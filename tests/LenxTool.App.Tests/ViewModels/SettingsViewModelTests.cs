@@ -8,6 +8,32 @@ namespace LenxTool.App.Tests.ViewModels;
 public sealed class SettingsViewModelTests
 {
     [Fact]
+    public async Task SaveSecretsPersistsTrimmedInputsAndReportsConfiguredState()
+    {
+        var secrets = new FakeSecretStore();
+        var viewModel = new SettingsViewModel(
+            new FakeThemeService(),
+            new FakeUpdateService(),
+            secrets,
+            new FakeSettingsRepository());
+
+        Assert.False(viewModel.SaveSecretsCommand.CanExecute(null));
+
+        viewModel.GroqKeyInput = "  gsk_test_not_a_real_key  ";
+        viewModel.DeepSeekKeyInput = "  sk-test-not-a-real-key  ";
+
+        Assert.True(viewModel.SaveSecretsCommand.CanExecute(null));
+        await viewModel.SaveSecretsCommand.ExecuteAsync();
+
+        Assert.Equal("gsk_test_not_a_real_key", secrets.Values["groq_api_key"]);
+        Assert.Equal("sk-test-not-a-real-key", secrets.Values["deepseek_api_key"]);
+        Assert.Empty(viewModel.GroqKeyInput);
+        Assert.Empty(viewModel.DeepSeekKeyInput);
+        Assert.Equal("Groq：已配置 · DeepSeek：已配置 · 已加密保存", viewModel.SecretStatus);
+        Assert.False(viewModel.SaveSecretsCommand.CanExecute(null));
+    }
+
+    [Fact]
     public async Task InitializeRestoresAppearanceAndSavePersistsChanges()
     {
         var theme = new FakeThemeService();
@@ -60,9 +86,19 @@ public sealed class SettingsViewModelTests
 
     private sealed class FakeSecretStore : ISecretStore
     {
-        public Task<string?> GetAsync(string name, CancellationToken cancellationToken) => Task.FromResult<string?>(null);
-        public Task SetAsync(string name, string value, CancellationToken cancellationToken) => Task.CompletedTask;
-        public Task DeleteAsync(string name, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Dictionary<string, string> Values { get; } = [];
+        public Task<string?> GetAsync(string name, CancellationToken cancellationToken) =>
+            Task.FromResult(Values.GetValueOrDefault(name));
+        public Task SetAsync(string name, string value, CancellationToken cancellationToken)
+        {
+            Values[name] = value;
+            return Task.CompletedTask;
+        }
+        public Task DeleteAsync(string name, CancellationToken cancellationToken)
+        {
+            Values.Remove(name);
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class FakeUpdateService : IUpdateService

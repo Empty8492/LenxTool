@@ -7,13 +7,13 @@ public static class PasswordBoxAssistant
 {
     public static readonly DependencyProperty BoundPasswordProperty = DependencyProperty.RegisterAttached(
         "BoundPassword", typeof(string), typeof(PasswordBoxAssistant),
-        new FrameworkPropertyMetadata(string.Empty, FrameworkPropertyMetadataOptions.BindsTwoWayByDefault, OnBoundPasswordChanged));
+        new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.BindsTwoWayByDefault, OnBoundPasswordChanged));
 
     private static readonly DependencyProperty UpdatingProperty = DependencyProperty.RegisterAttached(
         "Updating", typeof(bool), typeof(PasswordBoxAssistant));
 
     public static string GetBoundPassword(DependencyObject target) =>
-        (string)target.GetValue(BoundPasswordProperty);
+        (string?)target.GetValue(BoundPasswordProperty) ?? string.Empty;
 
     public static void SetBoundPassword(DependencyObject target, string value) =>
         target.SetValue(BoundPasswordProperty, value);
@@ -30,7 +30,8 @@ public static class PasswordBoxAssistant
     {
         var box = (PasswordBox)sender;
         box.SetValue(UpdatingProperty, true);
-        SetBoundPassword(box, box.Password);
+        box.SetCurrentValue(BoundPasswordProperty, box.Password);
+        box.GetBindingExpression(BoundPasswordProperty)?.UpdateSource();
         box.SetValue(UpdatingProperty, false);
     }
 }

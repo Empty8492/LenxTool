@@ -1,3 +1,4 @@
+using System.IO;
 using System.Net.Http;
 using LenxTool.App.Mvvm;
 using LenxTool.App.Services;
@@ -51,7 +52,7 @@ public sealed class SettingsViewModel : PageViewModel
         _settings = settings;
         CheckForUpdatesCommand = new(CheckForUpdatesAsync);
         DownloadUpdateCommand = new(DownloadUpdateAsync, () => _candidate is not null);
-        SaveSecretsCommand = new(SaveSecretsAsync);
+        SaveSecretsCommand = new(SaveSecretsAsync, CanSaveSecrets);
         DeleteSecretsCommand = new(DeleteSecretsAsync);
         SaveAppearanceCommand = new(SaveAppearanceAsync);
     }
@@ -109,12 +110,20 @@ public sealed class SettingsViewModel : PageViewModel
     public string GroqKeyInput
     {
         get => _groqKeyInput;
-        set => SetProperty(ref _groqKeyInput, value ?? string.Empty);
+        set
+        {
+            if (SetProperty(ref _groqKeyInput, value ?? string.Empty))
+                SaveSecretsCommand.NotifyCanExecuteChanged();
+        }
     }
     public string DeepSeekKeyInput
     {
         get => _deepSeekKeyInput;
-        set => SetProperty(ref _deepSeekKeyInput, value ?? string.Empty);
+        set
+        {
+            if (SetProperty(ref _deepSeekKeyInput, value ?? string.Empty))
+                SaveSecretsCommand.NotifyCanExecuteChanged();
+        }
     }
     public string SecretStatus
     {
@@ -127,9 +136,7 @@ public sealed class SettingsViewModel : PageViewModel
         IsDarkMode = bool.TryParse(await _settings.GetAsync("appearance.dark_mode", cancellationToken), out bool dark) && dark;
         ReduceMotion = bool.TryParse(await _settings.GetAsync("appearance.reduce_motion", cancellationToken), out bool reduce) && reduce;
         AppearanceStatus = "外观设置已从本地恢复。";
-        bool hasGroq = !string.IsNullOrWhiteSpace(await _secretStore.GetAsync("groq_api_key", cancellationToken));
-        bool hasDeepSeek = !string.IsNullOrWhiteSpace(await _secretStore.GetAsync("deepseek_api_key", cancellationToken));
-        SecretStatus = $"Groq：{(hasGroq ? "已配置" : "未配置")} · DeepSeek：{(hasDeepSeek ? "已配置" : "未配置")}";
+        await RefreshSecretStatusAsync(cancellationToken);
     }
 
     private async Task SaveAppearanceAsync(CancellationToken cancellationToken)
@@ -186,13 +193,30 @@ public sealed class SettingsViewModel : PageViewModel
 
     private async Task SaveSecretsAsync(CancellationToken cancellationToken)
     {
-        if (!string.IsNullOrWhiteSpace(GroqKeyInput))
-            await _secretStore.SetAsync("groq_api_key", GroqKeyInput.Trim(), cancellationToken);
-        if (!string.IsNullOrWhiteSpace(DeepSeekKeyInput))
-            await _secretStore.SetAsync("deepseek_api_key", DeepSeekKeyInput.Trim(), cancellationToken);
-        GroqKeyInput = string.Empty;
-        DeepSeekKeyInput = string.Empty;
-        await InitializeAsync(cancellationToken);
+        if (!CanSaveSecrets()) return;
+        SecretStatus = "正在使用 Windows DPAPI 加密保存…";
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(GroqKeyInput))
+                await _secretStore.SetAsync("groq_api_key", GroqKeyInput.Trim(), cancellationToken);
+            if (!string.IsNullOrWhiteSpace(DeepSeekKeyInput))
+                await _secretStore.SetAsync("deepseek_api_key", DeepSeekKeyInput.Trim(), cancellationToken);
+            GroqKeyInput = string.Empty;
+            DeepSeekKeyInput = string.Empty;
+            await RefreshSecretStatusAsync(cancellationToken, "已加密保存");
+        }
+        catch (AppException exception)
+        {
+            SecretStatus = $"{exception.Error.Title}：{exception.Error.Suggestion}";
+        }
+        catch (UnauthorizedAccessException)
+        {
+            SecretStatus = "保存失败：当前 Windows 用户无权写入密钥目录。";
+        }
+        catch (IOException)
+        {
+            SecretStatus = "保存失败：密钥文件暂时无法写入，请稍后重试。";
+        }
     }
 
     private async Task DeleteSecretsAsync(CancellationToken cancellationToken)
@@ -202,6 +226,23 @@ public sealed class SettingsViewModel : PageViewModel
         GroqKeyInput = string.Empty;
         DeepSeekKeyInput = string.Empty;
         await InitializeAsync(cancellationToken);
+    }
+
+    private bool CanSaveSecrets() =>
+        !string.IsNullOrWhiteSpace(GroqKeyInput)
+        || !string.IsNullOrWhiteSpace(DeepSeekKeyInput);
+
+    private async Task RefreshSecretStatusAsync(
+        CancellationToken cancellationToken,
+        string? suffix = null)
+    {
+        bool hasGroq = !string.IsNullOrWhiteSpace(
+            await _secretStore.GetAsync("groq_api_key", cancellationToken));
+        bool hasDeepSeek = !string.IsNullOrWhiteSpace(
+            await _secretStore.GetAsync("deepseek_api_key", cancellationToken));
+        SecretStatus = $"Groq：{(hasGroq ? "已配置" : "未配置")}" +
+            $" · DeepSeek：{(hasDeepSeek ? "已配置" : "未配置")}" +
+            (suffix is null ? string.Empty : $" · {suffix}");
     }
 
     private static string FormatSize(long bytes) => bytes >= 1024L * 1024
