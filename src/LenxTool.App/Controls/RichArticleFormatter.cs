@@ -8,12 +8,16 @@ public enum RichArticleBlockKind
     Heading,
     Subheading,
     Body,
-    Bullet
+    Bullet,
+    Image
 }
 
 public sealed record RichArticleInline(string Text, string? Url = null);
 
-public sealed record RichArticleBlock(RichArticleBlockKind Kind, IReadOnlyList<RichArticleInline> Inlines)
+public sealed record RichArticleBlock(
+    RichArticleBlockKind Kind,
+    IReadOnlyList<RichArticleInline> Inlines,
+    string? ImageUrl = null)
 {
     public string Text => string.Concat(Inlines.Select(inline => inline.Text));
 }
@@ -25,13 +29,18 @@ public static partial class RichArticleFormatter
     public static RichArticleDocument Parse(string? htmlOrText, string? baseUrl = null)
     {
         string input = htmlOrText ?? string.Empty;
-        Match imageMatch = ImageSourcePattern().Match(input);
-        string? heroImage = imageMatch.Success
-            ? ResolveUrl(WebUtility.HtmlDecode(imageMatch.Groups["url"].Value), baseUrl)
-            : null;
-
         string normalized = UnsafeElementPattern().Replace(input, string.Empty);
-        normalized = ImageTagPattern().Replace(normalized, string.Empty);
+        var images = new List<RichArticleImage>();
+        normalized = ImageTagPattern().Replace(
+            normalized,
+            match => CreateHtmlImageMarker(match.Value, baseUrl, images));
+        normalized = MarkdownImagePattern().Replace(
+            normalized,
+            match => CreateImageMarker(
+                match.Groups["url"].Value,
+                match.Groups["alt"].Value,
+                baseUrl,
+                images));
         normalized = AnchorPattern().Replace(normalized, match =>
         {
             string text = ToPlainText(match.Groups["text"].Value);
@@ -53,6 +62,20 @@ public static partial class RichArticleFormatter
             string line = InlineWhitespacePattern().Replace(rawLine, " ").Trim();
             if (line.Length == 0) continue;
 
+            Match imageMarker = ImageMarkerPattern().Match(line);
+            if (imageMarker.Success
+                && int.TryParse(imageMarker.Groups["index"].Value, out int imageIndex)
+                && imageIndex >= 0
+                && imageIndex < images.Count)
+            {
+                RichArticleImage image = images[imageIndex];
+                blocks.Add(new(
+                    RichArticleBlockKind.Image,
+                    [new(string.IsNullOrWhiteSpace(image.AltText) ? "资讯配图" : image.AltText)],
+                    image.Url));
+                continue;
+            }
+
             RichArticleBlockKind kind = RichArticleBlockKind.Body;
             if (line.StartsWith("### ", StringComparison.Ordinal))
             {
@@ -73,7 +96,64 @@ public static partial class RichArticleFormatter
             blocks.Add(new(kind, ParseInlines(line)));
         }
 
+        string? heroImage = blocks.FirstOrDefault(block => block.Kind == RichArticleBlockKind.Image)?.ImageUrl;
         return new(heroImage, blocks);
+    }
+
+    private static string CreateHtmlImageMarker(
+        string imageTag,
+        string? baseUrl,
+        List<RichArticleImage> images)
+    {
+        Dictionary<string, string> attributes = ImageAttributePattern()
+            .Matches(imageTag)
+            .GroupBy(match => match.Groups["name"].Value, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                group => group.Key.ToLowerInvariant(),
+                group =>
+                {
+                    Match match = group.Last();
+                    return WebUtility.HtmlDecode(
+                        match.Groups["double"].Success
+                            ? match.Groups["double"].Value
+                            : match.Groups["single"].Value);
+                },
+                StringComparer.OrdinalIgnoreCase);
+
+        string? source = null;
+        foreach (string attribute in new[] { "data-src", "data-original", "data-lazy-src", "src", "srcset" })
+        {
+            if (!attributes.TryGetValue(attribute, out string? candidate)) continue;
+            string firstCandidate = attribute == "srcset"
+                ? candidate.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Select(value => value.Split(' ', StringSplitOptions.RemoveEmptyEntries)[0])
+                    .FirstOrDefault() ?? string.Empty
+                : candidate;
+            if (ResolveUrl(firstCandidate, baseUrl) is not null)
+            {
+                source = firstCandidate;
+                break;
+            }
+        }
+
+        attributes.TryGetValue("alt", out string? altText);
+        return CreateImageMarker(source, altText, baseUrl, images);
+    }
+
+    private static string CreateImageMarker(
+        string? source,
+        string? altText,
+        string? baseUrl,
+        List<RichArticleImage> images)
+    {
+        string? url = string.IsNullOrWhiteSpace(source)
+            ? null
+            : ResolveUrl(WebUtility.HtmlDecode(source), baseUrl);
+        if (url is null) return string.Empty;
+
+        int index = images.Count;
+        images.Add(new(url, WebUtility.HtmlDecode(altText ?? string.Empty).Trim()));
+        return $"\n\uE000LENX_IMAGE_{index}\uE001\n";
     }
 
     private static List<RichArticleInline> ParseInlines(string text)
@@ -121,11 +201,17 @@ public static partial class RichArticleFormatter
     [GeneratedRegex("<(?:script|style|iframe|object|embed)\\b[^>]*>.*?</(?:script|style|iframe|object|embed)>", RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.CultureInvariant)]
     private static partial Regex UnsafeElementPattern();
 
-    [GeneratedRegex("<img\\b[^>]*(?:src|data-src)\\s*=\\s*[\"'](?<url>[^\"']+)[\"'][^>]*>", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
-    private static partial Regex ImageSourcePattern();
-
     [GeneratedRegex("<img\\b[^>]*>", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex ImageTagPattern();
+
+    [GeneratedRegex("(?:^|\\s)(?<name>data-src|data-original|data-lazy-src|srcset|src|alt)\\s*=\\s*(?:\"(?<double>[^\"]*)\"|'(?<single>[^']*)')", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex ImageAttributePattern();
+
+    [GeneratedRegex("!\\[(?<alt>[^\\]]*)\\]\\((?<url>[^\\s)]+)(?:\\s+[\"'][^\"']*[\"'])?\\)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex MarkdownImagePattern();
+
+    [GeneratedRegex("^\\uE000LENX_IMAGE_(?<index>[0-9]+)\\uE001$", RegexOptions.CultureInvariant)]
+    private static partial Regex ImageMarkerPattern();
 
     [GeneratedRegex("<a\\b[^>]*href\\s*=\\s*[\"'](?<url>[^\"']+)[\"'][^>]*>(?<text>.*?)</a>", RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.CultureInvariant)]
     private static partial Regex AnchorPattern();
@@ -156,4 +242,6 @@ public static partial class RichArticleFormatter
 
     [GeneratedRegex("\\{(?<display>[^{}|]+)\\|(?:\"[^\"]*\"|[^{}]+)\\}", RegexOptions.CultureInvariant)]
     private static partial Regex SpeechAnnotationPattern();
+
+    private sealed record RichArticleImage(string Url, string AltText);
 }

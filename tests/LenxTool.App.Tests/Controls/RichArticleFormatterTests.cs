@@ -23,4 +23,46 @@ public sealed class RichArticleFormatterTests
         RichArticleBlock bullet = Assert.Single(document.Blocks, block => block.Kind == RichArticleBlockKind.Bullet);
         Assert.Contains(bullet.Inlines, inline => inline.Text == "Qwen3.8 发布" && inline.Url == "https://example.com/story");
     }
+
+    [Fact]
+    public void ParsePreservesHtmlAndMarkdownImagesInDocumentOrder()
+    {
+        const string content = """
+            <p>第一段</p>
+            <img src="data:image/gif;base64,placeholder" data-src="/images/benchmark.png" alt="模型评测表">
+            <p>第二段</p>
+            ![趋势图](https://cdn.example/trend.png)
+            ![相对路径图](../images/relative.png)
+            <img src="javascript:alert(1)" alt="不安全图片">
+            """;
+
+        RichArticleDocument document = RichArticleFormatter.Parse(content, "https://daily.example/posts/42");
+
+        RichArticleBlock[] visibleBlocks = document.Blocks
+            .Where(block => block.Kind is RichArticleBlockKind.Body or RichArticleBlockKind.Image)
+            .ToArray();
+
+        Assert.Collection(
+            visibleBlocks,
+            block => Assert.Equal("第一段", block.Text),
+            block =>
+            {
+                Assert.Equal(RichArticleBlockKind.Image, block.Kind);
+                Assert.Equal("模型评测表", block.Text);
+                Assert.Equal("https://daily.example/images/benchmark.png", block.ImageUrl);
+            },
+            block => Assert.Equal("第二段", block.Text),
+            block =>
+            {
+                Assert.Equal(RichArticleBlockKind.Image, block.Kind);
+                Assert.Equal("趋势图", block.Text);
+                Assert.Equal("https://cdn.example/trend.png", block.ImageUrl);
+            },
+            block =>
+            {
+                Assert.Equal(RichArticleBlockKind.Image, block.Kind);
+                Assert.Equal("相对路径图", block.Text);
+                Assert.Equal("https://daily.example/images/relative.png", block.ImageUrl);
+            });
+    }
 }
