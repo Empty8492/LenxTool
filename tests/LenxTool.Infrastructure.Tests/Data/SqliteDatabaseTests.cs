@@ -134,6 +134,32 @@ public sealed class SqliteDatabaseTests : IDisposable
     }
 
     [Fact]
+    public async Task UpsertTrendsReplacesOnlyTheUpdatedPlatformSnapshot()
+    {
+        SqliteDatabase database = CreateDatabase();
+        await database.InitializeAsync(CancellationToken.None);
+        NewsRepository repository = new(database);
+        DateTimeOffset firstCapture = DateTimeOffset.Parse("2026-07-20T08:00:00+08:00", CultureInfo.InvariantCulture);
+        DateTimeOffset secondCapture = firstCapture.AddMinutes(10);
+
+        await repository.UpsertTrendsAsync(
+        [
+            new("zhihu-old", "知乎", 1, "旧知乎热点", "100 万", "https://zhihu.com/old", "zhihu-old", firstCapture),
+            new("weibo-keep", "微博", 1, "微博热点", "200 万", "https://weibo.com/keep", "weibo-keep", firstCapture)
+        ], CancellationToken.None);
+        await repository.UpsertTrendsAsync(
+        [
+            new("zhihu-new", "知乎", 1, "新知乎热点", "120 万", "https://zhihu.com/new", "zhihu-new", secondCapture)
+        ], CancellationToken.None);
+
+        IReadOnlyList<TrendItem> stored = await repository.GetLatestTrendsAsync(20, null, CancellationToken.None);
+
+        Assert.DoesNotContain(stored, item => item.Id == "zhihu-old");
+        Assert.Contains(stored, item => item.Id == "zhihu-new");
+        Assert.Contains(stored, item => item.Id == "weibo-keep");
+    }
+
+    [Fact]
     public async Task NewsRepositoryPersistsAiReportAndIndexesItsContent()
     {
         SqliteDatabase database = CreateDatabase();

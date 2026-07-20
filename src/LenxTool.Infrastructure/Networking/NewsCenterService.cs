@@ -16,7 +16,11 @@ public sealed partial class NewsCenterService(
     ILogger<NewsCenterService> logger) : INewsCenterService
 {
     private static readonly Uri DailyBriefUri = new("https://daily.juya.uk/rss.xml");
-    private static readonly Uri HackerNewsUri = new("https://news.ycombinator.com/rss");
+    private static readonly Uri NewsNowApiUri = new("https://newsnow.busiyi.world/api/s");
+    private static readonly SemaphoreSlim SourceFetchSlots = new(4, 4);
+    private const string BrowserUserAgent =
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        + "(KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36";
 
     public async Task<NewsCenterSnapshot> RefreshAsync(CancellationToken cancellationToken)
     {
@@ -24,35 +28,45 @@ public sealed partial class NewsCenterService(
             "AI 早报",
             FetchDailyBriefAsync,
             cancellationToken);
-        Task<FetchResult<TrendItem>> hackerNewsTask = TryFetchAsync(
-            "Hacker News",
-            FetchHackerNewsAsync,
-            cancellationToken);
-        Task<FetchResult<TrendItem>> githubTask = TryFetchAsync(
-            "GitHub",
-            FetchGithubAsync,
-            cancellationToken);
+        Task<FetchResult<TrendItem>>[] sourceTasks = TrendSourceCatalog.Default
+            .Select(source => TryFetchAsync(
+                source.Name,
+                token => FetchNewsNowAsync(source, token),
+                cancellationToken))
+            .ToArray();
 
-        await Task.WhenAll(briefTask, hackerNewsTask, githubTask).ConfigureAwait(false);
+        FetchResult<TrendItem>[] sourceResults = await Task.WhenAll(sourceTasks).ConfigureAwait(false);
         FetchResult<NewsArticle> brief = await briefTask.ConfigureAwait(false);
-        FetchResult<TrendItem> hackerNews = await hackerNewsTask.ConfigureAwait(false);
-        FetchResult<TrendItem> github = await githubTask.ConfigureAwait(false);
+        TrendItem[] trends = sourceResults.SelectMany(result => result.Items).ToArray();
 
-        TrendItem[] trends = hackerNews.Items.Concat(github.Items).ToArray();
-        if (brief.Items.Count > 0) await repository.UpsertAsync(brief.Items, cancellationToken).ConfigureAwait(false);
-        if (trends.Length > 0) await repository.UpsertTrendsAsync(trends, cancellationToken).ConfigureAwait(false);
+        if (brief.Items.Count > 0)
+        {
+            await repository.UpsertAsync(brief.Items, cancellationToken).ConfigureAwait(false);
+        }
+
+        if (trends.Length > 0)
+        {
+            await repository.UpsertTrendsAsync(trends, cancellationToken).ConfigureAwait(false);
+        }
 
         NewsCenterSnapshot cached = await LoadCachedAsync(cancellationToken).ConfigureAwait(false);
-        string?[] possibleWarnings = [brief.Warning, hackerNews.Warning, github.Warning];
-        string[] warnings = possibleWarnings
+        string[] warnings = sourceResults
+            .Select(result => result.Warning)
+            .Prepend(brief.Warning)
             .Where(value => !string.IsNullOrWhiteSpace(value))
             .Cast<string>()
             .ToArray();
         bool allFailed = brief.Items.Count == 0 && trends.Length == 0;
+        string? warning = warnings.Length switch
+        {
+            0 => null,
+            <= 3 => string.Join("；", warnings),
+            _ => $"{string.Join("；", warnings.Take(3))}；另有 {warnings.Length - 3} 个来源使用缓存"
+        };
         return cached with
         {
             IsFromCache = allFailed,
-            Warning = warnings.Length == 0 ? null : string.Join("；", warnings)
+            Warning = warning
         };
     }
 
@@ -60,7 +74,7 @@ public sealed partial class NewsCenterService(
     {
         IReadOnlyList<NewsArticle> articles = await repository.GetLatestAsync(40, cancellationToken)
             .ConfigureAwait(false);
-        IReadOnlyList<TrendItem> trends = await repository.GetLatestTrendsAsync(60, null, cancellationToken)
+        IReadOnlyList<TrendItem> trends = await repository.GetLatestTrendsAsync(200, null, cancellationToken)
             .ConfigureAwait(false);
         DateTimeOffset? cacheTime = articles.Select(item => (DateTimeOffset?)item.FetchedAt)
             .Concat(trends.Select(item => (DateTimeOffset?)item.CapturedAt))
@@ -68,7 +82,8 @@ public sealed partial class NewsCenterService(
         return new(articles, trends, true, cacheTime, null);
     }
 
-    private async Task<IReadOnlyList<NewsArticle>> FetchDailyBriefAsync(CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<NewsArticle>> FetchDailyBriefAsync(
+        CancellationToken cancellationToken)
     {
         XDocument document = await DownloadXmlAsync(DailyBriefUri, cancellationToken).ConfigureAwait(false);
         DateTimeOffset fetchedAt = DateTimeOffset.UtcNow;
@@ -83,60 +98,55 @@ public sealed partial class NewsCenterService(
             DateTimeOffset published = ParsePublished(ElementValue(item, "pubDate", string.Empty), fetchedAt);
             string hash = ContentFingerprint.Create(NormalizeUrl(url), title);
             return new NewsArticle(
-                $"news-{hash[..20]}", DateOnly.FromDateTime(published.LocalDateTime), "AI 早报",
-                title, summary, content, url, hash, fetchedAt)
+                $"news-{hash[..20]}",
+                DateOnly.FromDateTime(published.LocalDateTime),
+                "AI 早报",
+                title,
+                summary,
+                content,
+                url,
+                hash,
+                fetchedAt)
             {
                 RichContent = richContent
             };
         }).ToArray();
     }
 
-    private async Task<IReadOnlyList<TrendItem>> FetchHackerNewsAsync(CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<TrendItem>> FetchNewsNowAsync(
+        TrendSourceDefinition source,
+        CancellationToken cancellationToken)
     {
-        XDocument document = await DownloadXmlAsync(HackerNewsUri, cancellationToken).ConfigureAwait(false);
-        DateTimeOffset capturedAt = DateTimeOffset.UtcNow;
-        return document.Descendants("item").Take(20).Select((item, index) =>
+        await SourceFetchSlots.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
         {
-            string title = ElementValue(item, "title", "Untitled");
-            string url = ElementValue(item, "link", HackerNewsUri.AbsoluteUri);
-            string hash = ContentFingerprint.Create("Hacker News", NormalizeUrl(url), title);
-            return new TrendItem(
-                $"trend-{hash[..20]}", "Hacker News", index + 1, title, $"#{index + 1}",
-                url, hash, capturedAt);
-        }).ToArray();
-    }
-
-    private async Task<IReadOnlyList<TrendItem>> FetchGithubAsync(CancellationToken cancellationToken)
-    {
-        string date = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-7))
-            .ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
-        var uri = new Uri($"https://api.github.com/search/repositories?q=created:%3E{date}&sort=stars&order=desc&per_page=20");
-        using HttpRequestMessage request = new(HttpMethod.Get, uri);
-        request.Headers.UserAgent.ParseAdd("LenxTool/0.1");
-        using HttpClient client = httpClientFactory.CreateClient("LenxTool.News");
-        using HttpResponseMessage response = await client.SendAsync(
-            request,
-            HttpCompletionOption.ResponseHeadersRead,
-            cancellationToken).ConfigureAwait(false);
-        response.EnsureSuccessStatusCode();
-        await using Stream stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-        using JsonDocument document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken)
-            .ConfigureAwait(false);
-        DateTimeOffset capturedAt = DateTimeOffset.UtcNow;
-        var results = new List<TrendItem>();
-        int rank = 1;
-        foreach (JsonElement item in document.RootElement.GetProperty("items").EnumerateArray().Take(20))
-        {
-            string title = item.GetProperty("full_name").GetString() ?? "unknown/repository";
-            string url = item.GetProperty("html_url").GetString() ?? "https://github.com";
-            int stars = item.GetProperty("stargazers_count").GetInt32();
-            string hash = ContentFingerprint.Create("GitHub", NormalizeUrl(url), title);
-            results.Add(new(
-                $"trend-{hash[..20]}", "GitHub", rank++, title,
-                $"{stars.ToString("N0", CultureInfo.InvariantCulture)} stars", url, hash, capturedAt));
+            var uri = new Uri(
+                $"{NewsNowApiUri.AbsoluteUri}?id={Uri.EscapeDataString(source.Id)}&latest");
+            using var request = new HttpRequestMessage(HttpMethod.Get, uri);
+            request.Headers.TryAddWithoutValidation("User-Agent", BrowserUserAgent);
+            request.Headers.TryAddWithoutValidation("Accept", "application/json, text/plain, */*");
+            request.Headers.TryAddWithoutValidation("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8");
+            request.Headers.TryAddWithoutValidation("Cache-Control", "no-cache");
+            using HttpClient client = httpClientFactory.CreateClient("LenxTool.News");
+            using HttpResponseMessage response = await client.SendAsync(
+                request,
+                HttpCompletionOption.ResponseHeadersRead,
+                cancellationToken).ConfigureAwait(false);
+            response.EnsureSuccessStatusCode();
+            string json = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            IReadOnlyList<TrendItem> items = NewsNowTrendParser.Parse(
+                json,
+                source,
+                DateTimeOffset.UtcNow,
+                10);
+            return items.Count > 0
+                ? items
+                : throw new InvalidDataException($"{source.Name} 未返回可用热点。");
         }
-
-        return results;
+        finally
+        {
+            SourceFetchSlots.Release();
+        }
     }
 
     private async Task<XDocument> DownloadXmlAsync(Uri uri, CancellationToken cancellationToken)
@@ -147,7 +157,8 @@ public sealed partial class NewsCenterService(
             HttpCompletionOption.ResponseHeadersRead,
             cancellationToken).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
-        await using Stream stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        await using Stream stream = await response.Content.ReadAsStreamAsync(cancellationToken)
+            .ConfigureAwait(false);
         return await XDocument.LoadAsync(stream, LoadOptions.None, cancellationToken).ConfigureAwait(false);
     }
 
@@ -180,6 +191,11 @@ public sealed partial class NewsCenterService(
             LogSourceFailed(logger, source, exception.Message);
             return new([], $"{source} 返回了无法识别的数据");
         }
+        catch (InvalidDataException exception)
+        {
+            LogSourceFailed(logger, source, exception.Message);
+            return new([], $"{source} 数据未通过校验，已使用缓存");
+        }
     }
 
     private static string ElementValue(XElement parent, string localName, string fallback) =>
@@ -187,7 +203,11 @@ public sealed partial class NewsCenterService(
         is { Length: > 0 } value ? value : fallback;
 
     private static DateTimeOffset ParsePublished(string value, DateTimeOffset fallback) =>
-        DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AllowWhiteSpaces, out DateTimeOffset parsed)
+        DateTimeOffset.TryParse(
+            value,
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.AllowWhiteSpaces,
+            out DateTimeOffset parsed)
             ? parsed
             : fallback;
 

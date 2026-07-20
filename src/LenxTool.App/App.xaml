@@ -476,34 +476,58 @@
             </DataTemplate>
 
             <DataTemplate DataType="{x:Type vm:NewsCenterViewModel}">
-                <Grid Margin="28,24,28,28">
-                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="12" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                <Grid>
+                    <controls:AnimatedScrollViewer x:Name="NewsPageScrollViewer"
+                                                   VerticalScrollBarVisibility="Visible"
+                                                   HorizontalScrollBarVisibility="Disabled"
+                                                   PanningMode="VerticalOnly"
+                                                   IsDeferredScrollingEnabled="False">
+                <Grid Margin="28,10,28,28">
+                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="6" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
                     <DockPanel LastChildFill="False">
                         <StackPanel><TextBlock Style="{StaticResource PageTitleStyle}" Text="{Binding Title}" /><TextBlock Margin="0,6,0,0" Style="{StaticResource MetaTextStyle}" Text="{Binding Status}" /></StackPanel>
-                        <Button DockPanel.Dock="Right" Style="{StaticResource AccentButtonStyle}" Command="{Binding RefreshCommand}" Content="刷新今日资讯" />
+                        <Button DockPanel.Dock="Right"
+                                MinWidth="116"
+                                VerticalAlignment="Center"
+                                Style="{StaticResource AccentButtonStyle}"
+                                Command="{Binding RefreshCommand}"
+                                AutomationProperties.Name="刷新今日资讯"
+                                Content="刷新今日资讯" />
                     </DockPanel>
-                    <TabControl Grid.Row="2" Background="Transparent" BorderThickness="0">
+                    <TabControl Grid.Row="2" MinHeight="620" Background="Transparent" BorderThickness="0">
                         <TabControl.Resources>
                             <Style TargetType="TabItem">
-                                <Setter Property="Margin" Value="0,0,8,0" />
-                                <Setter Property="Padding" Value="18,9" />
+                                <Setter Property="Margin" Value="0,0,6,0" />
+                                <Setter Property="Padding" Value="16,8" />
+                                <Setter Property="MinHeight" Value="36" />
                                 <Setter Property="Foreground" Value="{DynamicResource Brush.TextSecondary}" />
                                 <Setter Property="FontWeight" Value="SemiBold" />
                                 <Setter Property="Cursor" Value="Hand" />
                                 <Setter Property="Template">
                                     <Setter.Value>
                                         <ControlTemplate TargetType="TabItem">
-                                            <Border x:Name="Chrome" Padding="{TemplateBinding Padding}" Background="{DynamicResource Brush.SurfaceRaised}" BorderBrush="{DynamicResource Brush.Border}" BorderThickness="1" CornerRadius="9">
-                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" ContentSource="Header" />
+                                            <Border x:Name="Chrome" Padding="{TemplateBinding Padding}" Background="Transparent" BorderBrush="Transparent" BorderThickness="1" CornerRadius="8" SnapsToDevicePixels="True">
+                                                <Grid>
+                                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" ContentSource="Header" />
+                                                    <Border x:Name="SelectedIndicator"
+                                                            Width="24"
+                                                            Height="2"
+                                                            Margin="0,0,0,-5"
+                                                            HorizontalAlignment="Center"
+                                                            VerticalAlignment="Bottom"
+                                                            Background="{DynamicResource Brush.Accent}"
+                                                            CornerRadius="1"
+                                                            Opacity="0" />
+                                                </Grid>
                                             </Border>
                                             <ControlTemplate.Triggers>
-                                                <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Brush.BorderStrong}" /></Trigger>
+                                                <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Chrome" Property="Background" Value="{DynamicResource Brush.SurfaceMuted}" /></Trigger>
                                                 <Trigger Property="IsSelected" Value="True">
-                                                    <Setter Property="Foreground" Value="White" />
-                                                    <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource Brush.Accent}" />
-                                                    <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
+                                                    <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
+                                                    <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource Brush.AccentSoft}" />
+                                                    <Setter TargetName="SelectedIndicator" Property="Opacity" Value="1" />
                                                 </Trigger>
-                                                <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Brush.Focus}" /><Setter TargetName="Chrome" Property="BorderThickness" Value="2" /></Trigger>
+                                                <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Brush.Focus}" /></Trigger>
                                             </ControlTemplate.Triggers>
                                         </ControlTemplate>
                                     </Setter.Value>
@@ -511,9 +535,9 @@
                             </Style>
                         </TabControl.Resources>
                         <TabItem Header="每日早报">
-                            <Border Margin="0,12,0,0" Style="{StaticResource BentoCardStyle}" Padding="0" ClipToBounds="True">
+                            <Border Margin="0,8,0,0" Style="{StaticResource BentoCardStyle}" Padding="0" ClipToBounds="True">
                                 <Grid>
-                                    <Grid.RowDefinitions><RowDefinition Height="64" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                                    <Grid.RowDefinitions><RowDefinition Height="56" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
                                     <Grid Margin="22,0">
                                         <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                                         <StackPanel VerticalAlignment="Center">
@@ -526,7 +550,11 @@
                                                     AutomationProperties.Name="为当前早报生成 AI 解读"
                                                     Content="生成 AI 解读" />
                                             <TextBlock Margin="0,0,10,0" VerticalAlignment="Center" Style="{StaticResource MetaTextStyle}" Text="选择日期" />
-                                            <ComboBox Width="150" ItemsSource="{Binding ArticleDates}" SelectedItem="{Binding SelectedDate}">
+                                             <ComboBox Width="150"
+                                                       MinHeight="36"
+                                                       Style="{StaticResource CompactComboBoxStyle}"
+                                                       ItemsSource="{Binding ArticleDates}"
+                                                       SelectedItem="{Binding SelectedDate}">
                                                 <ComboBox.ItemTemplate>
                                                     <DataTemplate><TextBlock Text="{Binding StringFormat={}{0:yyyy-MM-dd}}" /></DataTemplate>
                                                 </ComboBox.ItemTemplate>
@@ -538,44 +566,116 @@
                             </Border>
                         </TabItem>
                         <TabItem Header="热点趋势">
-                            <Border Margin="0,12,0,0" Style="{StaticResource BentoCardStyle}" Padding="0" ClipToBounds="True">
-                                <Grid>
-                                    <Grid.RowDefinitions><RowDefinition Height="64" /><RowDefinition Height="*" /></Grid.RowDefinitions>
-                                    <DockPanel Margin="22,0" LastChildFill="False">
-                                        <StackPanel VerticalAlignment="Center">
-                                            <TextBlock Style="{StaticResource SectionTitleStyle}" Text="热点趋势" />
-                                            <TextBlock Margin="0,4,0,0" Style="{StaticResource MetaTextStyle}" Text="按平台热度排名展示最新趋势" />
-                                        </StackPanel>
-                                        <Button DockPanel.Dock="Right"
-                                                VerticalAlignment="Center"
-                                                Command="{Binding GenerateDailyTrendReportCommand}"
-                                                AutomationProperties.Name="生成每日趋势 AI 报告"
-                                                Content="生成趋势报告" />
-                                    </DockPanel>
-                                    <ListBox Grid.Row="1" ItemsSource="{Binding Trends}" Background="Transparent" BorderThickness="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
-                                        <ListBox.ItemTemplate>
-                                            <DataTemplate>
-                                                <Border Padding="22,14" BorderBrush="{DynamicResource Brush.Border}" BorderThickness="0,1,0,0">
-                                                    <Grid>
-                                                        <Grid.ColumnDefinitions><ColumnDefinition Width="54" /><ColumnDefinition Width="*" /><ColumnDefinition Width="130" /></Grid.ColumnDefinitions>
-                                                        <TextBlock VerticalAlignment="Top" FontSize="20" FontWeight="SemiBold" Foreground="{DynamicResource Brush.Accent}" Text="{Binding Rank}" />
-                                                        <StackPanel Grid.Column="1">
-                                                            <TextBlock FontSize="15" FontWeight="SemiBold" Text="{Binding Title}" TextWrapping="Wrap" />
-                                                            <TextBlock Margin="0,5,0,0" Style="{StaticResource MetaTextStyle}" Text="{Binding Platform}" />
-                                                        </StackPanel>
-                                                        <TextBlock Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Center" Style="{StaticResource MetaTextStyle}" Text="{Binding Heat}" />
-                                                    </Grid>
+                            <Grid Margin="0,8,0,0">
+                                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="12" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                                <Border Padding="20,14" Style="{StaticResource BentoCardStyle}">
+                                    <Grid>
+                                        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="1" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                            <StackPanel VerticalAlignment="Center">
+                                                <TextBlock Style="{StaticResource SectionTitleStyle}" Text="多源热点" />
+                                                <TextBlock Margin="0,4,0,0" Style="{StaticResource MetaTextStyle}" Text="按平台分组展示，每组独立排名；点击条目可查看原文" />
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                                <Border Margin="0,0,14,0" Padding="10,6" Background="{DynamicResource Brush.SurfaceMuted}" CornerRadius="8">
+                                                    <TextBlock Style="{StaticResource MetaTextStyle}" Text="{Binding SelectedSourceSummary}" />
                                                 </Border>
-                                            </DataTemplate>
-                                        </ListBox.ItemTemplate>
-                                    </ListBox>
+                                                <Button Command="{Binding GenerateDailyTrendReportCommand}"
+                                                        AutomationProperties.Name="生成每日趋势 AI 报告"
+                                                        Content="生成趋势报告" />
+                                            </StackPanel>
+                                        </Grid>
+                                        <Border Grid.Row="1" Margin="0,13,0,0" Background="{DynamicResource Brush.Border}" />
+                                        <Grid Grid.Row="2" Margin="0,12,0,-8">
+                                            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                            <ItemsControl ItemsSource="{Binding SourceFilters}">
+                                                <ItemsControl.ItemsPanel>
+                                                    <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
+                                                </ItemsControl.ItemsPanel>
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <ToggleButton Style="{StaticResource FilterChipStyle}"
+                                                                      IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                                                      AutomationProperties.Name="{Binding Platform, StringFormat=来源筛选：{0}}">
+                                                            <StackPanel Orientation="Horizontal">
+                                                                <TextBlock Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type ToggleButton}}}" Text="{Binding Platform}" />
+                                                                <TextBlock Margin="6,0,0,0" FontSize="11" Foreground="{DynamicResource Brush.TextMuted}" Text="{Binding Count}" />
+                                                            </StackPanel>
+                                                        </ToggleButton>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                            <Button Grid.Column="1"
+                                                    Margin="8,0,0,8"
+                                                    MinHeight="32"
+                                                    Padding="11,6"
+                                                    VerticalAlignment="Top"
+                                                    Command="{Binding SelectAllSourcesCommand}"
+                                                    AutomationProperties.Name="选择全部热点来源"
+                                                    Content="全选" />
+                                        </Grid>
+                                    </Grid>
+                                </Border>
+                                <Grid Grid.Row="2">
+                                <ItemsControl ItemsSource="{Binding TrendGroups}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate><UniformGrid Columns="2" /></ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Margin="0,0,12,12" Padding="0" Style="{StaticResource BentoCardStyle}" ClipToBounds="True">
+                                                <Grid>
+                                                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                                                    <Grid Margin="18,14">
+                                                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                                        <TextBlock FontSize="15" FontWeight="SemiBold" Text="{Binding Platform}" />
+                                                        <TextBlock Grid.Column="1" Style="{StaticResource MetaTextStyle}" Text="{Binding Count, StringFormat={}{0} 条}" />
+                                                    </Grid>
+                                                    <ItemsControl Grid.Row="1" ItemsSource="{Binding Items}">
+                                                        <ItemsControl.ItemTemplate>
+                                                            <DataTemplate>
+                                                                <Button Style="{StaticResource TrendItemButtonStyle}"
+                                                                        Command="{Binding DataContext.OpenTrendCommand, RelativeSource={RelativeSource AncestorType={x:Type TabControl}}}"
+                                                                        CommandParameter="{Binding}"
+                                                                        AutomationProperties.Name="{Binding Title}">
+                                                                    <Grid Margin="16,12">
+                                                                        <Grid.ColumnDefinitions><ColumnDefinition Width="34" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="18" /></Grid.ColumnDefinitions>
+                                                                        <TextBlock VerticalAlignment="Top" FontSize="16" FontWeight="SemiBold" Foreground="{DynamicResource Brush.Accent}" Text="{Binding Rank}" />
+                                                                        <TextBlock Grid.Column="1" Margin="0,0,14,0" VerticalAlignment="Center" FontWeight="SemiBold" Text="{Binding Title}" TextWrapping="Wrap" />
+                                                                        <TextBlock Grid.Column="2" Margin="0,0,10,0" VerticalAlignment="Center" Style="{StaticResource MetaTextStyle}" Text="{Binding Heat}" />
+                                                                        <Path Grid.Column="3" Width="7" Height="11" VerticalAlignment="Center" Stretch="Fill" Stroke="{DynamicResource Brush.TextMuted}" StrokeThickness="1.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Data="M 1,1 L 6,5.5 L 1,10" />
+                                                                    </Grid>
+                                                                </Button>
+                                                            </DataTemplate>
+                                                        </ItemsControl.ItemTemplate>
+                                                    </ItemsControl>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                    <Border Padding="24" Background="{DynamicResource Brush.SurfaceRaised}" BorderBrush="{DynamicResource Brush.Border}" BorderThickness="1" CornerRadius="12">
+                                        <Border.Style>
+                                            <Style TargetType="Border">
+                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding TrendGroups.Count}" Value="0"><Setter Property="Visibility" Value="Visible" /></DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
+                                        <StackPanel HorizontalAlignment="Center">
+                                            <TextBlock HorizontalAlignment="Center" Style="{StaticResource SectionTitleStyle}" Text="未选择热点来源" />
+                                            <TextBlock Margin="0,6,0,0" HorizontalAlignment="Center" Style="{StaticResource MetaTextStyle}" Text="重新勾选来源，或点击“全选”恢复全部平台。" />
+                                        </StackPanel>
+                                    </Border>
                                 </Grid>
-                            </Border>
+                            </Grid>
                         </TabItem>
                         <TabItem Header="AI 报告">
-                            <Grid Margin="0,12,0,0">
-                                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="12" /><RowDefinition Height="*" /></Grid.RowDefinitions>
-                                <Border Style="{StaticResource BentoCardStyle}">
+                            <Grid Margin="0,8,0,0" MinHeight="620">
+                                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="8" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                                <Border Padding="18,12" Style="{StaticResource BentoCardStyle}">
                                     <Grid>
                                         <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                                         <StackPanel>
@@ -615,7 +715,7 @@
                                     </Border>
                                     <Border Grid.Column="2" Style="{StaticResource BentoCardStyle}" Padding="0">
                                         <Grid>
-                                            <Grid.RowDefinitions><RowDefinition Height="64" /><RowDefinition Height="*" /><RowDefinition Height="44" /></Grid.RowDefinitions>
+                                            <Grid.RowDefinitions><RowDefinition Height="56" /><RowDefinition Height="*" /><RowDefinition Height="40" /></Grid.RowDefinitions>
                                             <StackPanel Margin="22,0" VerticalAlignment="Center">
                                                 <TextBlock Style="{StaticResource SectionTitleStyle}" Text="{Binding SelectedReport.Title, TargetNullValue=尚未生成报告}" TextWrapping="Wrap" />
                                                 <TextBlock Margin="0,4,0,0" Style="{StaticResource MetaTextStyle}" Text="{Binding SelectedReport.Model, TargetNullValue=请从每日早报或热点趋势页生成第一份报告}" />
@@ -638,6 +738,55 @@
                             </Grid>
                         </TabItem>
                     </TabControl>
+                </Grid>
+                    </controls:AnimatedScrollViewer>
+                    <Button Width="44"
+                            Height="44"
+                            Margin="0,0,32,28"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Bottom"
+                            Panel.ZIndex="10"
+                            Command="{x:Static controls:AnimatedScrollViewer.SmoothScrollToTopCommand}"
+                            CommandTarget="{Binding ElementName=NewsPageScrollViewer}"
+                            AutomationProperties.Name="回到页面顶部"
+                            ToolTip="回到顶部">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource FloatingActionButtonStyle}">
+                                <Setter Property="Opacity" Value="0" />
+                                <Setter Property="IsHitTestVisible" Value="False" />
+                                <Setter Property="RenderTransform"><Setter.Value><TranslateTransform Y="8" /></Setter.Value></Setter>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsBackToTopVisible, ElementName=NewsPageScrollViewer}" Value="True">
+                                        <Setter Property="IsHitTestVisible" Value="True" />
+                                        <DataTrigger.EnterActions>
+                                            <BeginStoryboard>
+                                                <Storyboard>
+                                                    <DoubleAnimation Storyboard.TargetProperty="Opacity" To="1" Duration="0:0:0.28" />
+                                                    <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)" To="0" Duration="0:0:0.28" />
+                                                </Storyboard>
+                                            </BeginStoryboard>
+                                        </DataTrigger.EnterActions>
+                                        <DataTrigger.ExitActions>
+                                            <BeginStoryboard>
+                                                <Storyboard>
+                                                    <DoubleAnimation Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.18" />
+                                                    <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)" To="8" Duration="0:0:0.18" />
+                                                </Storyboard>
+                                            </BeginStoryboard>
+                                        </DataTrigger.ExitActions>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                        <Path Width="14"
+                              Height="14"
+                              Stretch="Uniform"
+                              Stroke="White"
+                              StrokeThickness="2"
+                              StrokeStartLineCap="Round"
+                              StrokeEndLineCap="Round"
+                              Data="M 2,8 L 7,3 L 12,8 M 7,3 L 7,13" />
+                    </Button>
                 </Grid>
             </DataTemplate>
         </ResourceDictionary>

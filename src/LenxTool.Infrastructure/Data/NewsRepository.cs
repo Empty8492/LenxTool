@@ -268,6 +268,20 @@ public sealed class NewsRepository(SqliteDatabase database) : INewsRepository
         await using SqliteTransaction transaction = (SqliteTransaction)await connection
             .BeginTransactionAsync(cancellationToken)
             .ConfigureAwait(false);
+        foreach (string platform in trends.Select(trend => trend.Platform).Distinct(StringComparer.Ordinal))
+        {
+            await using SqliteCommand deleteCommand = connection.CreateCommand();
+            deleteCommand.Transaction = transaction;
+            deleteCommand.CommandText = """
+                DELETE FROM content_fts
+                WHERE entity_type='trend'
+                  AND entity_id IN (SELECT id FROM trend_items WHERE platform=$platform);
+                DELETE FROM trend_items WHERE platform=$platform;
+                """;
+            deleteCommand.Parameters.AddWithValue("$platform", platform);
+            await deleteCommand.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
         foreach (TrendItem trend in trends)
         {
             await using SqliteCommand command = connection.CreateCommand();

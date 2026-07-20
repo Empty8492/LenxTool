@@ -1,5 +1,7 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using LenxTool.App.Mvvm;
+using LenxTool.App.Services;
 using LenxTool.Core.Contracts;
 using LenxTool.Core.Errors;
 using LenxTool.Core.Models;
@@ -11,6 +13,7 @@ public sealed class NewsCenterViewModel : PageViewModel, IDisposable
     private readonly INewsCenterService _newsCenterService;
     private readonly IAiReportService _aiReportService;
     private readonly INewsRepository _repository;
+    private readonly IDesktopFileDialogService _dialogs;
     private NewsArticle? _selectedArticle;
     private AiReport? _selectedReport;
     private DateOnly? _selectedDate;
@@ -18,32 +21,45 @@ public sealed class NewsCenterViewModel : PageViewModel, IDisposable
     private string _reportStatus = "可为当前早报生成单条解读，或基于热点生成每日趋势报告。";
     private AppError? _reportError;
     private string _keyword = string.Empty;
+    private bool _suppressSourceFilterChanges;
 
     public NewsCenterViewModel(
         INewsCenterService newsCenterService,
         IAiReportService aiReportService,
-        INewsRepository repository)
+        INewsRepository repository,
+        IDesktopFileDialogService dialogs)
         : base("资讯中心", "每日早报与热点趋势")
     {
         _newsCenterService = newsCenterService;
         _aiReportService = aiReportService;
         _repository = repository;
+        _dialogs = dialogs;
         RefreshCommand = new AsyncRelayCommand(RefreshAsync);
         GenerateArticleReportCommand = new AsyncRelayCommand(
             GenerateArticleReportAsync,
             () => SelectedArticle is not null);
         GenerateDailyTrendReportCommand = new AsyncRelayCommand(
             GenerateDailyTrendReportAsync,
-            () => Trends.Count > 0);
+            () => TrendGroups.Count > 0);
+        OpenTrendCommand = new RelayCommand<TrendItem>(OpenTrend, CanOpenTrend);
+        SelectAllSourcesCommand = new RelayCommand(
+            SelectAllSources,
+            () => SourceFilters.Any(filter => !filter.IsSelected));
     }
 
     public ObservableCollection<NewsArticle> Articles { get; } = [];
     public ObservableCollection<DateOnly> ArticleDates { get; } = [];
     public ObservableCollection<TrendItem> Trends { get; } = [];
+    public ObservableCollection<TrendPlatformGroup> TrendGroups { get; } = [];
+    public ObservableCollection<TrendSourceFilter> SourceFilters { get; } = [];
     public ObservableCollection<AiReport> Reports { get; } = [];
     public AsyncRelayCommand RefreshCommand { get; }
     public AsyncRelayCommand GenerateArticleReportCommand { get; }
     public AsyncRelayCommand GenerateDailyTrendReportCommand { get; }
+    public RelayCommand<TrendItem> OpenTrendCommand { get; }
+    public RelayCommand SelectAllSourcesCommand { get; }
+    public string SelectedSourceSummary =>
+        $"已显示 {SourceFilters.Count(filter => filter.IsSelected)}/{SourceFilters.Count} 个来源";
 
     public DateOnly? SelectedDate
     {
@@ -110,6 +126,8 @@ public sealed class NewsCenterViewModel : PageViewModel, IDisposable
 
     public void Dispose()
     {
+        foreach (TrendSourceFilter filter in SourceFilters)
+            filter.PropertyChanged -= OnSourceFilterChanged;
         RefreshCommand.Dispose();
         GenerateArticleReportCommand.Dispose();
         GenerateDailyTrendReportCommand.Dispose();
@@ -132,11 +150,22 @@ public sealed class NewsCenterViewModel : PageViewModel, IDisposable
 
     private async Task GenerateDailyTrendReportAsync(CancellationToken cancellationToken)
     {
-        if (Trends.Count == 0) return;
-        TrendItem[] snapshot = Trends.ToArray();
+        TrendItem[] snapshot = TrendGroups.SelectMany(group => group.Items).ToArray();
+        if (snapshot.Length == 0) return;
         await GenerateAndSaveAsync(
             token => _aiReportService.GenerateDailyTrendReportAsync(snapshot, token),
             cancellationToken);
+    }
+
+    private static bool CanOpenTrend(TrendItem? trend) =>
+        trend is not null
+        && Uri.TryCreate(trend.Url, UriKind.Absolute, out Uri? uri)
+        && uri.Scheme is "http" or "https";
+
+    private void OpenTrend(TrendItem? trend)
+    {
+        if (!CanOpenTrend(trend)) return;
+        _dialogs.OpenUri(trend!.Url);
     }
 
     private async Task GenerateAndSaveAsync(
@@ -185,12 +214,40 @@ public sealed class NewsCenterViewModel : PageViewModel, IDisposable
             ArticleDates.Add(date);
         }
 
+        Dictionary<string, int> sourceOrder = TrendSourceCatalog.Default
+            .Select((source, index) => (source.Name, index))
+            .ToDictionary(item => item.Name, item => item.index, StringComparer.Ordinal);
+        TrendItem[] orderedTrends = snapshot.Trends
+            .OrderBy(trend => sourceOrder.GetValueOrDefault(trend.Platform, int.MaxValue))
+            .ThenBy(trend => trend.Platform, StringComparer.CurrentCulture)
+            .ThenBy(trend => trend.Rank)
+            .ToArray();
+
         Trends.Clear();
-        foreach (TrendItem trend in snapshot.Trends.OrderBy(trend => trend.Rank))
+        foreach (TrendItem trend in orderedTrends)
         {
             Trends.Add(trend);
         }
-        GenerateDailyTrendReportCommand.NotifyCanExecuteChanged();
+        HashSet<string> deselectedSources = SourceFilters
+            .Where(filter => !filter.IsSelected)
+            .Select(filter => filter.Platform)
+            .ToHashSet(StringComparer.Ordinal);
+        bool hadSourceFilters = SourceFilters.Count > 0;
+        foreach (TrendSourceFilter filter in SourceFilters)
+            filter.PropertyChanged -= OnSourceFilterChanged;
+        SourceFilters.Clear();
+        foreach (IGrouping<string, TrendItem> group in orderedTrends.GroupBy(
+                     trend => trend.Platform,
+                     StringComparer.Ordinal))
+        {
+            var filter = new TrendSourceFilter(
+                group.Key,
+                group.Count(),
+                !hadSourceFilters || !deselectedSources.Contains(group.Key));
+            filter.PropertyChanged += OnSourceFilterChanged;
+            SourceFilters.Add(filter);
+        }
+        ApplySourceFilter();
 
         DateOnly today = DateOnly.FromDateTime(DateTime.Today);
         SelectedDate = ArticleDates.Contains(today) ? today : ArticleDates.FirstOrDefault();
@@ -206,5 +263,44 @@ public sealed class NewsCenterViewModel : PageViewModel, IDisposable
         Status = snapshot.Warning is null
             ? snapshot.IsFromCache ? cache : $"更新完成 · {cache}"
             : $"{snapshot.Warning} · {cache}";
+    }
+
+    private void OnSourceFilterChanged(object? sender, PropertyChangedEventArgs args)
+    {
+        if (_suppressSourceFilterChanges
+            || args.PropertyName != nameof(TrendSourceFilter.IsSelected)) return;
+        ApplySourceFilter();
+    }
+
+    private void SelectAllSources()
+    {
+        _suppressSourceFilterChanges = true;
+        try
+        {
+            foreach (TrendSourceFilter filter in SourceFilters) filter.IsSelected = true;
+        }
+        finally
+        {
+            _suppressSourceFilterChanges = false;
+        }
+        ApplySourceFilter();
+    }
+
+    private void ApplySourceFilter()
+    {
+        HashSet<string> selectedSources = SourceFilters
+            .Where(filter => filter.IsSelected)
+            .Select(filter => filter.Platform)
+            .ToHashSet(StringComparer.Ordinal);
+        TrendGroups.Clear();
+        foreach (IGrouping<string, TrendItem> group in Trends
+                     .Where(trend => selectedSources.Contains(trend.Platform))
+                     .GroupBy(trend => trend.Platform, StringComparer.Ordinal))
+        {
+            TrendGroups.Add(new(group.Key, group.ToArray()));
+        }
+        OnPropertyChanged(nameof(SelectedSourceSummary));
+        SelectAllSourcesCommand.NotifyCanExecuteChanged();
+        GenerateDailyTrendReportCommand.NotifyCanExecuteChanged();
     }
 }

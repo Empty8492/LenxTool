@@ -1,4 +1,5 @@
 using LenxTool.App.ViewModels;
+using LenxTool.App.Services;
 using LenxTool.Core.Contracts;
 using LenxTool.Core.Models;
 
@@ -62,7 +63,8 @@ public sealed class NewsCenterViewModelTests
         using NewsCenterViewModel viewModel = new(
             new StubNewsCenterService(CreateSnapshot(article)),
             new StubAiReportService(generated),
-            reports);
+            reports,
+            new StubDesktopFileDialogService());
         await viewModel.InitializeAsync(CancellationToken.None);
 
         await viewModel.GenerateArticleReportCommand.ExecuteAsync();
@@ -73,14 +75,130 @@ public sealed class NewsCenterViewModelTests
         Assert.Equal("报告已生成 · 128 tokens", viewModel.ReportStatus);
     }
 
-    private static NewsCenterViewModel CreateViewModel(NewsCenterSnapshot snapshot) =>
-        new(new StubNewsCenterService(snapshot), new StubAiReportService(null), new StubNewsRepository());
+    [Fact]
+    public async Task InitializeAsyncGroupsLocalRanksByPlatform()
+    {
+        NewsCenterSnapshot snapshot = new(
+            [],
+            [
+                CreateTrend("github-1", "GitHub", 1),
+                CreateTrend("hacker-news-1", "Hacker News", 1),
+                CreateTrend("github-2", "GitHub", 2)
+            ],
+            true,
+            DateTimeOffset.Now,
+            null);
+        using NewsCenterViewModel viewModel = CreateViewModel(snapshot);
+
+        await viewModel.InitializeAsync(CancellationToken.None);
+
+        Assert.Collection(
+            viewModel.TrendGroups,
+            group =>
+            {
+                Assert.Equal("GitHub", group.Platform);
+                Assert.Equal([1, 2], group.Items.Select(item => item.Rank).ToArray());
+            },
+            group =>
+            {
+                Assert.Equal("Hacker News", group.Platform);
+                Assert.Equal([1], group.Items.Select(item => item.Rank).ToArray());
+            });
+    }
+
+    [Fact]
+    public async Task SourceFilterHidesDeselectedPlatformAndCanRestoreAllSources()
+    {
+        NewsCenterSnapshot snapshot = new(
+            [],
+            [
+                CreateTrend("github-1", "GitHub", 1),
+                CreateTrend("hacker-news-1", "Hacker News", 1)
+            ],
+            true,
+            DateTimeOffset.Now,
+            null);
+        using NewsCenterViewModel viewModel = CreateViewModel(snapshot);
+        await viewModel.InitializeAsync(CancellationToken.None);
+
+        TrendSourceFilter github = Assert.Single(
+            viewModel.SourceFilters,
+            filter => filter.Platform == "GitHub");
+        github.IsSelected = false;
+
+        TrendPlatformGroup visible = Assert.Single(viewModel.TrendGroups);
+        Assert.Equal("Hacker News", visible.Platform);
+        Assert.Equal("已显示 1/2 个来源", viewModel.SelectedSourceSummary);
+        Assert.True(viewModel.SelectAllSourcesCommand.CanExecute(null));
+
+        viewModel.SelectAllSourcesCommand.Execute(null);
+
+        Assert.Equal(2, viewModel.TrendGroups.Count);
+        Assert.All(viewModel.SourceFilters, filter => Assert.True(filter.IsSelected));
+        Assert.False(viewModel.SelectAllSourcesCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task TrendReportUsesOnlyCurrentlySelectedSources()
+    {
+        AiReport generated = new(
+            "report-trends", "trend", "daily", "daily_trend", "趋势报告",
+            "筛选后的趋势。", "deepseek-v4-flash", 1, 64, DateTimeOffset.UtcNow);
+        var aiReports = new StubAiReportService(generated);
+        using var viewModel = new NewsCenterViewModel(
+            new StubNewsCenterService(new(
+                [],
+                [
+                    CreateTrend("github-1", "GitHub", 1),
+                    CreateTrend("hacker-news-1", "Hacker News", 1)
+                ],
+                true,
+                DateTimeOffset.Now,
+                null)),
+            aiReports,
+            new StubNewsRepository(),
+            new StubDesktopFileDialogService());
+        await viewModel.InitializeAsync(CancellationToken.None);
+        Assert.Single(viewModel.SourceFilters, filter => filter.Platform == "GitHub")
+            .IsSelected = false;
+
+        await viewModel.GenerateDailyTrendReportCommand.ExecuteAsync();
+
+        TrendItem selected = Assert.Single(aiReports.LastTrendItems!);
+        Assert.Equal("Hacker News", selected.Platform);
+    }
+
+    [Fact]
+    public void OpenTrendCommandOnlyAcceptsHttpLinks()
+    {
+        var dialogs = new StubDesktopFileDialogService();
+        using NewsCenterViewModel viewModel = CreateViewModel(CreateSnapshot(), dialogs);
+        TrendItem safe = CreateTrend("safe", "知乎", 1);
+
+        Assert.True(viewModel.OpenTrendCommand.CanExecute(safe));
+        Assert.False(viewModel.OpenTrendCommand.CanExecute(
+            CreateTrend("unsafe", "知乎", 1) with { Url = "javascript:alert(1)" }));
+        viewModel.OpenTrendCommand.Execute(safe);
+        Assert.Equal(safe.Url, dialogs.OpenedUri);
+    }
+
+    private static NewsCenterViewModel CreateViewModel(
+        NewsCenterSnapshot snapshot,
+        StubDesktopFileDialogService? dialogs = null) =>
+        new(
+            new StubNewsCenterService(snapshot),
+            new StubAiReportService(null),
+            new StubNewsRepository(),
+            dialogs ?? new StubDesktopFileDialogService());
 
     private static NewsCenterSnapshot CreateSnapshot(params NewsArticle[] articles) =>
         new(articles, [], true, DateTimeOffset.Now, null);
 
     private static NewsArticle CreateArticle(string id, DateOnly date) =>
         new(id, date, "AI 早报", $"标题 {id}", $"摘要 {id}", $"正文 {id}", string.Empty, id, DateTimeOffset.Now);
+
+    private static TrendItem CreateTrend(string id, string platform, int rank) =>
+        new(id, platform, rank, $"标题 {id}", $"热度 {rank}", $"https://example.com/{id}", id, DateTimeOffset.Now);
 
     private sealed class StubNewsCenterService(NewsCenterSnapshot snapshot) : INewsCenterService
     {
@@ -93,6 +211,8 @@ public sealed class NewsCenterViewModelTests
 
     private sealed class StubAiReportService(AiReport? report) : IAiReportService
     {
+        public IReadOnlyList<TrendItem>? LastTrendItems { get; private set; }
+
         public Task<AiReport> GenerateArticleInsightAsync(
             NewsArticle article,
             CancellationToken cancellationToken) => Task.FromResult(
@@ -100,8 +220,12 @@ public sealed class NewsCenterViewModelTests
 
         public Task<AiReport> GenerateDailyTrendReportAsync(
             IReadOnlyList<TrendItem> trends,
-            CancellationToken cancellationToken) => Task.FromResult(
+            CancellationToken cancellationToken)
+        {
+            LastTrendItems = trends;
+            return Task.FromResult(
                 report ?? throw new InvalidOperationException("本测试不应生成报告。"));
+        }
     }
 
     private sealed class StubNewsRepository : INewsRepository
@@ -142,5 +266,17 @@ public sealed class NewsCenterViewModelTests
             int limit,
             string? platform,
             CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<TrendItem>>([]);
+    }
+
+    private sealed class StubDesktopFileDialogService : IDesktopFileDialogService
+    {
+        public string? OpenedUri { get; private set; }
+        public IReadOnlyList<string> PickMediaFiles() => [];
+        public string? PickWhisperModel() => null;
+        public string? PickDatabaseBackup() => null;
+        public string? PickFileForHash() => null;
+        public (string Source, string Destination)? PickWordConversion() => null;
+        public void OpenFolder(string path) { }
+        public void OpenUri(string uri) => OpenedUri = uri;
     }
 }
