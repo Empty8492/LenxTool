@@ -1,0 +1,148 @@
+# Lenx 工具箱产品与工程规格
+
+## 1. 目标
+
+为中文 Windows 用户提供一款本地优先、离线可降级、可批量执行的桌面效率应用。首个正式版本覆盖资讯中心、媒体工作台、轻工具、历史与数据、共享额度账号和安全更新，且能够自包含安装在 Windows 10/11 x64。
+
+成功意味着：应用可编译、可测试、可运行、可安装；用户数据和自备密钥不随升级丢失；远端故障不会让已缓存内容不可用；所有长任务都可取消并留下可诊断的历史记录。
+
+## 2. 已确认的保守默认值
+
+1. 产品显示名为“Lenx 工具箱”，程序集和命名空间使用 `LenxTool`。
+2. 安装范围默认当前用户，不要求管理员权限；固定 AppId 保证覆盖升级。
+3. 数据目录固定为 `%LocalAppData%\LenxTool`；数据库为 `Data\lenx.db`，密钥为当前 Windows 用户作用域的 DPAPI 加密文件。
+4. 首版更新源使用 GitHub Releases；更新清单通过 ECDSA P-256/SHA-256 离线私钥签名，客户端仅内置公钥并支持镜像数组。
+5. Word 转 PDF 首版以适配器隔离具体实现；运行时优先使用 Microsoft Word COM（如已安装），未安装时返回可操作错误，不宣称无损转换。
+6. 本地 Whisper 模型不进入安装包。用户导入 `ggml-*.bin`，识别引擎通过独立适配器加载；共享 Groq 请求只经 Cloudflare Worker 流式转发。
+7. 云端不接收新闻缓存、字幕结果或本地文件；转写音频仅在请求生命周期中转，不写入 D1/R2/KV。
+8. 减少动画跟随系统设置，并允许应用内覆盖；动画限定为透明度和位移。
+9. 公共热点源属于不稳定外部依赖，单源失败只生成警告，展示其他源或本地缓存。
+
+## 3. 技术栈
+
+- .NET 10、C#、WPF、x64、Nullable、隐式 using。
+- MVVM、构造函数依赖注入、`IHttpClientFactory`、`CancellationToken`。
+- SQLite + FTS5；所有写入显式事务；迁移前自动备份。
+- 每日早报使用原生 WPF 只读视图；WebView2 只作为未来受控 HTML/Markdown 能力的可选承载。
+- xUnit 单元测试和真实临时 SQLite 集成测试。
+- Cloudflare Workers（TypeScript）+ D1 负责账号、邀请码、角色、额度、用量、令牌刷新与审计。
+- Inno Setup 生成安装程序；`dotnet publish` 生成自包含 win-x64 应用与便携 ZIP。
+
+## 4. 工程命令
+
+```powershell
+dotnet restore LenxTool.slnx
+dotnet build LenxTool.slnx -c Release --no-restore
+dotnet test LenxTool.slnx -c Release --no-build --logger "console;verbosity=normal"
+dotnet publish src/LenxTool.App/LenxTool.App.csproj -c Release -r win-x64 --self-contained true -o artifacts/publish/win-x64
+powershell -ExecutionPolicy Bypass -File scripts/Build-Release.ps1 `
+  -Version 0.1.0 `
+  -PrivateKeyPath D:\Offline\lenxtool-private.pem `
+  -Repository Empty8492/LenxTools
+```
+
+Worker：
+
+```powershell
+cd cloud/LenxTool.Worker
+npm ci
+npm run typecheck
+npm test
+npx wrangler d1 migrations apply lenx-tool --local
+```
+
+## 5. 项目结构
+
+```text
+src/LenxTool.Core/                    领域模型、接口、错误类型、纯逻辑
+src/LenxTool.Infrastructure/          SQLite、网络、AI、文件、系统、更新实现
+src/LenxTool.App/                     WPF 视图、主题、ViewModel、应用组合根
+tests/LenxTool.Core.Tests/            快速纯逻辑测试
+tests/LenxTool.Infrastructure.Tests/  SQLite/文件/网络边界集成测试
+cloud/LenxTool.Worker/                Cloudflare Worker 与 D1 迁移
+installer/                            Inno Setup 脚本与更新公钥
+scripts/                              可重复构建、打包和验收脚本
+docs/                                 规格、架构、ADR、威胁模型和使用说明
+artifacts/                            本地发布产物（不提交）
+```
+
+## 6. 代码风格
+
+- 类型、成员用 PascalCase，局部变量和参数用 camelCase，私有字段用 `_camelCase`。
+- `async` 方法以 `Async` 结尾并接受 `CancellationToken`；禁止同步阻塞异步代码。
+- View 的后台代码只处理窗口生命周期、焦点和视觉树事件；业务行为进入 ViewModel/Service。
+- 跨层只依赖 `Core` 中的接口和不可变模型。
+- 不捕获无法处理的异常；不得使用空 `catch`。清理失败必须至少写脱敏日志。
+
+```csharp
+public sealed class NewsSearchService(INewsRepository repository) : INewsSearchService
+{
+    public Task<IReadOnlyList<SearchResult>> SearchAsync(
+        SearchQuery query,
+        CancellationToken cancellationToken) =>
+        repository.SearchAsync(query.Normalize(), cancellationToken);
+}
+```
+
+## 7. 功能验收
+
+### 应用外壳
+
+- 深石墨侧边栏、暖白/深色内容区，布局在 100%～200% 缩放和 900×620 最小窗口下可用。
+- 全部功能图标为矢量 Path，键盘可达，焦点可见；`Ctrl+K` 打开全局命令面板。
+- 首页显示今日早报、热点、最近任务、收藏和快捷入口；深色与减少动画设置可持久化。
+
+### 资讯中心
+
+- 获取、事务保存并筛选每日早报和多平台热点；相同规范化 URL 或内容指纹去重。
+- 支持日期、平台、关键词、收藏、标签、备注和 FTS5 全文搜索。
+- 远端失败时返回带“缓存时间”的本地结果；默认清理 180 天前未收藏内容。
+- 单条 AI 解读与每日趋势报告可取消，并记录模型、token/请求用量和脱敏错误。
+
+### 媒体工作台
+
+- 批量队列包含排队、运行、完成、失败、取消状态；支持取消、重试、历史、打开输出目录。
+- 支持 Groq Whisper、自备 Groq Key、共享 Worker 代理和本地 Whisper。
+- 长音频按重叠窗口分片，传递上下文，按时间交接去重，并过滤低置信度非语音片段。
+- 可导出原文 SRT、双语 SRT、纯文本；路径支持中文、空格和长文件名。
+
+### 轻工具与历史
+
+- Word 转 PDF 只通过 `IDocumentConverter`；JSON 支持格式化、压缩、校验、排序和结构 Diff。
+- Base64、URL 编解码、SHA-256、文本去重和空行清理可离线使用。
+- 历史页可检索、重试任务、打开输出、查看错误和模型使用量；数据库可一键备份与恢复。
+
+### 云端账号
+
+- 邀请码注册；普通用户默认每日 10 分钟共享语音、10 次共享 AI；管理员无限额。
+- 管理员可按用户或邀请码设置额度、禁用账号；额度扣减防并发超额。
+- 短期 access token + 可轮换 refresh token；基础审计不记录正文、字幕或文件。
+
+### 更新与发布
+
+- 启动后台检查，设置页手动检查；语义版本、最低版本和强制安全更新均正确处理。
+- 展示版本、大小、更新日志；下载有进度、SHA-256 和签名校验，确认后静默覆盖安装并重启。
+- 生成 `Release/LenxTool_Setup.exe` 和便携 ZIP；卸载默认保留 `%LocalAppData%\LenxTool`。
+
+## 8. 测试策略
+
+- 单元测试：版本比较、错误映射、额度、分片/去重、SRT、JSON、编码、哈希、内容指纹。
+- 集成测试：临时 SQLite 建库/迁移/FTS5/事务/备份恢复/损坏检测；HTTP 假服务器覆盖 400/401/429/500/超时/断网。
+- Worker 测试：邀请码并发注册、并发额度预留、刷新令牌轮换、禁用用户、管理员豁免。
+- 发布烟测：中文用户名、中文/空格路径、只读目录、覆盖升级和卸载保留数据。
+- 手动 UI：100/125/150/200% DPI、900×620/1920×1080、键盘、深浅主题、减少动画。
+
+## 9. 边界
+
+始终执行：参数化 SQL、输入长度限制、HTTPS、事务、取消传播、脱敏日志、发布校验、测试后提交。
+
+需要产品负责人另行决定：收费体系、正式品牌证书、新闻源商业授权、云存储正文、系统级全局快捷键。
+
+永不执行：提交密钥/私钥/固定管理员密码；将 Key 写入 SQLite；记录密码、令牌或完整敏感正文；静默绕过更新签名；把模型塞进主安装包；修改旧项目。
+
+## 10. 完成定义
+
+- Release 构建零新增警告，全部测试通过且无跳过。
+- 冷启动可创建/迁移数据库并进入首页；关键离线功能不依赖网络。
+- 安装包与便携包均能在无 .NET Runtime 的 Windows x64 环境启动。
+- README、用户指南、发布说明、架构和回滚说明与实现一致。

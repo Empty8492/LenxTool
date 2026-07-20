@@ -1,0 +1,99 @@
+using System.Diagnostics;
+using System.IO;
+using Microsoft.Win32;
+
+namespace LenxTool.App.Services;
+
+public interface IDesktopFileDialogService
+{
+    IReadOnlyList<string> PickMediaFiles();
+    string? PickWhisperModel();
+    string? PickDatabaseBackup();
+    string? PickFileForHash();
+    (string Source, string Destination)? PickWordConversion();
+    void OpenFolder(string path);
+    void OpenUri(string uri);
+}
+
+public sealed class DesktopFileDialogService : IDesktopFileDialogService
+{
+    public IReadOnlyList<string> PickMediaFiles()
+    {
+        var dialog = new OpenFileDialog
+        {
+            Title = "选择音频或视频",
+            Filter = "媒体文件|*.wav;*.mp3;*.m4a;*.aac;*.flac;*.wma;*.mp4;*.mkv;*.mov;*.webm|所有文件|*.*",
+            Multiselect = true,
+            CheckFileExists = true
+        };
+        return dialog.ShowDialog() == true ? dialog.FileNames : [];
+    }
+
+    public string? PickWhisperModel()
+    {
+        var dialog = new OpenFileDialog
+        {
+            Title = "导入 Whisper 模型",
+            Filter = "Whisper GGML 模型|ggml-*.bin",
+            Multiselect = false,
+            CheckFileExists = true
+        };
+        return dialog.ShowDialog() == true ? dialog.FileName : null;
+    }
+
+    public string? PickDatabaseBackup()
+    {
+        var dialog = new OpenFileDialog
+        {
+            Title = "选择 Lenx 数据库备份",
+            Filter = "SQLite 数据库|*.db;*.sqlite|所有文件|*.*",
+            Multiselect = false,
+            CheckFileExists = true
+        };
+        return dialog.ShowDialog() == true ? dialog.FileName : null;
+    }
+
+    public string? PickFileForHash()
+    {
+        var dialog = new OpenFileDialog { Title = "选择要校验的文件", Filter = "所有文件|*.*", CheckFileExists = true };
+        return dialog.ShowDialog() == true ? dialog.FileName : null;
+    }
+
+    public (string Source, string Destination)? PickWordConversion()
+    {
+        var open = new OpenFileDialog { Title = "选择 Word 文档", Filter = "Word 文档|*.doc;*.docx", CheckFileExists = true };
+        if (open.ShowDialog() != true) return null;
+        var save = new SaveFileDialog
+        {
+            Title = "保存 PDF",
+            Filter = "PDF 文档|*.pdf",
+            FileName = Path.GetFileNameWithoutExtension(open.FileName) + ".pdf",
+            AddExtension = true
+        };
+        return save.ShowDialog() == true ? (open.FileName, save.FileName) : null;
+    }
+
+    public void OpenFolder(string path)
+    {
+        string folder = Directory.Exists(path) ? path : Path.GetDirectoryName(path) ?? path;
+        Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{path}\"")
+        {
+            UseShellExecute = true,
+            WorkingDirectory = folder
+        });
+    }
+
+    public void OpenUri(string uri)
+    {
+        if (!Uri.TryCreate(uri, UriKind.Absolute, out Uri? target) ||
+            target.Scheme is not ("http" or "https"))
+        {
+            throw new ArgumentException("只能打开 HTTP 或 HTTPS 链接。", nameof(uri));
+        }
+
+        Process.Start(new ProcessStartInfo(target.AbsoluteUri)
+        {
+            UseShellExecute = true
+        });
+    }
+}

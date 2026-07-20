@@ -1,0 +1,49 @@
+# 测试报告
+
+测试日期：2026-07-20（Asia/Shanghai）  
+版本：0.1.0  
+配置：Release / win-x64 / .NET SDK 10.0.302
+
+## 自动化结果
+
+| 测试组 | 结果 |
+|---|---:|
+| LenxTool.Core.Tests | 29 passed |
+| LenxTool.Infrastructure.Tests | 13 passed |
+| LenxTool.App.Tests | 21 passed |
+| Cloudflare Worker Vitest | 1 passed |
+| Worker TypeScript strict typecheck | passed |
+| .NET build warnings | 0 |
+| NuGet vulnerable packages | 0 detected |
+
+覆盖点包括：统一 HTTP 错误、Groq 429 与 Retry-After、DeepSeek 当前模型请求与 token 用量解析、AI 报告生成状态和 SQLite/FTS5 持久化、语义版本、签名篡改、字幕解析/导出、重叠合并、音频分片计划、JSON/编码/文本工具、SQLite schema/FTS/损坏、早报/热点/AI 报告统一全文搜索、包含未 checkpoint WAL 提交的一致性迁移备份、RSS 富内容持久化、封面/标题/列表/链接解析与朗读标记清理、设置持久化、DPAPI 与脱敏、中文和空格路径、媒体 Queued/Running/Completed/Failed 状态与进度持久化、重启恢复、失败计数和重试、资讯默认当天/日期切换/当天缺失回退、导航和 Ctrl+K 状态。
+
+真实 DeepSeek 连通性测试使用临时进程环境变量执行，未写入仓库或日志。`deepseek-v4-flash` 请求成功，返回 46 total tokens；测试凭据值未保存到项目文件。
+
+## 冒烟与制品测试
+
+- 从 Release 编译结果启动：主窗口标题 `Lenx 工具箱`，进程 Responding=True。
+- `LenxTool_Setup.exe` 静默安装到包含中文与空格的测试目录：ExitCode=0。
+- 启动已安装应用：Responding=True，标题正确。
+- 静默卸载：ExitCode=0，测试安装目录已移除。
+- 安装器包含 WebView2 Evergreen Bootstrapper。
+- 自包含发布无需系统 .NET Runtime。
+- 更新清单 ECDSA 签名与安装包 hash 签名均由发布脚本使用嵌入公钥反向验证。
+
+以上安装器冒烟记录对应 2026-07-20 01:44 的旧制品。本轮源码已更新，但当前机器缺少 Inno Setup 6，且本轮未提供仓库外离线私钥路径，因此尚未覆盖生成签名安装器；不得将旧 `LenxTool_Setup.exe` 视为包含本轮修复。
+
+本轮已生成未签名的开发验收便携包 `artifacts\LenxTool_Portable_0.1.0-preview-rich-reader.zip`（74,359,890 bytes，SHA-256 `7DB438205065AE3BC58C0FFDEFD3CBF2EF9CA9F97749D1D010F97C3BF1DE2CA6`）。它包含资讯分段页签、RSS 富内容迁移和原生富文本早报阅读器，但不能替代正式签名安装包。
+
+## 本次已验证的异常路径
+
+- 完全离线的资讯缓存回退设计与网络错误映射。
+- 400、401、403、429、5xx、超时和网络中断的不同错误对象。
+- SQLite 损坏、迁移备份和恢复完整性检查。
+- 任务取消状态持久化与异常退出任务恢复。
+- 中文用户名、中文文件名和空格路径的数据库及媒体导出。
+- 安装、启动、卸载和用户数据目录隔离。
+- 真实 WPF 运行检查：新构建可见带橙色选中态的“每日早报”和“热点趋势”分段按钮；刷新 2026-07-20 早报后，页面成功显示与来源页面一致的封面图、视频链接、标题层级、概览分组、项目列表和相关链接，无 WebView2 黑屏；热点页仍可独立显示 GitHub 与 Hacker News 排名列表。
+
+## 需要外部环境的验收
+
+以下测试需要真实账号、模型或较长运行时间，不在无凭据自动化环境中执行：真实 Groq/DeepSeek 请求、Cloudflare 生产 D1 并发压测、超长视频全程转写、各代 CPU 的本地大型模型性能、真实 GitHub Release 更新覆盖、已签 Authenticode 的 SmartScreen 声誉、Windows 10/11 多台物理机 100%～200% DPI 矩阵。对应测试步骤已写入规格与发布指南，生产发布前必须执行。

@@ -1,0 +1,645 @@
+<Application x:Class="LenxTool.App.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:LenxTool.App.Controls"
+             xmlns:vm="clr-namespace:LenxTool.App.ViewModels"
+             ShutdownMode="OnMainWindowClose">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Themes/Colors.Light.xaml" />
+                <ResourceDictionary Source="Themes/Controls.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+
+            <DataTemplate DataType="{x:Type vm:DashboardViewModel}">
+                <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                    <Grid Margin="32,28,32,40">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="22" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="16" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource PageTitleStyle}" Text="{Binding Title}" />
+                            <TextBlock Margin="0,7,0,0" Style="{StaticResource MetaTextStyle}" Text="{Binding Subtitle}" />
+                        </StackPanel>
+
+                        <Grid Grid.Row="2">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="1.55*" MinWidth="390" />
+                                <ColumnDefinition Width="16" />
+                                <ColumnDefinition Width="*" MinWidth="280" />
+                            </Grid.ColumnDefinitions>
+                            <Border Style="{StaticResource BentoCardStyle}">
+                                <StackPanel>
+                                    <DockPanel LastChildFill="False">
+                                        <TextBlock Style="{StaticResource SectionTitleStyle}" Text="今日早报" />
+                                        <Border DockPanel.Dock="Right" Padding="8,4" Background="{DynamicResource Brush.AccentSoft}" CornerRadius="12">
+                                            <TextBlock FontSize="11" Foreground="{DynamicResource Brush.Accent}" Text="已缓存" />
+                                        </Border>
+                                    </DockPanel>
+                                    <ItemsControl Margin="0,16,0,0" ItemsSource="{Binding News}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Grid Margin="0,0,0,16">
+                                                    <Grid.ColumnDefinitions><ColumnDefinition Width="56" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                                    <TextBlock Style="{StaticResource MetaTextStyle}" Text="{Binding Time}" />
+                                                    <StackPanel Grid.Column="1">
+                                                        <TextBlock FontSize="11" Foreground="{DynamicResource Brush.Accent}" Text="{Binding Source}" />
+                                                        <TextBlock Margin="0,3,0,0" FontSize="15" FontWeight="SemiBold" Text="{Binding Title}" />
+                                                        <TextBlock Margin="0,4,0,0" Style="{StaticResource MetaTextStyle}" Text="{Binding Summary}" />
+                                                    </StackPanel>
+                                                </Grid>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                    <Button HorizontalAlignment="Left"
+                                            Command="{Binding DataContext.NavigateCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                            CommandParameter="news"
+                                            Content="进入资讯中心" />
+                                </StackPanel>
+                            </Border>
+
+                            <Border Grid.Column="2" Style="{StaticResource BentoCardStyle}" Background="{DynamicResource Brush.Sidebar}">
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource SectionTitleStyle}" Foreground="{DynamicResource Brush.TextOnDark}" Text="热点脉搏" />
+                                    <TextBlock Margin="0,5,0,16" Foreground="{DynamicResource Brush.TextOnDarkMuted}" FontSize="12" Text="跨平台趋势 · 最近更新 08:32" />
+                                    <ItemsControl ItemsSource="{Binding Trends}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Grid Margin="0,0,0,15">
+                                                    <Grid.ColumnDefinitions><ColumnDefinition Width="30" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                                    <TextBlock FontSize="18" FontWeight="SemiBold" Foreground="{DynamicResource Brush.Accent}" Text="{Binding Rank}" />
+                                                    <StackPanel Grid.Column="1">
+                                                        <TextBlock Foreground="{DynamicResource Brush.TextOnDark}" Text="{Binding Title}" />
+                                                        <TextBlock Foreground="{DynamicResource Brush.TextOnDarkMuted}" FontSize="11" Text="{Binding Platform}" />
+                                                    </StackPanel>
+                                                    <TextBlock Grid.Column="2" Foreground="{DynamicResource Brush.TextOnDarkMuted}" FontSize="11" Text="{Binding Heat}" />
+                                                </Grid>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+
+                        <Grid Grid.Row="4">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="16" /><ColumnDefinition Width="1.3*" /></Grid.ColumnDefinitions>
+                            <Border Style="{StaticResource BentoCardStyle}">
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource SectionTitleStyle}" Text="最近任务" />
+                                    <ItemsControl Margin="0,14,0,0" ItemsSource="{Binding RecentTasks}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <StackPanel Margin="0,0,0,14">
+                                                    <DockPanel><TextBlock FontWeight="SemiBold" Text="{Binding Name}" /><TextBlock DockPanel.Dock="Right" Style="{StaticResource MetaTextStyle}" Text="{Binding Status}" /></DockPanel>
+                                                    <ProgressBar Height="3" Margin="0,8,0,6" Maximum="100" Value="{Binding Progress, Mode=OneWay}" />
+                                                    <TextBlock Style="{StaticResource MetaTextStyle}" Text="{Binding Detail}" />
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Grid.Column="2" Style="{StaticResource BentoCardStyle}" Background="{DynamicResource Brush.SurfaceMuted}">
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource SectionTitleStyle}" Text="快捷开始" />
+                                    <ItemsControl Margin="0,14,0,0" ItemsSource="{Binding QuickActions}">
+                                        <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Columns="3" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Button Margin="0,0,10,0" Padding="14" HorizontalContentAlignment="Left"
+                                                        Command="{Binding DataContext.NavigateCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                        CommandParameter="{Binding PageId}">
+                                                    <StackPanel>
+                                                        <Path Width="22" Height="22" Stretch="Uniform" Stroke="{DynamicResource Brush.Accent}" StrokeThickness="1.7" Data="{Binding IconData}" />
+                                                        <TextBlock Margin="0,14,0,3" FontWeight="SemiBold" Text="{Binding Label}" />
+                                                        <TextBlock Style="{StaticResource MetaTextStyle}" Text="{Binding Description}" />
+                                                    </StackPanel>
+                                                </Button>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+                    </Grid>
+                </ScrollViewer>
+            </DataTemplate>
+
+            <DataTemplate DataType="{x:Type vm:MediaWorkbenchViewModel}">
+                <Grid Margin="28,24,28,28">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="18" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="14" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+                    <DockPanel LastChildFill="False">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource PageTitleStyle}" Text="{Binding Title}" />
+                            <TextBlock Margin="0,7,0,0" Style="{StaticResource MetaTextStyle}" Text="{Binding Subtitle}" />
+                        </StackPanel>
+                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                            <Button Margin="0,0,8,0" Command="{Binding ImportModelCommand}" Content="导入模型" />
+                            <Button Style="{StaticResource AccentButtonStyle}" Command="{Binding BrowseCommand}" Content="导入媒体" />
+                        </StackPanel>
+                    </DockPanel>
+                    <Border Grid.Row="2" Style="{StaticResource BentoCardStyle}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="210" />
+                                <ColumnDefinition Width="210" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Margin="0,0,20,0">
+                                <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource Brush.Accent}" Text="QUEUE" />
+                                <TextBlock Margin="0,8,0,0" FontWeight="SemiBold" Text="{Binding InputSummary}" TextTrimming="CharacterEllipsis" />
+                                <TextBlock Margin="0,5,0,0" Style="{StaticResource MetaTextStyle}" Text="{Binding Status}" />
+                                <ProgressBar Height="3" Margin="0,13,0,0" Maximum="100" Value="{Binding Progress, Mode=OneWay}" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" Margin="0,0,18,0">
+                                <TextBlock Margin="0,0,0,7" Style="{StaticResource MetaTextStyle}" Text="识别方式" />
+                                <ComboBox ItemsSource="{Binding Engines}" SelectedItem="{Binding SelectedEngine}" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="2" Margin="0,0,18,0">
+                                <TextBlock Margin="0,0,0,7" Style="{StaticResource MetaTextStyle}" Text="本地模型" />
+                                <ComboBox ItemsSource="{Binding LocalModels}" SelectedItem="{Binding SelectedModel}" DisplayMemberPath="Name" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Bottom">
+                                <Button Margin="0,0,8,0" Command="{Binding CancelCommand}" Content="取消" />
+                                <Button Style="{StaticResource AccentButtonStyle}" Command="{Binding StartCommand}" Content="开始任务" />
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                    <Grid Grid.Row="4">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="14" /><ColumnDefinition Width="300" /></Grid.ColumnDefinitions>
+                        <Border Style="{StaticResource BentoCardStyle}" Padding="0">
+                            <Grid>
+                                <Grid.RowDefinitions><RowDefinition Height="48" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                                <DockPanel Margin="16,0">
+                                    <TextBlock VerticalAlignment="Center" Style="{StaticResource SectionTitleStyle}" Text="最近任务" />
+                                    <TextBlock DockPanel.Dock="Right" VerticalAlignment="Center" Style="{StaticResource MetaTextStyle}" Text="本地历史 · 可恢复" />
+                                </DockPanel>
+                                <ListBox Grid.Row="1" ItemsSource="{Binding RecentJobs}" Background="Transparent" BorderThickness="0">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid Margin="12,9" MinWidth="520">
+                                                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="110" /><ColumnDefinition Width="72" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                                <StackPanel>
+                                                    <TextBlock FontWeight="SemiBold" Text="{Binding InputPath}" TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock Margin="0,4,0,0" Style="{StaticResource MetaTextStyle}" Text="{Binding OutputPath}" TextTrimming="CharacterEllipsis" />
+                                                </StackPanel>
+                                                <TextBlock Grid.Column="1" VerticalAlignment="Center" Style="{StaticResource MetaTextStyle}" Text="{Binding Engine}" />
+                                                <TextBlock Grid.Column="2" VerticalAlignment="Center" Foreground="{DynamicResource Brush.Accent}" FontWeight="SemiBold" Text="{Binding Status}" />
+                                                <Button Grid.Column="3" Margin="8,0,0,0" Padding="10,4"
+                                                        Command="{Binding DataContext.RetryCommand, RelativeSource={RelativeSource AncestorType=ListBox}}"
+                                                        CommandParameter="{Binding}" Content="重试" />
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                            </Grid>
+                        </Border>
+                        <Border Grid.Column="2" Style="{StaticResource BentoCardStyle}">
+                            <StackPanel>
+                                <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource Brush.Accent}" Text="OUTPUT" />
+                                <TextBlock Margin="0,16,0,6" Style="{StaticResource SectionTitleStyle}" Text="字幕已独立保存" />
+                                <TextBlock Style="{StaticResource MetaTextStyle}" Text="输出为 UTF-8 SRT；源媒体、模型和字幕不会进入云端数据库。" TextWrapping="Wrap" />
+                                <Button Margin="0,18,0,0" Command="{Binding OpenOutputCommand}" Content="打开输出目录" />
+                                <Border Margin="0,18,0,0" Padding="12" Background="{DynamicResource Brush.SurfaceMuted}" CornerRadius="10">
+                                    <StackPanel>
+                                        <TextBlock FontWeight="SemiBold" Text="错误恢复" />
+                                        <TextBlock Margin="0,5,0,0" Style="{StaticResource MetaTextStyle}" Text="{Binding LastError.UserMessage, TargetNullValue=暂无错误}" TextWrapping="Wrap" />
+                                        <TextBlock Margin="0,4,0,0" Style="{StaticResource MetaTextStyle}" Text="{Binding LastError.Suggestion}" TextWrapping="Wrap" />
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                </Grid>
+            </DataTemplate>
+
+            <DataTemplate DataType="{x:Type vm:HistoryViewModel}">
+                <Grid Margin="28,24,28,28">
+                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="18" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                    <DockPanel LastChildFill="False">
+                        <StackPanel><TextBlock Style="{StaticResource PageTitleStyle}" Text="{Binding Title}" /><TextBlock Margin="0,7,0,0" Style="{StaticResource MetaTextStyle}" Text="{Binding Status}" /></StackPanel>
+                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                            <Button Margin="0,0,8,0" Command="{Binding RefreshCommand}" Content="刷新" />
+                            <Button Margin="0,0,8,0" Command="{Binding RestoreCommand}" Content="恢复备份" />
+                            <Button Style="{StaticResource AccentButtonStyle}" Command="{Binding BackupCommand}" Content="立即备份" />
+                        </StackPanel>
+                    </DockPanel>
+                    <TabControl Grid.Row="2" Background="Transparent" BorderThickness="0">
+                        <TabItem Header="全局搜索">
+                            <Grid Margin="0,12,0,0">
+                                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="14" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                                <Border Style="{StaticResource BentoCardStyle}">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="12" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                        <StackPanel>
+                                            <TextBlock Style="{StaticResource SectionTitleStyle}" Text="搜索本地内容" />
+                                            <TextBox Margin="0,10,0,0"
+                                                     MaxLength="200"
+                                                     AutomationProperties.Name="全局搜索关键词"
+                                                     Text="{Binding SearchQuery, UpdateSourceTrigger=PropertyChanged}">
+                                                <TextBox.InputBindings>
+                                                    <KeyBinding Key="Enter" Command="{Binding SearchCommand}" />
+                                                </TextBox.InputBindings>
+                                            </TextBox>
+                                            <TextBlock Margin="0,8,0,0" Style="{StaticResource MetaTextStyle}" Text="{Binding SearchStatus}" />
+                                        </StackPanel>
+                                        <Button Grid.Column="2" MinWidth="92" VerticalAlignment="Bottom" Style="{StaticResource AccentButtonStyle}" Command="{Binding SearchCommand}" Content="搜索" />
+                                    </Grid>
+                                </Border>
+                                <Grid Grid.Row="2">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="1.6*" MinWidth="430" /><ColumnDefinition Width="14" /><ColumnDefinition Width="*" MinWidth="270" /></Grid.ColumnDefinitions>
+                                    <Border Style="{StaticResource BentoCardStyle}" Padding="0">
+                                        <ListBox ItemsSource="{Binding SearchResults}"
+                                                 SelectedItem="{Binding SelectedSearchResult}"
+                                                 Background="Transparent"
+                                                 BorderThickness="0"
+                                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                                 AutomationProperties.Name="全局搜索结果">
+                                            <ListBox.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Border Padding="18,14" BorderBrush="{DynamicResource Brush.Border}" BorderThickness="0,0,0,1">
+                                                        <Grid>
+                                                            <Grid.ColumnDefinitions><ColumnDefinition Width="76" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                                            <Border HorizontalAlignment="Left" VerticalAlignment="Top" Padding="8,4" Background="{DynamicResource Brush.AccentSoft}" CornerRadius="8">
+                                                                <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource Brush.Accent}" Text="{Binding TypeLabel}" />
+                                                            </Border>
+                                                            <StackPanel Grid.Column="1" Margin="4,0,18,0">
+                                                                <TextBlock FontSize="15" FontWeight="SemiBold" Text="{Binding Title}" TextWrapping="Wrap" />
+                                                                <TextBlock Margin="0,5,0,0" Style="{StaticResource MetaTextStyle}" Text="{Binding Summary}" TextWrapping="Wrap" MaxHeight="42" />
+                                                            </StackPanel>
+                                                            <StackPanel Grid.Column="2" HorizontalAlignment="Right">
+                                                                <TextBlock HorizontalAlignment="Right" Style="{StaticResource MetaTextStyle}" Text="{Binding Source}" />
+                                                                <TextBlock Margin="0,5,0,0" HorizontalAlignment="Right" Style="{StaticResource MetaTextStyle}" Text="{Binding Timestamp, StringFormat={}{0:yyyy-MM-dd HH:mm}}" />
+                                                            </StackPanel>
+                                                        </Grid>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ListBox.ItemTemplate>
+                                        </ListBox>
+                                    </Border>
+                                    <Border Grid.Column="2" Style="{StaticResource BentoCardStyle}">
+                                        <StackPanel>
+                                            <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource Brush.Accent}" Text="RESULT" />
+                                            <TextBlock Margin="0,16,0,8" Style="{StaticResource SectionTitleStyle}" Text="{Binding SelectedSearchResult.Title, TargetNullValue=选择一条搜索结果}" TextWrapping="Wrap" />
+                                            <TextBlock Style="{StaticResource MetaTextStyle}" Text="{Binding SelectedSearchResult.Summary, TargetNullValue=结果详情会显示在这里。}" TextWrapping="Wrap" />
+                                            <TextBlock Margin="0,14,0,0" FontWeight="SemiBold" Text="{Binding SelectedSearchResult.Source}" />
+                                            <TextBlock Margin="0,5,0,0" Style="{StaticResource MetaTextStyle}" Text="{Binding SelectedSearchResult.Timestamp, StringFormat={}{0:yyyy-MM-dd HH:mm}}" />
+                                            <Button Margin="0,18,0,0" Command="{Binding OpenSearchResultCommand}" Content="打开来源链接" />
+                                            <TextBlock Margin="0,16,0,0" Style="{StaticResource MetaTextStyle}" Text="仅 HTTP/HTTPS 来源会交给系统默认浏览器打开。" TextWrapping="Wrap" />
+                                        </StackPanel>
+                                    </Border>
+                                </Grid>
+                            </Grid>
+                        </TabItem>
+                        <TabItem Header="任务历史">
+                            <Grid Margin="0,12,0,0">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="14" /><ColumnDefinition Width="290" /></Grid.ColumnDefinitions>
+                                <Border Style="{StaticResource BentoCardStyle}" Padding="0">
+                                    <ListBox ItemsSource="{Binding Jobs}" SelectedItem="{Binding SelectedJob}" Background="Transparent" BorderThickness="0">
+                                        <ListBox.ItemTemplate><DataTemplate>
+                                            <Grid Margin="14,10" MinWidth="560">
+                                                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="100" /><ColumnDefinition Width="90" /></Grid.ColumnDefinitions>
+                                                <StackPanel><TextBlock FontWeight="SemiBold" Text="{Binding InputPath}" TextTrimming="CharacterEllipsis" /><TextBlock Margin="0,4,0,0" Style="{StaticResource MetaTextStyle}" Text="{Binding OutputPath}" TextTrimming="CharacterEllipsis" /></StackPanel>
+                                                <TextBlock Grid.Column="1" VerticalAlignment="Center" Style="{StaticResource MetaTextStyle}" Text="{Binding Engine}" />
+                                                <TextBlock Grid.Column="2" VerticalAlignment="Center" Foreground="{DynamicResource Brush.Accent}" FontWeight="SemiBold" Text="{Binding Status}" />
+                                            </Grid>
+                                        </DataTemplate></ListBox.ItemTemplate>
+                                    </ListBox>
+                                </Border>
+                                <Border Grid.Column="2" Style="{StaticResource BentoCardStyle}">
+                                    <StackPanel>
+                                        <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource Brush.Accent}" Text="DETAIL" />
+                                        <TextBlock Margin="0,16,0,8" Style="{StaticResource SectionTitleStyle}" Text="所选任务" />
+                                        <TextBlock Style="{StaticResource MetaTextStyle}" Text="{Binding SelectedJob.Error.UserMessage, TargetNullValue=选择左侧任务查看详情}" TextWrapping="Wrap" />
+                                        <TextBlock Margin="0,8,0,0" Style="{StaticResource MetaTextStyle}" Text="{Binding SelectedJob.Model}" TextWrapping="Wrap" />
+                                        <Button Margin="0,18,0,0" Command="{Binding OpenOutputCommand}" Content="打开输出文件" />
+                                        <TextBlock Margin="0,24,0,6" FontWeight="SemiBold" Text="数据安全" />
+                                        <TextBlock Style="{StaticResource MetaTextStyle}" Text="恢复前自动备份当前数据库；卸载默认保留数据、模型和 DPAPI 密钥。" TextWrapping="Wrap" />
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
+                        </TabItem>
+                    </TabControl>
+                </Grid>
+            </DataTemplate>
+
+            <DataTemplate DataType="{x:Type vm:WorkspacePageViewModel}">
+                <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="32,28,32,40">
+                        <DockPanel LastChildFill="False">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource PageTitleStyle}" Text="{Binding Title}" />
+                                <TextBlock Margin="0,7,0,0" Style="{StaticResource MetaTextStyle}" Text="{Binding Subtitle}" />
+                            </StackPanel>
+                            <Button DockPanel.Dock="Right" Style="{StaticResource AccentButtonStyle}" Content="{Binding PrimaryAction}" />
+                        </DockPanel>
+                        <ItemsControl Margin="0,24,0,0" ItemsSource="{Binding Features}">
+                            <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Width="330" MinHeight="176" Margin="0,0,16,16" Style="{StaticResource BentoCardStyle}">
+                                        <StackPanel>
+                                            <DockPanel><TextBlock FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource Brush.Accent}" Text="{Binding Kicker}" /><TextBlock DockPanel.Dock="Right" Style="{StaticResource MetaTextStyle}" Text="{Binding Status}" /></DockPanel>
+                                            <TextBlock Margin="0,22,0,7" FontSize="18" FontWeight="SemiBold" Text="{Binding Title}" />
+                                            <TextBlock Style="{StaticResource MetaTextStyle}" Text="{Binding Description}" />
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </ScrollViewer>
+            </DataTemplate>
+
+            <DataTemplate DataType="{x:Type vm:SettingsViewModel}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="32,28,32,40">
+                        <TextBlock Style="{StaticResource PageTitleStyle}" Text="{Binding Title}" />
+                        <TextBlock Margin="0,7,0,24" Style="{StaticResource MetaTextStyle}" Text="{Binding Subtitle}" />
+                        <Border Style="{StaticResource BentoCardStyle}">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource SectionTitleStyle}" Text="外观与动效" />
+                                <CheckBox Margin="0,18,0,0" Foreground="{DynamicResource Brush.TextPrimary}" Content="使用深色模式" IsChecked="{Binding IsDarkMode}" />
+                                <CheckBox Margin="0,12,0,0" Foreground="{DynamicResource Brush.TextPrimary}" Content="减少动画（仅保留必要状态反馈）" IsChecked="{Binding ReduceMotion}" />
+                                <DockPanel Margin="0,16,0,0" LastChildFill="False">
+                                    <TextBlock VerticalAlignment="Center" Style="{StaticResource MetaTextStyle}" Text="{Binding AppearanceStatus}" />
+                                    <Button DockPanel.Dock="Right" Margin="16,0,0,0" Command="{Binding SaveAppearanceCommand}" Content="保存外观" />
+                                </DockPanel>
+                            </StackPanel>
+                        </Border>
+                        <Border Margin="0,16,0,0" Style="{StaticResource BentoCardStyle}">
+                            <Grid>
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="16" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource SectionTitleStyle}" Text="自备 Groq Key" />
+                                    <PasswordBox Margin="0,10,0,0" Padding="10,7" controls:PasswordBoxAssistant.BoundPassword="{Binding GroqKeyInput, Mode=TwoWay}" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="2">
+                                    <TextBlock Style="{StaticResource SectionTitleStyle}" Text="自备 DeepSeek Key" />
+                                    <PasswordBox Margin="0,10,0,0" Padding="10,7" controls:PasswordBoxAssistant.BoundPassword="{Binding DeepSeekKeyInput, Mode=TwoWay}" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="3" Margin="16,0,0,0" VerticalAlignment="Bottom" Orientation="Horizontal">
+                                    <Button Margin="0,0,8,0" Command="{Binding DeleteSecretsCommand}" Content="清除" />
+                                    <Button Style="{StaticResource AccentButtonStyle}" Command="{Binding SaveSecretsCommand}" Content="加密保存" />
+                                </StackPanel>
+                                <TextBlock Grid.ColumnSpan="3" Margin="0,72,0,0" Style="{StaticResource MetaTextStyle}" Text="{Binding SecretStatus}" />
+                            </Grid>
+                        </Border>
+                        <Border Margin="0,16,0,0" Style="{StaticResource BentoCardStyle}">
+                            <Grid>
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="180" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions><RowDefinition /><RowDefinition /><RowDefinition /></Grid.RowDefinitions>
+                                <TextBlock Text="数据库" /><TextBlock Grid.Column="1" Style="{StaticResource MetaTextStyle}" Text="{Binding DatabaseLocation}" />
+                                <TextBlock Grid.Row="1" Margin="0,12,0,0" Text="密钥存储" /><TextBlock Grid.Row="1" Grid.Column="1" Margin="0,12,0,0" Style="{StaticResource MetaTextStyle}" Text="{Binding SecretStorage}" />
+                                <TextBlock Grid.Row="2" Margin="0,12,0,0" Text="更新通道" /><TextBlock Grid.Row="2" Grid.Column="1" Margin="0,12,0,0" Style="{StaticResource MetaTextStyle}" Text="{Binding UpdateChannel}" />
+                            </Grid>
+                        </Border>
+                        <Border Margin="0,16,0,0" Style="{StaticResource BentoCardStyle}">
+                            <Grid>
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                <StackPanel Margin="0,0,24,0">
+                                    <TextBlock Style="{StaticResource SectionTitleStyle}" Text="应用更新" />
+                                    <TextBlock Margin="0,8,0,0" Style="{StaticResource MetaTextStyle}" Text="{Binding UpdateStatus}" TextWrapping="Wrap" />
+                                    <TextBlock Margin="0,8,0,0" Style="{StaticResource MetaTextStyle}" Text="{Binding ReleaseNotes}" TextWrapping="Wrap" />
+                                    <ProgressBar Height="3" Margin="0,12,0,0" Maximum="100" Value="{Binding UpdateProgress, Mode=OneWay}" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <Button Margin="0,0,8,0" Command="{Binding CheckForUpdatesCommand}" Content="检查更新" />
+                                    <Button Style="{StaticResource AccentButtonStyle}" Command="{Binding DownloadUpdateCommand}" Content="下载并安装" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </DataTemplate>
+
+            <DataTemplate DataType="{x:Type vm:ToolsViewModel}">
+                <Grid Margin="32,28,32,32">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="18" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="12" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource PageTitleStyle}" Text="{Binding Title}" />
+                        <TextBlock Margin="0,7,0,0" Style="{StaticResource MetaTextStyle}" Text="{Binding Subtitle}" />
+                    </StackPanel>
+                    <WrapPanel Grid.Row="2">
+                        <Button Margin="0,0,8,8" Command="{Binding FormatJsonCommand}" Content="格式化 JSON" />
+                        <Button Margin="0,0,8,8" Command="{Binding MinifyJsonCommand}" Content="压缩" />
+                        <Button Margin="0,0,8,8" Command="{Binding SortJsonCommand}" Content="键排序" />
+                        <Button Margin="0,0,8,8" Command="{Binding ValidateJsonCommand}" Content="校验" />
+                        <Button Margin="0,0,8,8" Command="{Binding EncodeBase64Command}" Content="Base64 编码" />
+                        <Button Margin="0,0,8,8" Command="{Binding DecodeBase64Command}" Content="Base64 解码" />
+                        <Button Margin="0,0,8,8" Command="{Binding EncodeUrlCommand}" Content="URL 编码" />
+                        <Button Margin="0,0,8,8" Command="{Binding DecodeUrlCommand}" Content="URL 解码" />
+                        <Button Margin="0,0,8,8" Command="{Binding CleanTextCommand}" Content="清理文本" />
+                        <Button Margin="0,0,8,8" Command="{Binding HashFileCommand}" Content="SHA-256 文件校验" />
+                        <Button Margin="0,0,8,8" Command="{Binding WordToPdfCommand}" Content="Word 转 PDF" />
+                    </WrapPanel>
+                    <Grid Grid.Row="4">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="52" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                        <Border Style="{StaticResource BentoCardStyle}" Padding="0">
+                            <Grid><Grid.RowDefinitions><RowDefinition Height="42" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                                <TextBlock Margin="16,0" VerticalAlignment="Center" FontWeight="SemiBold" Text="输入" />
+                                <TextBox Grid.Row="1" Padding="16" AcceptsReturn="True" AcceptsTab="True" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" FontFamily="Cascadia Mono, Consolas" Text="{Binding Input, UpdateSourceTrigger=PropertyChanged}" />
+                            </Grid>
+                        </Border>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <Button Width="38" Height="38" Padding="8" Command="{Binding SwapCommand}" ToolTip="交换输入与输出">
+                                <Path Stretch="Uniform" Stroke="{DynamicResource Brush.Accent}" StrokeThickness="1.6" Data="M4,8 L18,8 15,5 M18,8 15,11 M20,16 L6,16 9,13 M6,16 9,19" />
+                            </Button>
+                        </StackPanel>
+                        <Border Grid.Column="2" Style="{StaticResource BentoCardStyle}" Padding="0">
+                            <Grid><Grid.RowDefinitions><RowDefinition Height="42" /><RowDefinition Height="*" /><RowDefinition Height="34" /></Grid.RowDefinitions>
+                                <TextBlock Margin="16,0" VerticalAlignment="Center" FontWeight="SemiBold" Text="结果" />
+                                <TextBox Grid.Row="1" Padding="16" AcceptsReturn="True" IsReadOnly="True" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" FontFamily="Cascadia Mono, Consolas" Text="{Binding Output}" />
+                                <TextBlock Grid.Row="2" Margin="16,0" VerticalAlignment="Center" Style="{StaticResource MetaTextStyle}" Text="{Binding Status}" />
+                            </Grid>
+                        </Border>
+                    </Grid>
+                </Grid>
+            </DataTemplate>
+
+            <DataTemplate DataType="{x:Type vm:NewsCenterViewModel}">
+                <Grid Margin="28,24,28,28">
+                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="12" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                    <DockPanel LastChildFill="False">
+                        <StackPanel><TextBlock Style="{StaticResource PageTitleStyle}" Text="{Binding Title}" /><TextBlock Margin="0,6,0,0" Style="{StaticResource MetaTextStyle}" Text="{Binding Status}" /></StackPanel>
+                        <Button DockPanel.Dock="Right" Style="{StaticResource AccentButtonStyle}" Command="{Binding RefreshCommand}" Content="刷新今日资讯" />
+                    </DockPanel>
+                    <TabControl Grid.Row="2" Background="Transparent" BorderThickness="0">
+                        <TabControl.Resources>
+                            <Style TargetType="TabItem">
+                                <Setter Property="Margin" Value="0,0,8,0" />
+                                <Setter Property="Padding" Value="18,9" />
+                                <Setter Property="Foreground" Value="{DynamicResource Brush.TextSecondary}" />
+                                <Setter Property="FontWeight" Value="SemiBold" />
+                                <Setter Property="Cursor" Value="Hand" />
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="TabItem">
+                                            <Border x:Name="Chrome" Padding="{TemplateBinding Padding}" Background="{DynamicResource Brush.SurfaceRaised}" BorderBrush="{DynamicResource Brush.Border}" BorderThickness="1" CornerRadius="9">
+                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" ContentSource="Header" />
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Brush.BorderStrong}" /></Trigger>
+                                                <Trigger Property="IsSelected" Value="True">
+                                                    <Setter Property="Foreground" Value="White" />
+                                                    <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource Brush.Accent}" />
+                                                    <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
+                                                </Trigger>
+                                                <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Brush.Focus}" /><Setter TargetName="Chrome" Property="BorderThickness" Value="2" /></Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </TabControl.Resources>
+                        <TabItem Header="每日早报">
+                            <Border Margin="0,12,0,0" Style="{StaticResource BentoCardStyle}" Padding="0" ClipToBounds="True">
+                                <Grid>
+                                    <Grid.RowDefinitions><RowDefinition Height="64" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                                    <Grid Margin="22,0">
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                        <StackPanel VerticalAlignment="Center">
+                                            <TextBlock Style="{StaticResource SectionTitleStyle}" Text="早报阅读" />
+                                            <TextBlock Margin="0,4,0,0" Style="{StaticResource MetaTextStyle}" Text="默认显示今天；可选择已有日期查看历史早报" />
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                            <Button Margin="0,0,16,0"
+                                                    Command="{Binding GenerateArticleReportCommand}"
+                                                    AutomationProperties.Name="为当前早报生成 AI 解读"
+                                                    Content="生成 AI 解读" />
+                                            <TextBlock Margin="0,0,10,0" VerticalAlignment="Center" Style="{StaticResource MetaTextStyle}" Text="选择日期" />
+                                            <ComboBox Width="150" ItemsSource="{Binding ArticleDates}" SelectedItem="{Binding SelectedDate}">
+                                                <ComboBox.ItemTemplate>
+                                                    <DataTemplate><TextBlock Text="{Binding StringFormat={}{0:yyyy-MM-dd}}" /></DataTemplate>
+                                                </ComboBox.ItemTemplate>
+                                            </ComboBox>
+                                        </StackPanel>
+                                    </Grid>
+                                    <controls:RichArticleView Grid.Row="1" Article="{Binding SelectedArticle}" />
+                                </Grid>
+                            </Border>
+                        </TabItem>
+                        <TabItem Header="热点趋势">
+                            <Border Margin="0,12,0,0" Style="{StaticResource BentoCardStyle}" Padding="0" ClipToBounds="True">
+                                <Grid>
+                                    <Grid.RowDefinitions><RowDefinition Height="64" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                                    <DockPanel Margin="22,0" LastChildFill="False">
+                                        <StackPanel VerticalAlignment="Center">
+                                            <TextBlock Style="{StaticResource SectionTitleStyle}" Text="热点趋势" />
+                                            <TextBlock Margin="0,4,0,0" Style="{StaticResource MetaTextStyle}" Text="按平台热度排名展示最新趋势" />
+                                        </StackPanel>
+                                        <Button DockPanel.Dock="Right"
+                                                VerticalAlignment="Center"
+                                                Command="{Binding GenerateDailyTrendReportCommand}"
+                                                AutomationProperties.Name="生成每日趋势 AI 报告"
+                                                Content="生成趋势报告" />
+                                    </DockPanel>
+                                    <ListBox Grid.Row="1" ItemsSource="{Binding Trends}" Background="Transparent" BorderThickness="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                        <ListBox.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border Padding="22,14" BorderBrush="{DynamicResource Brush.Border}" BorderThickness="0,1,0,0">
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions><ColumnDefinition Width="54" /><ColumnDefinition Width="*" /><ColumnDefinition Width="130" /></Grid.ColumnDefinitions>
+                                                        <TextBlock VerticalAlignment="Top" FontSize="20" FontWeight="SemiBold" Foreground="{DynamicResource Brush.Accent}" Text="{Binding Rank}" />
+                                                        <StackPanel Grid.Column="1">
+                                                            <TextBlock FontSize="15" FontWeight="SemiBold" Text="{Binding Title}" TextWrapping="Wrap" />
+                                                            <TextBlock Margin="0,5,0,0" Style="{StaticResource MetaTextStyle}" Text="{Binding Platform}" />
+                                                        </StackPanel>
+                                                        <TextBlock Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Center" Style="{StaticResource MetaTextStyle}" Text="{Binding Heat}" />
+                                                    </Grid>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ListBox.ItemTemplate>
+                                    </ListBox>
+                                </Grid>
+                            </Border>
+                        </TabItem>
+                        <TabItem Header="AI 报告">
+                            <Grid Margin="0,12,0,0">
+                                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="12" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                                <Border Style="{StaticResource BentoCardStyle}">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                        <StackPanel>
+                                            <TextBlock Style="{StaticResource SectionTitleStyle}" Text="本地报告库" />
+                                            <TextBlock Margin="0,5,0,0" Style="{StaticResource MetaTextStyle}" Text="{Binding ReportStatus}" TextWrapping="Wrap" />
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                            <TextBlock HorizontalAlignment="Right" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource Brush.Accent}" Text="DEEPSEEK" />
+                                            <TextBlock Margin="0,4,0,0" HorizontalAlignment="Right" Style="{StaticResource MetaTextStyle}" Text="输出按纯文本保存 · 可取消" />
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                                <Grid Grid.Row="2">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="340" /><ColumnDefinition Width="14" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                    <Border Style="{StaticResource BentoCardStyle}" Padding="0">
+                                        <ListBox ItemsSource="{Binding Reports}"
+                                                 SelectedItem="{Binding SelectedReport}"
+                                                 Background="Transparent"
+                                                 BorderThickness="0"
+                                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                                 AutomationProperties.Name="AI 报告列表">
+                                            <ListBox.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Border Padding="18,14" BorderBrush="{DynamicResource Brush.Border}" BorderThickness="0,0,0,1">
+                                                        <StackPanel>
+                                                            <TextBlock FontWeight="SemiBold" Text="{Binding Title}" TextWrapping="Wrap" />
+                                                            <DockPanel Margin="0,7,0,0">
+                                                                <TextBlock Style="{StaticResource MetaTextStyle}" Text="{Binding Model}" />
+                                                                <TextBlock DockPanel.Dock="Right" Style="{StaticResource MetaTextStyle}" Text="{Binding TokenUsage, StringFormat={}{0} tokens}" />
+                                                            </DockPanel>
+                                                            <TextBlock Margin="0,5,0,0" Style="{StaticResource MetaTextStyle}" Text="{Binding CreatedAt, StringFormat={}{0:yyyy-MM-dd HH:mm}}" />
+                                                        </StackPanel>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ListBox.ItemTemplate>
+                                        </ListBox>
+                                    </Border>
+                                    <Border Grid.Column="2" Style="{StaticResource BentoCardStyle}" Padding="0">
+                                        <Grid>
+                                            <Grid.RowDefinitions><RowDefinition Height="64" /><RowDefinition Height="*" /><RowDefinition Height="44" /></Grid.RowDefinitions>
+                                            <StackPanel Margin="22,0" VerticalAlignment="Center">
+                                                <TextBlock Style="{StaticResource SectionTitleStyle}" Text="{Binding SelectedReport.Title, TargetNullValue=尚未生成报告}" TextWrapping="Wrap" />
+                                                <TextBlock Margin="0,4,0,0" Style="{StaticResource MetaTextStyle}" Text="{Binding SelectedReport.Model, TargetNullValue=请从每日早报或热点趋势页生成第一份报告}" />
+                                            </StackPanel>
+                                            <TextBox Grid.Row="1"
+                                                     Padding="22,16"
+                                                     IsReadOnly="True"
+                                                     AcceptsReturn="True"
+                                                     TextWrapping="Wrap"
+                                                     VerticalScrollBarVisibility="Auto"
+                                                     BorderThickness="0,1,0,1"
+                                                     BorderBrush="{DynamicResource Brush.Border}"
+                                                     Background="Transparent"
+                                                     AutomationProperties.Name="AI 报告正文"
+                                                     Text="{Binding SelectedReport.Content, Mode=OneWay}" />
+                                            <TextBlock Grid.Row="2" Margin="22,0" VerticalAlignment="Center" Style="{StaticResource MetaTextStyle}" Text="AI 输出可能存在错误，请结合原始资讯核验；报告与用量仅保存在本地 SQLite。" />
+                                        </Grid>
+                                    </Border>
+                                </Grid>
+                            </Grid>
+                        </TabItem>
+                    </TabControl>
+                </Grid>
+            </DataTemplate>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

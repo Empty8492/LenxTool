@@ -1,0 +1,15 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/LenxTool.App/LenxTool.App.csproj" />
+    <Project Path="src/LenxTool.Core/LenxTool.Core.csproj" />
+    <Project Path="src/LenxTool.Infrastructure/LenxTool.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/LenxTool.App.Tests/LenxTool.App.Tests.csproj" />
+    <Project Path="tests/LenxTool.Core.Tests/LenxTool.Core.Tests.csproj" />
+    <Project Path="tests/LenxTool.Infrastructure.Tests/LenxTool.Infrastructure.Tests.csproj" />
+  </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/LenxTool.ReleaseTool/LenxTool.ReleaseTool.csproj" />
+  </Folder>
+</Solution>

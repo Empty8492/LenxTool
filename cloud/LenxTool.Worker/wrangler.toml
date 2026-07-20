@@ -1,0 +1,17 @@
+name = "lenx-tool-api"
+main = "src/index.ts"
+compatibility_date = "2026-07-01"
+workers_dev = true
+
+[[d1_databases]]
+binding = "DB"
+database_name = "lenx-tool"
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
+migrations_dir = "migrations"
+
+[vars]
+ACCESS_TOKEN_TTL_SECONDS = "900"
+REFRESH_TOKEN_TTL_DAYS = "30"
+
+# Configure with `wrangler secret put` (never place values here):
+# TOKEN_SECRET, GROQ_API_KEY, DEEPSEEK_API_KEY
