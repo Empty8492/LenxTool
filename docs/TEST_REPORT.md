@@ -22,7 +22,7 @@
 
 ## 冒烟与制品测试
 
-- 从 Release 编译结果启动：主窗口标题 `Lenx 工具箱`，进程 Responding=True。
+- 从当时的 Release 编译结果启动：主窗口可见，进程 Responding=True。
 - `LenxTool_Setup.exe` 静默安装到包含中文与空格的测试目录：ExitCode=0。
 - 启动已安装应用：Responding=True，标题正确。
 - 静默卸载：ExitCode=0，测试安装目录已移除。

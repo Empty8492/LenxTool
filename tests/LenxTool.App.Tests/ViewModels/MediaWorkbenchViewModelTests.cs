@@ -11,7 +11,7 @@ public sealed class MediaWorkbenchViewModelTests
     [Fact]
     public async Task BrowsePersistsSelectedFileAsQueuedBeforeProcessingStarts()
     {
-        string root = Path.Combine(Path.GetTempPath(), "Lenx 工具箱 tests", Guid.NewGuid().ToString("N"));
+        string root = Path.Combine(Path.GetTempPath(), "Lenx Tools tests", Guid.NewGuid().ToString("N"));
         string input = Path.Combine(root, "queued.wav");
         Directory.CreateDirectory(root);
         await File.WriteAllBytesAsync(input, [1, 2, 3]);
@@ -40,7 +40,7 @@ public sealed class MediaWorkbenchViewModelTests
     [Fact]
     public async Task FailedJobIsCountedAsFailedInsteadOfCompleted()
     {
-        string root = Path.Combine(Path.GetTempPath(), "Lenx 工具箱 tests", Guid.NewGuid().ToString("N"));
+        string root = Path.Combine(Path.GetTempPath(), "Lenx Tools tests", Guid.NewGuid().ToString("N"));
         string input = Path.Combine(root, "broken.wav");
         Directory.CreateDirectory(root);
         await File.WriteAllBytesAsync(input, [1, 2, 3]);
@@ -68,7 +68,7 @@ public sealed class MediaWorkbenchViewModelTests
     [Fact]
     public async Task InitializeRestoresPersistedQueuedJobAndCanProcessIt()
     {
-        string root = Path.Combine(Path.GetTempPath(), "Lenx 工具箱 tests", Guid.NewGuid().ToString("N"));
+        string root = Path.Combine(Path.GetTempPath(), "Lenx Tools tests", Guid.NewGuid().ToString("N"));
         string input = Path.Combine(root, "restored.wav");
         Directory.CreateDirectory(root);
         await File.WriteAllBytesAsync(input, [1, 2, 3]);
@@ -98,7 +98,7 @@ public sealed class MediaWorkbenchViewModelTests
     [Fact]
     public async Task ProgressReportsArePersistedBeforeCompletedState()
     {
-        string root = Path.Combine(Path.GetTempPath(), "Lenx 工具箱 tests", Guid.NewGuid().ToString("N"));
+        string root = Path.Combine(Path.GetTempPath(), "Lenx Tools tests", Guid.NewGuid().ToString("N"));
         string input = Path.Combine(root, "progress.wav");
         Directory.CreateDirectory(root);
         await File.WriteAllBytesAsync(input, [1, 2, 3]);
@@ -127,7 +127,7 @@ public sealed class MediaWorkbenchViewModelTests
     [Fact]
     public async Task RetryCreatesFreshPersistedQueuedJobWithoutOldError()
     {
-        string root = Path.Combine(Path.GetTempPath(), "Lenx 工具箱 tests", Guid.NewGuid().ToString("N"));
+        string root = Path.Combine(Path.GetTempPath(), "Lenx Tools tests", Guid.NewGuid().ToString("N"));
         string input = Path.Combine(root, "retry.wav");
         Directory.CreateDirectory(root);
         await File.WriteAllBytesAsync(input, [1, 2, 3]);
@@ -161,7 +161,7 @@ public sealed class MediaWorkbenchViewModelTests
     [Fact]
     public async Task BatchProgressDoesNotMoveBackwardBetweenJobs()
     {
-        string root = Path.Combine(Path.GetTempPath(), "Lenx 工具箱 tests", Guid.NewGuid().ToString("N"));
+        string root = Path.Combine(Path.GetTempPath(), "Lenx Tools tests", Guid.NewGuid().ToString("N"));
         string first = Path.Combine(root, "first.wav");
         string second = Path.Combine(root, "second.wav");
         Directory.CreateDirectory(root);
@@ -197,7 +197,7 @@ public sealed class MediaWorkbenchViewModelTests
     [Fact]
     public async Task GroqJobExportsUtf8SrtAndPersistsHistoryInChineseSpacePath()
     {
-        string root = Path.Combine(Path.GetTempPath(), "Lenx 工具箱 tests", Guid.NewGuid().ToString("N"));
+        string root = Path.Combine(Path.GetTempPath(), "Lenx Tools tests", Guid.NewGuid().ToString("N"));
         string input = Path.Combine(root, "中文 音频.wav");
         Directory.CreateDirectory(root);
         await File.WriteAllBytesAsync(input, [1, 2, 3]);

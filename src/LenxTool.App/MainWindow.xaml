@@ -4,7 +4,8 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
-        Title="Lenx 工具箱"
+        Title="Lenx Tools"
+        Icon="Assets/LenxTools.ico"
         Width="1380"
         Height="860"
         MinWidth="920"
@@ -39,7 +40,7 @@
                               Data="M3,4 L9,4 9,14 15,14 15,20 3,20 Z M12,4 L20,4 20,11 12,11 Z" />
                     </Border>
                     <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center">
-                        <TextBlock FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource Brush.TextOnDark}" Text="LENX 工具箱" />
+                        <TextBlock FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource Brush.TextOnDark}" Text="LENX TOOLS" />
                         <TextBlock Margin="0,2,0,0" FontSize="10" Foreground="{DynamicResource Brush.TextOnDarkMuted}" Text="LOCAL-FIRST DESKTOP" />
                     </StackPanel>
                 </Grid>

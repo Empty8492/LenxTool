@@ -9,6 +9,7 @@
     <EmbeddedResource Include="..\..\installer\update-public-key.pem"
                       Link="Resources\update-public-key.pem"
                       LogicalName="LenxTool.UpdatePublicKey" />
+    <Resource Include="Assets\LenxTools.ico" />
   </ItemGroup>
 
   <ItemGroup>
@@ -27,8 +28,12 @@
     <SelfContained>true</SelfContained>
     <PublishSingleFile>false</PublishSingleFile>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\LenxTools.ico</ApplicationIcon>
     <AssemblyName>LenxTool</AssemblyName>
     <RootNamespace>LenxTool.App</RootNamespace>
+    <AssemblyTitle>Lenx Tools</AssemblyTitle>
+    <Title>Lenx Tools</Title>
+    <Product>Lenx Tools</Product>
     <Version>0.1.0</Version>
   </PropertyGroup>
 

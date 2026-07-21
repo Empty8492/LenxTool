@@ -12,7 +12,7 @@ public sealed class SqliteDatabaseTests : IDisposable
 {
     private readonly string _testRoot = Path.Combine(
         Path.GetTempPath(),
-        "Lenx 工具箱 tests",
+        "Lenx Tools tests",
         Guid.NewGuid().ToString("N"));
 
     [Fact]

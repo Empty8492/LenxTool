@@ -63,7 +63,7 @@ public partial class App : Application
         {
             string detail = SecretRedactor.Redact(exception.Message);
             MessageBox.Show(
-                $"Lenx 工具箱暂时无法启动。\n\n{detail}",
+                $"Lenx Tools 暂时无法启动。\n\n{detail}",
                 "启动失败",
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
@@ -203,7 +203,7 @@ public partial class App : Application
 
         MessageBox.Show(
             "操作未能完成。任务状态已尽可能保留，请重试或打开日志查看脱敏详情。",
-            "Lenx 工具箱遇到问题",
+            "Lenx Tools 遇到问题",
             MessageBoxButton.OK,
             MessageBoxImage.Warning);
     }

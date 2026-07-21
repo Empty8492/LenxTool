@@ -1,8 +1,8 @@
-# Lenx 工具箱项目文档
+# Lenx Tools 项目文档
 
 ## 1. 项目定位
 
-Lenx 工具箱是面向 Windows 10/11 x64 的本地优先桌面工具。项目从 `L:\RealTimeTranslator` 的功能经验中重构而来，但没有继承旧项目的单窗口业务堆叠、明文密钥、固定管理员口令、IE WebBrowser 或捆绑模型做法。旧目录始终只读。
+Lenx Tools 是面向 Windows 10/11 x64 的本地优先桌面工具。项目从 `L:\RealTimeTranslator` 的功能经验中重构而来，但没有继承旧项目的单窗口业务堆叠、明文密钥、固定管理员口令、IE WebBrowser 或捆绑模型做法。旧目录始终只读。
 
 当前版本：`0.1.0` 可运行预览基线。目标框架为 .NET 10，桌面 UI 使用 WPF、MVVM 与依赖注入；云端共享额度服务使用 Cloudflare Workers + D1。仓库内现有 `Release\LenxTool_Setup.exe` 早于本轮源码修复，不能视为当前版本安装包。
 
@@ -137,9 +137,9 @@ Groq 429 读取 `Retry-After`、请求限额和剩余量，并计算已用量。
 前置：Windows x64、.NET SDK 10.0.302。开发机需安装 WebView2 Runtime；Word 转 PDF 需要 Microsoft Word。
 
 ```powershell
-dotnet restore LenxTool.slnx
-dotnet build LenxTool.slnx -c Release
-dotnet test LenxTool.slnx -c Release
+dotnet restore LenxTools.slnx
+dotnet build LenxTools.slnx -c Release
+dotnet test LenxTools.slnx -c Release
 dotnet run --project src\LenxTool.App\LenxTool.App.csproj -c Release
 ```
 

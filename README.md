@@ -1,6 +1,6 @@
-# Lenx 工具箱
+# Lenx Tools
 
-Lenx 工具箱是面向 Windows 10/11 x64 的本地优先桌面效率应用，统一承载资讯阅读、热点研判、媒体字幕处理、文档与数据轻工具。
+Lenx Tools 是面向 Windows 10/11 x64 的本地优先桌面效率应用，统一承载资讯阅读、热点研判、媒体字幕处理、文档与数据轻工具。
 
 本仓库是对 `L:\RealTimeTranslator` 的独立重构。旧项目仅作为只读功能参考，不是本仓库的代码基础，也不会被本项目的构建、测试或发布脚本修改。
 
@@ -25,14 +25,14 @@ Lenx 工具箱是面向 Windows 10/11 x64 的本地优先桌面效率应用，�
 ## 常用命令
 
 ```powershell
-dotnet restore LenxTool.slnx
-dotnet build LenxTool.slnx -c Release --no-restore
-dotnet test LenxTool.slnx -c Release --no-build
+dotnet restore LenxTools.slnx
+dotnet build LenxTools.slnx -c Release --no-restore
+dotnet test LenxTools.slnx -c Release --no-build
 dotnet run --project src/LenxTool.App/LenxTool.App.csproj
 ```
 
 发布、安装包和便携包由 `scripts/Build-Release.ps1` 统一生成。
-Lenx 工具箱是 .NET 10 + WPF 的 Windows 10/11 x64 本地优先桌面应用。本仓库是全新重构项目；`L:\RealTimeTranslator` 仅用于功能分析，未被修改。
+Lenx Tools 是 .NET 10 + WPF 的 Windows 10/11 x64 本地优先桌面应用。本仓库是全新重构项目；`L:\RealTimeTranslator` 仅用于功能分析，未被修改。
 
 ## 文档入口
 
@@ -49,8 +49,8 @@ Lenx 工具箱是 .NET 10 + WPF 的 Windows 10/11 x64 本地优先桌面应用�
 ## 快速验证
 
 ```powershell
-dotnet build LenxTool.slnx -c Release
-dotnet test LenxTool.slnx -c Release
+dotnet build LenxTools.slnx -c Release
+dotnet test LenxTools.slnx -c Release
 ```
 
 正式发布脚本完成后，最终制品位于 `Release`。安装包为 `LenxTool_Setup.exe`，便携版为 `LenxTool_Portable_win-x64.zip`；生成时间必须晚于对应源码修改时间。

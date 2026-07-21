@@ -1,4 +1,4 @@
-#define AppName "Lenx 工具箱"
+#define AppName "Lenx Tools"
 #ifndef AppVersion
   #define AppVersion "0.1.0"
 #endif
@@ -15,6 +15,7 @@ DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes
 OutputDir=..\Release
 OutputBaseFilename=LenxTool_Setup
+SetupIconFile=..\src\LenxTool.App\Assets\LenxTools.ico
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern

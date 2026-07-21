@@ -22,7 +22,7 @@ public sealed class ToolboxTests
     [Fact]
     public void EncodingToolkitRoundTripsChineseAndUrlContent()
     {
-        const string text = "Lenx 工具箱 / 本地优先";
+        const string text = "Lenx Tools / 本地优先";
 
         string base64 = EncodingToolkit.ToBase64(text);
         string encodedUrl = EncodingToolkit.EncodeUrl(text);

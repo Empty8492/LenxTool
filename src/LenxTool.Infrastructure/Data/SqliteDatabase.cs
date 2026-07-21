@@ -42,7 +42,7 @@ public sealed partial class SqliteDatabase(
                 new(
                     AppErrorCode.DatabaseCorrupted,
                     "本地数据库已损坏",
-                    "Lenx 工具箱无法读取本地数据库，已停止写入以保护现有数据。",
+                    "Lenx Tools 无法读取本地数据库，已停止写入以保护现有数据。",
                     "请从历史备份恢复；如无可用备份，请保留损坏文件后新建数据库。",
                     exception.Message,
                     "SQLite",

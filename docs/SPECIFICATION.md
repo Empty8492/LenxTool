@@ -1,4 +1,4 @@
-# Lenx 工具箱产品与工程规格
+# Lenx Tools 产品与工程规格
 
 ## 1. 目标
 
@@ -8,7 +8,7 @@
 
 ## 2. 已确认的保守默认值
 
-1. 产品显示名为“Lenx 工具箱”，程序集和命名空间使用 `LenxTool`。
+1. 产品显示名为“Lenx Tools”，程序集和命名空间使用 `LenxTool`。
 2. 安装范围默认当前用户，不要求管理员权限；固定 AppId 保证覆盖升级。
 3. 数据目录固定为 `%LocalAppData%\LenxTool`；数据库为 `Data\lenx.db`，密钥为当前 Windows 用户作用域的 DPAPI 加密文件。
 4. 首版更新源使用 GitHub Releases；更新清单通过 ECDSA P-256/SHA-256 离线私钥签名，客户端仅内置公钥并支持镜像数组。
@@ -31,9 +31,9 @@
 ## 4. 工程命令
 
 ```powershell
-dotnet restore LenxTool.slnx
-dotnet build LenxTool.slnx -c Release --no-restore
-dotnet test LenxTool.slnx -c Release --no-build --logger "console;verbosity=normal"
+dotnet restore LenxTools.slnx
+dotnet build LenxTools.slnx -c Release --no-restore
+dotnet test LenxTools.slnx -c Release --no-build --logger "console;verbosity=normal"
 dotnet publish src/LenxTool.App/LenxTool.App.csproj -c Release -r win-x64 --self-contained true -o artifacts/publish/win-x64
 powershell -ExecutionPolicy Bypass -File scripts/Build-Release.ps1 `
   -Version 0.1.0 `

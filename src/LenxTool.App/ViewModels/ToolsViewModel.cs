@@ -11,7 +11,7 @@ public sealed class ToolsViewModel : PageViewModel
     private readonly IFileHashService _hashService;
     private readonly IDocumentConverter _documentConverter;
     private readonly IDesktopFileDialogService _dialogs;
-    private string _input = "{\n  \"name\": \"Lenx 工具箱\",\n  \"localFirst\": true\n}";
+    private string _input = "{\n  \"name\": \"Lenx Tools\",\n  \"localFirst\": true\n}";
     private string _output = string.Empty;
     private string _status = "选择操作后，结果会显示在右侧。";
 
