@@ -8,7 +8,7 @@
 
 | 测试组 | 结果 |
 |---|---:|
-| LenxTool.Core.Tests | 30 passed |
+| LenxTool.Core.Tests | 35 passed |
 | LenxTool.Infrastructure.Tests | 25 passed |
 | LenxTool.App.Tests | 41 passed |
 | Cloudflare Worker Vitest | 1 passed |
@@ -16,9 +16,9 @@
 | .NET build warnings | 0 |
 | NuGet vulnerable packages | 0 detected |
 
-本轮执行 `dotnet build LenxTools.slnx -c Release`，结果为 0 警告、0 错误；执行 `dotnet test LenxTools.slnx -c Release`，结果为 Core 30、Infrastructure 25、App 41，共 96/96 通过且无跳过。
+本轮执行 `dotnet build LenxTools.slnx -c Release`，结果为 0 警告、0 错误；执行 `dotnet test LenxTools.slnx -c Release`，结果为 Core 35、Infrastructure 25、App 41，共 101/101 通过且无跳过。
 
-覆盖点包括：统一 HTTP 错误、Groq 429 与 Retry-After、DeepSeek 当前模型请求与 token 用量解析、AI 报告生成状态和 SQLite/FTS5 持久化、语义版本、签名篡改、严格 SRT 解析/导出、UTF-8 BOM、原序号保留、畸形块错误行定位、已有 SRT 任务与片段原子创建、字幕片段按任务事务替换与按原序号读取、字幕序号/时间轴唯一性、字幕原文/译文/置信指标重开往返、覆盖写入、批次中途失败回滚和 schema v1 升级保留、重叠合并、音频分片计划、JSON/编码/文本工具、SQLite schema/FTS/损坏、早报/热点/AI 报告统一全文搜索、包含未 checkpoint WAL 提交的一致性迁移备份、RSS 富内容持久化、HTML/Markdown 正文配图顺序与安全 URL 解析、受大小限制的图片下载、标题/列表/链接解析与朗读标记清理、NewsNow 13 来源目录与响应解析、恶意子域名拒绝、按平台缓存快照替换、热点平台分组、多选来源过滤、全选恢复与安全原文命令、PasswordBox TwoWay Binding 保留、Key 保存命令状态与 DPAPI 配置反馈、资讯页统一控件样式、无缺边歧义的标签指示器、单一整页滚动、回顶渐显和缓动布局、设置持久化、DPAPI 与脱敏、中文/空格/超过 260 字符的路径、媒体 Queued/Running/Completed/Failed 状态与进度持久化、重启恢复、失败计数和重试、资讯默认当天/日期切换/当天缺失回退、导航和 Ctrl+K 状态。
+覆盖点包括：统一 HTTP 错误、Groq 429 与 Retry-After、DeepSeek 当前模型请求与 token 用量解析、AI 报告生成状态和 SQLite/FTS5 持久化、语义版本、签名篡改、严格 SRT 解析/导出、UTF-8 BOM、原序号保留、畸形块错误行定位、已有 SRT 任务与片段原子创建、字幕批量翻译输入快照、批大小边界、取消令牌、流式批次、模型/请求数/token 用量、幂等恢复点、结构化失败，以及译文乱序输入下仍只填充译文且保持原文/时间轴/置信指标/列表顺序、字幕片段按任务事务替换与按原序号读取、字幕序号/时间轴唯一性、字幕原文/译文/置信指标重开往返、覆盖写入、批次中途失败回滚和 schema v1 升级保留、重叠合并、音频分片计划、JSON/编码/文本工具、SQLite schema/FTS/损坏、早报/热点/AI 报告统一全文搜索、包含未 checkpoint WAL 提交的一致性迁移备份、RSS 富内容持久化、HTML/Markdown 正文配图顺序与安全 URL 解析、受大小限制的图片下载、标题/列表/链接解析与朗读标记清理、NewsNow 13 来源目录与响应解析、恶意子域名拒绝、按平台缓存快照替换、热点平台分组、多选来源过滤、全选恢复与安全原文命令、PasswordBox TwoWay Binding 保留、Key 保存命令状态与 DPAPI 配置反馈、资讯页统一控件样式、无缺边歧义的标签指示器、单一整页滚动、回顶渐显和缓动布局、设置持久化、DPAPI 与脱敏、中文/空格/超过 260 字符的路径、媒体 Queued/Running/Completed/Failed 状态与进度持久化、重启恢复、失败计数和重试、资讯默认当天/日期切换/当天缺失回退、导航和 Ctrl+K 状态。
 
 真实 DeepSeek 连通性测试使用临时进程环境变量执行，未写入仓库或日志。`deepseek-v4-flash` 请求成功，返回 46 total tokens；测试凭据值未保存到项目文件。
 
