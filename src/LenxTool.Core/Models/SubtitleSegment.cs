@@ -8,5 +8,7 @@ public sealed record SubtitleSegment(
     double? AverageLogProbability = null,
     double? NoSpeechProbability = null)
 {
+    public int? Sequence { get; init; }
+
     public double MidpointSeconds => (Start.TotalSeconds + End.TotalSeconds) / 2;
 }

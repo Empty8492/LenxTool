@@ -92,7 +92,11 @@ public partial class App : Application
         services.AddSingleton<INewsCenterService, NewsCenterService>();
         services.AddSingleton<IAiReportService, DeepSeekReportService>();
         services.AddSingleton<ISecretStore, DpapiSecretStore>();
-        services.AddSingleton<IMediaJobRepository, MediaJobRepository>();
+        services.AddSingleton<MediaJobRepository>();
+        services.AddSingleton<IMediaJobRepository>(static services =>
+            services.GetRequiredService<MediaJobRepository>());
+        services.AddSingleton<ISubtitleRepository>(static services =>
+            services.GetRequiredService<MediaJobRepository>());
         services.AddSingleton<IAppSettingsRepository, AppSettingsRepository>();
         services.AddSingleton<IFileHashService, FileHashService>();
         services.AddSingleton<ILocalModelService, LocalWhisperModelService>();

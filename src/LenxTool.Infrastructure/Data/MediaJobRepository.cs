@@ -7,7 +7,7 @@ using Microsoft.Data.Sqlite;
 
 namespace LenxTool.Infrastructure.Data;
 
-public sealed class MediaJobRepository(SqliteDatabase database) : IMediaJobRepository
+public sealed class MediaJobRepository(SqliteDatabase database) : IMediaJobRepository, ISubtitleRepository
 {
     public async Task UpsertAsync(MediaJob job, CancellationToken cancellationToken)
     {
@@ -73,6 +73,118 @@ public sealed class MediaJobRepository(SqliteDatabase database) : IMediaJobRepos
         return await GetRecentAsync(100, cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task ReplaceAsync(
+        string mediaJobId,
+        IReadOnlyList<SubtitleSegment> segments,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(mediaJobId);
+        ArgumentNullException.ThrowIfNull(segments);
+
+        await using SqliteConnection connection = await database.OpenConnectionAsync(cancellationToken)
+            .ConfigureAwait(false);
+        await using SqliteTransaction transaction = (SqliteTransaction)await connection
+            .BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        var sequences = new HashSet<int>();
+        var timelines = new HashSet<(long StartMilliseconds, long EndMilliseconds)>();
+        await using (SqliteCommand delete = connection.CreateCommand())
+        {
+            delete.Transaction = transaction;
+            delete.CommandText = "DELETE FROM subtitle_segments WHERE media_job_id=$mediaJobId;";
+            delete.Parameters.AddWithValue("$mediaJobId", mediaJobId);
+            await delete.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        for (int index = 0; index < segments.Count; index++)
+        {
+            SubtitleSegment segment = segments[index];
+            if (segment.Sequence is < 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(segments), "字幕序号不能为负数。");
+            }
+            int sequence = segment.Sequence ?? checked(index + 1);
+            long startMilliseconds = ToMilliseconds(segment.Start, nameof(segment.Start));
+            long endMilliseconds = ToMilliseconds(segment.End, nameof(segment.End));
+            if (endMilliseconds <= startMilliseconds)
+            {
+                throw new ArgumentException("字幕结束时间必须晚于开始时间。", nameof(segments));
+            }
+            ArgumentException.ThrowIfNullOrWhiteSpace(segment.Text);
+            if (!sequences.Add(sequence))
+            {
+                throw new ArgumentException("同一媒体任务中的字幕序号必须唯一。", nameof(segments));
+            }
+            if (!timelines.Add((startMilliseconds, endMilliseconds)))
+            {
+                throw new ArgumentException("同一媒体任务中的字幕时间轴必须唯一。", nameof(segments));
+            }
+
+            await using SqliteCommand insert = connection.CreateCommand();
+            insert.Transaction = transaction;
+            insert.CommandText = """
+                INSERT INTO subtitle_segments(
+                    media_job_id, sequence, start_ms, end_ms, text, translated_text,
+                    avg_log_probability, no_speech_probability)
+                VALUES(
+                    $mediaJobId, $sequence, $startMs, $endMs, $text, $translatedText,
+                    $averageLogProbability, $noSpeechProbability);
+                """;
+            insert.Parameters.AddWithValue("$mediaJobId", mediaJobId);
+            insert.Parameters.AddWithValue("$sequence", sequence);
+            insert.Parameters.AddWithValue("$startMs", startMilliseconds);
+            insert.Parameters.AddWithValue("$endMs", endMilliseconds);
+            insert.Parameters.AddWithValue("$text", segment.Text);
+            insert.Parameters.AddWithValue(
+                "$translatedText",
+                (object?)segment.TranslatedText ?? DBNull.Value);
+            insert.Parameters.AddWithValue(
+                "$averageLogProbability",
+                (object?)segment.AverageLogProbability ?? DBNull.Value);
+            insert.Parameters.AddWithValue(
+                "$noSpeechProbability",
+                (object?)segment.NoSpeechProbability ?? DBNull.Value);
+            await insert.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<IReadOnlyList<SubtitleSegment>> GetByMediaJobIdAsync(
+        string mediaJobId,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(mediaJobId);
+        await using SqliteConnection connection = await database.OpenConnectionAsync(cancellationToken)
+            .ConfigureAwait(false);
+        await using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT sequence, start_ms, end_ms, text, translated_text,
+                   avg_log_probability, no_speech_probability
+            FROM subtitle_segments
+            WHERE media_job_id=$mediaJobId
+            ORDER BY sequence;
+            """;
+        command.Parameters.AddWithValue("$mediaJobId", mediaJobId);
+
+        var segments = new List<SubtitleSegment>();
+        await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken)
+            .ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            segments.Add(new(
+                TimeSpan.FromMilliseconds(reader.GetInt64(1)),
+                TimeSpan.FromMilliseconds(reader.GetInt64(2)),
+                reader.GetString(3),
+                reader.IsDBNull(4) ? null : reader.GetString(4),
+                reader.IsDBNull(5) ? null : reader.GetDouble(5),
+                reader.IsDBNull(6) ? null : reader.GetDouble(6))
+            {
+                Sequence = reader.GetInt32(0)
+            });
+        }
+        return segments;
+    }
+
     private static void AddParameters(SqliteCommand command, MediaJob job)
     {
         command.Parameters.AddWithValue("$id", job.Id);
@@ -88,6 +200,12 @@ public sealed class MediaJobRepository(SqliteDatabase database) : IMediaJobRepos
         command.Parameters.AddWithValue("$error", job.Error is null ? DBNull.Value : JsonSerializer.Serialize(job.Error));
         command.Parameters.AddWithValue("$created", job.CreatedAt.ToString("O", CultureInfo.InvariantCulture));
         command.Parameters.AddWithValue("$updated", job.UpdatedAt.ToString("O", CultureInfo.InvariantCulture));
+    }
+
+    private static long ToMilliseconds(TimeSpan value, string parameterName)
+    {
+        if (value < TimeSpan.Zero) throw new ArgumentOutOfRangeException(parameterName);
+        return value.Ticks / TimeSpan.TicksPerMillisecond;
     }
 
     private static async Task<IReadOnlyList<MediaJob>> ReadAsync(
