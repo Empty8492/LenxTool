@@ -22,6 +22,8 @@ Lenx Tools 是面向 Windows 10/11 x64 的本地优先桌面效率应用，统�
 
 下一里程碑是完成 **SRT 导入、字幕批量翻译和译文/双语 SRT/TXT 导出**。当前主要未完成项还包括：首页接入真实资讯与任务数据，资讯收藏/标签/备注，封面图片离线缓存，JSON 双栏 Diff 界面，字幕片段与模型用量历史，以及客户端共享账号/额度链路。完整状态、运行配置和发布阻塞项以 [`docs/PROJECT_GUIDE.md` 第 10 节](docs/PROJECT_GUIDE.md#10-当前版本边界与交付状态)为准。
 
+字幕闭环之后的主路线为 **管理员策展 RSS**：只有管理员能维护共享 RSS/Atom 目录，普通用户只能同步和阅读。P0/P1/P2 的完整任务、现有欠账对齐、参考项目和许可证边界见 [`docs/plans/RSS_MASTER_ROADMAP.md`](docs/plans/RSS_MASTER_ROADMAP.md)。该路线目前仅完成规划，尚未实现。
+
 ## 常用命令
 
 ```powershell
@@ -45,6 +47,12 @@ Lenx Tools 是 .NET 10 + WPF 的 Windows 10/11 x64 本地优先桌面应用。�
 - [Worker 部署](docs/WORKER_DEPLOYMENT.md)
 - [构建与发布](docs/RELEASE_GUIDE.md)
 - [测试报告](docs/TEST_REPORT.md)
+- [管理员策展 RSS 总路线图](docs/plans/RSS_MASTER_ROADMAP.md)
+- [P0 管理员订阅计划](docs/plans/RSS_P0_ADMIN_CATALOG.md)
+- [P1 阅读智能计划](docs/plans/RSS_P1_READING_INTELLIGENCE.md)
+- [P2 视图与集成计划](docs/plans/RSS_P2_VIEWS_INTEGRATIONS.md)
+- [现有未完成项对齐计划](docs/plans/EXISTING_BACKLOG_ALIGNMENT.md)
+- [ADR-001：管理员策展 RSS](docs/decisions/ADR-001-admin-curated-rss.md)
 
 ## 快速验证
 

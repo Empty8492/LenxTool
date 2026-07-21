@@ -183,6 +183,17 @@ npm.cmd test -- --run
 
 当前 `SrtCodec` 已具备 SRT 解析、原文/双语 SRT 和纯文本编码能力，媒体任务也已具备转写与原文 SRT 导出；尚缺翻译服务、导入/导出交互、片段持久化和完整工作流接线。
 
+字幕闭环完成后的产品主路线已确定为“管理员策展 RSS”：管理员维护共享 RSS/Atom 目录，普通用户只能同步和阅读，不得修改共享订阅、分类、抓取策略或自动化规则。为保持现有“云端不存新闻正文”边界，首版采用 Worker/D1 保存权威目录、各桌面客户端本地抓取和 SQLite 缓存的模式。
+
+详细执行顺序如下：
+
+1. 完成当前字幕闭环，并补齐字幕历史/模型用量；具体见 [`plans/EXISTING_BACKLOG_ALIGNMENT.md`](plans/EXISTING_BACKLOG_ALIGNMENT.md)。
+2. 实现管理员 RBAC、共享 Feed 目录、安全抓取、OPML、时间线和首页真实数据；具体见 [`plans/RSS_P0_ADMIN_CATALOG.md`](plans/RSS_P0_ADMIN_CATALOG.md)。
+3. 实现私人阅读状态、全文/图片离线、AI 摘要/翻译、管理员规则、媒体衔接和统一搜索；具体见 [`plans/RSS_P1_READING_INTELLIGENCE.md`](plans/RSS_P1_READING_INTELLIGENCE.md)。
+4. 实现多内容视图、外部导出适配器、本地定时摘要和通知；具体见 [`plans/RSS_P2_VIEWS_INTEGRATIONS.md`](plans/RSS_P2_VIEWS_INTEGRATIONS.md)。
+
+总路线、参考项目和许可证边界见 [`plans/RSS_MASTER_ROADMAP.md`](plans/RSS_MASTER_ROADMAP.md)，架构决策见 [`decisions/ADR-001-admin-curated-rss.md`](decisions/ADR-001-admin-curated-rss.md)。这些能力当前均处于计划状态，不能作为已交付功能宣传。
+
 ### 10.3 其他尚未完成的产品功能
 
 本地产品缺口：
@@ -197,6 +208,8 @@ npm.cmd test -- --run
 
 - 客户端共享账号登录、注册、额度展示和管理端；Worker 虽有接口，但桌面端尚未接线。
 - Worker 的认证、令牌轮换、并发额度和 Groq/DeepSeek 代理链路仍缺少充分自动化验收；当前只有基础安全测试。
+- 管理员共享 RSS/Atom 目录、分类、目录版本、管理员订阅 API、桌面角色接线和普通用户只读目录尚未实现。
+- 通用 Feed 条目模型、安全发现/抓取、OPML、时间线、Feed 健康、全文/图片离线、自动化规则和外部导出均仅有详细计划，尚无实现代码。
 
 ### 10.4 普通本地使用需要配置
 
