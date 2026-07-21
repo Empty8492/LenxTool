@@ -1,6 +1,6 @@
 # Worker v1 账号与共享订阅目录 API 契约
 
-状态：已冻结，待 P0-02～P0-06 实现
+状态：已冻结，P0-02 身份端点已实现，待 P0-03～P0-06
 最后核对：2026-07-21
 适用范围：LenxTool 桌面端与 `cloud/LenxTool.Worker` 之间的账号、会话和管理员策展目录接口
 
@@ -62,10 +62,10 @@
 | HTTP | 错误码 | 语义 |
 |---:|---|---|
 | 400 | `INVALID_JSON`、`VALIDATION_ERROR` | JSON 无效、未知字段、字段类型/范围/组合不合法 |
-| 401 | `AUTH_REQUIRED`、`CREDENTIALS_INVALID`、`TOKEN_INVALID`、`TOKEN_EXPIRED` | 未认证或凭据不可用 |
+| 401 | `AUTH_REQUIRED`、`CREDENTIALS_INVALID`、`TOKEN_INVALID`、`TOKEN_EXPIRED`、`BOOTSTRAP_AUTH_INVALID` | 未认证或凭据不可用 |
 | 403 | `ACCOUNT_DISABLED`、`ADMIN_REQUIRED` | 已认证但账号或角色无权执行 |
 | 404 | `RESOURCE_NOT_FOUND` | 授权通过后资源不存在 |
-| 409 | `CATALOG_VERSION_CONFLICT`、`CATALOG_VERSION_AHEAD`、`IDEMPOTENCY_KEY_REUSED`、`CATEGORY_NOT_EMPTY`、`DUPLICATE_CATEGORY`、`DUPLICATE_FEED`、`CATALOG_CAPACITY_EXCEEDED`、`BATCH_OPERATION_FAILED` | 当前状态与请求前置条件冲突 |
+| 409 | `CATALOG_VERSION_CONFLICT`、`CATALOG_VERSION_AHEAD`、`IDEMPOTENCY_KEY_REUSED`、`CATEGORY_NOT_EMPTY`、`DUPLICATE_CATEGORY`、`DUPLICATE_FEED`、`CATALOG_CAPACITY_EXCEEDED`、`BATCH_OPERATION_FAILED`、`BOOTSTRAP_ALREADY_COMPLETED` | 当前状态与请求前置条件冲突 |
 | 413 | `PAYLOAD_TOO_LARGE` | 请求体超过端点上限 |
 | 429 | `RATE_LIMITED` | 速率限制；可能带 `Retry-After` |
 | 500 | `INTERNAL_ERROR` | 未分类服务端错误，不暴露内部细节 |
@@ -170,6 +170,7 @@ Idempotency-Key: 018f87d4-0f7e-7ad0-9c06-b285e52e7664
 | `POST /v1/auth/refresh` | anonymous | JSON 4 KiB；token 32～512 | 200 `TokenPair` | `TOKEN_INVALID`、`TOKEN_EXPIRED`、`ACCOUNT_DISABLED` | `auth.refresh.succeeded` / `auth.refresh.failed` |
 | `POST /v1/auth/logout` | user/admin | JSON 4 KiB；token 32～512 | 204，无响应体 | 通用认证错误 | `auth.logout` |
 | `GET /v1/me` | user/admin | 无请求体、无查询参数 | 200 `MeResponse` | 通用认证错误 | 无 |
+| `POST /v1/bootstrap/admin` | 临时 bootstrap secret，且 D1 无用户 | JSON 8 KiB；用户名 3～40；密码 12～128；secret ≥32 | 201 `PublicUser` | `BOOTSTRAP_AUTH_INVALID`、`BOOTSTRAP_ALREADY_COMPLETED` | `bootstrap.admin.created` / `bootstrap.admin.failed` |
 | `GET /v1/feeds/catalog` | user/admin | URL 2 KiB；`afterVersion` 0～2^63-1；`scope` 枚举 | 200 `CatalogSnapshot` 或 304 | `CATALOG_VERSION_AHEAD`、`ADMIN_REQUIRED` | 无 |
 | `POST /v1/admin/feed-categories` | admin | JSON 8 KiB；名称 1～80 | 201 `CatalogMutation<Category>` | 版本/幂等冲突、`DUPLICATE_CATEGORY`、容量超限 | `feed_category.created` |
 | `PATCH /v1/admin/feed-categories/{id}` | admin | JSON 8 KiB；ID 36；名称 1～80 | 200 `CatalogMutation<Category>` | 版本/幂等冲突、`RESOURCE_NOT_FOUND`、重复分类 | `feed_category.updated` |
@@ -191,7 +192,7 @@ Idempotency-Key: 018f87d4-0f7e-7ad0-9c06-b285e52e7664
 { "username": "reader", "password": "correct horse battery staple" }
 ```
 
-- `username` NFKC 规范化并转小写后为 3～40 个字符，只允许 `[a-z0-9._-]`。
+- `username` NFKC 规范化后为 3～40 个 Unicode 字符，只允许 Unicode 字母、组合标记、数字、`.`、`_` 和 `-`；唯一性比较使用规范化后的小写值。
 - `password` 为 1～128 个 Unicode 字符；服务端不得在规范化前后记录它。
 
 成功：
@@ -230,7 +231,7 @@ Idempotency-Key: 018f87d4-0f7e-7ad0-9c06-b285e52e7664
 }
 ```
 
-成功必须在同一事务中撤销旧 token 摘要并保存新 token 摘要。旧 token 的任何后续使用均返回 `401 TOKEN_INVALID`，不会再次返回已经签发的明文 token。审计只记录 token 记录 ID/族 ID等元数据，不记录 token 或摘要。
+成功必须在同一 D1 batch 中条件撤销旧 token 摘要、记录替代 token ID、保存新 token 摘要并写成功审计。旧 token 的任何后续使用均返回 `401 TOKEN_INVALID`，不会再次返回已经签发的明文 token。审计只记录 token 记录 ID 等元数据，不记录 token 或摘要。
 
 ### 4.3 `POST /v1/auth/logout`
 
@@ -240,7 +241,7 @@ Idempotency-Key: 018f87d4-0f7e-7ad0-9c06-b285e52e7664
 { "refreshToken": "<refresh-token>" }
 ```
 
-服务端撤销属于当前账号的 refresh token并返回 204。相同账号对同一已撤销 token 重试仍返回 204，避免产生 token 状态探针；其他账号的 token 或随机值也不向调用者暴露归属信息。access token 在短 TTL 结束前可继续通过签名验证，因此所有认证端点仍必须实时检查账号禁用状态。
+服务端撤销属于当前账号的 refresh token 并返回 204。相同账号对同一已撤销 token 重试仍返回 204，避免产生 token 状态探针；其他账号的 token 或随机值也不向调用者暴露归属信息。access token 在短 TTL 结束前可继续通过签名验证，因此所有认证端点仍必须实时检查账号禁用状态。
 
 ### 4.4 `GET /v1/me`
 
@@ -251,6 +252,27 @@ Idempotency-Key: 018f87d4-0f7e-7ad0-9c06-b285e52e7664
 ```
 
 响应不返回 token、token ID、密码/邀请码信息、D1 内部字段或其他用户信息。
+
+### 4.5 `POST /v1/bootstrap/admin`
+
+该端点只用于空 D1 的首次部署，不是日常注册入口。运维人员先用 Wrangler Secret 临时设置至少 32 个字符的 `BOOTSTRAP_TOKEN`，再在受控终端运行 [`bootstrap-admin.ps1`](../../cloud/LenxTool.Worker/scripts/bootstrap-admin.ps1)。脚本通过安全提示读取管理员密码和 bootstrap token，不接受这两项命令行参数。
+
+请求：
+
+```http
+Authorization: Bootstrap <temporary-secret>
+Content-Type: application/json
+```
+
+```json
+{ "username": "owner", "password": "<12-to-128-characters>" }
+```
+
+- 服务端先验证 bootstrap secret，再读取账号状态；无效 secret 返回 `401 BOOTSTRAP_AUTH_INVALID`，不透露 D1 是否已有用户。
+- 插入使用“D1 仍无任何用户”的条件写入。并发或重复执行最多一个请求成功，其他请求返回 `409 BOOTSTRAP_ALREADY_COMPLETED`。
+- 密码复用正常账号 PBKDF2 派生流程；响应和审计不包含密码、secret、salt 或 hash。
+- 201 只返回 `{ "user": PublicUser }`，不签发会话。运维人员随后通过正常登录验证。
+- 成功后必须立即执行 `wrangler secret delete BOOTSTRAP_TOKEN`。secret 缺失或短于 32 个字符时，该端点表现为 404。
 
 ## 5. 目录读取
 
@@ -418,10 +440,10 @@ Idempotency-Key: 018f87d4-0f7e-7ad0-9c06-b285e52e7664
 
 | 契约项 | 当前实现 | 后续归属 |
 |---|---|---|
-| 登录 | 已有基础路由；角色值和响应额度 DTO 尚未按本文统一 | P0-02 |
-| refresh 轮换 | 已有基础轮换；需补重放、禁用和审计测试 | P0-02 |
-| logout、`GET /v1/me` | 缺失 | P0-02 |
-| 统一 `AppError` 可映射错误体 | 当前仅返回 `code/message` | P0-02，并由后续端点复用 |
+| 登录、`GET /v1/me`、logout | 已按公开用户/额度 DTO 实现；logout 幂等撤销 refresh token | P0-02 已完成 |
+| refresh 轮换 | 条件撤销与新 token 写入在同一 D1 batch；并发重放只有一个成功者 | P0-02 已完成 |
+| 首管理员初始化 | 临时 Secret + 空库条件写入 + 受控终端脚本；重复执行安全失败 | P0-02 已完成 |
+| 统一 `AppError` 可映射错误体 | 身份及现有路由已统一，并补 401/403、请求 ID 与可重试字段测试 | P0-02 已完成，后续端点复用 |
 | 分类/Feed D1 表与全局版本 | 缺失 | P0-03 |
 | 分类/Feed/批量管理员路由、幂等记录 | 缺失 | P0-04 |
 | 只读目录、ETag、RBAC/版本并发测试 | 缺失 | P0-05 |

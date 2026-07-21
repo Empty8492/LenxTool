@@ -33,7 +33,29 @@ npx wrangler secret put DEEPSEEK_API_KEY
 
 ## 首个管理员
 
-项目没有固定管理员密码。首次部署由运维人员在受控终端生成随机 salt/hash，或使用一次性 bootstrap 脚本向 D1 插入首个 admin。完成后立即销毁明文密码与临时脚本。之后管理员通过 `/v1/admin/invites` 创建管理员或普通邀请码。
+项目没有固定管理员密码，也不提交初始化凭据。首次部署按以下顺序执行：
+
+1. 用密码管理器生成至少 32 个随机字符的一次性值，然后让 Wrangler 通过交互提示读取它。不要把值写在命令参数、`wrangler.toml`、脚本或聊天记录中：
+
+```powershell
+npx wrangler secret put BOOTSTRAP_TOKEN
+```
+
+`wrangler secret put` 会创建并立即部署带该 Secret 的 Worker 版本。确认 Worker 代码和 D1 迁移已部署后，在受控 PowerShell 终端执行：
+
+```powershell
+.\scripts\bootstrap-admin.ps1 -BaseUrl "https://<your-worker-host>"
+```
+
+脚本会分别安全提示管理员用户名、密码和 `BOOTSTRAP_TOKEN`；密码与 token 不接受命令行参数，不写入文件。端点仅在 D1 没有任何用户时允许一次条件插入，并发或重复执行返回 409。
+
+2. 使用新管理员账号调用正常登录端点验证密码，然后立即删除临时 Secret：
+
+```powershell
+npx wrangler secret delete BOOTSTRAP_TOKEN
+```
+
+当前 Wrangler 会为 secret put/delete 创建并立即部署新版本；删除后 `/v1/bootstrap/admin` 表现为 404。不要保留 `BOOTSTRAP_TOKEN` 作为灾难恢复入口。后续管理员通过 `/v1/admin/invites` 创建管理员或普通邀请码。
 
 普通邀请默认 `aiDailyLimit=10`、`speechDailySeconds=600`；管理员邀请可覆盖。管理员账号不执行共享额度预留。
 
@@ -43,6 +65,9 @@ npx wrangler secret put DEEPSEEK_API_KEY
 - `POST /v1/auth/register`：邀请码注册。
 - `POST /v1/auth/login`：登录。
 - `POST /v1/auth/refresh`：refresh token 轮换。
+- `POST /v1/auth/logout`：撤销当前 refresh token，重复退出安全返回 204。
+- `GET /v1/me`：返回最小公开用户、角色和当日额度。
+- `POST /v1/bootstrap/admin`：仅空库和临时 Secret 可用的一次性首管理员初始化。
 - `POST /v1/admin/invites`：管理员创建邀请。
 - `PATCH /v1/admin/users/{id}`：调整额度或禁用账号。
 - `POST /v1/proxy/ai`：共享 DeepSeek 流式代理。
@@ -62,10 +87,10 @@ npx wrangler secret put DEEPSEEK_API_KEY
 - 部署前运行：
 
 ```powershell
-npm.cmd install
+npm.cmd ci
 npm.cmd run typecheck
-npm.cmd test -- --run
+npm.cmd test
 npx wrangler deploy
 ```
 
-生产发布前应增加 Miniflare/D1 集成测试和实际 Provider sandbox 测试；不要在单元测试中使用真实共享 Key。
+Worker 测试使用 Cloudflare 官方 Vitest pool，在本地 workerd 中应用真实 D1 迁移并调用 Worker 路由；测试绑定仅含固定测试占位值。生产发布前仍需执行远端 D1 并发压测和 Provider sandbox 测试；自动测试不得使用真实共享 Key。
