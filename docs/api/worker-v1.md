@@ -1,0 +1,430 @@
+# Worker v1 账号与共享订阅目录 API 契约
+
+状态：已冻结，待 P0-02～P0-06 实现
+最后核对：2026-07-21
+适用范围：LenxTool 桌面端与 `cloud/LenxTool.Worker` 之间的账号、会话和管理员策展目录接口
+
+本文是 P0 的契约真相源。实现顺序和验收见 [P0 详细计划](../plans/RSS_P0_ADMIN_CATALOG.md)，安全边界见 [威胁模型](../THREAT_MODEL.md)，云端只保存共享目录配置的决策见 [ADR-001](../decisions/ADR-001-admin-curated-rss.md)。
+
+## 1. 兼容性与通用约定
+
+- 基础路径固定为 `/v1`。v1 内只做向后兼容的字段新增；删除字段、改变字段类型/语义或收紧既有枚举必须另立迁移方案。
+- 只接受 HTTPS、UTF-8 JSON。账号成功响应、写入响应和所有错误响应均发送 `Cache-Control: no-store`。目录 GET 使用 `Cache-Control: private, no-cache`、`Vary: Authorization` 和 ETag，允许桌面端保存后强制重验证，但禁止公共代理共享认证响应。
+- 字段和查询参数使用 `camelCase`；枚举值使用 `UPPER_SNAKE_CASE`；时间使用 UTC ISO 8601，例如 `2026-07-21T08:30:00Z`。
+- 服务端生成的账号、分类和 Feed ID 是不透明 UUID。客户端只能原样保存和回传，不能从 ID 推断排序或时间。
+- 客户端可发送 `X-Request-Id`，长度 1～128，只允许可打印 ASCII；服务端不信任其唯一性。服务端始终在 `X-Request-Id` 响应头和错误体 `requestId` 中返回最终请求 ID。
+- 除登录和刷新成功响应外，任何响应都不得返回 access/refresh token 明文。任何响应都不得返回密码摘要、邀请码摘要、令牌摘要、共享服务商 Key、Feed/文章正文、字幕、文件名、完整本地路径或本机状态。
+- JSON 对象出现未知字段时返回 `400 VALIDATION_ERROR`，防止拼写错误被静默忽略。响应以后可以增加可选字段；桌面端必须忽略未知响应字段。
+
+### 1.1 认证与角色
+
+`Authorization: Bearer <access-token>` 用于所有非匿名端点。角色只取服务端已验证令牌对应的 D1 用户记录，客户端传入的 `role`、本地 `IsAdmin` 或隐藏按钮都不参与授权。
+
+| 调用状态 | 结果 |
+|---|---|
+| 未提供 Bearer | `401 AUTH_REQUIRED` |
+| access token 无效、过期或已撤销 | `401 TOKEN_INVALID` 或 `401 TOKEN_EXPIRED` |
+| 用户已禁用 | `403 ACCOUNT_DISABLED` |
+| 已认证 user 调用 admin 端点 | `403 ADMIN_REQUIRED` |
+| 已认证 admin 调用 admin 端点 | 进入请求校验和业务处理 |
+
+因此，“未登录”永远不是 403，“非管理员”永远不是 401。授权必须在读取幂等记录、资源是否存在或当前目录版本之前完成，避免向未授权用户泄露状态。
+
+### 1.2 错误结构
+
+所有非 2xx/304 响应使用同一结构，可直接映射到桌面端 [`AppError`](../../src/LenxTool.Core/Errors/AppError.cs)：
+
+```json
+{
+  "error": {
+    "code": "CATALOG_VERSION_CONFLICT",
+    "title": "共享目录已更新",
+    "userMessage": "其他管理员已经修改了共享目录。",
+    "suggestion": "同步最新目录后重新应用本次修改。",
+    "provider": "LenxTool Worker",
+    "requestId": "018f...",
+    "retryAfterSeconds": null,
+    "isRetryable": true,
+    "details": {
+      "currentCatalogVersion": 42
+    }
+  }
+}
+```
+
+- `code` 是稳定的机器码；UI 不得依赖 `title`、`userMessage` 或 `suggestion` 的原文。
+- `details` 只能包含该错误明示的安全字段，例如当前目录版本、失败批次序号或字段名。不得返回 SQL、堆栈、内部主机、哈希、原始上游响应或请求正文。
+- HTTP `Retry-After` 秒值同时映射到 `retryAfterSeconds`；无值时为 `null`。
+- 桌面端将 `code`、HTTP 状态、其余公开字段映射为 `AppError`；服务端诊断细节只进入脱敏日志，不进入 `TechnicalDetails` 响应。
+
+通用状态与错误码：
+
+| HTTP | 错误码 | 语义 |
+|---:|---|---|
+| 400 | `INVALID_JSON`、`VALIDATION_ERROR` | JSON 无效、未知字段、字段类型/范围/组合不合法 |
+| 401 | `AUTH_REQUIRED`、`CREDENTIALS_INVALID`、`TOKEN_INVALID`、`TOKEN_EXPIRED` | 未认证或凭据不可用 |
+| 403 | `ACCOUNT_DISABLED`、`ADMIN_REQUIRED` | 已认证但账号或角色无权执行 |
+| 404 | `RESOURCE_NOT_FOUND` | 授权通过后资源不存在 |
+| 409 | `CATALOG_VERSION_CONFLICT`、`CATALOG_VERSION_AHEAD`、`IDEMPOTENCY_KEY_REUSED`、`CATEGORY_NOT_EMPTY`、`DUPLICATE_CATEGORY`、`DUPLICATE_FEED`、`CATALOG_CAPACITY_EXCEEDED`、`BATCH_OPERATION_FAILED` | 当前状态与请求前置条件冲突 |
+| 413 | `PAYLOAD_TOO_LARGE` | 请求体超过端点上限 |
+| 429 | `RATE_LIMITED` | 速率限制；可能带 `Retry-After` |
+| 500 | `INTERNAL_ERROR` | 未分类服务端错误，不暴露内部细节 |
+| 503 | `SERVICE_UNAVAILABLE` | D1 或必要依赖暂时不可用 |
+
+### 1.3 目录版本、ETag 与分页
+
+- D1 保存单调递增的 64 位非负整数 `catalogVersion`；空目录为 0。
+- 每个成功的单项目录写入使版本增加 1；一个成功批次无论含多少操作只增加 1。校验失败、授权失败、冲突、事务回滚和幂等重放都不增加版本。
+- 分类/Feed 的 `version` 表示该资源最后一次改变时的全局目录版本。
+- 目录响应 ETag 为强 ETag：`"catalog-active-42"` 或 `"catalog-all-42"`。客户端必须把目录内容和版本在同一 SQLite 事务中原子替换。
+- v1 目录是有界的原子快照，不分页：最多 200 个未删除分类、5,000 个未删除 Feed，序列化响应不超过 10 MiB。达到上限的新增返回 `409 CATALOG_CAPACITY_EXCEEDED`。避免分页是为了不在并发写入时组合出跨版本目录。
+- 将来出现无界列表时采用不透明 `cursor` 和 `pageSize`（默认 50，范围 1～200）；不得把偏移量分页混入当前目录快照。
+
+### 1.4 管理员目录写入的并发与幂等
+
+每个 `/v1/admin/feed-*` 写端点必须同时携带：
+
+```http
+If-Match: "catalog-all-41"
+Idempotency-Key: 018f87d4-0f7e-7ad0-9c06-b285e52e7664
+```
+
+- `If-Match` 必须精确匹配当前 `catalogVersion`，否则返回 `409 CATALOG_VERSION_CONFLICT`，`details.currentCatalogVersion` 给出安全的最新版本。
+- `Idempotency-Key` 长度 16～128，只允许 `A-Z a-z 0-9 . _ : -`；由客户端为一次用户意图生成，重试必须复用。
+- 幂等作用域是“操作者账号 + HTTP 方法 + 规范化路径 + key”。服务端保存请求规范化摘要、原始成功状态和成功响应至少 24 小时，不保存原始请求体。
+- 授权和输入大小检查之后，先查幂等记录，再检查 `If-Match`。同 key、同请求摘要返回原成功响应，不重复写入、不增加版本、不重复业务审计；同 key、不同请求摘要返回 `409 IDEMPOTENCY_KEY_REUSED`。
+- 请求摘要包含请求体、影响语义的查询参数和 `If-Match`。服务端错误不写成功幂等记录；客户端可用同 key 重试可重试错误。
+- 单项和批量目录操作都在 D1 事务中完成“版本比较、业务写入、版本增加、审计、幂等结果”。
+- user 在幂等/版本检查前即得到 `403 ADMIN_REQUIRED`，不会得知 key、资源或目录版本是否存在。
+
+账号写端点不改变 `catalogVersion`：登录可重复签发新会话；refresh token 只允许使用一次；logout 对同一已撤销 refresh token返回相同的 204。
+
+## 2. 公开 DTO
+
+### 2.1 用户与额度
+
+```json
+{
+  "user": {
+    "id": "0e7468a4-...",
+    "username": "reader",
+    "role": "USER"
+  },
+  "quota": {
+    "date": "2026-07-21",
+    "ai": { "limit": 100, "used": 12, "reserved": 0, "remaining": 88 },
+    "speechSeconds": { "limit": 3600, "used": 45, "reserved": 0, "remaining": 3555 }
+  }
+}
+```
+
+- `role` 仅为 `USER` 或 `ADMIN`。
+- 额度整数均为 0～2,147,483,647；`remaining = max(0, limit - used - reserved)`。
+- 日期按 Worker 的额度结算日（UTC）返回。
+
+### 2.2 分类
+
+```json
+{
+  "id": "4a5feea7-...",
+  "name": "技术",
+  "sortOrder": 100,
+  "isEnabled": true,
+  "version": 42,
+  "createdAt": "2026-07-21T08:30:00Z",
+  "updatedAt": "2026-07-21T08:30:00Z"
+}
+```
+
+### 2.3 Feed
+
+```json
+{
+  "id": "d889d0c8-...",
+  "originalUrl": "https://example.com/feed.xml",
+  "normalizedUrl": "https://example.com/feed.xml",
+  "displayName": "Example",
+  "siteUrl": "https://example.com/",
+  "categoryId": "4a5feea7-...",
+  "viewKind": "ARTICLE",
+  "refreshIntervalMinutes": 60,
+  "sortOrder": 100,
+  "isEnabled": true,
+  "version": 42,
+  "createdAt": "2026-07-21T08:30:00Z",
+  "updatedAt": "2026-07-21T08:30:00Z"
+}
+```
+
+- `viewKind` 的 v1 值为 `ARTICLE`、`PICTURE`、`AUDIO`、`VIDEO`、`NOTIFICATION`；旧桌面端遇到未知值必须回退 `ARTICLE`。
+- 管理端只提交 `originalUrl`；`normalizedUrl` 由服务端生成并用于重复检测。目录写路由只做语法、方案和规范化校验，不发起网络请求。DNS、重定向、响应大小和 XML 安全验证由 P0-11 的发现服务执行。
+- 普通目录响应只含未删除、已启用且分类已启用的 Feed；它不含抓取结果、正文、健康详情或用户私人状态。
+
+## 3. 端点总表
+
+“审计动作”为 D1 安全审计事件名；“无”表示仅有脱敏运维访问日志，不写逐次 D1 审计。
+
+| 端点 | 角色 | 输入上限 | 成功响应 | 主要业务错误 | 审计动作 |
+|---|---|---|---|---|---|
+| `POST /v1/auth/login` | anonymous | JSON 4 KiB；用户名 3～40；密码 1～128 | 200 `AuthSession` | `CREDENTIALS_INVALID`、`ACCOUNT_DISABLED`、`RATE_LIMITED` | `auth.login.succeeded` / `auth.login.failed` |
+| `POST /v1/auth/refresh` | anonymous | JSON 4 KiB；token 32～512 | 200 `TokenPair` | `TOKEN_INVALID`、`TOKEN_EXPIRED`、`ACCOUNT_DISABLED` | `auth.refresh.succeeded` / `auth.refresh.failed` |
+| `POST /v1/auth/logout` | user/admin | JSON 4 KiB；token 32～512 | 204，无响应体 | 通用认证错误 | `auth.logout` |
+| `GET /v1/me` | user/admin | 无请求体、无查询参数 | 200 `MeResponse` | 通用认证错误 | 无 |
+| `GET /v1/feeds/catalog` | user/admin | URL 2 KiB；`afterVersion` 0～2^63-1；`scope` 枚举 | 200 `CatalogSnapshot` 或 304 | `CATALOG_VERSION_AHEAD`、`ADMIN_REQUIRED` | 无 |
+| `POST /v1/admin/feed-categories` | admin | JSON 8 KiB；名称 1～80 | 201 `CatalogMutation<Category>` | 版本/幂等冲突、`DUPLICATE_CATEGORY`、容量超限 | `feed_category.created` |
+| `PATCH /v1/admin/feed-categories/{id}` | admin | JSON 8 KiB；ID 36；名称 1～80 | 200 `CatalogMutation<Category>` | 版本/幂等冲突、`RESOURCE_NOT_FOUND`、重复分类 | `feed_category.updated` |
+| `DELETE /v1/admin/feed-categories/{id}` | admin | 无请求体；ID 36 | 200 `CatalogDeletion` | 版本/幂等冲突、`RESOURCE_NOT_FOUND`、`CATEGORY_NOT_EMPTY` | `feed_category.deleted` |
+| `POST /v1/admin/feeds` | admin | JSON 16 KiB；URL 2,048；名称 1～160 | 201 `CatalogMutation<Feed>` | 版本/幂等冲突、`DUPLICATE_FEED`、`RESOURCE_NOT_FOUND`、容量超限 | `feed.created` |
+| `PATCH /v1/admin/feeds/{id}` | admin | JSON 16 KiB；ID 36 | 200 `CatalogMutation<Feed>` | 版本/幂等冲突、`RESOURCE_NOT_FOUND`、`DUPLICATE_FEED` | `feed.updated` |
+| `DELETE /v1/admin/feeds/{id}` | admin | 无请求体；ID 36 | 200 `CatalogDeletion` | 版本/幂等冲突、`RESOURCE_NOT_FOUND` | `feed.deleted` |
+| `POST /v1/admin/feed-catalog-batches` | admin | JSON 256 KiB；1～100 个操作 | 200 `CatalogBatchResult` | 版本/幂等冲突、`BATCH_OPERATION_FAILED` | `feed_catalog.batch` + 各操作动作 |
+
+所有端点还可能返回第 1.2 节的通用校验、认证、限流和服务不可用错误。
+
+## 4. 账号与会话端点
+
+### 4.1 `POST /v1/auth/login`
+
+请求：
+
+```json
+{ "username": "reader", "password": "correct horse battery staple" }
+```
+
+- `username` NFKC 规范化并转小写后为 3～40 个字符，只允许 `[a-z0-9._-]`。
+- `password` 为 1～128 个 Unicode 字符；服务端不得在规范化前后记录它。
+
+成功：
+
+```json
+{
+  "user": { "id": "0e7468a4-...", "username": "reader", "role": "USER" },
+  "quota": {
+    "date": "2026-07-21",
+    "ai": { "limit": 100, "used": 12, "reserved": 0, "remaining": 88 },
+    "speechSeconds": { "limit": 3600, "used": 45, "reserved": 0, "remaining": 3555 }
+  },
+  "accessToken": "<one-time-response-value>",
+  "refreshToken": "<one-time-response-value>",
+  "expiresInSeconds": 900
+}
+```
+
+登录失败统一用 `CREDENTIALS_INVALID`，不得透露用户名是否存在。成功审计记录 actor、request ID 和脱敏 IP 哈希；失败审计不含密码或原始用户名，可记录规范化用户名的带服务端密钥摘要和原因类别。
+
+### 4.2 `POST /v1/auth/refresh`
+
+请求：
+
+```json
+{ "refreshToken": "<refresh-token>" }
+```
+
+成功：
+
+```json
+{
+  "accessToken": "<new-access-token>",
+  "refreshToken": "<new-refresh-token>",
+  "expiresInSeconds": 900
+}
+```
+
+成功必须在同一事务中撤销旧 token 摘要并保存新 token 摘要。旧 token 的任何后续使用均返回 `401 TOKEN_INVALID`，不会再次返回已经签发的明文 token。审计只记录 token 记录 ID/族 ID等元数据，不记录 token 或摘要。
+
+### 4.3 `POST /v1/auth/logout`
+
+请求携带 Bearer 和当前 refresh token：
+
+```json
+{ "refreshToken": "<refresh-token>" }
+```
+
+服务端撤销属于当前账号的 refresh token并返回 204。相同账号对同一已撤销 token 重试仍返回 204，避免产生 token 状态探针；其他账号的 token 或随机值也不向调用者暴露归属信息。access token 在短 TTL 结束前可继续通过签名验证，因此所有认证端点仍必须实时检查账号禁用状态。
+
+### 4.4 `GET /v1/me`
+
+返回第 2.1 节的 `user`、`quota`，并增加：
+
+```json
+{ "serverTime": "2026-07-21T08:30:00Z" }
+```
+
+响应不返回 token、token ID、密码/邀请码信息、D1 内部字段或其他用户信息。
+
+## 5. 目录读取
+
+### 5.1 `GET /v1/feeds/catalog?afterVersion=41&scope=ACTIVE`
+
+- `afterVersion` 可省略；省略或 0 表示需要完整快照，即使当前空目录版本也是 0。
+- `scope` 默认为 `ACTIVE`。user 只能请求 `ACTIVE`；admin 可请求 `ACTIVE` 或 `ALL`。`ALL` 包含未删除的停用分类和 Feed，用于管理界面。
+- 若 `afterVersion` 大于 0 且等于当前版本，返回 304、ETag 和 `X-Request-Id`，无响应体。
+- 若 `afterVersion` 小于当前版本，返回当前完整快照；v1 不返回增量补丁。
+- 若 `afterVersion` 大于当前版本，返回 `409 CATALOG_VERSION_AHEAD`，防止用服务器旧状态覆盖本地更新版本。
+- 客户端也可发送 `If-None-Match`。它必须与 `scope` 和 `afterVersion` 一致；矛盾的条件返回 `400 VALIDATION_ERROR`。
+
+200 响应：
+
+```json
+{
+  "catalogVersion": 42,
+  "scope": "ACTIVE",
+  "generatedAt": "2026-07-21T08:30:00Z",
+  "categories": [],
+  "feeds": []
+}
+```
+
+排序是契约的一部分：分类按 `sortOrder`、`name`、`id`；Feed 按分类顺序、`sortOrder`、`displayName`、`id`。即使客户端重新排序，也不能依赖 D1 的未指定行顺序。
+
+## 6. 管理员分类端点
+
+以下三个端点均要求第 1.4 节的 `If-Match` 和 `Idempotency-Key`。
+
+### 6.1 `POST /v1/admin/feed-categories`
+
+```json
+{ "name": "技术", "sortOrder": 100, "isEnabled": true }
+```
+
+- `name` 去除首尾空白后 1～80 个 Unicode 字符；同一未删除分类内按 NFKC + Unicode case fold 唯一。
+- `sortOrder` 为 0～1,000,000；`isEnabled` 必须是布尔值。
+- 返回 201：`{ "catalogVersion": 42, "category": { ... } }`。
+
+### 6.2 `PATCH /v1/admin/feed-categories/{id}`
+
+```json
+{ "name": "工程", "sortOrder": 200, "isEnabled": false }
+```
+
+字段均可选，但至少出现一个。停用分类会使其 Feed 从 `ACTIVE` 目录消失；不会删除 Feed 或本地文章。返回 200 `CatalogMutation<Category>`。
+
+### 6.3 `DELETE /v1/admin/feed-categories/{id}`
+
+无请求体。只有不存在未删除 Feed 的分类可以软删除，否则返回 `409 CATEGORY_NOT_EMPTY`。成功：
+
+```json
+{ "catalogVersion": 42, "deletedId": "4a5feea7-...", "resourceType": "FEED_CATEGORY" }
+```
+
+重复使用原幂等 key 返回原 200；新 key 删除已删除资源返回 `404 RESOURCE_NOT_FOUND`。
+
+## 7. 管理员 Feed 端点
+
+以下三个端点均要求第 1.4 节的 `If-Match` 和 `Idempotency-Key`。
+
+### 7.1 `POST /v1/admin/feeds`
+
+```json
+{
+  "originalUrl": "https://example.com/feed.xml",
+  "displayName": "Example",
+  "siteUrl": "https://example.com/",
+  "categoryId": "4a5feea7-...",
+  "viewKind": "ARTICLE",
+  "refreshIntervalMinutes": 60,
+  "sortOrder": 100,
+  "isEnabled": true
+}
+```
+
+- `originalUrl` 必填，绝对 HTTPS URL，最长 2,048；默认拒绝userinfo、fragment、非 443 显式端口和控制字符。未来只有显式可信主机策略可允许 HTTP。
+- `displayName` 去除首尾空白后 1～160 个字符；`siteUrl` 可为 null，否则为最长 2,048 的绝对 HTTPS URL。
+- `categoryId` 可为 null；非 null 时必须指向未删除分类。不能启用位于停用分类下的 Feed。
+- `viewKind` 必须是第 2.3 节枚举；`refreshIntervalMinutes` 为 5～1,440；`sortOrder` 为 0～1,000,000。
+- `normalizedUrl` 在所有未删除 Feed 中唯一；冲突返回 `409 DUPLICATE_FEED`，不返回冲突 Feed 的私有信息。
+- 返回 201：`{ "catalogVersion": 42, "feed": { ... } }`。
+
+### 7.2 `PATCH /v1/admin/feeds/{id}`
+
+请求字段与创建相同且均可选，但至少出现一个。`normalizedUrl`、ID、版本和时间字段不可写。修改 URL 重新执行纯语法规范化与重复检测，不在此路由抓取网络。返回 200 `CatalogMutation<Feed>`。
+
+### 7.3 `DELETE /v1/admin/feeds/{id}`
+
+无请求体。执行软删除并立刻从所有目录 scope 隐藏；不会远程删除客户端已缓存文章。本地保留期由桌面端策略处理。成功：
+
+```json
+{ "catalogVersion": 42, "deletedId": "d889d0c8-...", "resourceType": "FEED" }
+```
+
+## 8. 原子批量目录更新
+
+### 8.1 `POST /v1/admin/feed-catalog-batches`
+
+请求：
+
+```json
+{
+  "operations": [
+    {
+      "operationId": "category-1",
+      "type": "CREATE_CATEGORY",
+      "input": { "name": "技术", "sortOrder": 100, "isEnabled": true }
+    },
+    {
+      "operationId": "feed-1",
+      "type": "CREATE_FEED",
+      "input": {
+        "originalUrl": "https://example.com/feed.xml",
+        "displayName": "Example",
+        "categoryRef": { "operationId": "category-1" },
+        "viewKind": "ARTICLE",
+        "refreshIntervalMinutes": 60,
+        "sortOrder": 100,
+        "isEnabled": true
+      }
+    }
+  ]
+}
+```
+
+- `operations` 含 1～100 项；`operationId` 在批次内唯一，长度 1～64，只允许 `A-Z a-z 0-9 . _ : -`。
+- `type` 为 `CREATE_CATEGORY`、`PATCH_CATEGORY`、`DELETE_CATEGORY`、`CREATE_FEED`、`PATCH_FEED` 或 `DELETE_FEED`。各 `input` 复用单项端点上限；PATCH/DELETE 同时提供对应 `categoryId` 或 `feedId`。
+- 创建 Feed 可用 `categoryId` 引用既有分类，或用 `categoryRef.operationId` 引用同批次更早创建的分类，二者只能出现一个。
+- 操作严格按数组顺序执行，但整个批次原子提交。任一操作失败则无目录、版本、审计或幂等成功记录落库，返回 `409 BATCH_OPERATION_FAILED`，`details` 只含 `operationIndex`、`operationId` 和内层稳定错误码。
+- 成功只增加一次 `catalogVersion`；所有新建/变更资源的 `version` 都等于该版本。响应按输入顺序返回结果：
+
+```json
+{
+  "catalogVersion": 42,
+  "results": [
+    { "operationId": "category-1", "resourceType": "FEED_CATEGORY", "resourceId": "4a5feea7-..." },
+    { "operationId": "feed-1", "resourceType": "FEED", "resourceId": "d889d0c8-..." }
+  ]
+}
+```
+
+成功事务写一个 `feed_catalog.batch` 父审计事件和每项对应动作，均共享 request ID、批次幂等 key 和最终版本；审计不保存 Feed 正文、请求体或 token。
+
+## 9. 审计与响应字段白名单
+
+每个业务审计事件只允许：
+
+- 事件 ID、UTC 时间、actor user ID、target type/ID、稳定 action、请求 ID。
+- 目录版本、批次操作数量、结果类别、脱敏 IP 哈希和必要的安全原因码。
+- 幂等 key 的带服务端密钥摘要；不得保存原始 key 或规范化请求摘要以外的正文。
+
+目录和账号响应采用本文 DTO 白名单。特别禁止：
+
+- `password_hash`、`invite_hash`、`token_hash`、JWT 签名材料、Secret Binding 和任何 API Key。
+- Feed XML/Atom/HTML 正文、文章标题/正文、抓取响应、Cookie、Authorization 和 DNS/内网诊断。
+- Windows 用户名、设备名、文件名、完整路径、SQLite 行 ID、DPAPI 数据和本地阅读/收藏状态。
+
+`originalUrl`、`normalizedUrl`、`siteUrl`、分类和显示名属于管理员发布的共享配置，可以出现在目录；它们仍按不可信数据处理，客户端显示时编码且不会自动导航。
+
+## 10. 当前实现对照与后续任务
+
+2026-07-21 对照 [Worker 路由](../../cloud/LenxTool.Worker/src/index.ts)、[初始 D1 迁移](../../cloud/LenxTool.Worker/migrations/0001_initial.sql) 和桌面端 `AppError` 后的差距如下。此表用于防止把“契约已冻结”误写成“功能已实现”。
+
+| 契约项 | 当前实现 | 后续归属 |
+|---|---|---|
+| 登录 | 已有基础路由；角色值和响应额度 DTO 尚未按本文统一 | P0-02 |
+| refresh 轮换 | 已有基础轮换；需补重放、禁用和审计测试 | P0-02 |
+| logout、`GET /v1/me` | 缺失 | P0-02 |
+| 统一 `AppError` 可映射错误体 | 当前仅返回 `code/message` | P0-02，并由后续端点复用 |
+| 分类/Feed D1 表与全局版本 | 缺失 | P0-03 |
+| 分类/Feed/批量管理员路由、幂等记录 | 缺失 | P0-04 |
+| 只读目录、ETag、RBAC/版本并发测试 | 缺失 | P0-05 |
+| 桌面账号/目录 DTO | 缺失 | P0-06～P0-10 |
+
+实现不得为了迁就当前单文件 Worker 的偶然行为而改变本文语义。确需变更时，先更新契约、威胁模型和受影响测试，再修改服务端与桌面端。
