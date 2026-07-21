@@ -14,6 +14,7 @@ namespace LenxTool.App.ViewModels;
 public sealed class MediaWorkbenchViewModel : PageViewModel
 {
     private readonly IMediaJobRepository _jobs;
+    private readonly ISubtitleRepository _subtitles;
     private readonly ITranscriptionService _groq;
     private readonly ILocalTranscriptionService _local;
     private readonly IMediaAudioService _audio;
@@ -31,6 +32,7 @@ public sealed class MediaWorkbenchViewModel : PageViewModel
 
     public MediaWorkbenchViewModel(
         IMediaJobRepository jobs,
+        ISubtitleRepository subtitles,
         ITranscriptionService groq,
         ILocalTranscriptionService local,
         IMediaAudioService audio,
@@ -39,6 +41,7 @@ public sealed class MediaWorkbenchViewModel : PageViewModel
         AppPaths paths) : base("媒体工作台", "批量转写音视频，使用云端 Groq 或完全离线的本地 Whisper")
     {
         _jobs = jobs;
+        _subtitles = subtitles;
         _groq = groq;
         _local = local;
         _audio = audio;
@@ -140,8 +143,10 @@ public sealed class MediaWorkbenchViewModel : PageViewModel
         IReadOnlyList<string> files = _dialogs.PickMediaFiles();
         if (files.Count == 0) return;
 
+        string[] subtitleFiles = files.Where(IsSubtitleFile).ToArray();
+        string[] mediaFiles = files.Where(path => !IsSubtitleFile(path)).ToArray();
         bool useLocal = SelectedEngine == Engines[1];
-        if (useLocal && SelectedModel is null)
+        if (mediaFiles.Length > 0 && useLocal && SelectedModel is null)
         {
             LastError = new(
                 AppErrorCode.InvalidRequest, "尚未导入本地模型", "本地 Whisper 需要 ggml-*.bin 模型。",
@@ -151,7 +156,54 @@ public sealed class MediaWorkbenchViewModel : PageViewModel
         }
 
         LastError = null;
-        foreach (string inputPath in files)
+        var subtitleImports = new List<(string Path, IReadOnlyList<SubtitleSegment> Segments)>();
+        try
+        {
+            foreach (string inputPath in subtitleFiles)
+            {
+                string content = await File.ReadAllTextAsync(inputPath, cancellationToken);
+                IReadOnlyList<SubtitleSegment> segments = SrtCodec.Parse(content);
+                if (segments.Count == 0)
+                {
+                    throw new FormatException("SRT 文件未包含任何有效字幕片段。");
+                }
+                subtitleImports.Add((inputPath, segments));
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            LastError = CreateSubtitleImportError(exception);
+            Status = LastError.UserMessage;
+            return;
+        }
+
+        int importedSegmentCount = 0;
+        try
+        {
+            foreach ((string inputPath, IReadOnlyList<SubtitleSegment> segments) in subtitleImports)
+            {
+                MediaJob job = CreateImportedSubtitleJob(inputPath);
+                await _subtitles.CreateMediaJobWithSegmentsAsync(job, segments, cancellationToken);
+                importedSegmentCount += segments.Count;
+                AddOrReplace(job);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            LastError = CreateSubtitleImportError(exception);
+            Status = LastError.UserMessage;
+            return;
+        }
+
+        foreach (string inputPath in mediaFiles)
         {
             MediaJob job = CreateQueuedJob(inputPath, useLocal);
             await _jobs.UpsertAsync(job, cancellationToken);
@@ -159,7 +211,12 @@ public sealed class MediaWorkbenchViewModel : PageViewModel
             AddOrReplace(job);
         }
         UpdateQueueSummary();
-        Status = $"已持久化 {files.Count} 个待处理任务，可安全关闭后继续。";
+        Status = (subtitleImports.Count, mediaFiles.Length) switch
+        {
+            (> 0, 0) => $"已导入 {subtitleImports.Count} 个 SRT，共 {importedSegmentCount} 个片段；关闭后仍可恢复。",
+            (0, > 0) => $"已持久化 {mediaFiles.Length} 个待处理任务，可安全关闭后继续。",
+            _ => $"已导入 {subtitleImports.Count} 个 SRT，并持久化 {mediaFiles.Length} 个媒体任务。"
+        };
         StartCommand.NotifyCanExecuteChanged();
     }
 
@@ -318,6 +375,59 @@ public sealed class MediaWorkbenchViewModel : PageViewModel
             useLocal ? TranscriptionEngine.LocalWhisper : TranscriptionEngine.Groq,
             useLocal ? SelectedModel!.Name : "whisper-large-v3", 0, 0, null, now, now);
     }
+
+    private static MediaJob CreateImportedSubtitleJob(string inputPath)
+    {
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        return new(
+            Guid.NewGuid().ToString("N"),
+            "SubtitleImport",
+            inputPath,
+            null,
+            MediaJobStatus.Completed,
+            100,
+            TranscriptionEngine.ImportedSrt,
+            null,
+            0,
+            0,
+            null,
+            now,
+            now);
+    }
+
+    private static bool IsSubtitleFile(string path) =>
+        string.Equals(Path.GetExtension(path), ".srt", StringComparison.OrdinalIgnoreCase);
+
+    private static AppError CreateSubtitleImportError(Exception exception) => exception switch
+    {
+        FormatException => new(
+            AppErrorCode.InvalidRequest,
+            "SRT 格式无效",
+            exception.Message,
+            "请修正提示行的序号、时间轴或正文后重新导入。"),
+        FileNotFoundException => new(
+            AppErrorCode.FileNotFound,
+            "SRT 文件不存在",
+            "所选 SRT 文件已被移动或删除。",
+            "重新选择现有的 SRT 文件后再试。"),
+        UnauthorizedAccessException => new(
+            AppErrorCode.FileAccessDenied,
+            "无法读取 SRT 文件",
+            "当前 Windows 用户没有读取所选文件的权限。",
+            "复制到当前用户可读目录后重新导入。"),
+        IOException => new(
+            AppErrorCode.FileAccessDenied,
+            "无法读取 SRT 文件",
+            "读取或保存字幕时发生文件系统错误。",
+            "确认文件未被占用且磁盘可写，然后重试。",
+            IsRetryable: true),
+        _ => new(
+            AppErrorCode.Unknown,
+            "SRT 导入失败",
+            "字幕未能完整写入本地数据库。",
+            "请重试；若仍失败，请先备份数据库并检查磁盘空间。",
+            IsRetryable: true)
+    };
 
     private async Task PersistAfterAsync(Task previousWrite, MediaJob job)
     {

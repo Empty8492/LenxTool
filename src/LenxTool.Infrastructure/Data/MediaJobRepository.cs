@@ -11,26 +11,12 @@ public sealed class MediaJobRepository(SqliteDatabase database) : IMediaJobRepos
 {
     public async Task UpsertAsync(MediaJob job, CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(job);
         await using SqliteConnection connection = await database.OpenConnectionAsync(cancellationToken)
             .ConfigureAwait(false);
         await using SqliteTransaction transaction = (SqliteTransaction)await connection
             .BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
-        await using SqliteCommand command = connection.CreateCommand();
-        command.Transaction = transaction;
-        command.CommandText = """
-            INSERT INTO media_jobs(
-              id, kind, input_path, output_path, status, progress, engine, model,
-              shared_usage_seconds, ai_request_count, error_json, created_at, updated_at)
-            VALUES($id,$kind,$input,$output,$status,$progress,$engine,$model,$usage,$requests,$error,$created,$updated)
-            ON CONFLICT(id) DO UPDATE SET
-              output_path=excluded.output_path, status=excluded.status, progress=excluded.progress,
-              engine=excluded.engine, model=excluded.model,
-              shared_usage_seconds=excluded.shared_usage_seconds,
-              ai_request_count=excluded.ai_request_count, error_json=excluded.error_json,
-              updated_at=excluded.updated_at;
-            """;
-        AddParameters(command, job);
-        await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        await UpsertAsync(connection, transaction, job, cancellationToken).ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
 
@@ -85,6 +71,35 @@ public sealed class MediaJobRepository(SqliteDatabase database) : IMediaJobRepos
             .ConfigureAwait(false);
         await using SqliteTransaction transaction = (SqliteTransaction)await connection
             .BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        await ReplaceAsync(connection, transaction, mediaJobId, segments, cancellationToken)
+            .ConfigureAwait(false);
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task CreateMediaJobWithSegmentsAsync(
+        MediaJob job,
+        IReadOnlyList<SubtitleSegment> segments,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(job);
+        ArgumentNullException.ThrowIfNull(segments);
+        await using SqliteConnection connection = await database.OpenConnectionAsync(cancellationToken)
+            .ConfigureAwait(false);
+        await using SqliteTransaction transaction = (SqliteTransaction)await connection
+            .BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        await UpsertAsync(connection, transaction, job, cancellationToken).ConfigureAwait(false);
+        await ReplaceAsync(connection, transaction, job.Id, segments, cancellationToken)
+            .ConfigureAwait(false);
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async Task ReplaceAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        string mediaJobId,
+        IReadOnlyList<SubtitleSegment> segments,
+        CancellationToken cancellationToken)
+    {
         var sequences = new HashSet<int>();
         var timelines = new HashSet<(long StartMilliseconds, long EndMilliseconds)>();
         await using (SqliteCommand delete = connection.CreateCommand())
@@ -145,8 +160,6 @@ public sealed class MediaJobRepository(SqliteDatabase database) : IMediaJobRepos
                 (object?)segment.NoSpeechProbability ?? DBNull.Value);
             await insert.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         }
-
-        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<IReadOnlyList<SubtitleSegment>> GetByMediaJobIdAsync(
@@ -183,6 +196,30 @@ public sealed class MediaJobRepository(SqliteDatabase database) : IMediaJobRepos
             });
         }
         return segments;
+    }
+
+    private static async Task UpsertAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        MediaJob job,
+        CancellationToken cancellationToken)
+    {
+        await using SqliteCommand command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            INSERT INTO media_jobs(
+              id, kind, input_path, output_path, status, progress, engine, model,
+              shared_usage_seconds, ai_request_count, error_json, created_at, updated_at)
+            VALUES($id,$kind,$input,$output,$status,$progress,$engine,$model,$usage,$requests,$error,$created,$updated)
+            ON CONFLICT(id) DO UPDATE SET
+              output_path=excluded.output_path, status=excluded.status, progress=excluded.progress,
+              engine=excluded.engine, model=excluded.model,
+              shared_usage_seconds=excluded.shared_usage_seconds,
+              ai_request_count=excluded.ai_request_count, error_json=excluded.error_json,
+              updated_at=excluded.updated_at;
+            """;
+        AddParameters(command, job);
+        await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private static void AddParameters(SqliteCommand command, MediaJob job)

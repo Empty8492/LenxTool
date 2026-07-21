@@ -146,7 +146,7 @@
                         </StackPanel>
                         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
                             <Button Margin="0,0,8,0" Command="{Binding ImportModelCommand}" Content="导入模型" />
-                            <Button Style="{StaticResource AccentButtonStyle}" Command="{Binding BrowseCommand}" Content="导入媒体" />
+                            <Button Style="{StaticResource AccentButtonStyle}" Command="{Binding BrowseCommand}" Content="导入媒体 / SRT" />
                         </StackPanel>
                     </DockPanel>
                     <Border Grid.Row="2" Style="{StaticResource BentoCardStyle}">

@@ -21,8 +21,8 @@ public sealed class DesktopFileDialogService : IDesktopFileDialogService
     {
         var dialog = new OpenFileDialog
         {
-            Title = "选择音频或视频",
-            Filter = "媒体文件|*.wav;*.mp3;*.m4a;*.aac;*.flac;*.wma;*.mp4;*.mkv;*.mov;*.webm|所有文件|*.*",
+            Title = "选择音频、视频或 SRT 字幕",
+            Filter = "媒体与字幕|*.wav;*.mp3;*.m4a;*.aac;*.flac;*.wma;*.mp4;*.mkv;*.mov;*.webm;*.srt|SRT 字幕|*.srt|媒体文件|*.wav;*.mp3;*.m4a;*.aac;*.flac;*.wma;*.mp4;*.mkv;*.mov;*.webm|所有文件|*.*",
             Multiselect = true,
             CheckFileExists = true
         };

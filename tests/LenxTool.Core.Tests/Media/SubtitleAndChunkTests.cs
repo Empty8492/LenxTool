@@ -8,7 +8,7 @@ public sealed class SubtitleAndChunkTests
     [Fact]
     public void SrtCodecParsesMultilineAndExportsBilingualSubtitle()
     {
-        const string source = "1\r\n00:00:01,250 --> 00:00:03,500\r\nHello\r\nworld\r\n\r\n";
+        const string source = "\uFEFF7\r\n00:00:01,250 --> 00:00:03,500\r\nHello\r\nworld\r\n\r\n";
 
         SubtitleSegment segment = Assert.Single(SrtCodec.Parse(source));
         string exported = SrtCodec.Export(
@@ -16,8 +16,29 @@ public sealed class SubtitleAndChunkTests
             SubtitleExportMode.BilingualSrt);
 
         Assert.Equal("Hello\nworld", segment.Text);
+        Assert.Equal(7, segment.Sequence);
+        Assert.StartsWith("7\n", exported, StringComparison.Ordinal);
         Assert.Contains("00:00:01,250 --> 00:00:03,500", exported, StringComparison.Ordinal);
         Assert.Contains("你好，世界\nHello\nworld", exported, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SrtCodecRejectsMalformedBlockWithActionableLineNumber()
+    {
+        const string source = """
+            1
+            00:00:01,000 --> 00:00:02,000
+            valid
+
+            2
+            not-a-time-range
+            invalid
+            """;
+
+        FormatException exception = Assert.Throws<FormatException>(() => SrtCodec.Parse(source));
+
+        Assert.Contains("第 6 行", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("时间轴", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -15,7 +15,8 @@ public enum TranscriptionEngine
 {
     Groq,
     SharedGroq,
-    LocalWhisper
+    LocalWhisper,
+    ImportedSrt
 }
 
 public sealed record MediaJob(

@@ -149,6 +149,40 @@ public sealed class SubtitleRepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task CreateMediaJobWithSegmentsAsyncPersistsBothInOneOperation()
+    {
+        using SqliteDatabase database = CreateDatabase();
+        await database.InitializeAsync(CancellationToken.None);
+        var repository = new MediaJobRepository(database);
+        MediaJob job = CreateMediaJob("job-import");
+        SubtitleSegment[] segments = [Segment(7, 1, 2, "imported")];
+
+        await repository.CreateMediaJobWithSegmentsAsync(job, segments, CancellationToken.None);
+
+        Assert.Equal(job, Assert.Single(await repository.GetRecentAsync(10, CancellationToken.None)));
+        Assert.Equal(
+            segments,
+            await repository.GetByMediaJobIdAsync("job-import", CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task CreateMediaJobWithSegmentsAsyncRollsBackJobWhenSegmentsAreInvalid()
+    {
+        using SqliteDatabase database = CreateDatabase();
+        await database.InitializeAsync(CancellationToken.None);
+        var repository = new MediaJobRepository(database);
+        MediaJob job = CreateMediaJob("job-import-failure");
+
+        await Assert.ThrowsAsync<ArgumentException>(() => repository.CreateMediaJobWithSegmentsAsync(
+            job,
+            [Segment(1, 1, 2, "first"), Segment(1, 2, 3, "duplicate-sequence")],
+            CancellationToken.None));
+
+        Assert.Empty(await repository.GetRecentAsync(10, CancellationToken.None));
+        Assert.Empty(await repository.GetByMediaJobIdAsync(job.Id, CancellationToken.None));
+    }
+
+    [Fact]
     public async Task VersionOneUpgradePreservesExistingSubtitleSegments()
     {
         AppPaths paths = CreatePaths();
@@ -259,23 +293,26 @@ public sealed class SubtitleRepositoryTests : IDisposable
 
     private static async Task CreateMediaJobAsync(SqliteDatabase database, string id)
     {
-        DateTimeOffset now = DateTimeOffset.UtcNow;
         var repository = new MediaJobRepository(database);
-        await repository.UpsertAsync(
-            new(
-                id,
-                "Transcription",
-                $"D:\\媒体\\{id}.wav",
-                null,
-                MediaJobStatus.Completed,
-                100,
-                TranscriptionEngine.Groq,
-                "whisper-large-v3",
-                0,
-                1,
-                null,
-                now,
-                now),
-            CancellationToken.None);
+        await repository.UpsertAsync(CreateMediaJob(id), CancellationToken.None);
+    }
+
+    private static MediaJob CreateMediaJob(string id)
+    {
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        return new(
+            id,
+            "Transcription",
+            $"D:\\媒体\\{id}.wav",
+            null,
+            MediaJobStatus.Completed,
+            100,
+            TranscriptionEngine.Groq,
+            "whisper-large-v3",
+            0,
+            1,
+            null,
+            now,
+            now);
     }
 }

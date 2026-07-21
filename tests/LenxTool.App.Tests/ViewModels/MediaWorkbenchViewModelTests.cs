@@ -3,6 +3,7 @@ using LenxTool.App.ViewModels;
 using LenxTool.Core.Contracts;
 using LenxTool.Core.Models;
 using LenxTool.Infrastructure.SystemServices;
+using System.Text;
 
 namespace LenxTool.App.Tests.ViewModels;
 
@@ -20,7 +21,7 @@ public sealed class MediaWorkbenchViewModelTests
             var repository = new FakeRepository();
             var transcription = new FakeTranscription();
             var viewModel = new MediaWorkbenchViewModel(
-                repository, transcription, transcription, new FakeAudio(), new FakeModels(),
+                repository, repository, transcription, transcription, new FakeAudio(), new FakeModels(),
                 new FakeDialogs(input), new AppPaths(root));
 
             await viewModel.InitializeAsync(CancellationToken.None);
@@ -49,7 +50,7 @@ public sealed class MediaWorkbenchViewModelTests
             var repository = new FakeRepository();
             var transcription = new ThrowingTranscription();
             var viewModel = new MediaWorkbenchViewModel(
-                repository, transcription, transcription, new FakeAudio(), new FakeModels(),
+                repository, repository, transcription, transcription, new FakeAudio(), new FakeModels(),
                 new FakeDialogs(input), new AppPaths(root));
 
             await viewModel.InitializeAsync(CancellationToken.None);
@@ -80,7 +81,7 @@ public sealed class MediaWorkbenchViewModelTests
             var repository = new FakeRepository(queued);
             var transcription = new FakeTranscription();
             var viewModel = new MediaWorkbenchViewModel(
-                repository, transcription, transcription, new FakeAudio(), new FakeModels(),
+                repository, repository, transcription, transcription, new FakeAudio(), new FakeModels(),
                 new FakeDialogs(input), new AppPaths(root));
 
             await viewModel.InitializeAsync(CancellationToken.None);
@@ -107,7 +108,7 @@ public sealed class MediaWorkbenchViewModelTests
             var repository = new FakeRepository();
             var transcription = new FakeTranscription();
             var viewModel = new MediaWorkbenchViewModel(
-                repository, transcription, transcription, new FakeAudio(), new FakeModels(),
+                repository, repository, transcription, transcription, new FakeAudio(), new FakeModels(),
                 new FakeDialogs(input), new AppPaths(root));
 
             await viewModel.InitializeAsync(CancellationToken.None);
@@ -136,7 +137,7 @@ public sealed class MediaWorkbenchViewModelTests
             var repository = new FakeRepository();
             var transcription = new ThrowingTranscription();
             var viewModel = new MediaWorkbenchViewModel(
-                repository, transcription, transcription, new FakeAudio(), new FakeModels(),
+                repository, repository, transcription, transcription, new FakeAudio(), new FakeModels(),
                 new FakeDialogs(input), new AppPaths(root));
 
             await viewModel.InitializeAsync(CancellationToken.None);
@@ -172,7 +173,7 @@ public sealed class MediaWorkbenchViewModelTests
             var repository = new FakeRepository();
             var transcription = new FakeTranscription();
             var viewModel = new MediaWorkbenchViewModel(
-                repository, transcription, transcription, new FakeAudio(), new FakeModels(),
+                repository, repository, transcription, transcription, new FakeAudio(), new FakeModels(),
                 new FakeDialogs(first, second), new AppPaths(root));
             var observed = new List<double>();
             viewModel.PropertyChanged += (_, args) =>
@@ -207,7 +208,7 @@ public sealed class MediaWorkbenchViewModelTests
             var dialog = new FakeDialogs(input);
             var transcription = new FakeTranscription();
             var viewModel = new MediaWorkbenchViewModel(
-                repository, transcription, transcription, new FakeAudio(), new FakeModels(), dialog,
+                repository, repository, transcription, transcription, new FakeAudio(), new FakeModels(), dialog,
                 new AppPaths(root));
             await viewModel.InitializeAsync(CancellationToken.None);
 
@@ -226,9 +227,87 @@ public sealed class MediaWorkbenchViewModelTests
         }
     }
 
-    private sealed class FakeRepository(params MediaJob[] initialJobs) : IMediaJobRepository
+    [Fact]
+    public async Task BrowseImportsBomSrtInChineseSpaceAndLongPathAndRestoresCompletedJob()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "Lenx Tools tests", Guid.NewGuid().ToString("N"));
+        string longDirectory = Enumerable.Range(0, 8).Aggregate(
+            Path.Combine(root, "中文 目录"),
+            (current, index) => Path.Combine(current, $"第{index:00}层 空格目录 abcdefghijklmnop"));
+        string input = Path.Combine(longDirectory, "已有 字幕.srt");
+        Assert.True(input.Length > 260);
+        Directory.CreateDirectory(Path.GetDirectoryName(input)!);
+        const string content = "7\r\n00:00:01,250 --> 00:00:03,500\r\n你好 Lenx\r\n\r\n";
+        await File.WriteAllTextAsync(input, content, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+        try
+        {
+            var repository = new FakeRepository();
+            var transcription = new FakeTranscription();
+            var viewModel = new MediaWorkbenchViewModel(
+                repository, repository, transcription, transcription, new FakeAudio(), new FakeModels(),
+                new FakeDialogs(input), new AppPaths(root));
+
+            await viewModel.InitializeAsync(CancellationToken.None);
+            await viewModel.BrowseCommand.ExecuteAsync();
+
+            MediaJob imported = Assert.Single(repository.Jobs.Values);
+            Assert.Equal("SubtitleImport", imported.Kind);
+            Assert.Equal(MediaJobStatus.Completed, imported.Status);
+            Assert.Equal(TranscriptionEngine.ImportedSrt, imported.Engine);
+            SubtitleSegment segment = Assert.Single(repository.Segments[imported.Id]);
+            Assert.Equal(7, segment.Sequence);
+            Assert.Equal("你好 Lenx", segment.Text);
+            var reopened = new MediaWorkbenchViewModel(
+                repository, repository, transcription, transcription, new FakeAudio(), new FakeModels(),
+                new FakeDialogs(), new AppPaths(root));
+
+            await reopened.InitializeAsync(CancellationToken.None);
+
+            Assert.Equal(imported, Assert.Single(reopened.RecentJobs));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task BrowseMalformedSrtShowsLineNumberAndLeavesNoPersistedJob()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "Lenx Tools tests", Guid.NewGuid().ToString("N"));
+        string input = Path.Combine(root, "坏 字幕.srt");
+        Directory.CreateDirectory(root);
+        await File.WriteAllTextAsync(
+            input,
+            "1\nnot-a-time-range\ninvalid\n",
+            new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+        try
+        {
+            var repository = new FakeRepository();
+            var transcription = new FakeTranscription();
+            var viewModel = new MediaWorkbenchViewModel(
+                repository, repository, transcription, transcription, new FakeAudio(), new FakeModels(),
+                new FakeDialogs(input), new AppPaths(root));
+
+            await viewModel.InitializeAsync(CancellationToken.None);
+            await viewModel.BrowseCommand.ExecuteAsync();
+
+            Assert.Empty(repository.Jobs);
+            Assert.NotNull(viewModel.LastError);
+            Assert.Equal(LenxTool.Core.Errors.AppErrorCode.InvalidRequest, viewModel.LastError.Code);
+            Assert.Contains("第 2 行", viewModel.LastError.UserMessage, StringComparison.Ordinal);
+            Assert.True(viewModel.BrowseCommand.CanExecute(null));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    private sealed class FakeRepository(params MediaJob[] initialJobs) : IMediaJobRepository, ISubtitleRepository
     {
         public Dictionary<string, MediaJob> Jobs { get; } = initialJobs.ToDictionary(job => job.Id);
+        public Dictionary<string, IReadOnlyList<SubtitleSegment>> Segments { get; } = [];
         public List<MediaJob> Snapshots { get; } = [];
         public Task UpsertAsync(MediaJob job, CancellationToken cancellationToken)
         {
@@ -242,6 +321,28 @@ public sealed class MediaWorkbenchViewModelTests
             Task.FromResult<IReadOnlyList<MediaJob>>(Jobs.Values.ToArray());
         public Task<IReadOnlyList<MediaJob>> GetQueuedAsync(CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<MediaJob>>(Jobs.Values.Where(job => job.Status == MediaJobStatus.Queued).ToArray());
+        public Task CreateMediaJobWithSegmentsAsync(
+            MediaJob job,
+            IReadOnlyList<SubtitleSegment> segments,
+            CancellationToken cancellationToken)
+        {
+            Jobs[job.Id] = job;
+            Segments[job.Id] = segments.ToArray();
+            Snapshots.Add(job);
+            return Task.CompletedTask;
+        }
+        public Task ReplaceAsync(
+            string mediaJobId,
+            IReadOnlyList<SubtitleSegment> segments,
+            CancellationToken cancellationToken)
+        {
+            Segments[mediaJobId] = segments.ToArray();
+            return Task.CompletedTask;
+        }
+        public Task<IReadOnlyList<SubtitleSegment>> GetByMediaJobIdAsync(
+            string mediaJobId,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(Segments.GetValueOrDefault(mediaJobId) ?? []);
     }
 
     private sealed class ThrowingTranscription : ITranscriptionService, ILocalTranscriptionService

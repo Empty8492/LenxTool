@@ -4,6 +4,11 @@ namespace LenxTool.Core.Contracts;
 
 public interface ISubtitleRepository
 {
+    Task CreateMediaJobWithSegmentsAsync(
+        MediaJob job,
+        IReadOnlyList<SubtitleSegment> segments,
+        CancellationToken cancellationToken);
+
     Task ReplaceAsync(
         string mediaJobId,
         IReadOnlyList<SubtitleSegment> segments,
