@@ -2,7 +2,7 @@
 
 ## 设计目标
 
-Worker 只保存账号、邀请码、角色、额度、用量、refresh token 哈希和基础审计；不保存早报、字幕、音视频、文件或请求正文。共享 Groq/DeepSeek Key 仅保存在 Worker Secret。
+Worker 只保存账号、邀请码、角色、额度、用量、refresh token 哈希、基础审计，以及管理员发布的共享分类和 Feed 配置；不保存文章正文、早报正文、字幕、音视频、文件、本地路径或请求正文。共享 Groq/DeepSeek Key 仅保存在 Worker Secret。目录表与约束见 [Worker D1 Schema](api/worker-d1-schema.md)。
 
 ## 资源准备
 
@@ -18,8 +18,13 @@ npx wrangler d1 create lenx-tool
 4. 应用迁移：
 
 ```powershell
+npx wrangler d1 migrations list lenx-tool --remote
+npx wrangler d1 time-travel info lenx-tool
 npx wrangler d1 migrations apply lenx-tool --remote
+npx wrangler d1 migrations list lenx-tool --remote
 ```
+
+应用前记录 Time Travel 当前书签，应用后确认无待处理迁移。迁移 SQL 失败时 Wrangler 会回滚当前迁移并保留之前成功的迁移；如果迁移成功后才发现生产语义问题，按 [Schema 恢复说明](api/worker-d1-schema.md#6-发布与恢复) 停止写入并人工确认恢复。Time Travel 恢复会原地覆盖数据库，不能作为自动重试步骤。
 
 5. 设置 Secret：
 
