@@ -15,3 +15,4 @@ REFRESH_TOKEN_TTL_DAYS = "30"
 
 # Configure with `wrangler secret put` (never place values here):
 # TOKEN_SECRET, GROQ_API_KEY, DEEPSEEK_API_KEY
+# BOOTSTRAP_TOKEN is temporary; delete it immediately after first-admin setup.
