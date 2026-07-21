@@ -1,8 +1,8 @@
+﻿using System.Globalization;
 using LenxTool.Core.Errors;
 using LenxTool.Infrastructure.SystemServices;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
-using System.Globalization;
 
 namespace LenxTool.Infrastructure.Data;
 
@@ -10,7 +10,7 @@ public sealed partial class SqliteDatabase(
     AppPaths paths,
     ILogger<SqliteDatabase> logger) : IDisposable
 {
-    private const int CurrentSchemaVersion = 2;
+    private const int CurrentSchemaVersion = 3;
     private readonly SemaphoreSlim _initializationGate = new(1, 1);
     private bool _initialized;
     private bool _disposed;
@@ -147,6 +147,25 @@ public sealed partial class SqliteDatabase(
                 command.CommandText = "INSERT INTO schema_versions(version, applied_at, checksum) VALUES (2, $appliedAt, $checksum);";
                 command.Parameters.AddWithValue("$appliedAt", DateTimeOffset.UtcNow.ToString("O"));
                 command.Parameters.AddWithValue("$checksum", "lenx-schema-v2-rich-news");
+                await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                version = 2;
+            }
+
+            if (version < 3)
+            {
+                command.CommandText = """
+                    ALTER TABLE media_jobs ADD COLUMN translation_provider TEXT;
+                    ALTER TABLE media_jobs ADD COLUMN translation_target_language TEXT;
+                    ALTER TABLE media_jobs ADD COLUMN translation_next_segment_index INTEGER NOT NULL DEFAULT 0;
+                    ALTER TABLE media_jobs ADD COLUMN translation_prompt_tokens INTEGER NOT NULL DEFAULT 0;
+                    ALTER TABLE media_jobs ADD COLUMN translation_completion_tokens INTEGER NOT NULL DEFAULT 0;
+                    ALTER TABLE media_jobs ADD COLUMN translation_total_tokens INTEGER NOT NULL DEFAULT 0;
+                    """;
+                command.Parameters.Clear();
+                await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                command.CommandText = "INSERT INTO schema_versions(version, applied_at, checksum) VALUES (3, $appliedAt, $checksum);";
+                command.Parameters.AddWithValue("$appliedAt", DateTimeOffset.UtcNow.ToString("O"));
+                command.Parameters.AddWithValue("$checksum", "lenx-schema-v3-subtitle-translation-usage");
                 await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
             }
         }

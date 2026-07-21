@@ -1,13 +1,13 @@
-using System.IO;
-using System.Windows;
+﻿using System.IO;
 using System.Reflection;
+using System.Windows;
 using LenxTool.App.Services;
 using LenxTool.App.ViewModels;
 using LenxTool.Core.Contracts;
 using LenxTool.Core.Errors;
 using LenxTool.Infrastructure.Data;
-using LenxTool.Infrastructure.Networking;
 using LenxTool.Infrastructure.Media;
+using LenxTool.Infrastructure.Networking;
 using LenxTool.Infrastructure.Security;
 using LenxTool.Infrastructure.SystemServices;
 using LenxTool.Infrastructure.Updates;
@@ -107,6 +107,7 @@ public partial class App : Application
         services.AddSingleton<ILocalTranscriptionService, LocalWhisperTranscriptionService>();
         services.AddSingleton<IMediaAudioService, MediaFoundationAudioService>();
         services.AddSingleton<IDesktopFileDialogService, DesktopFileDialogService>();
+        services.AddSingleton<ISubtitleExportService, SubtitleExportService>();
         services.AddSingleton(CreateUpdateOptions());
         services.AddSingleton<IUpdateService, UpdateService>();
         services.AddSingleton<IThemeService, ThemeService>();

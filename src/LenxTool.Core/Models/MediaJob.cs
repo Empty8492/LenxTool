@@ -1,4 +1,4 @@
-using LenxTool.Core.Errors;
+﻿using LenxTool.Core.Errors;
 
 namespace LenxTool.Core.Models;
 
@@ -32,4 +32,17 @@ public sealed record MediaJob(
     int AiRequestCount,
     AppError? Error,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt)
+{
+    public string? TranslationProvider { get; init; }
+
+    public string? TranslationTargetLanguage { get; init; }
+
+    public int TranslationNextSegmentIndex { get; init; }
+
+    public int TranslationPromptTokens { get; init; }
+
+    public int TranslationCompletionTokens { get; init; }
+
+    public int TranslationTotalTokens { get; init; }
+}

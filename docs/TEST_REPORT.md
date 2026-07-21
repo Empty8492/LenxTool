@@ -8,17 +8,17 @@
 
 | 测试组 | 结果 |
 |---|---:|
-| LenxTool.Core.Tests | 35 passed |
-| LenxTool.Infrastructure.Tests | 32 passed |
-| LenxTool.App.Tests | 42 passed |
+| LenxTool.Core.Tests | 37 passed |
+| LenxTool.Infrastructure.Tests | 33 passed |
+| LenxTool.App.Tests | 50 passed |
 | Cloudflare Worker Vitest | 1 passed |
 | Worker TypeScript strict typecheck | passed |
 | .NET build warnings | 0 |
 | NuGet vulnerable packages | 0 detected |
 
-本轮执行 `dotnet build LenxTools.slnx -c Release`，结果为 0 警告、0 错误；执行 `dotnet test LenxTools.slnx -c Release`，结果为 Core 35、Infrastructure 32、App 42，共 109/109 通过且无跳过。
+本轮执行 `dotnet build LenxTools.slnx -c Release`，结果为 0 警告、0 错误；执行 `dotnet test LenxTools.slnx -c Release`，结果为 Core 37、Infrastructure 33、App 50，共 120/120 通过且无跳过。
 
-覆盖点包括：统一 HTTP 错误、Groq 429 与 Retry-After、DeepSeek 当前模型请求与 token 用量解析、DeepSeek 字幕批次成功与 token、模型乱序输出复序、缺项拒绝、取消、429 重试与实际请求数、超时退避耗尽后的精确断点、畸形超大 `Retry-After` 限界、部分批次恢复和组合根 `ISubtitleTranslator` 解析、AI 报告生成状态和 SQLite/FTS5 持久化、语义版本、签名篡改、严格 SRT 解析/导出、UTF-8 BOM、原序号保留、畸形块错误行定位、已有 SRT 任务与片段原子创建、字幕批量翻译输入快照、批大小边界、取消令牌、流式批次、模型/请求数/token 用量、幂等恢复点、结构化失败，以及译文乱序输入下仍只填充译文且保持原文/时间轴/置信指标/列表顺序、字幕片段按任务事务替换与按原序号读取、字幕序号/时间轴唯一性、字幕原文/译文/置信指标重开往返、覆盖写入、批次中途失败回滚和 schema v1 升级保留、重叠合并、音频分片计划、JSON/编码/文本工具、SQLite schema/FTS/损坏、早报/热点/AI 报告统一全文搜索、包含未 checkpoint WAL 提交的一致性迁移备份、RSS 富内容持久化、HTML/Markdown 正文配图顺序与安全 URL 解析、受大小限制的图片下载、标题/列表/链接解析与朗读标记清理、NewsNow 13 来源目录与响应解析、恶意子域名拒绝、按平台缓存快照替换、热点平台分组、多选来源过滤、全选恢复与安全原文命令、PasswordBox TwoWay Binding 保留、Key 保存命令状态与 DPAPI 配置反馈、资讯页统一控件样式、无缺边歧义的标签指示器、单一整页滚动、回顶渐显和缓动布局、设置持久化、DPAPI 与脱敏、中文/空格/超过 260 字符的路径、媒体 Queued/Running/Completed/Failed 状态与进度持久化、重启恢复、失败计数和重试、资讯默认当天/日期切换/当天缺失回退、导航和 Ctrl+K 状态。
+覆盖点包括：统一 HTTP 错误、Groq 429 与 Retry-After、DeepSeek 当前模型请求与 token 用量解析、DeepSeek 字幕批次成功与 token、模型乱序输出复序、缺项拒绝、取消、429 重试与实际请求数、超时退避耗尽后的精确断点、畸形超大 `Retry-After` 限界、部分批次恢复和组合根 `ISubtitleTranslator` 解析、AI 报告生成状态和 SQLite/FTS5 持久化、语义版本、签名篡改、严格 SRT 解析/四种导出、UTF-8 无 BOM、原序号保留、畸形块错误行定位、已有 SRT 任务与片段原子创建、转写片段入库、字幕批量翻译输入快照、批大小边界、取消令牌、流式批次、模型/请求数/token 用量、幂等恢复点、首批失败后的第二次断点恢复、翻译取消状态与恢复位置、历史原文/译文详情、脱敏错误和不调用模型的本地再导出、字幕与翻译用量同事务提交、schema v3 重开往返、字幕序号/时间轴唯一性、覆盖写入、批次中途失败回滚和 schema v1 升级保留、重叠合并、音频分片计划、JSON/编码/文本工具、SQLite schema/FTS/损坏、早报/热点/AI 报告统一全文搜索、包含未 checkpoint WAL 提交的一致性迁移备份、RSS 富内容持久化、HTML/Markdown 正文配图顺序与安全 URL 解析、受大小限制的图片下载、标题/列表/链接解析与朗读标记清理、NewsNow 13 来源目录与响应解析、恶意子域名拒绝、按平台缓存快照替换、热点平台分组、多选来源过滤、全选恢复与安全原文命令、PasswordBox TwoWay Binding 保留、Key 保存命令状态与 DPAPI 配置反馈、资讯页统一控件样式、无缺边歧义的标签指示器、单一整页滚动、回顶渐显和缓动布局、设置持久化、DPAPI 与脱敏、中文/空格/超过 260 字符的路径、媒体 Queued/Running/Completed/Failed 状态与进度持久化、重启恢复、失败计数和重试、资讯默认当天/日期切换/当天缺失回退、导航和 Ctrl+K 状态。
 
 真实 DeepSeek 连通性测试使用临时进程环境变量执行，未写入仓库或日志。`deepseek-v4-flash` 请求成功，返回 46 total tokens；测试凭据值未保存到项目文件。
 
@@ -50,6 +50,7 @@
 - 设置页真实输入无效测试 Key 后，“加密保存”从空输入禁用变为可用，100 ms 内状态更新为“Groq：已配置 · DeepSeek：已配置 · 已加密保存”；随后通过“清除”恢复为双未配置，未保留测试凭据。
 - 热点页真实呈现 13 个带 TogglePattern 的来源筛选胶囊；取消“知乎”后即时显示 12/13，知乎卡片隐藏而筛选入口保留，“全选”启用并可恢复 13/13。选中标签使用完整背景和底部强调线，不再依赖容易产生缺边错觉的四周描边。
 - Gate0-02 真实 WPF 验收：通过“导入媒体 / SRT”文件选择器导入中文和空格路径下的黄金 SRT，界面显示“已导入 1 个 SRT，共 2 个片段”、`ImportedSrt / Completed`；关闭并重启应用后，该任务仍从本地 SQLite 恢复。
+- Gate0-05/06 当前 WPF 构建 UI Automation 冒烟：可导航媒体工作台并找到字幕任务、目标语言、模型、翻译/取消、四种导出和打开目录控件；可导航任务历史并找到媒体任务、字幕原文/译文详情、历史导出格式和本地导出控件。进程 `Responding=True`，本项未发出真实模型请求。
 
 ## 需要外部环境的验收
 

@@ -1,4 +1,4 @@
-using LenxTool.Core.Models;
+﻿using LenxTool.Core.Models;
 using LenxTool.Infrastructure.Data;
 using LenxTool.Infrastructure.SystemServices;
 using Microsoft.Data.Sqlite;
@@ -166,6 +166,42 @@ public sealed class SubtitleRepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task SaveTranslationBatchAsyncPersistsSegmentsCheckpointAndUsageAtomically()
+    {
+        using SqliteDatabase database = CreateDatabase();
+        await database.InitializeAsync(CancellationToken.None);
+        var repository = new MediaJobRepository(database);
+        MediaJob job = CreateMediaJob("job-translation") with
+        {
+            Status = MediaJobStatus.Running,
+            Progress = 50,
+            Model = "deepseek-v4-flash",
+            AiRequestCount = 2,
+            TranslationProvider = "DeepSeek",
+            TranslationTargetLanguage = "简体中文",
+            TranslationNextSegmentIndex = 1,
+            TranslationPromptTokens = 100,
+            TranslationCompletionTokens = 30,
+            TranslationTotalTokens = 130
+        };
+        SubtitleSegment[] segments =
+        [
+            Segment(1, 1, 2, "Hello") with { TranslatedText = "你好" },
+            Segment(2, 2, 3, "World")
+        ];
+
+        await repository.SaveTranslationBatchAsync(job, segments, CancellationToken.None);
+        database.Dispose();
+
+        using SqliteDatabase reopened = CreateDatabase();
+        await reopened.InitializeAsync(CancellationToken.None);
+        var reopenedRepository = new MediaJobRepository(reopened);
+
+        Assert.Equal(job, Assert.Single(await reopenedRepository.GetRecentAsync(10, CancellationToken.None)));
+        Assert.Equal(segments, await reopenedRepository.GetByMediaJobIdAsync(job.Id, CancellationToken.None));
+    }
+
+    [Fact]
     public async Task CreateMediaJobWithSegmentsAsyncRollsBackJobWhenSegmentsAreInvalid()
     {
         using SqliteDatabase database = CreateDatabase();
@@ -264,7 +300,7 @@ public sealed class SubtitleRepositoryTests : IDisposable
         await using SqliteConnection upgradedConnection = await upgraded.OpenConnectionAsync(CancellationToken.None);
         await using SqliteCommand version = upgradedConnection.CreateCommand();
         version.CommandText = "SELECT MAX(version) FROM schema_versions;";
-        Assert.Equal(2L, (long)(await version.ExecuteScalarAsync(CancellationToken.None))!);
+        Assert.Equal(3L, (long)(await version.ExecuteScalarAsync(CancellationToken.None))!);
     }
 
     public void Dispose()

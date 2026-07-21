@@ -1,4 +1,4 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using System.IO;
 using System.Text;
 using LenxTool.App.Mvvm;
@@ -21,6 +21,8 @@ public sealed class MediaWorkbenchViewModel : PageViewModel
     private readonly ILocalModelService _models;
     private readonly IDesktopFileDialogService _dialogs;
     private readonly AppPaths _paths;
+    private readonly ISubtitleTranslator _translator;
+    private readonly ISubtitleExportService _subtitleExporter;
     private readonly List<MediaJob> _pendingJobs = [];
     private string _inputSummary = "尚未选择文件";
     private string _status = "支持批量导入；任务按顺序执行，可随时取消。";
@@ -29,6 +31,14 @@ public sealed class MediaWorkbenchViewModel : PageViewModel
     private double _progress;
     private string? _lastOutputPath;
     private AppError? _lastError;
+    private MediaJob? _selectedSubtitleJob;
+    private Task _selectedSubtitleLoad = Task.CompletedTask;
+    private int _selectedSubtitleLoadVersion;
+    private string _targetLanguage = "简体中文";
+    private string _translationModel = "deepseek-v4-flash";
+    private string _translationStatus = "选择一条已有字幕的任务开始翻译。";
+    private double _translationProgress;
+    private SubtitleExportOption _selectedExportOption;
 
     public MediaWorkbenchViewModel(
         IMediaJobRepository jobs,
@@ -38,7 +48,9 @@ public sealed class MediaWorkbenchViewModel : PageViewModel
         IMediaAudioService audio,
         ILocalModelService models,
         IDesktopFileDialogService dialogs,
-        AppPaths paths) : base("媒体工作台", "批量转写音视频，使用云端 Groq 或完全离线的本地 Whisper")
+        AppPaths paths,
+        ISubtitleTranslator translator,
+        ISubtitleExportService subtitleExporter) : base("媒体工作台", "批量转写音视频，使用云端 Groq 或完全离线的本地 Whisper")
     {
         _jobs = jobs;
         _subtitles = subtitles;
@@ -48,29 +60,121 @@ public sealed class MediaWorkbenchViewModel : PageViewModel
         _models = models;
         _dialogs = dialogs;
         _paths = paths;
+        _translator = translator;
+        _subtitleExporter = subtitleExporter;
+        _selectedExportOption = ExportOptions[1];
         ImportModelCommand = new(ImportModelAsync);
         StartCommand = new(ProcessQueueAsync, () => _pendingJobs.Count > 0);
         BrowseCommand = new(BrowseAsync, () => !StartCommand.IsRunning);
         CancelCommand = new(() => StartCommand.Cancel(), () => StartCommand.IsRunning);
         OpenOutputCommand = new(OpenOutput, () => !string.IsNullOrWhiteSpace(LastOutputPath));
-        RetryCommand = new(RetryAsync, job => job?.Status is MediaJobStatus.Failed or MediaJobStatus.Cancelled);
+        RetryCommand = new(
+            RetryAsync,
+            job => job?.Kind == "Transcription" &&
+                job.Status is MediaJobStatus.Failed or MediaJobStatus.Cancelled);
+        TranslateCommand = new(TranslateSelectedAsync, CanTranslate);
+        CancelTranslationCommand = new(
+            () => TranslateCommand.Cancel(),
+            () => TranslateCommand.IsRunning);
+        ExportSubtitleCommand = new(ExportSelectedAsync, CanExport);
         StartCommand.PropertyChanged += (_, args) =>
         {
             if (args.PropertyName != nameof(AsyncRelayCommand.IsRunning)) return;
             BrowseCommand.NotifyCanExecuteChanged();
             CancelCommand.NotifyCanExecuteChanged();
         };
+        TranslateCommand.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName != nameof(AsyncRelayCommand.IsRunning)) return;
+            CancelTranslationCommand.NotifyCanExecuteChanged();
+            ExportSubtitleCommand.NotifyCanExecuteChanged();
+        };
     }
 
     public IReadOnlyList<string> Engines { get; } = ["Groq Whisper", "本地 Whisper"];
     public ObservableCollection<LocalModelInfo> LocalModels { get; } = [];
     public ObservableCollection<MediaJob> RecentJobs { get; } = [];
+    public ObservableCollection<SubtitleSegment> SubtitleSegments { get; } = [];
+    public IReadOnlyList<SubtitleExportOption> ExportOptions { get; } =
+    [
+        new(SubtitleExportMode.OriginalSrt, "原文 SRT"),
+        new(SubtitleExportMode.TranslatedSrt, "译文 SRT"),
+        new(SubtitleExportMode.BilingualSrt, "双语 SRT"),
+        new(SubtitleExportMode.PlainText, "纯文本 TXT")
+    ];
     public AsyncRelayCommand BrowseCommand { get; }
     public AsyncRelayCommand ImportModelCommand { get; }
     public AsyncRelayCommand StartCommand { get; }
     public RelayCommand CancelCommand { get; }
     public RelayCommand OpenOutputCommand { get; }
     public AsyncRelayCommand<MediaJob> RetryCommand { get; }
+    public AsyncRelayCommand TranslateCommand { get; }
+    public RelayCommand CancelTranslationCommand { get; }
+    public AsyncRelayCommand ExportSubtitleCommand { get; }
+
+    public MediaJob? SelectedSubtitleJob
+    {
+        get => _selectedSubtitleJob;
+        set
+        {
+            if (!SetProperty(ref _selectedSubtitleJob, value)) return;
+            int loadVersion = ++_selectedSubtitleLoadVersion;
+            _selectedSubtitleLoad = LoadSelectedSubtitleAsync(value, loadVersion);
+            OnPropertyChanged(nameof(SelectedSubtitleLoad));
+            TranslateCommand.NotifyCanExecuteChanged();
+            ExportSubtitleCommand.NotifyCanExecuteChanged();
+        }
+    }
+
+    public Task SelectedSubtitleLoad => _selectedSubtitleLoad;
+
+    public string TargetLanguage
+    {
+        get => _targetLanguage;
+        set
+        {
+            if (SetProperty(ref _targetLanguage, value ?? string.Empty))
+            {
+                TranslateCommand.NotifyCanExecuteChanged();
+            }
+        }
+    }
+
+    public string TranslationModel
+    {
+        get => _translationModel;
+        set
+        {
+            if (SetProperty(ref _translationModel, value ?? string.Empty))
+            {
+                TranslateCommand.NotifyCanExecuteChanged();
+            }
+        }
+    }
+
+    public string TranslationStatus
+    {
+        get => _translationStatus;
+        private set => SetProperty(ref _translationStatus, value);
+    }
+
+    public double TranslationProgress
+    {
+        get => _translationProgress;
+        private set => SetProperty(ref _translationProgress, value);
+    }
+
+    public SubtitleExportOption SelectedExportOption
+    {
+        get => _selectedExportOption;
+        set
+        {
+            if (SetProperty(ref _selectedExportOption, value))
+            {
+                ExportSubtitleCommand.NotifyCanExecuteChanged();
+            }
+        }
+    }
 
     public string InputSummary
     {
@@ -136,6 +240,7 @@ public sealed class MediaWorkbenchViewModel : PageViewModel
         LocalModels.Clear();
         foreach (LocalModelInfo model in models) LocalModels.Add(model);
         SelectedModel ??= LocalModels.FirstOrDefault();
+        SelectedSubtitleJob ??= RecentJobs.FirstOrDefault(job => job.Status != MediaJobStatus.Queued);
     }
 
     private async Task BrowseAsync(CancellationToken cancellationToken)
@@ -213,7 +318,7 @@ public sealed class MediaWorkbenchViewModel : PageViewModel
         UpdateQueueSummary();
         Status = (subtitleImports.Count, mediaFiles.Length) switch
         {
-            (> 0, 0) => $"已导入 {subtitleImports.Count} 个 SRT，共 {importedSegmentCount} 个片段；关闭后仍可恢复。",
+            ( > 0, 0) => $"已导入 {subtitleImports.Count} 个 SRT，共 {importedSegmentCount} 个片段；关闭后仍可恢复。",
             (0, > 0) => $"已持久化 {mediaFiles.Length} 个待处理任务，可安全关闭后继续。",
             _ => $"已导入 {subtitleImports.Count} 个 SRT，并持久化 {mediaFiles.Length} 个媒体任务。"
         };
@@ -314,12 +419,17 @@ public sealed class MediaWorkbenchViewModel : PageViewModel
             await File.WriteAllTextAsync(outputPath, SrtCodec.Export(segments, SubtitleExportMode.OriginalSrt),
                 new UTF8Encoding(false), cancellationToken);
             job = job with { OutputPath = outputPath, Status = MediaJobStatus.Completed, Progress = 100, UpdatedAt = DateTimeOffset.UtcNow };
+            await _subtitles.SaveTranslationBatchAsync(job, segments, cancellationToken);
             LastOutputPath = outputPath;
         }
         catch (OperationCanceledException)
         {
-            job = job with { Status = MediaJobStatus.Cancelled, UpdatedAt = DateTimeOffset.UtcNow,
-                Error = new(AppErrorCode.OperationCancelled, "任务已取消", "媒体处理已由用户取消。", "可从历史记录重新执行。", IsRetryable: true) };
+            job = job with
+            {
+                Status = MediaJobStatus.Cancelled,
+                UpdatedAt = DateTimeOffset.UtcNow,
+                Error = new(AppErrorCode.OperationCancelled, "任务已取消", "媒体处理已由用户取消。", "可从历史记录重新执行。", IsRetryable: true)
+            };
             throw;
         }
         catch (Exception exception)
@@ -365,6 +475,256 @@ public sealed class MediaWorkbenchViewModel : PageViewModel
         UpdateQueueSummary();
         Status = "失败任务已重新加入持久化队列。";
         StartCommand.NotifyCanExecuteChanged();
+    }
+
+    private async Task LoadSelectedSubtitleAsync(MediaJob? job, int loadVersion)
+    {
+        if (job is null)
+        {
+            if (loadVersion != _selectedSubtitleLoadVersion) return;
+            SubtitleSegments.Clear();
+            TranslationProgress = 0;
+            TranslationStatus = "选择一条已有字幕的任务开始翻译。";
+            return;
+        }
+
+        try
+        {
+            IReadOnlyList<SubtitleSegment> segments = await _subtitles.GetByMediaJobIdAsync(
+                job.Id,
+                CancellationToken.None);
+            if (loadVersion != _selectedSubtitleLoadVersion) return;
+            SubtitleSegments.Clear();
+            foreach (SubtitleSegment segment in segments) SubtitleSegments.Add(segment);
+            if (!string.IsNullOrWhiteSpace(job.TranslationTargetLanguage))
+            {
+                TargetLanguage = job.TranslationTargetLanguage;
+            }
+            TranslationProgress = segments.Count == 0
+                ? 0
+                : segments.Count(segment => !string.IsNullOrWhiteSpace(segment.TranslatedText)) * 100d / segments.Count;
+            TranslationStatus = segments.Count == 0
+                ? "该任务还没有可用字幕。"
+                : $"已加载 {segments.Count} 个片段，已翻译 {segments.Count(segment => !string.IsNullOrWhiteSpace(segment.TranslatedText))} 个。";
+        }
+        catch (Exception)
+        {
+            if (loadVersion != _selectedSubtitleLoadVersion) return;
+            SubtitleSegments.Clear();
+            TranslationStatus = "无法读取本地字幕详情，请刷新后重试。";
+        }
+        finally
+        {
+            if (loadVersion == _selectedSubtitleLoadVersion)
+            {
+                TranslateCommand.NotifyCanExecuteChanged();
+                ExportSubtitleCommand.NotifyCanExecuteChanged();
+            }
+        }
+    }
+
+    private bool CanTranslate()
+    {
+        if (SelectedSubtitleJob is null || SubtitleSegments.Count == 0 ||
+            string.IsNullOrWhiteSpace(TargetLanguage) || string.IsNullOrWhiteSpace(TranslationModel))
+        {
+            return false;
+        }
+
+        bool sameTarget = string.Equals(
+            SelectedSubtitleJob.TranslationTargetLanguage,
+            TargetLanguage.Trim(),
+            StringComparison.OrdinalIgnoreCase);
+        return !sameTarget || SubtitleSegments.Any(segment => string.IsNullOrWhiteSpace(segment.TranslatedText));
+    }
+
+    private async Task TranslateSelectedAsync(CancellationToken cancellationToken)
+    {
+        await SelectedSubtitleLoad;
+        if (SelectedSubtitleJob is not { } selectedJob || SubtitleSegments.Count == 0) return;
+
+        string targetLanguage = TargetLanguage.Trim();
+        string model = TranslationModel.Trim();
+        IReadOnlyList<SubtitleSegment> segments = SubtitleSegments.ToArray();
+        bool sameTarget = string.Equals(
+            selectedJob.TranslationTargetLanguage,
+            targetLanguage,
+            StringComparison.OrdinalIgnoreCase);
+        if (!sameTarget)
+        {
+            segments = segments.Select(segment => segment with { TranslatedText = null }).ToArray();
+        }
+
+        int nextSegmentIndex = sameTarget
+            ? FindFirstUntranslatedIndex(segments)
+            : 0;
+        if (nextSegmentIndex >= segments.Count) return;
+
+        string operationId = selectedJob.Id + "-subtitle";
+        MediaJob job = selectedJob with
+        {
+            Status = MediaJobStatus.Running,
+            Progress = nextSegmentIndex * 100d / segments.Count,
+            Model = model,
+            Error = null,
+            UpdatedAt = DateTimeOffset.UtcNow,
+            TranslationProvider = "DeepSeek",
+            TranslationTargetLanguage = targetLanguage,
+            TranslationNextSegmentIndex = nextSegmentIndex
+        };
+        try
+        {
+            await _subtitles.SaveTranslationBatchAsync(job, segments, cancellationToken);
+            UpdateTranslationState(job, segments, $"正在翻译：{nextSegmentIndex}/{segments.Count}");
+            SubtitleTranslationRequest request = SubtitleTranslationRequest.Create(
+                operationId,
+                job.Id,
+                targetLanguage,
+                model,
+                batchSize: 20,
+                segments,
+                new(operationId, nextSegmentIndex));
+            await foreach (SubtitleTranslationBatchResult batch in _translator
+                .TranslateAsync(request, cancellationToken)
+                .WithCancellation(cancellationToken))
+            {
+                segments = batch.ApplyTo(segments);
+                job = job with
+                {
+                    Progress = batch.ResumeFrom.NextSegmentIndex * 100d / segments.Count,
+                    Model = batch.Model,
+                    AiRequestCount = checked(job.AiRequestCount + batch.RequestCount),
+                    UpdatedAt = DateTimeOffset.UtcNow,
+                    TranslationNextSegmentIndex = batch.ResumeFrom.NextSegmentIndex,
+                    TranslationPromptTokens = checked(job.TranslationPromptTokens + batch.TokenUsage.PromptTokens),
+                    TranslationCompletionTokens = checked(job.TranslationCompletionTokens + batch.TokenUsage.CompletionTokens),
+                    TranslationTotalTokens = checked(job.TranslationTotalTokens + batch.TokenUsage.TotalTokens)
+                };
+                await _subtitles.SaveTranslationBatchAsync(job, segments, cancellationToken);
+                UpdateTranslationState(
+                    job,
+                    segments,
+                    $"正在翻译：{job.TranslationNextSegmentIndex}/{segments.Count} · {job.TranslationTotalTokens} tokens");
+            }
+
+            if (job.TranslationNextSegmentIndex < segments.Count)
+            {
+                throw new InvalidOperationException("翻译服务未返回全部字幕片段。");
+            }
+
+            job = job with
+            {
+                Status = MediaJobStatus.Completed,
+                Progress = 100,
+                Error = null,
+                UpdatedAt = DateTimeOffset.UtcNow
+            };
+            await _subtitles.SaveTranslationBatchAsync(job, segments, cancellationToken);
+            UpdateTranslationState(job, segments, $"翻译完成：{segments.Count} 个片段 · {job.TranslationTotalTokens} tokens");
+        }
+        catch (OperationCanceledException)
+        {
+            job = job with
+            {
+                Status = MediaJobStatus.Cancelled,
+                Error = new(
+                    AppErrorCode.OperationCancelled,
+                    "翻译已取消",
+                    "已保存完成的字幕批次。",
+                    "点击“继续翻译”可从当前断点恢复。",
+                    IsRetryable: true),
+                UpdatedAt = DateTimeOffset.UtcNow
+            };
+            await _subtitles.SaveTranslationBatchAsync(job, segments, CancellationToken.None);
+            UpdateTranslationState(job, segments, "翻译已取消；已保存断点，可继续翻译。");
+        }
+        catch (SubtitleTranslationException exception)
+        {
+            job = job with
+            {
+                Status = MediaJobStatus.Failed,
+                Progress = exception.ResumeFrom.NextSegmentIndex * 100d / segments.Count,
+                Error = exception.Error,
+                UpdatedAt = DateTimeOffset.UtcNow,
+                TranslationNextSegmentIndex = exception.ResumeFrom.NextSegmentIndex
+            };
+            await _subtitles.SaveTranslationBatchAsync(job, segments, CancellationToken.None);
+            LastError = exception.Error;
+            UpdateTranslationState(job, segments, $"翻译中断于 {job.TranslationNextSegmentIndex}/{segments.Count}；点击继续翻译可恢复。");
+        }
+        catch (Exception)
+        {
+            AppError error = new(
+                AppErrorCode.Unknown,
+                "字幕翻译失败",
+                "已保存完成的字幕批次。",
+                "检查网络与 API 配置后继续翻译。",
+                Provider: "DeepSeek",
+                IsRetryable: true);
+            job = job with
+            {
+                Status = MediaJobStatus.Failed,
+                Error = error,
+                UpdatedAt = DateTimeOffset.UtcNow
+            };
+            await _subtitles.SaveTranslationBatchAsync(job, segments, CancellationToken.None);
+            LastError = error;
+            UpdateTranslationState(job, segments, $"翻译中断于 {job.TranslationNextSegmentIndex}/{segments.Count}；点击继续翻译可恢复。");
+        }
+    }
+
+    private async Task ExportSelectedAsync(CancellationToken cancellationToken)
+    {
+        await SelectedSubtitleLoad;
+        if (SelectedSubtitleJob is not { } job || SubtitleSegments.Count == 0) return;
+        string outputPath = await _subtitleExporter.ExportAsync(
+            job,
+            SubtitleSegments.ToArray(),
+            SelectedExportOption.Mode,
+            cancellationToken);
+        job = job with { OutputPath = outputPath, UpdatedAt = DateTimeOffset.UtcNow };
+        await _jobs.UpsertAsync(job, cancellationToken);
+        UpdateSelectedJob(job);
+        AddOrReplace(job);
+        LastOutputPath = outputPath;
+        TranslationStatus = $"已导出：{Path.GetFileName(outputPath)}";
+    }
+
+    private bool CanExport() =>
+        SelectedSubtitleJob is not null &&
+        SubtitleSegments.Count > 0 &&
+        (SelectedExportOption.Mode == SubtitleExportMode.OriginalSrt ||
+         SubtitleSegments.All(segment => !string.IsNullOrWhiteSpace(segment.TranslatedText)));
+
+    private static int FindFirstUntranslatedIndex(IReadOnlyList<SubtitleSegment> segments)
+    {
+        for (int index = 0; index < segments.Count; index++)
+        {
+            if (string.IsNullOrWhiteSpace(segments[index].TranslatedText)) return index;
+        }
+        return segments.Count;
+    }
+
+    private void UpdateTranslationState(
+        MediaJob job,
+        IReadOnlyList<SubtitleSegment> segments,
+        string status)
+    {
+        UpdateSelectedJob(job);
+        SubtitleSegments.Clear();
+        foreach (SubtitleSegment segment in segments) SubtitleSegments.Add(segment);
+        TranslationProgress = job.Progress;
+        TranslationStatus = status;
+        AddOrReplace(job);
+        TranslateCommand.NotifyCanExecuteChanged();
+        ExportSubtitleCommand.NotifyCanExecuteChanged();
+    }
+
+    private void UpdateSelectedJob(MediaJob job)
+    {
+        if (_selectedSubtitleJob?.Id != job.Id) return;
+        _selectedSubtitleJob = job;
+        OnPropertyChanged(nameof(SelectedSubtitleJob));
     }
 
     private MediaJob CreateQueuedJob(string inputPath, bool useLocal)
@@ -454,9 +814,23 @@ public sealed class MediaWorkbenchViewModel : PageViewModel
 
     private void AddOrReplace(MediaJob job)
     {
-        MediaJob? existing = RecentJobs.FirstOrDefault(item => item.Id == job.Id);
-        if (existing is not null) RecentJobs.Remove(existing);
-        RecentJobs.Insert(0, job);
+        int existingIndex = -1;
+        for (int index = 0; index < RecentJobs.Count; index++)
+        {
+            if (RecentJobs[index].Id != job.Id) continue;
+            existingIndex = index;
+            break;
+        }
+
+        if (existingIndex >= 0)
+        {
+            RecentJobs[existingIndex] = job;
+            if (existingIndex > 0) RecentJobs.Move(existingIndex, 0);
+        }
+        else
+        {
+            RecentJobs.Insert(0, job);
+        }
         while (RecentJobs.Count > 50) RecentJobs.RemoveAt(RecentJobs.Count - 1);
     }
 
@@ -469,4 +843,5 @@ public sealed class MediaWorkbenchViewModel : PageViewModel
     {
         public void Report(T value) => handler(value);
     }
+
 }

@@ -1,8 +1,10 @@
+﻿using System.Globalization;
 using LenxTool.App.Services;
 using LenxTool.App.ViewModels;
 using LenxTool.Core.Contracts;
+using LenxTool.Core.Errors;
+using LenxTool.Core.Media;
 using LenxTool.Core.Models;
-using System.Globalization;
 
 namespace LenxTool.App.Tests.ViewModels;
 
@@ -23,7 +25,9 @@ public sealed class HistoryViewModelTests
             new StubMediaJobRepository(),
             new StubDatabaseMaintenanceService(),
             new StubDialogs(),
-            new StubNewsRepository([expected]));
+            new StubNewsRepository([expected]),
+            new StubMediaJobRepository(),
+            new StubSubtitleExportService());
         viewModel.SearchQuery = "人工智能";
 
         await viewModel.SearchCommand.ExecuteAsync();
@@ -40,11 +44,75 @@ public sealed class HistoryViewModelTests
             new StubMediaJobRepository(),
             new StubDatabaseMaintenanceService(),
             new StubDialogs(),
-            new StubNewsRepository([]));
+            new StubNewsRepository([]),
+            new StubMediaJobRepository(),
+            new StubSubtitleExportService());
 
         viewModel.SearchQuery = "   ";
 
         Assert.False(viewModel.SearchCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task SelectingSubtitleJobLoadsSegmentsUsageAndSupportsLocalReExport()
+    {
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        var job = new MediaJob(
+            "subtitle-history",
+            "SubtitleImport",
+            "D:\\字幕\\history.srt",
+            null,
+            MediaJobStatus.Failed,
+            50,
+            TranscriptionEngine.ImportedSrt,
+            "deepseek-v4-flash",
+            0,
+            2,
+            new(
+                AppErrorCode.ProviderUnavailable,
+                "翻译服务暂时不可用",
+                "翻译已在断点处停止。",
+                "稍后继续翻译。",
+                "Bearer secret-must-not-be-shown"),
+            now,
+            now)
+        {
+            TranslationProvider = "DeepSeek",
+            TranslationTargetLanguage = "简体中文",
+            TranslationNextSegmentIndex = 1,
+            TranslationPromptTokens = 100,
+            TranslationCompletionTokens = 30,
+            TranslationTotalTokens = 130
+        };
+        SubtitleSegment[] segments =
+        [
+            new(TimeSpan.Zero, TimeSpan.FromSeconds(1), "Hello", "你好") { Sequence = 1 }
+        ];
+        var repository = new StubMediaJobRepository([job], segments);
+        var exporter = new StubSubtitleExportService();
+        var viewModel = new HistoryViewModel(
+            repository,
+            new StubDatabaseMaintenanceService(),
+            new StubDialogs(),
+            new StubNewsRepository([]),
+            repository,
+            exporter);
+
+        await viewModel.InitializeAsync(CancellationToken.None);
+        await viewModel.SelectedJobLoad;
+
+        Assert.Equal(segments, viewModel.SubtitleSegments);
+        Assert.Equal("DeepSeek · deepseek-v4-flash", viewModel.ProviderSummary);
+        Assert.Equal("2 次请求 · 130 tokens（输入 100 / 输出 30）", viewModel.UsageSummary);
+        Assert.Equal("翻译已在断点处停止。", viewModel.ErrorSummary);
+        Assert.DoesNotContain("secret", viewModel.ErrorSummary, StringComparison.OrdinalIgnoreCase);
+
+        viewModel.SelectedExportOption = viewModel.ExportOptions.Single(
+            option => option.Mode == SubtitleExportMode.TranslatedSrt);
+        await viewModel.ExportSubtitleCommand.ExecuteAsync();
+
+        Assert.Equal(SubtitleExportMode.TranslatedSrt, exporter.Mode);
+        Assert.Equal(job.Id, exporter.Job?.Id);
     }
 
     private sealed class StubNewsRepository(IReadOnlyList<ContentSearchResult> results) : INewsRepository
@@ -77,15 +145,32 @@ public sealed class HistoryViewModelTests
             Task.FromResult<IReadOnlyList<TrendItem>>([]);
     }
 
-    private sealed class StubMediaJobRepository : IMediaJobRepository
+    private sealed class StubMediaJobRepository(
+        IReadOnlyList<MediaJob>? jobs = null,
+        IReadOnlyList<SubtitleSegment>? segments = null) : IMediaJobRepository, ISubtitleRepository
     {
         public Task UpsertAsync(MediaJob job, CancellationToken cancellationToken) => Task.CompletedTask;
         public Task<IReadOnlyList<MediaJob>> GetRecentAsync(int limit, CancellationToken cancellationToken) =>
-            Task.FromResult<IReadOnlyList<MediaJob>>([]);
+            Task.FromResult(jobs ?? []);
         public Task<IReadOnlyList<MediaJob>> GetQueuedAsync(CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<MediaJob>>([]);
         public Task<IReadOnlyList<MediaJob>> RecoverInterruptedAsync(CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<MediaJob>>([]);
+        public Task CreateMediaJobWithSegmentsAsync(
+            MediaJob job,
+            IReadOnlyList<SubtitleSegment> subtitleSegments,
+            CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task ReplaceAsync(
+            string mediaJobId,
+            IReadOnlyList<SubtitleSegment> subtitleSegments,
+            CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task SaveTranslationBatchAsync(
+            MediaJob job,
+            IReadOnlyList<SubtitleSegment> subtitleSegments,
+            CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task<IReadOnlyList<SubtitleSegment>> GetByMediaJobIdAsync(
+            string mediaJobId,
+            CancellationToken cancellationToken) => Task.FromResult(segments ?? []);
     }
 
     private sealed class StubDatabaseMaintenanceService : IDatabaseMaintenanceService
@@ -104,5 +189,22 @@ public sealed class HistoryViewModelTests
         public (string Source, string Destination)? PickWordConversion() => null;
         public void OpenFolder(string path) { }
         public void OpenUri(string uri) { }
+    }
+
+    private sealed class StubSubtitleExportService : ISubtitleExportService
+    {
+        public MediaJob? Job { get; private set; }
+        public SubtitleExportMode? Mode { get; private set; }
+
+        public Task<string> ExportAsync(
+            MediaJob job,
+            IReadOnlyList<SubtitleSegment> segments,
+            SubtitleExportMode mode,
+            CancellationToken cancellationToken)
+        {
+            Job = job;
+            Mode = mode;
+            return Task.FromResult("D:\\Output\\history.translated.srt");
+        }
     }
 }

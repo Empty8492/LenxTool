@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
 using LenxTool.Core.Models;
@@ -8,6 +8,7 @@ namespace LenxTool.Core.Media;
 public enum SubtitleExportMode
 {
     OriginalSrt,
+    TranslatedSrt,
     BilingualSrt,
     PlainText
 }
@@ -101,13 +102,22 @@ public static partial class SrtCodec
             builder.Append(FormatTime(segment.Start)).Append(" --> ")
                 .Append(FormatTime(segment.End)).Append('\n');
 
-            if (mode == SubtitleExportMode.BilingualSrt &&
-                !string.IsNullOrWhiteSpace(segment.TranslatedText))
+            if (mode is SubtitleExportMode.TranslatedSrt or SubtitleExportMode.BilingualSrt)
             {
-                builder.Append(segment.TranslatedText!.Trim()).Append('\n');
+                if (string.IsNullOrWhiteSpace(segment.TranslatedText))
+                {
+                    throw new InvalidOperationException("译文尚未完整生成，无法导出所选格式。");
+                }
+
+                builder.Append(segment.TranslatedText.Trim()).Append('\n');
             }
 
-            builder.Append(segment.Text.Trim()).Append("\n\n");
+            if (mode != SubtitleExportMode.TranslatedSrt)
+            {
+                builder.Append(segment.Text.Trim()).Append('\n');
+            }
+
+            builder.Append('\n');
         }
 
         return builder.ToString();

@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Text.Json;
 using LenxTool.Core.Contracts;
 using LenxTool.Core.Errors;
@@ -9,6 +9,8 @@ namespace LenxTool.Infrastructure.Data;
 
 public sealed class MediaJobRepository(SqliteDatabase database) : IMediaJobRepository, ISubtitleRepository
 {
+    private const string SelectColumns = "id,kind,input_path,output_path,status,progress,engine,model,shared_usage_seconds,ai_request_count,translation_provider,translation_target_language,translation_next_segment_index,translation_prompt_tokens,translation_completion_tokens,translation_total_tokens,error_json,created_at,updated_at";
+
     public async Task UpsertAsync(MediaJob job, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(job);
@@ -26,7 +28,7 @@ public sealed class MediaJobRepository(SqliteDatabase database) : IMediaJobRepos
         await using SqliteConnection connection = await database.OpenConnectionAsync(cancellationToken)
             .ConfigureAwait(false);
         await using SqliteCommand command = connection.CreateCommand();
-        command.CommandText = "SELECT id,kind,input_path,output_path,status,progress,engine,model,shared_usage_seconds,ai_request_count,error_json,created_at,updated_at FROM media_jobs ORDER BY updated_at DESC LIMIT $limit;";
+        command.CommandText = $"SELECT {SelectColumns} FROM media_jobs ORDER BY updated_at DESC LIMIT $limit;";
         command.Parameters.AddWithValue("$limit", limit);
         return await ReadAsync(command, cancellationToken).ConfigureAwait(false);
     }
@@ -36,7 +38,7 @@ public sealed class MediaJobRepository(SqliteDatabase database) : IMediaJobRepos
         await using SqliteConnection connection = await database.OpenConnectionAsync(cancellationToken)
             .ConfigureAwait(false);
         await using SqliteCommand command = connection.CreateCommand();
-        command.CommandText = "SELECT id,kind,input_path,output_path,status,progress,engine,model,shared_usage_seconds,ai_request_count,error_json,created_at,updated_at FROM media_jobs WHERE status='Queued' ORDER BY created_at;";
+        command.CommandText = $"SELECT {SelectColumns} FROM media_jobs WHERE status='Queued' ORDER BY created_at;";
         return await ReadAsync(command, cancellationToken).ConfigureAwait(false);
     }
 
@@ -77,6 +79,23 @@ public sealed class MediaJobRepository(SqliteDatabase database) : IMediaJobRepos
     }
 
     public async Task CreateMediaJobWithSegmentsAsync(
+        MediaJob job,
+        IReadOnlyList<SubtitleSegment> segments,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(job);
+        ArgumentNullException.ThrowIfNull(segments);
+        await using SqliteConnection connection = await database.OpenConnectionAsync(cancellationToken)
+            .ConfigureAwait(false);
+        await using SqliteTransaction transaction = (SqliteTransaction)await connection
+            .BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        await UpsertAsync(connection, transaction, job, cancellationToken).ConfigureAwait(false);
+        await ReplaceAsync(connection, transaction, job.Id, segments, cancellationToken)
+            .ConfigureAwait(false);
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task SaveTranslationBatchAsync(
         MediaJob job,
         IReadOnlyList<SubtitleSegment> segments,
         CancellationToken cancellationToken)
@@ -209,13 +228,26 @@ public sealed class MediaJobRepository(SqliteDatabase database) : IMediaJobRepos
         command.CommandText = """
             INSERT INTO media_jobs(
               id, kind, input_path, output_path, status, progress, engine, model,
-              shared_usage_seconds, ai_request_count, error_json, created_at, updated_at)
-            VALUES($id,$kind,$input,$output,$status,$progress,$engine,$model,$usage,$requests,$error,$created,$updated)
+              shared_usage_seconds, ai_request_count, translation_provider,
+              translation_target_language, translation_next_segment_index,
+              translation_prompt_tokens, translation_completion_tokens,
+              translation_total_tokens, error_json, created_at, updated_at)
+            VALUES($id,$kind,$input,$output,$status,$progress,$engine,$model,$usage,$requests,
+              $translationProvider,$translationTargetLanguage,$translationNextSegmentIndex,
+              $translationPromptTokens,$translationCompletionTokens,$translationTotalTokens,
+              $error,$created,$updated)
             ON CONFLICT(id) DO UPDATE SET
               output_path=excluded.output_path, status=excluded.status, progress=excluded.progress,
               engine=excluded.engine, model=excluded.model,
               shared_usage_seconds=excluded.shared_usage_seconds,
-              ai_request_count=excluded.ai_request_count, error_json=excluded.error_json,
+              ai_request_count=excluded.ai_request_count,
+              translation_provider=excluded.translation_provider,
+              translation_target_language=excluded.translation_target_language,
+              translation_next_segment_index=excluded.translation_next_segment_index,
+              translation_prompt_tokens=excluded.translation_prompt_tokens,
+              translation_completion_tokens=excluded.translation_completion_tokens,
+              translation_total_tokens=excluded.translation_total_tokens,
+              error_json=excluded.error_json,
               updated_at=excluded.updated_at;
             """;
         AddParameters(command, job);
@@ -234,6 +266,12 @@ public sealed class MediaJobRepository(SqliteDatabase database) : IMediaJobRepos
         command.Parameters.AddWithValue("$model", (object?)job.Model ?? DBNull.Value);
         command.Parameters.AddWithValue("$usage", job.SharedUsageSeconds);
         command.Parameters.AddWithValue("$requests", job.AiRequestCount);
+        command.Parameters.AddWithValue("$translationProvider", (object?)job.TranslationProvider ?? DBNull.Value);
+        command.Parameters.AddWithValue("$translationTargetLanguage", (object?)job.TranslationTargetLanguage ?? DBNull.Value);
+        command.Parameters.AddWithValue("$translationNextSegmentIndex", job.TranslationNextSegmentIndex);
+        command.Parameters.AddWithValue("$translationPromptTokens", job.TranslationPromptTokens);
+        command.Parameters.AddWithValue("$translationCompletionTokens", job.TranslationCompletionTokens);
+        command.Parameters.AddWithValue("$translationTotalTokens", job.TranslationTotalTokens);
         command.Parameters.AddWithValue("$error", job.Error is null ? DBNull.Value : JsonSerializer.Serialize(job.Error));
         command.Parameters.AddWithValue("$created", job.CreatedAt.ToString("O", CultureInfo.InvariantCulture));
         command.Parameters.AddWithValue("$updated", job.UpdatedAt.ToString("O", CultureInfo.InvariantCulture));
@@ -260,9 +298,17 @@ public sealed class MediaJobRepository(SqliteDatabase database) : IMediaJobRepos
                 Enum.Parse<MediaJobStatus>(reader.GetString(4)), reader.GetDouble(5),
                 Enum.Parse<TranscriptionEngine>(reader.GetString(6)),
                 reader.IsDBNull(7) ? null : reader.GetString(7), reader.GetDouble(8), reader.GetInt32(9),
-                reader.IsDBNull(10) ? null : JsonSerializer.Deserialize<AppError>(reader.GetString(10)),
-                DateTimeOffset.Parse(reader.GetString(11), CultureInfo.InvariantCulture),
-                DateTimeOffset.Parse(reader.GetString(12), CultureInfo.InvariantCulture)));
+                reader.IsDBNull(16) ? null : JsonSerializer.Deserialize<AppError>(reader.GetString(16)),
+                DateTimeOffset.Parse(reader.GetString(17), CultureInfo.InvariantCulture),
+                DateTimeOffset.Parse(reader.GetString(18), CultureInfo.InvariantCulture))
+            {
+                TranslationProvider = reader.IsDBNull(10) ? null : reader.GetString(10),
+                TranslationTargetLanguage = reader.IsDBNull(11) ? null : reader.GetString(11),
+                TranslationNextSegmentIndex = reader.GetInt32(12),
+                TranslationPromptTokens = reader.GetInt32(13),
+                TranslationCompletionTokens = reader.GetInt32(14),
+                TranslationTotalTokens = reader.GetInt32(15)
+            });
         }
         return jobs;
     }

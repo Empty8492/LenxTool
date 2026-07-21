@@ -186,7 +186,12 @@
                                     <TextBlock VerticalAlignment="Center" Style="{StaticResource SectionTitleStyle}" Text="最近任务" />
                                     <TextBlock DockPanel.Dock="Right" VerticalAlignment="Center" Style="{StaticResource MetaTextStyle}" Text="本地历史 · 可恢复" />
                                 </DockPanel>
-                                <ListBox Grid.Row="1" ItemsSource="{Binding RecentJobs}" Background="Transparent" BorderThickness="0">
+                                <ListBox Grid.Row="1"
+                                         ItemsSource="{Binding RecentJobs}"
+                                         SelectedItem="{Binding SelectedSubtitleJob}"
+                                         Background="Transparent"
+                                         BorderThickness="0"
+                                         AutomationProperties.Name="字幕任务列表">
                                     <ListBox.ItemTemplate>
                                         <DataTemplate>
                                             <Grid Margin="12,9" MinWidth="520">
@@ -207,19 +212,45 @@
                             </Grid>
                         </Border>
                         <Border Grid.Column="2" Style="{StaticResource BentoCardStyle}">
-                            <StackPanel>
-                                <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource Brush.Accent}" Text="OUTPUT" />
-                                <TextBlock Margin="0,16,0,6" Style="{StaticResource SectionTitleStyle}" Text="字幕已独立保存" />
-                                <TextBlock Style="{StaticResource MetaTextStyle}" Text="输出为 UTF-8 SRT；源媒体、模型和字幕不会进入云端数据库。" TextWrapping="Wrap" />
-                                <Button Margin="0,18,0,0" Command="{Binding OpenOutputCommand}" Content="打开输出目录" />
-                                <Border Margin="0,18,0,0" Padding="12" Background="{DynamicResource Brush.SurfaceMuted}" CornerRadius="10">
-                                    <StackPanel>
-                                        <TextBlock FontWeight="SemiBold" Text="错误恢复" />
-                                        <TextBlock Margin="0,5,0,0" Style="{StaticResource MetaTextStyle}" Text="{Binding LastError.UserMessage, TargetNullValue=暂无错误}" TextWrapping="Wrap" />
-                                        <TextBlock Margin="0,4,0,0" Style="{StaticResource MetaTextStyle}" Text="{Binding LastError.Suggestion}" TextWrapping="Wrap" />
-                                    </StackPanel>
-                                </Border>
-                            </StackPanel>
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                <StackPanel>
+                                    <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource Brush.Accent}" Text="SUBTITLE" />
+                                    <TextBlock Margin="0,12,0,5" Style="{StaticResource SectionTitleStyle}" Text="翻译与导出" />
+                                    <TextBlock Style="{StaticResource MetaTextStyle}" Text="先在左侧选择已有字幕的任务。每批译文都会立即保存。" TextWrapping="Wrap" />
+
+                                    <TextBlock Margin="0,14,0,5" Style="{StaticResource MetaTextStyle}" Text="目标语言" />
+                                    <TextBox MaxLength="60"
+                                             AutomationProperties.Name="字幕翻译目标语言"
+                                             Text="{Binding TargetLanguage, UpdateSourceTrigger=PropertyChanged}" />
+                                    <TextBlock Margin="0,10,0,5" Style="{StaticResource MetaTextStyle}" Text="DeepSeek 模型" />
+                                    <TextBox MaxLength="100"
+                                             AutomationProperties.Name="字幕翻译模型"
+                                             Text="{Binding TranslationModel, UpdateSourceTrigger=PropertyChanged}" />
+                                    <ProgressBar Height="4" Margin="0,13,0,0" Maximum="100" Value="{Binding TranslationProgress, Mode=OneWay}" />
+                                    <TextBlock Margin="0,7,0,0" Style="{StaticResource MetaTextStyle}" Text="{Binding TranslationStatus}" TextWrapping="Wrap" />
+                                    <Grid Margin="0,12,0,0">
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="8" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                        <Button Command="{Binding CancelTranslationCommand}" Content="取消翻译" />
+                                        <Button Grid.Column="2" Style="{StaticResource AccentButtonStyle}" Command="{Binding TranslateCommand}" Content="翻译 / 继续" />
+                                    </Grid>
+
+                                    <TextBlock Margin="0,16,0,5" Style="{StaticResource MetaTextStyle}" Text="导出格式" />
+                                    <ComboBox ItemsSource="{Binding ExportOptions}"
+                                              SelectedItem="{Binding SelectedExportOption}"
+                                              DisplayMemberPath="Label"
+                                              AutomationProperties.Name="字幕导出格式" />
+                                    <Button Margin="0,9,0,0" Command="{Binding ExportSubtitleCommand}" Content="导出所选格式" />
+                                    <Button Margin="0,8,0,0" Command="{Binding OpenOutputCommand}" Content="打开输出目录" />
+
+                                    <Border Margin="0,14,0,0" Padding="12" Background="{DynamicResource Brush.SurfaceMuted}" CornerRadius="10">
+                                        <StackPanel>
+                                            <TextBlock FontWeight="SemiBold" Text="错误与恢复" />
+                                            <TextBlock Margin="0,5,0,0" Style="{StaticResource MetaTextStyle}" Text="{Binding LastError.UserMessage, TargetNullValue=暂无错误}" TextWrapping="Wrap" />
+                                            <TextBlock Margin="0,4,0,0" Style="{StaticResource MetaTextStyle}" Text="{Binding LastError.Suggestion}" TextWrapping="Wrap" />
+                                        </StackPanel>
+                                    </Border>
+                                </StackPanel>
+                            </ScrollViewer>
                         </Border>
                     </Grid>
                 </Grid>
@@ -305,30 +336,74 @@
                         </TabItem>
                         <TabItem Header="任务历史">
                             <Grid Margin="0,12,0,0">
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="14" /><ColumnDefinition Width="290" /></Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions><RowDefinition Height="210" /><RowDefinition Height="14" /><RowDefinition Height="*" /></Grid.RowDefinitions>
                                 <Border Style="{StaticResource BentoCardStyle}" Padding="0">
-                                    <ListBox ItemsSource="{Binding Jobs}" SelectedItem="{Binding SelectedJob}" Background="Transparent" BorderThickness="0">
+                                    <ListBox ItemsSource="{Binding Jobs}"
+                                             SelectedItem="{Binding SelectedJob}"
+                                             Background="Transparent"
+                                             BorderThickness="0"
+                                             AutomationProperties.Name="媒体任务历史">
                                         <ListBox.ItemTemplate><DataTemplate>
                                             <Grid Margin="14,10" MinWidth="560">
-                                                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="100" /><ColumnDefinition Width="90" /></Grid.ColumnDefinitions>
+                                                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="120" /><ColumnDefinition Width="120" /><ColumnDefinition Width="90" /></Grid.ColumnDefinitions>
                                                 <StackPanel><TextBlock FontWeight="SemiBold" Text="{Binding InputPath}" TextTrimming="CharacterEllipsis" /><TextBlock Margin="0,4,0,0" Style="{StaticResource MetaTextStyle}" Text="{Binding OutputPath}" TextTrimming="CharacterEllipsis" /></StackPanel>
-                                                <TextBlock Grid.Column="1" VerticalAlignment="Center" Style="{StaticResource MetaTextStyle}" Text="{Binding Engine}" />
-                                                <TextBlock Grid.Column="2" VerticalAlignment="Center" Foreground="{DynamicResource Brush.Accent}" FontWeight="SemiBold" Text="{Binding Status}" />
+                                                <TextBlock Grid.Column="1" VerticalAlignment="Center" Style="{StaticResource MetaTextStyle}" Text="{Binding TranslationProvider, TargetNullValue=本地 / 转写}" />
+                                                <TextBlock Grid.Column="2" VerticalAlignment="Center" Style="{StaticResource MetaTextStyle}" Text="{Binding Model}" TextTrimming="CharacterEllipsis" />
+                                                <TextBlock Grid.Column="3" VerticalAlignment="Center" Foreground="{DynamicResource Brush.Accent}" FontWeight="SemiBold" Text="{Binding Status}" />
                                             </Grid>
                                         </DataTemplate></ListBox.ItemTemplate>
                                     </ListBox>
                                 </Border>
-                                <Border Grid.Column="2" Style="{StaticResource BentoCardStyle}">
-                                    <StackPanel>
-                                        <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource Brush.Accent}" Text="DETAIL" />
-                                        <TextBlock Margin="0,16,0,8" Style="{StaticResource SectionTitleStyle}" Text="所选任务" />
-                                        <TextBlock Style="{StaticResource MetaTextStyle}" Text="{Binding SelectedJob.Error.UserMessage, TargetNullValue=选择左侧任务查看详情}" TextWrapping="Wrap" />
-                                        <TextBlock Margin="0,8,0,0" Style="{StaticResource MetaTextStyle}" Text="{Binding SelectedJob.Model}" TextWrapping="Wrap" />
-                                        <Button Margin="0,18,0,0" Command="{Binding OpenOutputCommand}" Content="打开输出文件" />
-                                        <TextBlock Margin="0,24,0,6" FontWeight="SemiBold" Text="数据安全" />
-                                        <TextBlock Style="{StaticResource MetaTextStyle}" Text="恢复前自动备份当前数据库；卸载默认保留数据、模型和 DPAPI 密钥。" TextWrapping="Wrap" />
-                                    </StackPanel>
-                                </Border>
+                                <Grid Grid.Row="2">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="14" /><ColumnDefinition Width="310" /></Grid.ColumnDefinitions>
+                                    <Border Style="{StaticResource BentoCardStyle}" Padding="0">
+                                        <Grid>
+                                            <Grid.RowDefinitions><RowDefinition Height="48" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                                            <DockPanel Margin="16,0">
+                                                <TextBlock VerticalAlignment="Center" Style="{StaticResource SectionTitleStyle}" Text="字幕片段" />
+                                                <TextBlock DockPanel.Dock="Right" VerticalAlignment="Center" Style="{StaticResource MetaTextStyle}" Text="原文 / 译文" />
+                                            </DockPanel>
+                                            <ListBox Grid.Row="1"
+                                                     ItemsSource="{Binding SubtitleSegments}"
+                                                     Background="Transparent"
+                                                     BorderThickness="0"
+                                                     AutomationProperties.Name="字幕原文与译文详情">
+                                                <ListBox.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <Border Padding="16,11" BorderBrush="{DynamicResource Brush.Border}" BorderThickness="0,0,0,1">
+                                                            <StackPanel>
+                                                                <TextBlock Style="{StaticResource MetaTextStyle}" Text="{Binding Sequence, StringFormat=片段 {0}}" />
+                                                                <TextBlock Margin="0,5,0,0" Text="{Binding Text}" TextWrapping="Wrap" />
+                                                                <TextBlock Margin="0,5,0,0" Foreground="{DynamicResource Brush.Accent}" Text="{Binding TranslatedText, TargetNullValue=尚未翻译}" TextWrapping="Wrap" />
+                                                            </StackPanel>
+                                                        </Border>
+                                                    </DataTemplate>
+                                                </ListBox.ItemTemplate>
+                                            </ListBox>
+                                        </Grid>
+                                    </Border>
+                                    <Border Grid.Column="2" Style="{StaticResource BentoCardStyle}">
+                                        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                            <StackPanel>
+                                                <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource Brush.Accent}" Text="USAGE" />
+                                                <TextBlock Margin="0,13,0,5" Style="{StaticResource SectionTitleStyle}" Text="模型与用量" />
+                                                <TextBlock FontWeight="SemiBold" Text="{Binding ProviderSummary}" TextWrapping="Wrap" />
+                                                <TextBlock Margin="0,6,0,0" Style="{StaticResource MetaTextStyle}" Text="{Binding UsageSummary}" TextWrapping="Wrap" />
+                                                <TextBlock Margin="0,14,0,5" FontWeight="SemiBold" Text="脱敏错误" />
+                                                <TextBlock Style="{StaticResource MetaTextStyle}" Text="{Binding ErrorSummary}" TextWrapping="Wrap" />
+
+                                                <TextBlock Margin="0,16,0,5" Style="{StaticResource MetaTextStyle}" Text="重新导出" />
+                                                <ComboBox ItemsSource="{Binding ExportOptions}"
+                                                          SelectedItem="{Binding SelectedExportOption}"
+                                                          DisplayMemberPath="Label"
+                                                          AutomationProperties.Name="历史字幕导出格式" />
+                                                <Button Margin="0,9,0,0" Style="{StaticResource AccentButtonStyle}" Command="{Binding ExportSubtitleCommand}" Content="从本地字幕导出" />
+                                                <Button Margin="0,8,0,0" Command="{Binding OpenOutputCommand}" Content="打开输出文件" />
+                                                <TextBlock Margin="0,14,0,0" Style="{StaticResource MetaTextStyle}" Text="重新导出只读取本地数据库，不会再次调用模型。" TextWrapping="Wrap" />
+                                            </StackPanel>
+                                        </ScrollViewer>
+                                    </Border>
+                                </Grid>
                             </Grid>
                         </TabItem>
                     </TabControl>

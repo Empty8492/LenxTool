@@ -1,10 +1,10 @@
+﻿using System.Globalization;
 using LenxTool.Core.Errors;
 using LenxTool.Core.Models;
 using LenxTool.Infrastructure.Data;
 using LenxTool.Infrastructure.SystemServices;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
-using System.Globalization;
 
 namespace LenxTool.Infrastructure.Tests.Data;
 
@@ -48,7 +48,7 @@ public sealed class SqliteDatabaseTests : IDisposable
 
         await using SqliteCommand versionCommand = connection.CreateCommand();
         versionCommand.CommandText = "SELECT COUNT(*) FROM schema_versions";
-        Assert.Equal(2L, (long)(await versionCommand.ExecuteScalarAsync(
+        Assert.Equal(3L, (long)(await versionCommand.ExecuteScalarAsync(
             CancellationToken.None))!);
     }
 
