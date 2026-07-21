@@ -91,6 +91,7 @@ public partial class App : Application
         services.AddSingleton<INewsRepository, NewsRepository>();
         services.AddSingleton<INewsCenterService, NewsCenterService>();
         services.AddSingleton<IAiReportService, DeepSeekReportService>();
+        services.AddSingleton<ISubtitleTranslator, DeepSeekSubtitleTranslator>();
         services.AddSingleton<ISecretStore, DpapiSecretStore>();
         services.AddSingleton<MediaJobRepository>();
         services.AddSingleton<IMediaJobRepository>(static services =>

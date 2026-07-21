@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Runtime.CompilerServices;
@@ -17,6 +19,8 @@ public sealed class DeepSeekSubtitleTranslator(
     private static readonly Uri Endpoint = new("https://api.deepseek.com/chat/completions");
     private const int MaximumBatchCharacters = 12_000;
     private const int MaximumResponseBytes = 2_000_000;
+    private const int MaximumRequestAttempts = 3;
+    private static readonly TimeSpan MaximumAutomaticRetryDelay = TimeSpan.FromSeconds(30);
 
     public async IAsyncEnumerable<SubtitleTranslationBatchResult> TranslateAsync(
         SubtitleTranslationRequest request,
@@ -112,14 +116,52 @@ public sealed class DeepSeekSubtitleTranslator(
             }
         };
 
-        using HttpRequestMessage message = new(HttpMethod.Post, Endpoint);
-        message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
-        message.Content = JsonContent.Create(payload);
         using HttpClient client = httpClientFactory.CreateClient("LenxTool.DeepSeek");
-        using HttpResponseMessage response = await client.SendAsync(
-            message,
-            HttpCompletionOption.ResponseHeadersRead,
-            cancellationToken).ConfigureAwait(false);
+        for (int attempt = 1; attempt <= MaximumRequestAttempts; attempt++)
+        {
+            try
+            {
+                using HttpRequestMessage message = new(HttpMethod.Post, Endpoint);
+                message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+                message.Content = JsonContent.Create(payload);
+                using HttpResponseMessage response = await client.SendAsync(
+                    message,
+                    HttpCompletionOption.ResponseHeadersRead,
+                    cancellationToken).ConfigureAwait(false);
+                if (response.StatusCode == HttpStatusCode.TooManyRequests &&
+                    TryGetAutomaticRetryDelay(response, attempt, out TimeSpan retryDelay))
+                {
+                    await Task.Delay(retryDelay, cancellationToken).ConfigureAwait(false);
+                    continue;
+                }
+
+                return await ReadBatchResponseAsync(
+                    request,
+                    batch,
+                    startIndex,
+                    attempt,
+                    response,
+                    cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (
+                !cancellationToken.IsCancellationRequested &&
+                attempt < MaximumRequestAttempts)
+            {
+                await Task.Delay(Backoff(attempt), cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        throw new InvalidOperationException("字幕翻译重试循环未返回结果。");
+    }
+
+    private static async Task<SubtitleTranslationBatchResult> ReadBatchResponseAsync(
+        SubtitleTranslationRequest request,
+        List<SubtitleTranslationInput> batch,
+        int startIndex,
+        int requestCount,
+        HttpResponseMessage response,
+        CancellationToken cancellationToken)
+    {
         string? requestId = Header(response, "x-request-id");
         if (!response.IsSuccessStatusCode)
         {
@@ -131,7 +173,7 @@ public sealed class DeepSeekSubtitleTranslator(
                     "DeepSeek",
                     requestId,
                     LimitDetails(SecretRedactor.Redact(responseText)),
-                    response.Headers.RetryAfter?.Delta),
+                    GetRetryAfter(response)),
                 new(request.OperationId, startIndex));
         }
         if (response.Content.Headers.ContentLength is > MaximumResponseBytes)
@@ -182,7 +224,7 @@ public sealed class DeepSeekSubtitleTranslator(
                 new(request.OperationId, startIndex + batch.Count),
                 translations,
                 responseModel,
-                1,
+                requestCount,
                 new(promptTokens, completionTokens, totalTokens));
         }
         catch (SubtitleTranslationException)
@@ -193,6 +235,41 @@ public sealed class DeepSeekSubtitleTranslator(
         {
             throw InvalidResponse(request.OperationId, startIndex, requestId, exception.Message, exception);
         }
+    }
+
+    private static bool TryGetAutomaticRetryDelay(
+        HttpResponseMessage response,
+        int attempt,
+        out TimeSpan retryDelay)
+    {
+        retryDelay = GetRetryAfter(response) ?? Backoff(attempt);
+        return attempt < MaximumRequestAttempts && retryDelay <= MaximumAutomaticRetryDelay;
+    }
+
+    private static TimeSpan Backoff(int attempt) =>
+        TimeSpan.FromMilliseconds(100 * Math.Pow(2, attempt - 1));
+
+    private static TimeSpan? GetRetryAfter(HttpResponseMessage response)
+    {
+        TimeSpan? retryAfter = response.Headers.RetryAfter?.Delta;
+        if (retryAfter is null && response.Headers.RetryAfter?.Date is { } date)
+        {
+            retryAfter = date - DateTimeOffset.UtcNow;
+        }
+        if (retryAfter is null &&
+            double.TryParse(
+                Header(response, "Retry-After"),
+                NumberStyles.Number,
+                CultureInfo.InvariantCulture,
+                out double seconds) &&
+            double.IsFinite(seconds) &&
+            seconds >= 0 &&
+            seconds <= TimeSpan.MaxValue.TotalSeconds)
+        {
+            retryAfter = TimeSpan.FromSeconds(seconds);
+        }
+
+        return retryAfter is { } value && value < TimeSpan.Zero ? TimeSpan.Zero : retryAfter;
     }
 
     private static List<SubtitleTranslationInput> CreateBoundedBatch(

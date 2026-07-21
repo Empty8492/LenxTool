@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using LenxTool.Core.Errors;
@@ -63,6 +64,113 @@ public sealed class DeepSeekSubtitleTranslatorTests
 
         Assert.Equal(AppErrorCode.ProviderUnavailable, exception.Error.Code);
         Assert.Equal(new SubtitleTranslationCheckpoint("operation-1", 0), exception.ResumeFrom);
+    }
+
+    [Fact]
+    public async Task TranslateAsyncRetriesRateLimitAndCountsEveryRequest()
+    {
+        int requestCount = 0;
+        var handler = new StubHandler((_, _) =>
+        {
+            if (Interlocked.Increment(ref requestCount) == 1)
+            {
+                var response = new HttpResponseMessage(HttpStatusCode.TooManyRequests)
+                {
+                    Content = new StringContent("{\"error\":\"slow down\"}", Encoding.UTF8, "application/json")
+                };
+                response.Headers.RetryAfter = new RetryConditionHeaderValue(TimeSpan.Zero);
+                return Task.FromResult(response);
+            }
+
+            return Task.FromResult(Response(
+                """{"translations":[{"sequence":7,"translatedText":"第一"},{"sequence":9,"translatedText":"第二"}]}""",
+                30,
+                10));
+        });
+        DeepSeekSubtitleTranslator translator = Create(handler);
+
+        SubtitleTranslationBatchResult? result = null;
+        await foreach (SubtitleTranslationBatchResult batch in translator.TranslateAsync(
+                           Request(batchSize: 2),
+                           CancellationToken.None))
+        {
+            result = batch;
+        }
+
+        Assert.NotNull(result);
+        Assert.Equal(2, requestCount);
+        Assert.Equal(2, result.RequestCount);
+        Assert.Equal(new SubtitleTranslationCheckpoint("operation-1", 2), result.ResumeFrom);
+    }
+
+    [Fact]
+    public async Task TranslateAsyncBoundsUntrustedRetryAfterHeader()
+    {
+        int requestCount = 0;
+        var handler = new StubHandler((_, _) =>
+        {
+            if (Interlocked.Increment(ref requestCount) == 1)
+            {
+                var response = new HttpResponseMessage(HttpStatusCode.TooManyRequests);
+                response.Headers.TryAddWithoutValidation(
+                    "Retry-After",
+                    "999999999999999999999999999999999999999999999999999999999999");
+                return Task.FromResult(response);
+            }
+
+            return Task.FromResult(Response(
+                """{"translations":[{"sequence":7,"translatedText":"第一"},{"sequence":9,"translatedText":"第二"}]}""",
+                30,
+                10));
+        });
+        DeepSeekSubtitleTranslator translator = Create(handler);
+
+        SubtitleTranslationBatchResult? result = null;
+        await foreach (SubtitleTranslationBatchResult batch in translator.TranslateAsync(
+                           Request(batchSize: 2),
+                           CancellationToken.None))
+        {
+            result = batch;
+        }
+
+        Assert.NotNull(result);
+        Assert.Equal(2, requestCount);
+        Assert.Equal(2, result.RequestCount);
+    }
+
+    [Fact]
+    public async Task TranslateAsyncRetriesTimeoutAndKeepsLastCompletedCheckpoint()
+    {
+        int requestCount = 0;
+        var handler = new StubHandler((_, _) =>
+        {
+            if (Interlocked.Increment(ref requestCount) == 1)
+            {
+                return Task.FromResult(Response(
+                    """{"translations":[{"sequence":7,"translatedText":"第一"}]}""",
+                    10,
+                    5));
+            }
+
+            throw new TaskCanceledException("stub timeout");
+        });
+        DeepSeekSubtitleTranslator translator = Create(handler);
+        var completed = new List<SubtitleTranslationBatchResult>();
+
+        SubtitleTranslationException exception = await Assert.ThrowsAsync<SubtitleTranslationException>(async () =>
+        {
+            await foreach (SubtitleTranslationBatchResult batch in translator.TranslateAsync(
+                               Request(batchSize: 1),
+                               CancellationToken.None))
+            {
+                completed.Add(batch);
+            }
+        });
+
+        Assert.Equal(AppErrorCode.Timeout, exception.Error.Code);
+        Assert.Equal(new SubtitleTranslationCheckpoint("operation-1", 1), exception.ResumeFrom);
+        Assert.Equal(new SubtitleTranslationCheckpoint("operation-1", 1), Assert.Single(completed).ResumeFrom);
+        Assert.Equal(4, requestCount);
     }
 
     [Fact]
