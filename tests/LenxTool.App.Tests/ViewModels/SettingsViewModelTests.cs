@@ -1,5 +1,6 @@
 using LenxTool.App.Services;
 using LenxTool.App.ViewModels;
+using LenxTool.Core.Accounts;
 using LenxTool.Core.Contracts;
 using LenxTool.Core.Updates;
 
@@ -15,7 +16,8 @@ public sealed class SettingsViewModelTests
             new FakeThemeService(),
             new FakeUpdateService(),
             secrets,
-            new FakeSettingsRepository());
+            new FakeSettingsRepository(),
+            new FakeAccountSessionService());
 
         Assert.False(viewModel.SaveSecretsCommand.CanExecute(null));
 
@@ -46,7 +48,7 @@ public sealed class SettingsViewModelTests
             }
         };
         var viewModel = new SettingsViewModel(
-            theme, new FakeUpdateService(), new FakeSecretStore(), settings);
+            theme, new FakeUpdateService(), new FakeSecretStore(), settings, new FakeAccountSessionService());
 
         await viewModel.InitializeAsync(CancellationToken.None);
 
@@ -63,6 +65,92 @@ public sealed class SettingsViewModelTests
         Assert.Equal("False", settings.Values["appearance.reduce_motion"]);
         Assert.Contains("已保存", viewModel.AppearanceStatus, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public async Task LoginDisplaysRoleAndQuotaWithoutRetainingPassword()
+    {
+        var account = new FakeAccountSessionService();
+        var viewModel = CreateViewModel(account);
+        viewModel.AccountUsernameInput = "owner";
+
+        Assert.False(viewModel.LoginCommand.CanExecute(null));
+
+        viewModel.AccountPasswordInput = "correct horse battery staple";
+        Assert.True(viewModel.LoginCommand.CanExecute(null));
+        await viewModel.LoginCommand.ExecuteAsync();
+
+        Assert.True(viewModel.IsSignedIn);
+        Assert.False(viewModel.IsSignedOut);
+        Assert.True(viewModel.IsAdmin);
+        Assert.Equal("owner · 管理员", viewModel.AccountIdentity);
+        Assert.Equal("AI 88/100 · 语音 3555/3600 秒 · 2026-07-22 UTC", viewModel.AccountQuotaSummary);
+        Assert.Empty(viewModel.AccountPasswordInput);
+        Assert.False(viewModel.LoginCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task InitializeShowsExpiredSessionPromptAndLogoutReturnsToSignedOut()
+    {
+        var account = new FakeAccountSessionService
+        {
+            InitializeSession = AccountSessionSnapshot.Expired
+        };
+        var viewModel = CreateViewModel(account);
+
+        await viewModel.InitializeAsync(CancellationToken.None);
+
+        Assert.True(viewModel.IsSignedOut);
+        Assert.Contains("已过期", viewModel.AccountStatus, StringComparison.Ordinal);
+
+        account.SetSession(SignedIn(AccountRole.User));
+        Assert.False(viewModel.IsAdmin);
+        await viewModel.LogoutCommand.ExecuteAsync();
+
+        Assert.True(viewModel.IsSignedOut);
+        Assert.Contains("已退出", viewModel.AccountStatus, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task DeletingProviderKeysDoesNotRotateAccountSession()
+    {
+        var account = new FakeAccountSessionService();
+        var viewModel = CreateViewModel(account);
+
+        await viewModel.DeleteSecretsCommand.ExecuteAsync();
+
+        Assert.Equal(0, account.InitializeCalls);
+    }
+
+    [Fact]
+    public async Task LoginStorageFailureIsReportedAndPasswordIsCleared()
+    {
+        var account = new FakeAccountSessionService { LoginException = new IOException("test failure") };
+        var viewModel = CreateViewModel(account);
+        viewModel.AccountUsernameInput = "owner";
+        viewModel.AccountPasswordInput = "password";
+
+        await viewModel.LoginCommand.ExecuteAsync();
+
+        Assert.True(viewModel.IsSignedOut);
+        Assert.Empty(viewModel.AccountPasswordInput);
+        Assert.Contains("令牌", viewModel.AccountStatus, StringComparison.Ordinal);
+        Assert.DoesNotContain("test failure", viewModel.AccountStatus, StringComparison.Ordinal);
+    }
+
+    private static SettingsViewModel CreateViewModel(IAccountSessionService account) => new(
+        new FakeThemeService(),
+        new FakeUpdateService(),
+        new FakeSecretStore(),
+        new FakeSettingsRepository(),
+        account);
+
+    private static AccountSessionSnapshot SignedIn(AccountRole role) => new(
+        AccountSessionStatus.SignedIn,
+        new("10000000-0000-4000-8000-000000000001", "owner", role),
+        new(
+            new DateOnly(2026, 7, 22),
+            new(100, 12, 0, 88),
+            new(3600, 45, 0, 3555)));
 
     private sealed class FakeThemeService : IThemeService
     {
@@ -108,5 +196,43 @@ public sealed class SettingsViewModelTests
         public Task<string> DownloadAsync(UpdateCandidate candidate, IProgress<double>? progress, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
         public void LaunchInstallerAndExit(string installerPath) => throw new NotSupportedException();
+    }
+
+    private sealed class FakeAccountSessionService : IAccountSessionService
+    {
+        public bool IsConfigured { get; set; } = true;
+        public AccountSessionSnapshot Current { get; private set; } = AccountSessionSnapshot.SignedOut;
+        public AccountSessionSnapshot InitializeSession { get; init; } = AccountSessionSnapshot.SignedOut;
+        public int InitializeCalls { get; private set; }
+        public Exception? LoginException { get; init; }
+        public event EventHandler<AccountSessionChangedEventArgs>? SessionChanged;
+
+        public Task InitializeAsync(CancellationToken cancellationToken)
+        {
+            InitializeCalls++;
+            SetSession(InitializeSession);
+            return Task.CompletedTask;
+        }
+
+        public Task LoginAsync(string username, string password, CancellationToken cancellationToken)
+        {
+            if (LoginException is not null) throw LoginException;
+            SetSession(SignedIn(AccountRole.Admin));
+            return Task.CompletedTask;
+        }
+
+        public Task RefreshAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+        public Task LogoutAsync(CancellationToken cancellationToken)
+        {
+            SetSession(AccountSessionSnapshot.SignedOut);
+            return Task.CompletedTask;
+        }
+
+        public void SetSession(AccountSessionSnapshot session)
+        {
+            Current = session;
+            SessionChanged?.Invoke(this, new(session));
+        }
     }
 }

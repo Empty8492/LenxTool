@@ -1,5 +1,8 @@
 using System.Collections.ObjectModel;
+using System.Threading;
 using LenxTool.App.Mvvm;
+using LenxTool.Core.Accounts;
+using LenxTool.Core.Contracts;
 
 namespace LenxTool.App.ViewModels;
 
@@ -14,7 +17,8 @@ public sealed record PageNavigationItem(
     string Label,
     string Description,
     string IconData,
-    PageViewModel ViewModel);
+    PageViewModel ViewModel,
+    bool AdminOnly = false);
 
 public sealed class ShellViewModel : ObservableObject
 {
@@ -22,24 +26,41 @@ public sealed class ShellViewModel : ObservableObject
     private string _selectedPageId;
     private bool _isCommandPaletteOpen;
     private string _commandQuery = string.Empty;
+    private readonly PageNavigationItem[] _allPages;
+    private readonly PageNavigationItem _fallbackPage;
+    private readonly IAccountSessionService _accountSession;
+    private readonly SynchronizationContext? _synchronizationContext;
+    private string _cloudAccountStatus = "云服务未登录 · 可离线使用";
 
-    public ShellViewModel(IEnumerable<PageNavigationItem> pages)
+    public ShellViewModel(IEnumerable<PageNavigationItem> pages, IAccountSessionService accountSession)
     {
         PageNavigationItem[] pageArray = pages.ToArray();
         if (pageArray.Length == 0) throw new ArgumentException("至少需要一个导航页面。", nameof(pages));
+        _fallbackPage = pageArray.FirstOrDefault(page => !page.AdminOnly)
+            ?? throw new ArgumentException("至少需要一个普通用户可见页面。", nameof(pages));
+        _allPages = pageArray;
+        _accountSession = accountSession;
+        _synchronizationContext = SynchronizationContext.Current;
 
-        NavigationItems = new(pageArray);
-        _currentPage = pageArray[0].ViewModel;
-        _selectedPageId = pageArray[0].Id;
+        NavigationItems = [];
+        _currentPage = _fallbackPage.ViewModel;
+        _selectedPageId = _fallbackPage.Id;
         NavigateCommand = new RelayCommand<string>(Navigate);
         OpenCommandPaletteCommand = new RelayCommand(() => IsCommandPaletteOpen = true);
         CloseCommandPaletteCommand = new RelayCommand(() => IsCommandPaletteOpen = false);
+        _accountSession.SessionChanged += OnAccountSessionChanged;
+        ApplyAccountSession(_accountSession.Current);
     }
 
     public ObservableCollection<PageNavigationItem> NavigationItems { get; }
     public RelayCommand<string> NavigateCommand { get; }
     public RelayCommand OpenCommandPaletteCommand { get; }
     public RelayCommand CloseCommandPaletteCommand { get; }
+    public string CloudAccountStatus
+    {
+        get => _cloudAccountStatus;
+        private set => SetProperty(ref _cloudAccountStatus, value);
+    }
 
     public PageViewModel CurrentPage
     {
@@ -98,5 +119,39 @@ public sealed class ShellViewModel : ObservableObject
         SetProperty(ref _selectedPageId, target.Id, nameof(SelectedPageId));
         IsCommandPaletteOpen = false;
         CommandQuery = string.Empty;
+    }
+
+    private void OnAccountSessionChanged(object? sender, AccountSessionChangedEventArgs eventArgs)
+    {
+        if (_synchronizationContext is not null && SynchronizationContext.Current != _synchronizationContext)
+        {
+            _synchronizationContext.Post(_ => ApplyAccountSession(eventArgs.Session), null);
+            return;
+        }
+        ApplyAccountSession(eventArgs.Session);
+    }
+
+    private void ApplyAccountSession(AccountSessionSnapshot session)
+    {
+        PageNavigationItem[] visible = _allPages
+            .Where(page => !page.AdminOnly || session.IsAdmin)
+            .ToArray();
+        NavigationItems.Clear();
+        foreach (PageNavigationItem page in visible) NavigationItems.Add(page);
+
+        if (visible.All(page => !ReferenceEquals(page.ViewModel, CurrentPage)))
+        {
+            CurrentPage = _fallbackPage.ViewModel;
+            SetProperty(ref _selectedPageId, _fallbackPage.Id, nameof(SelectedPageId));
+        }
+        OnPropertyChanged(nameof(FilteredCommands));
+        CloudAccountStatus = session.Status switch
+        {
+            AccountSessionStatus.SignedIn =>
+                $"{session.User!.Username} · {(session.IsAdmin ? "管理员" : "普通用户")}",
+            AccountSessionStatus.Expired => "云服务会话已过期 · 请重新登录",
+            _ when !_accountSession.IsConfigured => "云服务未配置 · 可离线使用",
+            _ => "云服务未登录 · 可离线使用"
+        };
     }
 }

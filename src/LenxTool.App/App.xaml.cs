@@ -93,6 +93,8 @@ public partial class App : Application
         services.AddSingleton<IAiReportService, DeepSeekReportService>();
         services.AddSingleton<ISubtitleTranslator, DeepSeekSubtitleTranslator>();
         services.AddSingleton<ISecretStore, DpapiSecretStore>();
+        services.AddSingleton(CreateWorkerAccountOptions());
+        services.AddSingleton<IAccountSessionService, WorkerAccountSessionService>();
         services.AddSingleton<MediaJobRepository>();
         services.AddSingleton<IMediaJobRepository>(static services =>
             services.GetRequiredService<MediaJobRepository>());
@@ -116,6 +118,7 @@ public partial class App : Application
         services.AddHttpClient("LenxTool.Groq", client => client.Timeout = TimeSpan.FromMinutes(5));
         services.AddHttpClient("LenxTool.DeepSeek", client => client.Timeout = TimeSpan.FromSeconds(90));
         services.AddHttpClient("LenxTool.Update", client => client.Timeout = TimeSpan.FromMinutes(10));
+        services.AddHttpClient("LenxTool.Account", client => client.Timeout = TimeSpan.FromSeconds(30));
 
         services.AddSingleton<DashboardViewModel>();
         services.AddSingleton<NewsCenterViewModel>();
@@ -135,6 +138,8 @@ public partial class App : Application
         HistoryViewModel history = services.GetRequiredService<HistoryViewModel>();
         ToolsViewModel tools = services.GetRequiredService<ToolsViewModel>();
         SettingsViewModel settings = services.GetRequiredService<SettingsViewModel>();
+        IAccountSessionService accountSession = services.GetRequiredService<IAccountSessionService>();
+        WorkspacePageViewModel feedAdmin = CreateFeedAdminPage();
 
         return new(
         [
@@ -143,9 +148,29 @@ public partial class App : Application
             new("media", "媒体工作台", "字幕、音频与批量任务", "M4,5 L20,5 20,17 4,17 Z M9,9 L15,12 9,15 Z M8,21 L16,21", media),
             new("tools", "文档与数据", "转换、JSON、编码与校验", "M6,3 L18,3 18,21 6,21 Z M9,8 L15,8 M9,12 L15,12 M9,16 L13,16", tools),
             new("history", "历史与数据", "任务、收藏、搜索与备份", "M12,4 A8,8 0 1 1 4.5,9 M4,4 L4,9 9,9 M12,8 L12,13 16,15", history),
+            new("feed-admin", "订阅管理", "管理员共享目录入口", "M4,5 L20,5 20,19 4,19 Z M8,9 L16,9 M8,13 L16,13 M8,17 L13,17", feedAdmin, AdminOnly: true),
             new("settings", "设置", "主题、密钥、账号与更新", "M12,8 A4,4 0 1 0 12,16 A4,4 0 1 0 12,8 M12,3 L13,5 16,6 18,5 20,9 18,11 18,14 20,16 18,20 15,19 13,20 11,19 8,20 6,18 7,15 6,12 4,10 6,6 9,6 Z", settings)
-        ]);
+        ], accountSession);
     }
+
+    private static WorkerAccountOptions CreateWorkerAccountOptions()
+    {
+        string? configured = Environment.GetEnvironmentVariable("LENXTOOL_WORKER_BASE_URL");
+        return Uri.TryCreate(configured, UriKind.Absolute, out Uri? address)
+            && address.Scheme == Uri.UriSchemeHttps
+            ? new(address)
+            : new(null);
+    }
+
+    private static WorkspacePageViewModel CreateFeedAdminPage() => new(
+        "订阅管理",
+        "仅管理员可见；服务端仍会对每个写请求重新验证角色",
+        "管理共享目录",
+        [
+            new("CATALOG", "共享目录已接通", "Worker 已支持分类和 Feed CRUD、版本并发与审计。", "P0-04/05"),
+            new("UI", "管理界面待接入", "列表、编辑、排序和发布交互将在 P0-15 完成。", "未完成"),
+            new("SECURITY", "权限以服务端为准", "隐藏入口只改善体验，不能替代 Worker 的 admin 校验。", "强制")
+        ]);
 
     private static UpdateOptions CreateUpdateOptions()
     {

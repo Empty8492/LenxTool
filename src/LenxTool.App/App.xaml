@@ -455,6 +455,70 @@
                             </StackPanel>
                         </Border>
                         <Border Margin="0,16,0,0" Style="{StaticResource BentoCardStyle}">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource SectionTitleStyle}" Text="共享账号" />
+                                <TextBlock Margin="0,8,0,0"
+                                           Style="{StaticResource MetaTextStyle}"
+                                           Text="{Binding AccountStatus}"
+                                           TextWrapping="Wrap" />
+                                <Grid Margin="0,16,0,0"
+                                      Visibility="{Binding IsSignedOut, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="16" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="16" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel>
+                                        <TextBlock Style="{StaticResource MetaTextStyle}" Text="用户名" />
+                                        <TextBox Margin="0,7,0,0"
+                                                 Padding="10,7"
+                                                 AutomationProperties.Name="共享账号用户名"
+                                                 Text="{Binding AccountUsernameInput, UpdateSourceTrigger=PropertyChanged}" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="2">
+                                        <TextBlock Style="{StaticResource MetaTextStyle}" Text="密码" />
+                                        <PasswordBox Margin="0,7,0,0"
+                                                     Padding="10,7"
+                                                     AutomationProperties.Name="共享账号密码"
+                                                     controls:PasswordBoxAssistant.BoundPassword="{Binding AccountPasswordInput, Mode=TwoWay}" />
+                                    </StackPanel>
+                                    <Button Grid.Column="4"
+                                            MinWidth="96"
+                                            VerticalAlignment="Bottom"
+                                            IsDefault="True"
+                                            Style="{StaticResource AccentButtonStyle}"
+                                            AutomationProperties.Name="登录共享账号"
+                                            Command="{Binding LoginCommand}"
+                                            Content="登录" />
+                                </Grid>
+                                <Grid Margin="0,16,0,0"
+                                      Visibility="{Binding IsSignedIn, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel>
+                                        <TextBlock FontWeight="SemiBold" Text="{Binding AccountIdentity}" />
+                                        <TextBlock Margin="0,6,0,0"
+                                                   Style="{StaticResource MetaTextStyle}"
+                                                   Text="{Binding AccountQuotaSummary}"
+                                                   TextWrapping="Wrap" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1" Margin="20,0,0,0" VerticalAlignment="Center" Orientation="Horizontal">
+                                        <Button Margin="0,0,8,0"
+                                                AutomationProperties.Name="刷新账号额度"
+                                                Command="{Binding RefreshAccountCommand}"
+                                                Content="刷新额度" />
+                                        <Button AutomationProperties.Name="退出共享账号"
+                                                Command="{Binding LogoutCommand}"
+                                                Content="退出" />
+                                    </StackPanel>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+                        <Border Margin="0,16,0,0" Style="{StaticResource BentoCardStyle}">
                             <Grid>
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="16" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                                 <StackPanel>

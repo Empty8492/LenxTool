@@ -1,7 +1,9 @@
 using System.IO;
 using System.Net.Http;
+using System.Threading;
 using LenxTool.App.Mvvm;
 using LenxTool.App.Services;
+using LenxTool.Core.Accounts;
 using LenxTool.Core.Contracts;
 using LenxTool.Core.Errors;
 using LenxTool.Core.Updates;
@@ -26,6 +28,8 @@ public sealed class SettingsViewModel : PageViewModel
     private readonly IUpdateService _updateService;
     private readonly ISecretStore _secretStore;
     private readonly IAppSettingsRepository _settings;
+    private readonly IAccountSessionService _accountSession;
+    private readonly SynchronizationContext? _synchronizationContext;
     private readonly string _databaseLocation = "%LocalAppData%\\LenxTool\\Data\\lenx.db";
     private readonly string _secretStorage = "Windows DPAPI · 当前用户";
     private readonly string _updateChannel = "稳定版 · GitHub Releases";
@@ -38,23 +42,35 @@ public sealed class SettingsViewModel : PageViewModel
     private string _deepSeekKeyInput = string.Empty;
     private string _secretStatus = "密钥仅以 Windows DPAPI 加密保存在当前用户目录。";
     private string _appearanceStatus = "外观设置保存在本地数据库。";
+    private string _accountUsernameInput = string.Empty;
+    private string _accountPasswordInput = string.Empty;
+    private string _accountStatus = "云服务未登录；本地功能仍可使用。";
+    private AccountSessionSnapshot _account = AccountSessionSnapshot.SignedOut;
 
     public SettingsViewModel(
         IThemeService themeService,
         IUpdateService updateService,
         ISecretStore secretStore,
-        IAppSettingsRepository settings)
+        IAppSettingsRepository settings,
+        IAccountSessionService accountSession)
         : base("设置", "外观、服务凭据、数据与更新")
     {
         _themeService = themeService;
         _updateService = updateService;
         _secretStore = secretStore;
         _settings = settings;
+        _accountSession = accountSession;
+        _synchronizationContext = SynchronizationContext.Current;
         CheckForUpdatesCommand = new(CheckForUpdatesAsync);
         DownloadUpdateCommand = new(DownloadUpdateAsync, () => _candidate is not null);
         SaveSecretsCommand = new(SaveSecretsAsync, CanSaveSecrets);
         DeleteSecretsCommand = new(DeleteSecretsAsync);
         SaveAppearanceCommand = new(SaveAppearanceAsync);
+        LoginCommand = new(LoginAsync, CanLogin);
+        LogoutCommand = new(LogoutAsync, () => IsSignedIn);
+        RefreshAccountCommand = new(RefreshAccountAsync, () => IsSignedIn);
+        _accountSession.SessionChanged += OnAccountSessionChanged;
+        ApplyAccountSession(_accountSession.Current);
     }
 
     public bool IsDarkMode
@@ -102,6 +118,9 @@ public sealed class SettingsViewModel : PageViewModel
     public AsyncRelayCommand SaveSecretsCommand { get; }
     public AsyncRelayCommand DeleteSecretsCommand { get; }
     public AsyncRelayCommand SaveAppearanceCommand { get; }
+    public AsyncRelayCommand LoginCommand { get; }
+    public AsyncRelayCommand LogoutCommand { get; }
+    public AsyncRelayCommand RefreshAccountCommand { get; }
     public string AppearanceStatus
     {
         get => _appearanceStatus;
@@ -130,6 +149,40 @@ public sealed class SettingsViewModel : PageViewModel
         get => _secretStatus;
         private set => SetProperty(ref _secretStatus, value);
     }
+    public string AccountUsernameInput
+    {
+        get => _accountUsernameInput;
+        set
+        {
+            if (SetProperty(ref _accountUsernameInput, value ?? string.Empty))
+                LoginCommand.NotifyCanExecuteChanged();
+        }
+    }
+    public string AccountPasswordInput
+    {
+        get => _accountPasswordInput;
+        set
+        {
+            if (SetProperty(ref _accountPasswordInput, value ?? string.Empty))
+                LoginCommand.NotifyCanExecuteChanged();
+        }
+    }
+    public string AccountStatus
+    {
+        get => _accountStatus;
+        private set => SetProperty(ref _accountStatus, value);
+    }
+    public bool IsSignedIn => _account.IsAuthenticated;
+    public bool IsSignedOut => !IsSignedIn;
+    public bool IsAdmin => _account.IsAdmin;
+    public string AccountIdentity => _account.User is null
+        ? "未登录"
+        : $"{_account.User.Username} · {(_account.User.Role == AccountRole.Admin ? "管理员" : "普通用户")}";
+    public string AccountQuotaSummary => _account.Quota is null
+        ? "登录后显示共享额度"
+        : $"AI {_account.Quota.Ai.Remaining}/{_account.Quota.Ai.Limit}" +
+          $" · 语音 {_account.Quota.SpeechSeconds.Remaining}/{_account.Quota.SpeechSeconds.Limit} 秒" +
+          $" · {_account.Quota.Date:yyyy-MM-dd} UTC";
 
     public async Task InitializeAsync(CancellationToken cancellationToken)
     {
@@ -137,6 +190,21 @@ public sealed class SettingsViewModel : PageViewModel
         ReduceMotion = bool.TryParse(await _settings.GetAsync("appearance.reduce_motion", cancellationToken), out bool reduce) && reduce;
         AppearanceStatus = "外观设置已从本地恢复。";
         await RefreshSecretStatusAsync(cancellationToken);
+        try
+        {
+            await _accountSession.InitializeAsync(cancellationToken);
+            ApplyAccountSession(_accountSession.Current);
+        }
+        catch (AppException exception)
+        {
+            ApplyAccountSession(_accountSession.Current);
+            AccountStatus = $"{exception.Error.Title}：{exception.Error.Suggestion}";
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            ApplyAccountSession(_accountSession.Current);
+            AccountStatus = "账号令牌文件暂时无法读取；请检查当前 Windows 用户的目录权限。";
+        }
     }
 
     private async Task SaveAppearanceAsync(CancellationToken cancellationToken)
@@ -225,7 +293,107 @@ public sealed class SettingsViewModel : PageViewModel
         await _secretStore.DeleteAsync("deepseek_api_key", cancellationToken);
         GroqKeyInput = string.Empty;
         DeepSeekKeyInput = string.Empty;
-        await InitializeAsync(cancellationToken);
+        await RefreshSecretStatusAsync(cancellationToken, "已清除");
+    }
+
+    private async Task LoginAsync(CancellationToken cancellationToken)
+    {
+        if (!CanLogin()) return;
+        AccountStatus = "正在安全登录…";
+        try
+        {
+            await _accountSession.LoginAsync(
+                AccountUsernameInput,
+                AccountPasswordInput,
+                cancellationToken);
+            ApplyAccountSession(_accountSession.Current);
+        }
+        catch (AppException exception)
+        {
+            AccountStatus = $"{exception.Error.Title}：{exception.Error.Suggestion}";
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            ApplyAccountSession(_accountSession.Current);
+            AccountStatus = "登录未完成：账号令牌无法安全写入当前 Windows 用户目录。";
+        }
+        finally
+        {
+            AccountPasswordInput = string.Empty;
+        }
+    }
+
+    private async Task LogoutAsync(CancellationToken cancellationToken)
+    {
+        AccountStatus = "正在退出云服务…";
+        try
+        {
+            await _accountSession.LogoutAsync(cancellationToken);
+            ApplyAccountSession(_accountSession.Current);
+            AccountStatus = "已退出云服务；本地数据和离线功能不受影响。";
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            ApplyAccountSession(_accountSession.Current);
+            AccountStatus = "内存会话已清除，但加密令牌文件无法更新；请检查目录权限。";
+        }
+    }
+
+    private async Task RefreshAccountAsync(CancellationToken cancellationToken)
+    {
+        AccountStatus = "正在刷新账号与额度…";
+        try
+        {
+            await _accountSession.RefreshAsync(cancellationToken);
+            ApplyAccountSession(_accountSession.Current);
+        }
+        catch (AppException exception)
+        {
+            ApplyAccountSession(_accountSession.Current);
+            AccountStatus = $"{exception.Error.Title}：{exception.Error.Suggestion}";
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            ApplyAccountSession(_accountSession.Current);
+            AccountStatus = "额度刷新未完成：轮换后的账号令牌无法安全保存。";
+        }
+    }
+
+    private bool CanLogin() =>
+        _accountSession.IsConfigured
+        && IsSignedOut
+        && !string.IsNullOrWhiteSpace(AccountUsernameInput)
+        && !string.IsNullOrEmpty(AccountPasswordInput);
+
+    private void OnAccountSessionChanged(object? sender, AccountSessionChangedEventArgs eventArgs)
+    {
+        if (_synchronizationContext is not null && SynchronizationContext.Current != _synchronizationContext)
+        {
+            _synchronizationContext.Post(_ => ApplyAccountSession(eventArgs.Session), null);
+            return;
+        }
+        ApplyAccountSession(eventArgs.Session);
+    }
+
+    private void ApplyAccountSession(AccountSessionSnapshot session)
+    {
+        _account = session;
+        AccountStatus = session.Status switch
+        {
+            AccountSessionStatus.SignedIn => "云服务已登录；角色与额度来自 Worker。",
+            AccountSessionStatus.Expired => "登录已过期，请重新输入账号和密码。",
+            _ when !_accountSession.IsConfigured =>
+                "未配置云服务地址；设置 LENXTOOL_WORKER_BASE_URL 后重启即可登录。",
+            _ => "云服务未登录；本地功能仍可使用。"
+        };
+        OnPropertyChanged(nameof(IsSignedIn));
+        OnPropertyChanged(nameof(IsSignedOut));
+        OnPropertyChanged(nameof(IsAdmin));
+        OnPropertyChanged(nameof(AccountIdentity));
+        OnPropertyChanged(nameof(AccountQuotaSummary));
+        LoginCommand.NotifyCanExecuteChanged();
+        LogoutCommand.NotifyCanExecuteChanged();
+        RefreshAccountCommand.NotifyCanExecuteChanged();
     }
 
     private bool CanSaveSecrets() =>

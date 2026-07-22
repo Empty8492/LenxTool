@@ -26,6 +26,9 @@
     <None Include="..\..\src\LenxTool.App\App.xaml"
           Link="Fixtures\App.xaml"
           CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\src\LenxTool.App\MainWindow.xaml"
+          Link="Fixtures\MainWindow.xaml"
+          CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\src\LenxTool.App\Themes\Controls.xaml"
           Link="Fixtures\Controls.xaml"
           CopyToOutputDirectory="PreserveNewest" />
