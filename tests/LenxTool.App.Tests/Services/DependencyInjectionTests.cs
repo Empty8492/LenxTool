@@ -26,5 +26,6 @@ public sealed class DependencyInjectionTests
         Assert.Same(account, provider.GetRequiredService<IAccountSessionService>());
         Assert.IsType<FeedCatalogRepository>(provider.GetRequiredService<IFeedCatalogRepository>());
         Assert.IsType<FeedCatalogSyncService>(provider.GetRequiredService<IFeedCatalogSyncService>());
+        Assert.NotNull(provider.GetRequiredService<IFeedDiscoveryService>());
     }
 }

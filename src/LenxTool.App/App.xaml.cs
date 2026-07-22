@@ -101,6 +101,7 @@ public partial class App : Application
         services.AddSingleton(FeedCatalogSyncOptions.Default);
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton<IFeedCatalogSyncService, FeedCatalogSyncService>();
+        services.AddFeedDiscovery(CreateFeedDiscoveryOptions());
         services.AddSingleton<MediaJobRepository>();
         services.AddSingleton<IMediaJobRepository>(static services =>
             services.GetRequiredService<MediaJobRepository>());
@@ -166,6 +167,32 @@ public partial class App : Application
             && address.Scheme == Uri.UriSchemeHttps
             ? new(address)
             : new(null);
+    }
+
+    private static FeedDiscoveryOptions CreateFeedDiscoveryOptions() =>
+        FeedDiscoveryOptions.Default with
+        {
+            AllowedHttpHosts = ReadConfiguredHosts("LENXTOOL_FEED_HTTP_HOSTS"),
+            TrustedPrivateHosts = ReadConfiguredHosts("LENXTOOL_FEED_PRIVATE_HOSTS")
+        };
+
+    private static HashSet<string> ReadConfiguredHosts(string variableName)
+    {
+        string? configured = Environment.GetEnvironmentVariable(variableName);
+        if (string.IsNullOrWhiteSpace(configured))
+            return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        var hosts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (string candidate in configured.Split([',', ';'], StringSplitOptions.RemoveEmptyEntries))
+        {
+            string host = candidate.Trim().TrimEnd('.');
+            if (Uri.CheckHostName(host) == UriHostNameType.Unknown)
+                throw new InvalidOperationException($"{variableName} contains an invalid host name.");
+            hosts.Add(System.Net.IPAddress.TryParse(host, out System.Net.IPAddress? address)
+                ? address.ToString().ToLowerInvariant()
+                : new System.Globalization.IdnMapping().GetAscii(host).ToLowerInvariant());
+        }
+        return hosts;
     }
 
     private static WorkspacePageViewModel CreateFeedAdminPage() => new(
