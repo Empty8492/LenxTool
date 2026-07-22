@@ -188,21 +188,22 @@ npm.cmd test -- --run
 - P0-09 已完成本地目录仓储：`IFeedCatalogRepository` 在单一 SQLite 事务内替换分类、Feed 和目录状态；拒绝版本倒退，中途失败回滚到上一完整版本，保留已下载文章及仍存在 Feed 的抓取状态。ACTIVE 查询稳定过滤停用资源，管理员 ALL 仅在本地确实保存过完整快照时可用。
 - P0-10 已完成目录同步服务：启动恢复和后续登录会立即同步，成功后每 15 分钟检查版本，失败执行有界指数退避。user 只能通过受限同源 GET 读取 ACTIVE，admin 读取 ALL；401 复用账号单飞刷新且请求最多重放一次。首次或 ACTIVE→ALL 范围升级强制完整快照，304 仅更新时间戳；旧版、409、超时、离线、取消或无效/超限 DTO 均保留最后完整目录。设置页显示目录版本、最后同步时间与 stale 状态。
 - P0-11 已完成 Feed URL 发现与 SSRF 防护：默认只允许公网 HTTPS/443；HTTP 与私网主机需要独立精确白名单。DNS 返回地址经完整 IPv4/IPv6 分类后直接钉住到无代理、无自动重定向的 TCP 连接，每次跳转重新解析校验。服务限制连接/总超时、跳转、候选数、压缩/解压大小、MIME 和编码；RSS/Atom XML 禁用 DTD/外部实体并完整读到文档末尾，HTML 只提取有界 `rel=alternate` 候选。
+- P0-12 已完成 RSS 2.0 / Atom 统一解析与稳定身份：支持 CDATA、常见日期、作者、分类、enclosure、缺失字段和重复项；外部身份按 id/guid、规范 URL、Feed 作用域内容指纹依次回退。URL 只删除明确追踪参数，遇到签名或身份参数则保留完整 query；XML 禁用 DTD/实体并限制文档与条目规模，不可信正文只产出不执行脚本的纯文本。
 
 ### 10.2 下一里程碑
 
-Gate 0 字幕闭环已经完成。P0“管理员策展 RSS”已完成服务端契约、身份生命周期、目录 schema、管理员 CRUD、只读目录、桌面安全会话、账号 UI、本地 Feed schema、目录原子仓储、自动同步和安全发现（P0-01～P0-11/P0-B）；下一里程碑是 P0-12“RSS 2.0 / Atom 解析与稳定标识”。
+Gate 0 字幕闭环已经完成。P0“管理员策展 RSS”已完成服务端契约、身份生命周期、目录 schema、管理员 CRUD、只读目录、桌面安全会话、账号 UI、本地 Feed schema、目录原子仓储、自动同步、安全发现和统一解析（P0-01～P0-12/P0-B）；下一里程碑是 P0-13“条件抓取、调度与退避”。
 
 字幕闭环完成后的产品主路线已确定为“管理员策展 RSS”：管理员维护共享 RSS/Atom 目录，普通用户只能同步和阅读，不得修改共享订阅、分类、抓取策略或自动化规则。为保持现有“云端不存新闻正文”边界，首版采用 Worker/D1 保存权威目录、各桌面客户端本地抓取和 SQLite 缓存的模式。
 
 详细执行顺序如下：
 
 1. Gate 0 字幕闭环已完成；验收记录见 [`plans/EXISTING_BACKLOG_ALIGNMENT.md`](plans/EXISTING_BACKLOG_ALIGNMENT.md)。
-2. P0-01～P0-11 与 P0-B 已完成；下一步实现 P0-12 RSS 2.0 / Atom 解析与稳定标识，再继续抓取、OPML、时间线和首页真实数据；具体见 [`plans/RSS_P0_ADMIN_CATALOG.md`](plans/RSS_P0_ADMIN_CATALOG.md)。
+2. P0-01～P0-12 与 P0-B 已完成；下一步实现 P0-13 条件抓取、调度与退避，再继续条目仓储、OPML、时间线和首页真实数据；具体见 [`plans/RSS_P0_ADMIN_CATALOG.md`](plans/RSS_P0_ADMIN_CATALOG.md)。
 3. 实现私人阅读状态、全文/图片离线、AI 摘要/翻译、管理员规则、媒体衔接和统一搜索；具体见 [`plans/RSS_P1_READING_INTELLIGENCE.md`](plans/RSS_P1_READING_INTELLIGENCE.md)。
 4. 实现多内容视图、外部导出适配器、本地定时摘要和通知；具体见 [`plans/RSS_P2_VIEWS_INTEGRATIONS.md`](plans/RSS_P2_VIEWS_INTEGRATIONS.md)。
 
-总路线、参考项目和许可证边界见 [`plans/RSS_MASTER_ROADMAP.md`](plans/RSS_MASTER_ROADMAP.md)，架构决策见 [`decisions/ADR-001-admin-curated-rss.md`](decisions/ADR-001-admin-curated-rss.md)。只有上述 P0-01～P0-11 可作为已实现基础；完整条目解析/抓取、真实管理界面和后续 P1/P2 仍不能作为已交付功能宣传。
+总路线、参考项目和许可证边界见 [`plans/RSS_MASTER_ROADMAP.md`](plans/RSS_MASTER_ROADMAP.md)，架构决策见 [`decisions/ADR-001-admin-curated-rss.md`](decisions/ADR-001-admin-curated-rss.md)。只有上述 P0-01～P0-12 可作为已实现基础；条件抓取/调度、条目仓储、真实管理界面和后续 P1/P2 仍不能作为已交付功能宣传。
 
 ### 10.3 其他尚未完成的产品功能
 

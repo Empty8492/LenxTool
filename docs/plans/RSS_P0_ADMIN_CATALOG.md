@@ -277,13 +277,15 @@ P0 不包含全文抓取、图片离线缓存、AI 摘要/翻译、自动化规�
 
 **验收：**
 
-- [ ] 支持 RSS 2.0、Atom、CDATA、常见日期、作者、分类和 enclosure。
-- [ ] 稳定 ID 优先使用 Atom id/guid，其次规范化 URL，最后 Feed+内容指纹。
-- [ ] URL 规范化保留签名/身份相关 query；只移除明确追踪参数，不做破坏性通用裁剪。
+- [x] 支持 RSS 2.0、Atom、CDATA、常见日期、作者、分类和 enclosure。
+- [x] 稳定 ID 优先使用 Atom id/guid，其次规范化 URL，最后 Feed+内容指纹。
+- [x] URL 规范化保留签名/身份相关 query；只移除明确追踪参数，不做破坏性通用裁剪。
 
 **验证：** 真实样例 fixture、缺字段、重复、非法日期、命名空间和恶意 XML 测试。
 
 **参考：** Folo 统一条目模型；LenxTool 当前 `DownloadXmlAsync` 和 `NewsArticle` 解析需被通用化而非直接扩写。
+
+**完成记录（2026-07-22）：** 已新增 Core `IFeedParser`、统一 `ParsedFeedDocument`/`FeedEntry` 模型与 Infrastructure RSS 2.0/Atom 解析器。解析器支持 CDATA、Dublin Core 作者/日期、Atom feed 作者回退、分类、enclosure、常见带时区日期和缺失字段回退；同文档重复外部 ID 保留首项。稳定身份严格按 Atom id/RSS guid → 规范化 URL → Feed 作用域内容指纹选择，内部 ID 与内容哈希采用区分大小写、长度前缀的 SHA-256 规范串，不受抓取时间影响。URL 仅删除明确的 `utm_*`、`gclid` 等追踪参数；一旦包含 token、签名或云存储凭据参数即完整保留原 query 顺序和值。XML 禁用 DTD/外部实体，并限制 4 MiB 文档、2000 条目、字段/分类数量；正文转换为不执行脚本的纯文本，危险链接/enclosure 协议被丢弃。2 份真实 fixture 与 14 项测试覆盖 RSS/Atom、CDATA、命名空间、重复、非法日期、缺字段、签名 URL、大小写身份、脚本标题/正文、条目/字节上限和 XXE。
 
 ### P0-13：条件抓取、调度与退避
 
