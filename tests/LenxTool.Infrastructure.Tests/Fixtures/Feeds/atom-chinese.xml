@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xml:lang="zh-CN"><title>中文 Atom 更新</title><entry><id>tag:example.cn,2026:一</id><title>桌面工具更新</title><published>2026-07-21T09:30:00+08:00</published><summary>支持中文标题与摘要。</summary><category term="工具"/></entry></feed>

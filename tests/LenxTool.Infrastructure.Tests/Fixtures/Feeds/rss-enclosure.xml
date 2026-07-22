@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0"><channel><title>Podcast</title><item><guid>podcast-1</guid><title>Episode</title><enclosure url="https://cdn.example/episode.mp3" type="audio/mpeg" length="2048"/></item></channel></rss>

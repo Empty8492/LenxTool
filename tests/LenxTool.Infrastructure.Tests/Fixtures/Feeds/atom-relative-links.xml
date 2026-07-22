@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom"><title>Relative Atom</title><link rel="alternate" href="/blog"/><entry><id>tag:example,2026:relative</id><title>Relative entry</title><link href="posts/one?utm_medium=atom&amp;ref=home"/></entry></feed>

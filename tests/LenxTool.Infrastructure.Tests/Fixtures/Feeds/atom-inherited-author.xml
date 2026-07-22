@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom"><title>Author Feed</title><author><name>Feed Author</name></author><entry><id>tag:example,2026:author</id><title>Inherited author</title><updated>2026-07-20T12:00:00Z</updated></entry></feed>

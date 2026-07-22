@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom"><title>Video Feed</title><entry><id>tag:example,2026:video</id><title>Video entry</title><link rel="enclosure" href="https://cdn.example/video.mp4" type="video/mp4" length="4096" title="Demo"/></entry></feed>

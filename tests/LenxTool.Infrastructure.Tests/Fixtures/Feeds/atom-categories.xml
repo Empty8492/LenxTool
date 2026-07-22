@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom"><title>Categories</title><entry><id>tag:example,2026:categories</id><title>Category entry</title><category term="release"/><category term="release"/><category term="desktop" label="Desktop"/></entry></feed>

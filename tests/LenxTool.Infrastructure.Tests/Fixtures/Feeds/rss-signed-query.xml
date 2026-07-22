@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0"><channel><title>Signed Query</title><item><title>Download</title><link>https://download.example/file?utm_source=rss&amp;X-Amz-Signature=abc&amp;X-Amz-Expires=60</link></item></channel></rss>
