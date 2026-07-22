@@ -10,7 +10,7 @@ public sealed partial class SqliteDatabase(
     AppPaths paths,
     ILogger<SqliteDatabase> logger) : IDisposable
 {
-    private const int CurrentSchemaVersion = 3;
+    private const int CurrentSchemaVersion = 4;
     private readonly SemaphoreSlim _initializationGate = new(1, 1);
     private bool _initialized;
     private bool _disposed;
@@ -167,6 +167,18 @@ public sealed partial class SqliteDatabase(
                 command.Parameters.AddWithValue("$appliedAt", DateTimeOffset.UtcNow.ToString("O"));
                 command.Parameters.AddWithValue("$checksum", "lenx-schema-v3-subtitle-translation-usage");
                 await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                version = 3;
+            }
+
+            if (version < 4)
+            {
+                command.CommandText = MigrationFourSql;
+                command.Parameters.Clear();
+                await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                command.CommandText = "INSERT INTO schema_versions(version, applied_at, checksum) VALUES (4, $appliedAt, $checksum);";
+                command.Parameters.AddWithValue("$appliedAt", DateTimeOffset.UtcNow.ToString("O"));
+                command.Parameters.AddWithValue("$checksum", "lenx-schema-v4-feed-catalog-and-entries");
+                await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
             }
         }
 
@@ -306,5 +318,115 @@ public sealed partial class SqliteDatabase(
         CREATE INDEX IF NOT EXISTS ix_trend_items_platform_captured ON trend_items(platform, captured_at DESC);
         CREATE INDEX IF NOT EXISTS ix_media_jobs_updated_at ON media_jobs(updated_at DESC);
         CREATE INDEX IF NOT EXISTS ix_ai_reports_created_at ON ai_reports(created_at DESC);
+        """;
+
+    private const string MigrationFourSql = """
+        CREATE TABLE feed_catalog_state(
+            singleton_id INTEGER PRIMARY KEY CHECK(singleton_id = 1),
+            catalog_version INTEGER NOT NULL DEFAULT 0
+                CHECK(typeof(catalog_version) = 'integer' AND catalog_version >= 0),
+            scope TEXT NOT NULL DEFAULT 'ACTIVE'
+                CHECK(scope IN ('ACTIVE', 'ALL')),
+            generated_at TEXT
+                CHECK(generated_at IS NULL OR length(generated_at) BETWEEN 20 AND 40),
+            last_synced_at TEXT
+                CHECK(last_synced_at IS NULL OR length(last_synced_at) BETWEEN 20 AND 40)
+        );
+        INSERT INTO feed_catalog_state(singleton_id, catalog_version, scope)
+        VALUES(1, 0, 'ACTIVE');
+
+        CREATE TABLE feed_categories(
+            id TEXT PRIMARY KEY CHECK(length(id) = 36),
+            name TEXT NOT NULL CHECK(length(trim(name)) BETWEEN 1 AND 80),
+            name_norm TEXT NOT NULL CHECK(length(name_norm) BETWEEN 1 AND 160),
+            sort_order INTEGER NOT NULL DEFAULT 0
+                CHECK(typeof(sort_order) = 'integer' AND sort_order BETWEEN 0 AND 1000000),
+            is_enabled INTEGER NOT NULL DEFAULT 1
+                CHECK(typeof(is_enabled) = 'integer' AND is_enabled IN (0, 1)),
+            version INTEGER NOT NULL DEFAULT 0
+                CHECK(typeof(version) = 'integer' AND version >= 0),
+            created_at TEXT NOT NULL CHECK(length(created_at) BETWEEN 20 AND 40),
+            updated_at TEXT NOT NULL CHECK(length(updated_at) BETWEEN 20 AND 40)
+        );
+
+        CREATE TABLE feed_catalog(
+            id TEXT PRIMARY KEY CHECK(length(id) = 36),
+            original_url TEXT NOT NULL
+                CHECK(length(original_url) BETWEEN 1 AND 2048 AND lower(substr(trim(original_url), 1, 8)) = 'https://'),
+            normalized_url TEXT NOT NULL
+                CHECK(length(normalized_url) BETWEEN 1 AND 2048 AND substr(normalized_url, 1, 8) = 'https://' AND instr(normalized_url, '#') = 0),
+            display_name TEXT NOT NULL CHECK(length(trim(display_name)) BETWEEN 1 AND 160),
+            site_url TEXT
+                CHECK(site_url IS NULL OR (length(site_url) BETWEEN 1 AND 2048 AND lower(substr(trim(site_url), 1, 8)) = 'https://')),
+            category_id TEXT,
+            view_kind TEXT NOT NULL DEFAULT 'ARTICLE'
+                CHECK(view_kind IN ('ARTICLE', 'PICTURE', 'AUDIO', 'VIDEO', 'NOTIFICATION')),
+            refresh_interval_minutes INTEGER NOT NULL DEFAULT 60
+                CHECK(typeof(refresh_interval_minutes) = 'integer' AND refresh_interval_minutes BETWEEN 5 AND 1440),
+            sort_order INTEGER NOT NULL DEFAULT 0
+                CHECK(typeof(sort_order) = 'integer' AND sort_order BETWEEN 0 AND 1000000),
+            is_enabled INTEGER NOT NULL DEFAULT 1
+                CHECK(typeof(is_enabled) = 'integer' AND is_enabled IN (0, 1)),
+            version INTEGER NOT NULL DEFAULT 0
+                CHECK(typeof(version) = 'integer' AND version >= 0),
+            created_at TEXT NOT NULL CHECK(length(created_at) BETWEEN 20 AND 40),
+            updated_at TEXT NOT NULL CHECK(length(updated_at) BETWEEN 20 AND 40),
+            FOREIGN KEY(category_id) REFERENCES feed_categories(id) ON UPDATE RESTRICT ON DELETE RESTRICT
+        );
+
+        CREATE TABLE feed_fetch_state(
+            feed_id TEXT PRIMARY KEY REFERENCES feed_catalog(id) ON DELETE CASCADE,
+            etag TEXT CHECK(etag IS NULL OR length(etag) <= 1024),
+            last_modified TEXT CHECK(last_modified IS NULL OR length(last_modified) <= 256),
+            next_fetch_at TEXT CHECK(next_fetch_at IS NULL OR length(next_fetch_at) BETWEEN 20 AND 40),
+            last_success_at TEXT CHECK(last_success_at IS NULL OR length(last_success_at) BETWEEN 20 AND 40),
+            last_failure_at TEXT CHECK(last_failure_at IS NULL OR length(last_failure_at) BETWEEN 20 AND 40),
+            consecutive_failures INTEGER NOT NULL DEFAULT 0
+                CHECK(typeof(consecutive_failures) = 'integer' AND consecutive_failures >= 0),
+            error_code TEXT CHECK(error_code IS NULL OR length(error_code) BETWEEN 1 AND 128),
+            updated_at TEXT NOT NULL CHECK(length(updated_at) BETWEEN 20 AND 40)
+        );
+
+        -- No foreign key to feed_catalog: entries must survive catalog removal until retention policy deletes them.
+        CREATE TABLE feed_entries(
+            id TEXT PRIMARY KEY CHECK(length(id) BETWEEN 1 AND 128),
+            feed_id TEXT NOT NULL CHECK(length(feed_id) = 36),
+            external_id TEXT NOT NULL CHECK(length(external_id) BETWEEN 1 AND 2048),
+            normalized_url TEXT
+                CHECK(normalized_url IS NULL OR (
+                    length(normalized_url) BETWEEN 1 AND 2048
+                    AND (lower(substr(normalized_url, 1, 7)) = 'http://' OR lower(substr(normalized_url, 1, 8)) = 'https://')
+                    AND instr(normalized_url, '#') = 0)),
+            title TEXT NOT NULL CHECK(length(title) <= 512),
+            author TEXT CHECK(author IS NULL OR length(author) <= 256),
+            published_at TEXT CHECK(published_at IS NULL OR length(published_at) BETWEEN 20 AND 40),
+            updated_at TEXT CHECK(updated_at IS NULL OR length(updated_at) BETWEEN 20 AND 40),
+            summary TEXT NOT NULL DEFAULT '',
+            sanitized_content TEXT NOT NULL DEFAULT '',
+            enclosure_json TEXT NOT NULL DEFAULT '[]'
+                CHECK(json_valid(enclosure_json) AND json_type(enclosure_json) = 'array'),
+            content_hash TEXT NOT NULL CHECK(length(content_hash) BETWEEN 1 AND 128),
+            fetched_at TEXT NOT NULL CHECK(length(fetched_at) BETWEEN 20 AND 40)
+        );
+
+        CREATE UNIQUE INDEX ux_feed_categories_name_norm ON feed_categories(name_norm);
+        CREATE INDEX ix_feed_categories_order ON feed_categories(is_enabled, sort_order, id);
+        CREATE UNIQUE INDEX ux_feed_catalog_normalized_url ON feed_catalog(normalized_url);
+        CREATE INDEX ix_feed_catalog_order ON feed_catalog(category_id, is_enabled, sort_order, id);
+        CREATE INDEX ix_feed_catalog_version ON feed_catalog(version);
+        CREATE INDEX ix_feed_fetch_state_next_fetch ON feed_fetch_state(next_fetch_at, feed_id);
+        CREATE UNIQUE INDEX ux_feed_entries_feed_external_id ON feed_entries(feed_id, external_id);
+        CREATE INDEX ix_feed_entries_feed_published ON feed_entries(feed_id, published_at DESC, id);
+        CREATE INDEX ix_feed_entries_normalized_url ON feed_entries(normalized_url);
+        CREATE INDEX ix_feed_entries_content_hash ON feed_entries(content_hash);
+        CREATE INDEX ix_feed_entries_fetched_at ON feed_entries(fetched_at DESC);
+
+        CREATE VIEW feed_entry_search_documents AS
+        SELECT
+            'feed_entry' AS entity_type,
+            id AS entity_id,
+            title,
+            trim(summary || char(10) || sanitized_content) AS content
+        FROM feed_entries;
         """;
 }
