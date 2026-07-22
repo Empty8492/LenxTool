@@ -94,6 +94,33 @@ public sealed class FeedAdminViewModelTests
     }
 
     [Fact]
+    public async Task SuccessfulMutationWithFailedSyncLocksFurtherWritesAndReportsCommittedVersion()
+    {
+        var context = CreateViewModel(Snapshot(7), AccountRole.Admin);
+        context.Discovery.Result = new(
+            "https://new.example/",
+            [new("https://new.example/feed.xml", "新订阅", FeedDocumentKind.Rss20)]);
+        context.Sync.Failure = new AppException(new(
+            AppErrorCode.NetworkUnavailable,
+            "同步失败",
+            "目录刷新失败",
+            "请稍后刷新",
+            "simulated sync failure"));
+        await context.ViewModel.InitializeAsync(CancellationToken.None);
+        context.ViewModel.BeginNewFeedCommand.Execute(null);
+        context.ViewModel.FeedUrlInput = "https://new.example/";
+        await context.ViewModel.DiscoverCommand.ExecuteAsync();
+
+        await context.ViewModel.SaveFeedCommand.ExecuteAsync();
+
+        Assert.Single(context.Admin.FeedCalls);
+        Assert.False(context.ViewModel.CanManage);
+        Assert.False(context.ViewModel.SaveFeedCommand.CanExecute(null));
+        Assert.Contains("远端更改已提交为 v8", context.ViewModel.Status, StringComparison.Ordinal);
+        Assert.Contains("本地刷新失败", context.ViewModel.Status, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task VersionConflictRefreshesButDoesNotReplayMutation()
     {
         var context = CreateViewModel(Snapshot(4), AccountRole.Admin);
@@ -122,6 +149,24 @@ public sealed class FeedAdminViewModelTests
     }
 
     [Fact]
+    public async Task RoleLossDuringPostMutationSyncDoesNotRepopulateAdminCatalog()
+    {
+        var context = CreateViewModel(Snapshot(7), AccountRole.Admin);
+        context.Sync.OnSync = () => context.Account.SetSession(SignedIn(AccountRole.User));
+        await context.ViewModel.InitializeAsync(CancellationToken.None);
+        context.ViewModel.SelectedCategory = context.ViewModel.Categories[0];
+        context.ViewModel.CategoryNameInput = "更新后的名称";
+
+        await context.ViewModel.SaveCategoryCommand.ExecuteAsync();
+
+        Assert.Single(context.Admin.CategoryCalls);
+        Assert.False(context.ViewModel.IsAdmin);
+        Assert.False(context.ViewModel.CanManage);
+        Assert.Empty(context.ViewModel.Categories);
+        Assert.Empty(context.ViewModel.Feeds);
+    }
+
+    [Fact]
     public async Task ToggleMoveAndTwoStepDeleteUseVersionedFeedMutations()
     {
         FeedCatalogSnapshot initial = Snapshot(10) with
@@ -138,7 +183,10 @@ public sealed class FeedAdminViewModelTests
             FeedCatalogSnapshot current = context.Repository.Snapshot!;
             context.Repository.Snapshot = current with
             {
-                State = current.State with { Version = current.State.Version + 1 }
+                State = current.State with { Version = current.State.Version + 1 },
+                Feeds = context.Sync.SyncCount == 3
+                    ? current.Feeds.Where(feed => feed.Id != initial.Feeds[0].Id).ToArray()
+                    : current.Feeds
             };
         };
         await context.ViewModel.InitializeAsync(CancellationToken.None);
@@ -166,6 +214,9 @@ public sealed class FeedAdminViewModelTests
                 Assert.True(call.Input!.SortOrder > 200);
             },
             call => Assert.Equal("delete", call.Operation));
+        Assert.Null(context.ViewModel.SelectedFeed);
+        Assert.Empty(context.ViewModel.FeedUrlInput);
+        Assert.False(context.ViewModel.HasDiscoveryPreview);
     }
 
     private static TestContext CreateViewModel(FeedCatalogSnapshot snapshot, AccountRole role)
@@ -176,7 +227,7 @@ public sealed class FeedAdminViewModelTests
         var discovery = new FakeDiscoveryService();
         var account = new FakeAccountSessionService(SignedIn(role));
         var viewModel = new FeedAdminViewModel(admin, repository, sync, discovery, account);
-        return new(viewModel, admin, repository, sync, discovery);
+        return new(viewModel, admin, repository, sync, discovery, account);
     }
 
     private static FeedCatalogSnapshot Snapshot(long version) => new(
@@ -212,7 +263,8 @@ public sealed class FeedAdminViewModelTests
         FakeCatalogAdminService Admin,
         FakeCatalogRepository Repository,
         FakeCatalogSyncService Sync,
-        FakeDiscoveryService Discovery);
+        FakeDiscoveryService Discovery,
+        FakeAccountSessionService Account);
 
     private sealed record FeedCall(
         string Operation,
@@ -278,6 +330,7 @@ public sealed class FeedAdminViewModelTests
     {
         public int SyncCount { get; private set; }
         public Action? OnSync { get; set; }
+        public AppException? Failure { get; set; }
         public FeedCatalogSyncStatus Current { get; private set; } = new(
             false, 0, FeedCatalogScope.All, null, false, 0, null, null);
         public event EventHandler<FeedCatalogSyncStatusChangedEventArgs>? StatusChanged;
@@ -285,6 +338,7 @@ public sealed class FeedAdminViewModelTests
         public Task<FeedCatalogSyncResult> SyncAsync(CancellationToken token)
         {
             SyncCount++;
+            if (Failure is not null) return Task.FromException<FeedCatalogSyncResult>(Failure);
             OnSync?.Invoke();
             StatusChanged?.Invoke(this, new(Current));
             return Task.FromResult(new FeedCatalogSyncResult(FeedCatalogSyncOutcome.Updated, 0, Now));
@@ -302,10 +356,11 @@ public sealed class FeedAdminViewModelTests
     {
         public bool IsConfigured => true;
         public AccountSessionSnapshot Current { get; private set; } = current;
-        public event EventHandler<AccountSessionChangedEventArgs>? SessionChanged
+        public event EventHandler<AccountSessionChangedEventArgs>? SessionChanged;
+        public void SetSession(AccountSessionSnapshot session)
         {
-            add { }
-            remove { }
+            Current = session;
+            SessionChanged?.Invoke(this, new(session));
         }
         public Task InitializeAsync(CancellationToken token) => Task.CompletedTask;
         public Task LoginAsync(string username, string password, CancellationToken token) => Task.CompletedTask;

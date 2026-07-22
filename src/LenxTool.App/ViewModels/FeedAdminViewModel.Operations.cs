@@ -13,22 +13,35 @@ public sealed partial class FeedAdminViewModel
     {
         if (!CanManage) return;
         Status = "正在提交共享目录更改…";
+        long newVersion;
         try
         {
-            long newVersion = await mutation(CatalogVersion, cancellationToken);
-            PendingDeleteCategoryId = null;
-            PendingDeleteFeedId = null;
-            await _catalogSync.SyncAsync(cancellationToken);
-            await LoadCatalogAsync(newVersion, cancellationToken);
-            Status = successMessage;
+            newVersion = await mutation(CatalogVersion, cancellationToken);
         }
         catch (AppException exception) when (IsCatalogVersionConflict(exception))
         {
             await RefreshAfterConflictAsync(cancellationToken);
+            return;
         }
         catch (AppException exception)
         {
             Status = $"{exception.Error.Title}：{exception.Error.Suggestion}";
+            return;
+        }
+
+        PendingDeleteCategoryId = null;
+        PendingDeleteFeedId = null;
+        try
+        {
+            await _catalogSync.SyncAsync(cancellationToken);
+            await LoadCatalogAsync(newVersion, cancellationToken);
+            if (_catalogIsCurrent) Status = successMessage;
+        }
+        catch (AppException exception)
+        {
+            _catalogIsCurrent = false;
+            NotifyAllCommands();
+            Status = $"远端更改已提交为 v{newVersion}，但本地刷新失败：{exception.Error.Suggestion}";
         }
     }
 
@@ -50,9 +63,19 @@ public sealed partial class FeedAdminViewModel
 
     private async Task LoadCatalogAsync(long? minimumVersion, CancellationToken cancellationToken)
     {
+        if (!IsAdmin)
+        {
+            ClearAdminCatalog();
+            return;
+        }
         FeedCatalogSnapshot? snapshot = await _repository.GetCatalogAsync(
             FeedCatalogScope.All,
             cancellationToken);
+        if (!IsAdmin)
+        {
+            ClearAdminCatalog();
+            return;
+        }
         if (snapshot is null)
         {
             _catalogIsCurrent = false;
@@ -76,7 +99,9 @@ public sealed partial class FeedAdminViewModel
         _catalogIsCurrent = snapshot.State.Scope == FeedCatalogScope.All
             && (minimumVersion is null || snapshot.State.Version >= minimumVersion.Value);
         SelectedCategory = Categories.FirstOrDefault(category => category.Id == selectedCategoryId);
+        if (selectedCategoryId is not null && SelectedCategory is null) BeginNewCategory();
         SelectedFeed = Feeds.FirstOrDefault(feed => feed.Id == selectedFeedId);
+        if (selectedFeedId is not null && SelectedFeed is null) BeginNewFeed();
         if (!_catalogIsCurrent && minimumVersion is not null)
             Status = "远端写入已完成，但本地目录尚未刷新到新版本；请刷新后继续。";
         NotifyAllCommands();
@@ -147,12 +172,21 @@ public sealed partial class FeedAdminViewModel
         OnPropertyChanged(nameof(CanManage));
         if (!session.IsAdmin)
         {
-            _catalogIsCurrent = false;
-            Categories.Clear();
-            Feeds.Clear();
-            CategoryChoices.Clear();
-            Status = "需要管理员账号才能读取和修改共享订阅目录。";
+            ClearAdminCatalog();
+            return;
         }
+        NotifyAllCommands();
+    }
+
+    private void ClearAdminCatalog()
+    {
+        _catalogIsCurrent = false;
+        Categories.Clear();
+        Feeds.Clear();
+        CategoryChoices.Clear();
+        SelectedCategory = null;
+        SelectedFeed = null;
+        Status = "需要管理员账号才能读取和修改共享订阅目录。";
         NotifyAllCommands();
     }
 
