@@ -43,6 +43,11 @@ interface FeedRow {
   updated_at: string;
 }
 
+interface CatalogStateRow {
+  catalog_version: number;
+  updated_at: string;
+}
+
 interface IdempotencyRow {
   request_hash: string;
   status_code: number;
@@ -79,6 +84,79 @@ const idempotencyKeyPattern = /^[A-Za-z0-9._:-]{16,128}$/u;
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 const viewKinds = new Set<ViewKind>(["ARTICLE", "PICTURE", "AUDIO", "VIDEO", "NOTIFICATION"]);
 const encoder = new TextEncoder();
+const catalogResponseLimit = 10 * 1024 * 1024;
+
+export async function handleCatalogReadRequest(
+  request: Request,
+  db: D1Database,
+  auth: CatalogAuthContext,
+  url: URL
+): Promise<Response | null> {
+  if (request.method !== "GET" || url.pathname !== "/v1/feeds/catalog") return null;
+  if (encoder.encode(request.url).byteLength > 2048) {
+    throw new CatalogApiError(400, "VALIDATION_ERROR", "目录查询地址过长");
+  }
+
+  const conditions = parseCatalogReadConditions(request, url);
+  if (conditions.scope === "ALL" && auth.role !== "admin") {
+    throw new CatalogApiError(403, "ADMIN_REQUIRED", "需要管理员权限");
+  }
+
+  const activeOnly = conditions.scope === "ACTIVE";
+  const categorySql =
+    "SELECT id,name,name_norm,sort_order,is_enabled,version,created_at,updated_at " +
+    "FROM feed_categories WHERE deleted_at IS NULL" +
+    (activeOnly ? " AND is_enabled=1" : "") +
+    " ORDER BY sort_order,name COLLATE BINARY,id";
+  const feedSql =
+    "SELECT f.id,f.original_url,f.normalized_url,f.display_name,f.site_url,f.category_id,f.view_kind," +
+    "f.refresh_interval_minutes,f.sort_order,f.is_enabled,f.version,f.created_at,f.updated_at " +
+    "FROM managed_feeds f LEFT JOIN feed_categories c ON c.id=f.category_id AND c.deleted_at IS NULL " +
+    "WHERE f.deleted_at IS NULL AND (f.category_id IS NULL OR c.id IS NOT NULL)" +
+    (activeOnly ? " AND f.is_enabled=1 AND (f.category_id IS NULL OR c.is_enabled=1)" : "") +
+    " ORDER BY CASE WHEN f.category_id IS NULL THEN 1 ELSE 0 END," +
+    "c.sort_order,c.name COLLATE BINARY,c.id,f.sort_order,f.display_name COLLATE BINARY,f.id";
+  const results = await db.batch<CatalogStateRow | CategoryRow | FeedRow>([
+    db.prepare("SELECT catalog_version,updated_at FROM feed_catalog_state WHERE singleton_id=1"),
+    db.prepare(categorySql),
+    db.prepare(feedSql)
+  ]);
+  const state = results[0]?.results[0] as CatalogStateRow | undefined;
+  if (!state || !Number.isSafeInteger(state.catalog_version) || state.catalog_version < 0) {
+    throw new CatalogApiError(503, "SERVICE_UNAVAILABLE", "共享目录状态不可用");
+  }
+
+  const etag = catalogEtag(conditions.scope, state.catalog_version);
+  const clientVersion = conditions.afterVersion && conditions.afterVersion > 0
+    ? conditions.afterVersion
+    : conditions.etagVersion;
+  if (clientVersion !== undefined && clientVersion > state.catalog_version) {
+    throw new CatalogApiError(
+      409,
+      "CATALOG_VERSION_AHEAD",
+      "客户端目录版本高于服务端版本",
+      { currentCatalogVersion: state.catalog_version },
+      true
+    );
+  }
+  if (clientVersion !== undefined && clientVersion === state.catalog_version) {
+    return catalogNotModified(etag, auth.requestId);
+  }
+
+  const categories = (results[1]?.results ?? []) as CategoryRow[];
+  const feeds = (results[2]?.results ?? []) as FeedRow[];
+  const body = JSON.stringify({
+    catalogVersion: state.catalog_version,
+    scope: conditions.scope,
+    generatedAt: state.updated_at,
+    categories: categories.map(toCatalogCategory),
+    feeds: feeds.map(toCatalogFeed)
+  });
+  if (encoder.encode(body).byteLength > catalogResponseLimit) {
+    throw new CatalogApiError(503, "SERVICE_UNAVAILABLE", "共享目录快照超过发布上限");
+  }
+  return catalogJson(body, etag, auth.requestId);
+}
 
 export async function handleCatalogAdminRequest(
   request: Request,
@@ -123,6 +201,87 @@ export async function handleCatalogAdminRequest(
     return deleteFeed(request, db, auth, `/v1/admin/feeds/${feedId}`, feedId);
   }
   return null;
+}
+
+function parseCatalogReadConditions(request: Request, url: URL): {
+  scope: "ACTIVE" | "ALL";
+  afterVersion?: number;
+  etagVersion?: number;
+} {
+  for (const key of url.searchParams.keys()) {
+    if (key !== "afterVersion" && key !== "scope") {
+      throw new CatalogApiError(400, "VALIDATION_ERROR", "目录查询包含未知参数");
+    }
+  }
+  if (url.searchParams.getAll("afterVersion").length > 1 || url.searchParams.getAll("scope").length > 1) {
+    throw new CatalogApiError(400, "VALIDATION_ERROR", "目录查询参数不能重复");
+  }
+
+  const scopeValue = url.searchParams.get("scope") ?? "ACTIVE";
+  if (scopeValue !== "ACTIVE" && scopeValue !== "ALL") {
+    throw new CatalogApiError(400, "VALIDATION_ERROR", "目录范围无效");
+  }
+  const afterValue = url.searchParams.get("afterVersion");
+  const afterVersion = afterValue === null ? undefined : parseCatalogVersion(afterValue, "afterVersion");
+
+  const ifNoneMatch = request.headers.get("if-none-match");
+  let etagVersion: number | undefined;
+  if (ifNoneMatch !== null) {
+    const match = /^"catalog-(active|all)-(0|[1-9][0-9]*)"$/u.exec(ifNoneMatch);
+    if (!match || match[1]?.toUpperCase() !== scopeValue) {
+      throw new CatalogApiError(400, "VALIDATION_ERROR", "If-None-Match 与目录范围不一致");
+    }
+    etagVersion = parseCatalogVersion(match[2]!, "If-None-Match");
+    if (afterVersion === 0 || (afterVersion !== undefined && afterVersion !== etagVersion)) {
+      throw new CatalogApiError(400, "VALIDATION_ERROR", "目录缓存条件互相矛盾");
+    }
+  }
+  return { scope: scopeValue, afterVersion, etagVersion };
+}
+
+function parseCatalogVersion(value: string, label: string): number {
+  if (!/^(0|[1-9][0-9]*)$/u.test(value)) {
+    throw new CatalogApiError(400, "VALIDATION_ERROR", `${label} 格式无效`);
+  }
+  const version = Number(value);
+  if (!Number.isSafeInteger(version) || version < 0) {
+    throw new CatalogApiError(400, "VALIDATION_ERROR", `${label} 超出范围`);
+  }
+  return version;
+}
+
+function catalogEtag(scope: "ACTIVE" | "ALL", version: number): string {
+  return `"catalog-${scope.toLocaleLowerCase("en-US")}-${version}"`;
+}
+
+function toCatalogCategory(row: CategoryRow) {
+  return {
+    id: row.id,
+    name: row.name,
+    sortOrder: row.sort_order,
+    isEnabled: row.is_enabled === 1,
+    version: row.version,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
+function toCatalogFeed(row: FeedRow) {
+  return {
+    id: row.id,
+    originalUrl: row.original_url,
+    normalizedUrl: row.normalized_url,
+    displayName: row.display_name,
+    siteUrl: row.site_url,
+    categoryId: row.category_id,
+    viewKind: row.view_kind,
+    refreshIntervalMinutes: row.refresh_interval_minutes,
+    sortOrder: row.sort_order,
+    isEnabled: row.is_enabled === 1,
+    version: row.version,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
 }
 
 async function createCategory(
@@ -859,6 +1018,25 @@ function jsonText(body: string, status: number, requestId: string): Response {
     "x-request-id": requestId
   });
   return new Response(body, { status, headers });
+}
+
+function catalogJson(body: string, etag: string, requestId: string): Response {
+  const headers = catalogReadHeaders(etag, requestId);
+  headers.set("content-type", "application/json; charset=utf-8");
+  return new Response(body, { status: 200, headers });
+}
+
+function catalogNotModified(etag: string, requestId: string): Response {
+  return new Response(null, { status: 304, headers: catalogReadHeaders(etag, requestId) });
+}
+
+function catalogReadHeaders(etag: string, requestId: string): Headers {
+  return new Headers({
+    "cache-control": "private, no-cache",
+    "vary": "Authorization",
+    "etag": etag,
+    "x-request-id": requestId
+  });
 }
 
 function nowIso(): string {

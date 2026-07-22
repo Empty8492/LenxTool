@@ -1,4 +1,4 @@
-import { CatalogApiError, handleCatalogAdminRequest } from "./catalog";
+import { CatalogApiError, handleCatalogAdminRequest, handleCatalogReadRequest } from "./catalog";
 
 export interface Env {
   DB: D1Database;
@@ -45,11 +45,14 @@ export default {
       const auth = await authenticate(request, env, requestId);
       if (request.method === "POST" && url.pathname === "/v1/auth/logout") return await logout(request, env, auth);
       if (request.method === "GET" && url.pathname === "/v1/me") return await currentUser(env, auth);
-      const catalogResponse = await handleCatalogAdminRequest(request, env.DB, {
+      const catalogAuth = {
         userId: auth.user.id,
         role: auth.user.role,
         requestId: auth.requestId
-      }, url);
+      };
+      const catalogReadResponse = await handleCatalogReadRequest(request, env.DB, catalogAuth, url);
+      if (catalogReadResponse) return catalogReadResponse;
+      const catalogResponse = await handleCatalogAdminRequest(request, env.DB, catalogAuth, url);
       if (catalogResponse) return catalogResponse;
       if (request.method === "POST" && url.pathname === "/v1/admin/invites") return await createInvite(request, env, auth);
       if (request.method === "PATCH" && url.pathname.startsWith("/v1/admin/users/")) return await updateUser(request, env, auth, url.pathname.split("/").at(-1)!);
