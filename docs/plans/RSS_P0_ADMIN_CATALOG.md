@@ -1,6 +1,6 @@
 # P0 详细计划：管理员订阅与普通用户只读目录
 
-状态：进行中，P0-01～P0-15 与检查点 P0-B/P0-C 已完成
+状态：进行中，P0-01～P0-16 与检查点 P0-B/P0-C 已完成
 最后核对：2026-07-23
 上位文档：[RSS 集成总路线图](RSS_MASTER_ROADMAP.md)
 参考项目：RSSNext/Folo（发现、OPML、订阅状态和内容视图的行为参考），LenxTool 当前 Worker/SQLite/资讯中心（实现基础）
@@ -367,13 +367,15 @@ P0 不包含全文抓取、图片离线缓存、AI 摘要/翻译、自动化规�
 
 **验收：**
 
-- [ ] 解析分组、标题、xmlUrl/htmlUrl；默认不自动提交。
-- [ ] 预览标记新增、重复、无效和冲突项，可选择性导入。
-- [ ] 批量提交原子或返回逐项结果；导出不含凭据和本地抓取状态。
+- [x] 解析分组、标题、xmlUrl/htmlUrl；默认不自动提交。
+- [x] 预览标记新增、重复、无效和冲突项，可选择性导入。
+- [x] 批量提交原子或返回逐项结果；导出不含凭据和本地抓取状态。
 
 **验证：** 嵌套分组、重复、畸形 XML、XXE、中文和大文件上限测试；WPF 手测。
 
 **参考：** Folo `DiscoverImport.tsx`、`OpmlSelectionModal.tsx` 和数据控制导出行为。
+
+**完成记录（2026-07-23）：** 已新增 2 MiB 有界 `IOpmlCodec` 与原子文件服务，支持 OPML 2.0 嵌套分组、中文/UTF-16、`text`/`title`、`xmlUrl`/`htmlUrl` 和安全转义往返；XML 禁用 DTD/外部实体，并限制字符、outline、Feed、深度和属性长度。管理页新增“OPML 导入/导出”标签，选择文件后只生成新增/重复/冲突/无效预览，不自动写入；嵌套分组以 `父 / 子` 展平到当前平面分类，用户只能选择新增项。提交前每个选中 Feed 复用 SSRF 防护发现服务并再次检查重定向后的重复/冲突，任一失败整批零提交；成功时最多 100 个分类/Feed 操作通过 `categoryRef`、`If-Match` 和同一幂等键原子提交，只增加一次目录版本。Worker 批量事务写父/子审计并使用约 12 条聚合语句；该实现按 Cloudflare 官方 [D1 limits](https://developers.cloudflare.com/d1/platform/limits/) 的免费计划每次调用 50 查询上限设计，并依赖官方 [D1 batch API](https://developers.cloudflare.com/d1/worker-api/d1-database/#batch) 的顺序执行与失败回滚语义。导出仅含目录标题、Feed URL、站点 URL 和分类，不含账号、凭据、正文或本地抓取状态。Release 构建 0 警告、0 错误，.NET 284/284、Worker 38/38 通过；真实管理员账号、900×620～4K 与 100%～200% DPI 视觉矩阵保留为外部环境验收。
 
 ### P0-17：普通用户时间线与筛选
 
