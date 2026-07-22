@@ -9,14 +9,14 @@
 | 测试组 | 结果 |
 |---|---:|
 | LenxTool.Core.Tests | 37 passed |
-| LenxTool.Infrastructure.Tests | 139 passed |
+| LenxTool.Infrastructure.Tests | 160 passed |
 | LenxTool.App.Tests | 58 passed |
 | Cloudflare Worker Vitest | 34 passed |
 | Worker TypeScript strict typecheck | passed |
 | .NET build warnings | 0 |
 | NuGet vulnerable packages | 0 detected |
 
-本轮执行 `dotnet build LenxTools.slnx -c Release --no-restore`，结果为 0 警告、0 错误；执行 `dotnet test LenxTools.slnx -c Release --no-build --no-restore`，结果为 Core 37、Infrastructure 139、App 58，共 234/234 通过且无跳过。
+本轮执行 `dotnet build LenxTools.slnx -c Release --no-restore`，结果为 0 警告、0 错误；执行 `dotnet test LenxTools.slnx -c Release --no-build --no-restore`，结果为 Core 37、Infrastructure 160、App 58，共 255/255 通过且无跳过。
 
 P0-08 覆盖 4 项 SQLite 集成场景并同步既有 schema 断言：新建库创建目录状态、分类、Feed、抓取状态、条目、索引和搜索映射；真实 schema v2 哨兵数据经 v3/v4 原位升级后仍可由现有仓储读取；迁移对象冲突时完整回滚且版本停留在 v3；相同外部 ID、URL 和内容哈希可存在于不同 Feed，同一 Feed 内重复外部 ID 被约束拒绝。既有包含未 checkpoint WAL 提交的一致性备份测试继续通过。
 
@@ -31,6 +31,8 @@ P0-12 新增 14 项 Infrastructure 测试与 2 份真实 RSS/Atom fixture：覆�
 P0-13 新增 25 项 Infrastructure 测试：20 项刷新服务/传输测试覆盖 200 先写条目后提交验证器、304 不写条目、无条件 304 拒绝、ETag/Last-Modified、429 Retry-After、5xx 指数退避与 6 小时上限、非法 XML、响应大小、跨 authority 重定向验证器清除、生产地址钉住条件头、总超时、调用方/退出取消、同 Feed 单飞、全局并发 2 的测试配置和跨源故障隔离；3 项 SQLite 抓取状态测试覆盖启用目录投影、到期筛选、条件头/时间/错误往返、upsert 和目录删除竞态；2 项条目写入测试覆盖重复外部 ID 更新及批次中途失败整批回滚。组合根测试同时确认抓取状态仓储、条目写入器和刷新服务均可解析。
 
 P0-14 新增 6 项 Infrastructure 测试：4 项条目仓储测试覆盖同 Feed/外部 ID 幂等更新、唯一 FTS 文档、稳定分页和 `HasMore`、Feed/分类/日期/未读占位筛选、统一搜索结果来源/URL，以及 180 天清理对收藏和标签的保护与 FTS 同步删除；2 项 schema v4→v5 测试覆盖既有 Feed 条目索引回填、三个同步触发器和触发器冲突时回填/版本整批回滚。既有批次写入中途失败测试新增 FTS 零残留断言，旧 schema v1/v2 迁移断言同步提升至 v5。
+
+P0-C 新增 21 项 Infrastructure 测试实例：1 项语料清单断言锁定至少 20 个独立文件、11 个 RSS/9 个 Atom 及中文/异常编码覆盖；20 项参数化解析实例逐份验证文档类型、稳定身份、内容哈希和脚本净化，并单独验证 ISO-8859-1、带 BOM 的 UTF-16 LE/BE、重复 guid 去重和签名 query 保留。该检查点同时复用 P0-11 的 SSRF/XXE/压缩炸弹/重定向绕过拒绝测试，以及 P0-13 的跨源故障隔离、既有缓存保留和巨型响应拒绝测试。
 
 桌面账号新增 8 项 Infrastructure 测试和 7 项 App 测试：覆盖登录、refresh token 恢复、`/v1/me`、并发 401 单次刷新、每请求最多重放一次、失效清理、离线退出、DPAPI 删除/写入失败脱敏、登录密码清空、过期与额度显示、admin/user 导航隔离、角色降级回退和 XAML 自动化名称/绑定。
 
