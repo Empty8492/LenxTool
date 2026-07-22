@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0"
+     xmlns:content="http://purl.org/rss/1.0/modules/content/"
+     xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <title>示例技术周刊</title>
+    <link>https://example.com/weekly/</link>
+    <description>真实世界字段组合样例</description>
+    <item>
+      <guid isPermaLink="false">post-42</guid>
+      <title><![CDATA[版本 42 <发布>]]></title>
+      <link>https://example.com/posts/42?utm_source=newsletter&amp;edition=cn#comments</link>
+      <dc:creator><![CDATA[编辑 Alice]]></dc:creator>
+      <pubDate>Tue, 21 Jul 2026 10:30:00 +0800</pubDate>
+      <category>技术</category>
+      <category><![CDATA[.NET]]></category>
+      <description><![CDATA[<p>摘要 &amp; 更多</p>]]></description>
+      <content:encoded><![CDATA[<article><h1>正文</h1><script>alert('x')</script><p>安全文本</p></article>]]></content:encoded>
+      <enclosure url="https://cdn.example.com/audio/42.mp3?utm_medium=rss" type="audio/mpeg" length="123456" />
+    </item>
+    <item>
+      <title>带签名链接</title>
+      <link>https://download.example.com/file?id=7&amp;utm_source=rss&amp;X-Amz-Signature=abc123&amp;X-Amz-Expires=300</link>
+      <author>author@example.com (Bob)</author>
+      <pubDate>not-a-date</pubDate>
+      <description>fallback content</description>
+    </item>
+    <item>
+      <guid isPermaLink="false">post-42</guid>
+      <title>重复条目应忽略</title>
+    </item>
+  </channel>
+</rss>

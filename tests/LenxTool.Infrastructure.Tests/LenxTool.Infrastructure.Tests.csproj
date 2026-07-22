@@ -23,4 +23,8 @@
     <ProjectReference Include="..\..\src\LenxTool.Infrastructure\LenxTool.Infrastructure.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Update="Fixtures\Feeds\**\*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

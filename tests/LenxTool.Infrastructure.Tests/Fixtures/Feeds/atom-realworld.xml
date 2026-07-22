@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Atom Updates</title>
+  <link rel="alternate" href="https://example.org/blog/" />
+  <author><name>Feed Author</name></author>
+  <entry>
+    <id>tag:example.org,2026:entry-1</id>
+    <title type="html">Release &amp;lt;One&amp;gt;</title>
+    <link rel="alternate" href="/posts/one?ref=home&amp;utm_campaign=launch#top" />
+    <link rel="enclosure" href="https://cdn.example.org/video/one.mp4" type="video/mp4" length="98765" title="Demo" />
+    <author><name>Entry Author</name></author>
+    <published>2026-07-20T12:00:00Z</published>
+    <updated>2026-07-21T13:30:00Z</updated>
+    <category term="release" />
+    <category label="产品" term="product" />
+    <summary type="html">&lt;p&gt;Short &lt;b&gt;summary&lt;/b&gt;&lt;/p&gt;</summary>
+    <content type="html">&lt;div&gt;Full &lt;em&gt;content&lt;/em&gt;&lt;script&gt;bad()&lt;/script&gt;&lt;/div&gt;</content>
+  </entry>
+  <entry>
+    <title>Fingerprint only</title>
+    <updated>invalid-date</updated>
+    <content>Stable body</content>
+  </entry>
+</feed>

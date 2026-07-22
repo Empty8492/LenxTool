@@ -27,5 +27,6 @@ public sealed class DependencyInjectionTests
         Assert.IsType<FeedCatalogRepository>(provider.GetRequiredService<IFeedCatalogRepository>());
         Assert.IsType<FeedCatalogSyncService>(provider.GetRequiredService<IFeedCatalogSyncService>());
         Assert.NotNull(provider.GetRequiredService<IFeedDiscoveryService>());
+        Assert.NotNull(provider.GetRequiredService<IFeedParser>());
     }
 }

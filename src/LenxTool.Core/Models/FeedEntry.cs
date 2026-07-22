@@ -17,6 +17,13 @@ public sealed record FeedEntry(
     DateTimeOffset? UpdatedAt,
     string Summary,
     string SanitizedContent,
+    IReadOnlyList<string> Categories,
     IReadOnlyList<FeedEnclosure> Enclosures,
     string ContentHash,
     DateTimeOffset FetchedAt);
+
+public sealed record ParsedFeedDocument(
+    string Title,
+    string? SiteUrl,
+    FeedDocumentKind Kind,
+    IReadOnlyList<FeedEntry> Entries);

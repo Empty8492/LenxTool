@@ -15,6 +15,8 @@ public static class FeedDiscoveryServiceCollectionExtensions
         services.AddSingleton<IFeedHostResolver, SystemFeedHostResolver>();
         services.AddSingleton<IFeedDiscoveryTransport, PinnedFeedDiscoveryTransport>();
         services.AddSingleton<IFeedDiscoveryService, FeedDiscoveryService>();
+        services.AddSingleton(FeedParserOptions.Default);
+        services.AddSingleton<IFeedParser, FeedDocumentParser>();
         return services;
     }
 }
