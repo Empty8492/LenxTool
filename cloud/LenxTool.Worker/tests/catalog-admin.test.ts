@@ -35,6 +35,15 @@ interface FeedMutation {
   };
 }
 
+interface CatalogBatchMutation {
+  catalogVersion: number;
+  results: Array<{
+    operationId: string;
+    resourceType: "FEED_CATEGORY" | "FEED";
+    resourceId: string;
+  }>;
+}
+
 beforeEach(async () => {
   await env.DB.batch([
     env.DB.prepare("DELETE FROM managed_feeds"),
@@ -456,6 +465,242 @@ describe("Worker v1 administrator feed catalog routes", () => {
     expect(await scalar("SELECT catalog_version AS value FROM feed_catalog_state WHERE singleton_id=1")).toBe(1);
     expect(await scalar("SELECT COUNT(*) AS value FROM feed_categories")).toBe(1);
     expect(await scalar("SELECT COUNT(*) AS value FROM audit_events WHERE action='feed_category.created'")).toBe(1);
+  });
+
+  it("atomically creates referenced categories and feeds with one version and replays the batch", async () => {
+    const admin = await seedSession("admin");
+    const body = {
+      operations: [
+        {
+          operationId: "category-tech",
+          type: "CREATE_CATEGORY",
+          input: { name: "技术", sortOrder: 100, isEnabled: true }
+        },
+        {
+          operationId: "feed-tech",
+          type: "CREATE_FEED",
+          input: {
+            originalUrl: "https://example.com/feed.xml",
+            displayName: "Example",
+            categoryRef: { operationId: "category-tech" },
+            viewKind: "ARTICLE",
+            refreshIntervalMinutes: 60,
+            sortOrder: 100,
+            isEnabled: true
+          }
+        }
+      ]
+    };
+
+    const response = await mutationRequest(
+      "/v1/admin/feed-catalog-batches",
+      admin,
+      0,
+      "catalog-batch-create-0001",
+      { method: "POST", requestId: "request-catalog-batch", body }
+    );
+    const result = await response.json<CatalogBatchMutation>();
+
+    expect(response.status).toBe(200);
+    expect(result.catalogVersion).toBe(1);
+    expect(result.results).toEqual([
+      { operationId: "category-tech", resourceType: "FEED_CATEGORY", resourceId: expect.any(String) },
+      { operationId: "feed-tech", resourceType: "FEED", resourceId: expect.any(String) }
+    ]);
+    expect(await scalar("SELECT COUNT(*) AS value FROM feed_categories WHERE version=1")).toBe(1);
+    expect(await scalar("SELECT COUNT(*) AS value FROM managed_feeds WHERE version=1")).toBe(1);
+    const storedFeed = await env.DB.prepare(
+      "SELECT category_id FROM managed_feeds WHERE id=?"
+    ).bind(result.results[1]!.resourceId).first<{ category_id: string }>();
+    expect(storedFeed?.category_id).toBe(result.results[0]!.resourceId);
+    expect(await scalar("SELECT COUNT(*) AS value FROM audit_events WHERE request_id='request-catalog-batch'")).toBe(3);
+
+    const replay = await mutationRequest(
+      "/v1/admin/feed-catalog-batches",
+      admin,
+      0,
+      "catalog-batch-create-0001",
+      { method: "POST", body }
+    );
+    expect(replay.status).toBe(200);
+    await expect(replay.json<CatalogBatchMutation>()).resolves.toEqual(result);
+    expect(await scalar("SELECT catalog_version AS value FROM feed_catalog_state WHERE singleton_id=1")).toBe(1);
+  });
+
+  it("rolls back every batch operation and reports the failing item", async () => {
+    const admin = await seedSession("admin");
+    const response = await mutationRequest(
+      "/v1/admin/feed-catalog-batches",
+      admin,
+      0,
+      "catalog-batch-failure-0001",
+      {
+        method: "POST",
+        body: {
+          operations: [
+            {
+              operationId: "category-one",
+              type: "CREATE_CATEGORY",
+              input: { name: "Ｔｅｃｈ", sortOrder: 100, isEnabled: true }
+            },
+            {
+              operationId: "category-two",
+              type: "CREATE_CATEGORY",
+              input: { name: "tech", sortOrder: 200, isEnabled: true }
+            }
+          ]
+        }
+      }
+    );
+
+    expect(response.status).toBe(409);
+    await expect(errorBody(response)).resolves.toMatchObject({
+      code: "BATCH_OPERATION_FAILED",
+      details: {
+        operationIndex: 1,
+        operationId: "category-two",
+        innerCode: "DUPLICATE_CATEGORY"
+      }
+    });
+    expect(await scalar("SELECT catalog_version AS value FROM feed_catalog_state WHERE singleton_id=1")).toBe(0);
+    expect(await scalar("SELECT COUNT(*) AS value FROM feed_categories")).toBe(0);
+    expect(await scalar("SELECT COUNT(*) AS value FROM audit_events")).toBe(0);
+    expect(await scalar("SELECT COUNT(*) AS value FROM catalog_idempotency")).toBe(0);
+  });
+
+  it("applies patch and delete operations in order while advancing the catalog once", async () => {
+    const admin = await seedSession("admin");
+    const category = await createCategory(admin, 0, "batch-lifecycle-category", {
+      name: "技术",
+      sortOrder: 100,
+      isEnabled: true
+    });
+    const createdFeedResponse = await mutationRequest(
+      "/v1/admin/feeds",
+      admin,
+      1,
+      "batch-lifecycle-feed",
+      {
+        method: "POST",
+        body: {
+          originalUrl: "https://example.com/lifecycle.xml",
+          displayName: "Lifecycle",
+          categoryId: category.category.id,
+          viewKind: "ARTICLE",
+          refreshIntervalMinutes: 60,
+          sortOrder: 100,
+          isEnabled: true
+        }
+      }
+    );
+    const feed = await createdFeedResponse.json<FeedMutation>();
+
+    const response = await mutationRequest(
+      "/v1/admin/feed-catalog-batches",
+      admin,
+      2,
+      "catalog-batch-lifecycle-0001",
+      {
+        method: "POST",
+        body: {
+          operations: [
+            {
+              operationId: "feed-patch",
+              type: "PATCH_FEED",
+              feedId: feed.feed.id,
+              input: { displayName: "Updated", isEnabled: false }
+            },
+            {
+              operationId: "category-patch",
+              type: "PATCH_CATEGORY",
+              categoryId: category.category.id,
+              input: { name: "工程", isEnabled: false }
+            },
+            { operationId: "feed-delete", type: "DELETE_FEED", feedId: feed.feed.id },
+            { operationId: "category-delete", type: "DELETE_CATEGORY", categoryId: category.category.id }
+          ]
+        }
+      }
+    );
+    const result = await response.json<CatalogBatchMutation>();
+
+    expect(response.status).toBe(200);
+    expect(result.catalogVersion).toBe(3);
+    expect(result.results.map(item => item.operationId)).toEqual([
+      "feed-patch",
+      "category-patch",
+      "feed-delete",
+      "category-delete"
+    ]);
+    expect(await scalar("SELECT COUNT(*) AS value FROM managed_feeds WHERE deleted_at IS NOT NULL AND version=3")).toBe(1);
+    expect(await scalar("SELECT COUNT(*) AS value FROM feed_categories WHERE deleted_at IS NOT NULL AND version=3")).toBe(1);
+    expect(await scalar("SELECT COUNT(*) AS value FROM audit_events WHERE catalog_version=3")).toBe(5);
+  });
+
+  it("rejects non-admin batches and operation counts above the contract limit", async () => {
+    const user = await seedSession("user");
+    const forbidden = await mutationRequest(
+      "/v1/admin/feed-catalog-batches",
+      user,
+      0,
+      "catalog-batch-user-0001",
+      {
+        method: "POST",
+        body: {
+          operations: [
+            {
+              operationId: "category-one",
+              type: "CREATE_CATEGORY",
+              input: { name: "技术", sortOrder: 100, isEnabled: true }
+            }
+          ]
+        }
+      }
+    );
+    expect(forbidden.status).toBe(403);
+
+    const admin = await seedSession("admin");
+    const tooMany = await mutationRequest(
+      "/v1/admin/feed-catalog-batches",
+      admin,
+      0,
+      "catalog-batch-limit-0001",
+      {
+        method: "POST",
+        body: {
+          operations: Array.from({ length: 101 }, (_, index) => ({
+            operationId: `category-${index}`,
+            type: "CREATE_CATEGORY",
+            input: { name: `Category ${index}`, sortOrder: index, isEnabled: true }
+          }))
+        }
+      }
+    );
+    expect(tooMany.status).toBe(400);
+    await expect(errorBody(tooMany)).resolves.toMatchObject({ code: "VALIDATION_ERROR" });
+    expect(await scalar("SELECT catalog_version AS value FROM feed_catalog_state WHERE singleton_id=1")).toBe(0);
+
+    const maximum = await mutationRequest(
+      "/v1/admin/feed-catalog-batches",
+      admin,
+      0,
+      "catalog-batch-maximum-0001",
+      {
+        method: "POST",
+        body: {
+          operations: Array.from({ length: 100 }, (_, index) => ({
+            operationId: `category-${index}`,
+            type: "CREATE_CATEGORY",
+            input: { name: `Category ${index}`, sortOrder: index, isEnabled: true }
+          }))
+        }
+      }
+    );
+    const maximumResult = await maximum.json<CatalogBatchMutation>();
+    expect(maximum.status).toBe(200);
+    expect(maximumResult.results).toHaveLength(100);
+    expect(await scalar("SELECT COUNT(*) AS value FROM feed_categories WHERE version=1")).toBe(100);
+    expect(await scalar("SELECT COUNT(*) AS value FROM audit_events WHERE catalog_version=1")).toBe(101);
   });
 });
 

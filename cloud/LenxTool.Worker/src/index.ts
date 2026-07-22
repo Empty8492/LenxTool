@@ -1,4 +1,5 @@
 import { CatalogApiError, handleCatalogAdminRequest, handleCatalogReadRequest } from "./catalog";
+import { handleCatalogBatchRequest } from "./catalog-batch";
 
 export interface Env {
   DB: D1Database;
@@ -52,6 +53,8 @@ export default {
       };
       const catalogReadResponse = await handleCatalogReadRequest(request, env.DB, catalogAuth, url);
       if (catalogReadResponse) return catalogReadResponse;
+      const catalogBatchResponse = await handleCatalogBatchRequest(request, env.DB, catalogAuth, url);
+      if (catalogBatchResponse) return catalogBatchResponse;
       const catalogResponse = await handleCatalogAdminRequest(request, env.DB, catalogAuth, url);
       if (catalogResponse) return catalogResponse;
       if (request.method === "POST" && url.pathname === "/v1/admin/invites") return await createInvite(request, env, auth);

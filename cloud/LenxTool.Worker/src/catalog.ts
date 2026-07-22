@@ -16,7 +16,7 @@ export class CatalogApiError extends Error {
   }
 }
 
-interface CategoryRow {
+export interface CategoryRow {
   id: string;
   name: string;
   name_norm: string;
@@ -27,7 +27,7 @@ interface CategoryRow {
   updated_at: string;
 }
 
-interface FeedRow {
+export interface FeedRow {
   id: string;
   original_url: string;
   normalized_url: string;
@@ -48,13 +48,13 @@ interface CatalogStateRow {
   updated_at: string;
 }
 
-interface IdempotencyRow {
+export interface IdempotencyRow {
   request_hash: string;
   status_code: number;
   response_body: string;
 }
 
-interface PreparedMutation {
+export interface PreparedMutation {
   actorUserId: string;
   method: "POST" | "PATCH" | "DELETE";
   path: string;
@@ -78,7 +78,7 @@ interface CommitMutationSpec {
   businessStatement: (mutationId: string) => D1PreparedStatement;
 }
 
-type ViewKind = "ARTICLE" | "PICTURE" | "AUDIO" | "VIDEO" | "NOTIFICATION";
+export type ViewKind = "ARTICLE" | "PICTURE" | "AUDIO" | "VIDEO" | "NOTIFICATION";
 
 const idempotencyKeyPattern = /^[A-Za-z0-9._:-]{16,128}$/u;
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
@@ -636,7 +636,7 @@ async function deleteFeed(
   });
 }
 
-async function prepareMutation(
+export async function prepareMutation(
   request: Request,
   db: D1Database,
   auth: CatalogAuthContext,
@@ -756,7 +756,7 @@ async function commitMutation(db: D1Database, spec: CommitMutationSpec): Promise
   return jsonText(spec.responseBody, spec.status, spec.mutation.requestId);
 }
 
-async function findIdempotency(
+export async function findIdempotency(
   db: D1Database,
   actorUserId: string,
   method: string,
@@ -770,14 +770,14 @@ async function findIdempotency(
   ).bind(actorUserId, method, path, key, now).first<IdempotencyRow>();
 }
 
-function replayOrReject(stored: IdempotencyRow, requestHash: string, requestId: string): Response {
+export function replayOrReject(stored: IdempotencyRow, requestHash: string, requestId: string): Response {
   if (!timingSafeEqual(stored.request_hash, requestHash)) {
     throw new CatalogApiError(409, "IDEMPOTENCY_KEY_REUSED", "Idempotency-Key 已用于不同请求");
   }
   return jsonText(stored.response_body, stored.status_code, requestId);
 }
 
-async function getCatalogVersion(db: D1Database): Promise<number> {
+export async function getCatalogVersion(db: D1Database): Promise<number> {
   const state = await db.prepare(
     "SELECT catalog_version FROM feed_catalog_state WHERE singleton_id=1"
   ).first<{ catalog_version: number }>();
@@ -835,7 +835,7 @@ async function countRows(db: D1Database, table: "feed_categories" | "managed_fee
   return row?.count ?? 0;
 }
 
-function versionConflict(currentCatalogVersion: number): CatalogApiError {
+export function versionConflict(currentCatalogVersion: number): CatalogApiError {
   return new CatalogApiError(
     409,
     "CATALOG_VERSION_CONFLICT",
@@ -845,13 +845,13 @@ function versionConflict(currentCatalogVersion: number): CatalogApiError {
   );
 }
 
-function requireOriginalFeedUrl(value: unknown): string {
+export function requireOriginalFeedUrl(value: unknown): string {
   const original = requireTrimmedString(value, "Feed URL", 2048);
   normalizeHttpsUrl(original, "Feed URL");
   return original;
 }
 
-function normalizeHttpsUrl(value: string, label: string): string {
+export function normalizeHttpsUrl(value: string, label: string): string {
   if (/[\u0000-\u001f\u007f]/u.test(value) || value.includes("#")) {
     throw new CatalogApiError(400, "VALIDATION_ERROR", `${label}格式无效`);
   }
@@ -867,11 +867,11 @@ function normalizeHttpsUrl(value: string, label: string): string {
   return url.toString();
 }
 
-function normalizeCategoryName(value: string): string {
+export function normalizeCategoryName(value: string): string {
   return value.normalize("NFKC").toLocaleLowerCase("und");
 }
 
-function requireTrimmedString(value: unknown, label: string, maxCodePoints: number): string {
+export function requireTrimmedString(value: unknown, label: string, maxCodePoints: number): string {
   if (typeof value !== "string") {
     throw new CatalogApiError(400, "VALIDATION_ERROR", `${label}格式无效`);
   }
@@ -883,42 +883,42 @@ function requireTrimmedString(value: unknown, label: string, maxCodePoints: numb
   return trimmed;
 }
 
-function requireInteger(value: unknown, min: number, max: number, label: string): number {
+export function requireInteger(value: unknown, min: number, max: number, label: string): number {
   if (typeof value !== "number" || !Number.isInteger(value) || value < min || value > max) {
     throw new CatalogApiError(400, "VALIDATION_ERROR", `${label}超出范围`);
   }
   return value;
 }
 
-function requireBoolean(value: unknown, label: string): boolean {
+export function requireBoolean(value: unknown, label: string): boolean {
   if (typeof value !== "boolean") {
     throw new CatalogApiError(400, "VALIDATION_ERROR", `${label}格式无效`);
   }
   return value;
 }
 
-function requireUuid(value: unknown, label: string): string {
+export function requireUuid(value: unknown, label: string): string {
   if (typeof value !== "string" || !uuidPattern.test(value)) {
     throw new CatalogApiError(400, "VALIDATION_ERROR", `${label}格式无效`);
   }
   return value.toLowerCase();
 }
 
-function requireViewKind(value: unknown): ViewKind {
+export function requireViewKind(value: unknown): ViewKind {
   if (typeof value !== "string" || !viewKinds.has(value as ViewKind)) {
     throw new CatalogApiError(400, "VALIDATION_ERROR", "Feed 视图类型无效");
   }
   return value as ViewKind;
 }
 
-function assertOnlyFields(body: Record<string, unknown>, allowed: readonly string[]): void {
+export function assertOnlyFields(body: Record<string, unknown>, allowed: readonly string[]): void {
   const fields = new Set(allowed);
   if (Object.keys(body).some(key => !fields.has(key))) {
     throw new CatalogApiError(400, "VALIDATION_ERROR", "请求包含未知字段");
   }
 }
 
-function assertHasFields(body: Record<string, unknown>, message: string): void {
+export function assertHasFields(body: Record<string, unknown>, message: string): void {
   if (Object.keys(body).length === 0) {
     throw new CatalogApiError(400, "VALIDATION_ERROR", message);
   }
@@ -931,7 +931,7 @@ async function requireEmptyBody(request: Request): Promise<void> {
   }
 }
 
-async function readJson(request: Request, max: number): Promise<Record<string, unknown>> {
+export async function readJson(request: Request, max: number): Promise<Record<string, unknown>> {
   const bytes = await readBodyWithinLimit(request, max);
   let value: unknown;
   try {
@@ -987,7 +987,7 @@ function canonicalJson(value: unknown): string {
   return `{${Object.keys(object).sort().map(key => `${JSON.stringify(key)}:${canonicalJson(object[key])}`).join(",")}}`;
 }
 
-async function sha256(value: string): Promise<string> {
+export async function sha256(value: string): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", encoder.encode(value));
   return toBase64Url(new Uint8Array(digest));
 }
@@ -1007,11 +1007,11 @@ function timingSafeEqual(left: string, right: string): boolean {
   return difference === 0;
 }
 
-function isUniqueConstraintError(error: unknown): boolean {
+export function isUniqueConstraintError(error: unknown): boolean {
   return error instanceof Error && /UNIQUE constraint failed/iu.test(error.message);
 }
 
-function jsonText(body: string, status: number, requestId: string): Response {
+export function jsonText(body: string, status: number, requestId: string): Response {
   const headers = new Headers({
     "content-type": "application/json; charset=utf-8",
     "cache-control": "no-store",
@@ -1039,6 +1039,6 @@ function catalogReadHeaders(etag: string, requestId: string): Headers {
   });
 }
 
-function nowIso(): string {
+export function nowIso(): string {
   return new Date().toISOString();
 }
