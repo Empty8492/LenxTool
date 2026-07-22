@@ -96,7 +96,7 @@ LenxTool/
 
 数据库：`%LocalAppData%\LenxTool\Data\lenx.db`。
 
-主要表：`news_articles`、`trend_items`、`ai_reports`、`media_jobs`、`subtitle_segments`、`favorites`、`tags`、`entity_tags`、`app_settings`、`schema_versions`。
+主要表：`news_articles`、`trend_items`、`ai_reports`、`media_jobs`、`subtitle_segments`、`favorites`、`tags`、`entity_tags`、`app_settings`、`feed_catalog_state`、`feed_categories`、`feed_catalog`、`feed_fetch_state`、`feed_entries`、`schema_versions`。
 
 实现原则：
 
@@ -183,21 +183,22 @@ npm.cmd test -- --run
 - P0-05 已完成只读目录发布：user 只能读取 ACTIVE，admin 可读取 ACTIVE/ALL；服务端从单个 D1 batch 发布稳定排序的原子快照，并支持强 ETag、304、矛盾缓存条件校验和客户端版本超前拒绝。软删除记录及 ACTIVE 下的停用资源不会返回。
 - P0-06 已完成桌面安全会话：access token 只驻内存，refresh token 由 DPAPI CurrentUser 保存；启动恢复、`/v1/me`、并发 401 单次刷新、请求最多重放一次、失效清理和离线退出均有自动测试。
 - P0-07 已完成账号与角色 UI：设置页支持登录、退出、过期提示和额度显示；侧栏显示真实会话状态，管理员入口随服务端角色出现或移除。该入口目前只说明 P0-15 管理界面尚待实现，Worker 仍是授权真相来源。
+- P0-08 已完成本地 Feed schema v4：新增目录状态、分类、Feed、抓取状态和通用条目表；v2 用户按 v2 → v3 → v4 原位升级，旧早报、热点、AI 报告、媒体任务和设置保持可读。Feed 外部 ID 只在 Feed 内唯一，规范化 URL 与内容哈希不作全局去重。
 
 ### 10.2 下一里程碑
 
-Gate 0 字幕闭环已经完成。P0“管理员策展 RSS”已完成服务端契约、身份生命周期、目录 schema、管理员 CRUD、只读目录、桌面安全会话和账号 UI（P0-01～P0-07）；下一里程碑是 P0-08“本地 Feed schema v3 与迁移”，不再继续扩张字幕数据模型。
+Gate 0 字幕闭环已经完成。P0“管理员策展 RSS”已完成服务端契约、身份生命周期、目录 schema、管理员 CRUD、只读目录、桌面安全会话、账号 UI 和本地 Feed schema（P0-01～P0-08）；下一里程碑是 P0-09“本地目录仓储与原子替换”。
 
 字幕闭环完成后的产品主路线已确定为“管理员策展 RSS”：管理员维护共享 RSS/Atom 目录，普通用户只能同步和阅读，不得修改共享订阅、分类、抓取策略或自动化规则。为保持现有“云端不存新闻正文”边界，首版采用 Worker/D1 保存权威目录、各桌面客户端本地抓取和 SQLite 缓存的模式。
 
 详细执行顺序如下：
 
 1. Gate 0 字幕闭环已完成；验收记录见 [`plans/EXISTING_BACKLOG_ALIGNMENT.md`](plans/EXISTING_BACKLOG_ALIGNMENT.md)。
-2. P0-01～P0-07 已完成；下一步实现 P0-08 本地 Feed schema v3 与迁移，再继续目录落库同步、安全抓取、OPML、时间线和首页真实数据；具体见 [`plans/RSS_P0_ADMIN_CATALOG.md`](plans/RSS_P0_ADMIN_CATALOG.md)。
+2. P0-01～P0-08 已完成；下一步实现 P0-09 本地目录仓储与原子替换，再继续目录同步、安全抓取、OPML、时间线和首页真实数据；具体见 [`plans/RSS_P0_ADMIN_CATALOG.md`](plans/RSS_P0_ADMIN_CATALOG.md)。
 3. 实现私人阅读状态、全文/图片离线、AI 摘要/翻译、管理员规则、媒体衔接和统一搜索；具体见 [`plans/RSS_P1_READING_INTELLIGENCE.md`](plans/RSS_P1_READING_INTELLIGENCE.md)。
 4. 实现多内容视图、外部导出适配器、本地定时摘要和通知；具体见 [`plans/RSS_P2_VIEWS_INTEGRATIONS.md`](plans/RSS_P2_VIEWS_INTEGRATIONS.md)。
 
-总路线、参考项目和许可证边界见 [`plans/RSS_MASTER_ROADMAP.md`](plans/RSS_MASTER_ROADMAP.md)，架构决策见 [`decisions/ADR-001-admin-curated-rss.md`](decisions/ADR-001-admin-curated-rss.md)。只有上述 P0-01～P0-07 可作为已实现基础；本地目录镜像、真实管理界面、抓取和后续 P1/P2 仍不能作为已交付功能宣传。
+总路线、参考项目和许可证边界见 [`plans/RSS_MASTER_ROADMAP.md`](plans/RSS_MASTER_ROADMAP.md)，架构决策见 [`decisions/ADR-001-admin-curated-rss.md`](decisions/ADR-001-admin-curated-rss.md)。只有上述 P0-01～P0-08 可作为已实现基础；本地目录仓储与同步、真实管理界面、抓取和后续 P1/P2 仍不能作为已交付功能宣传。
 
 ### 10.3 其他尚未完成的产品功能
 
