@@ -46,6 +46,8 @@ public partial class App : Application
             await media.InitializeAsync(CancellationToken.None).ConfigureAwait(true);
             SettingsViewModel settings = _host.Services.GetRequiredService<SettingsViewModel>();
             await settings.InitializeAsync(CancellationToken.None).ConfigureAwait(true);
+            IFeedRefreshService feedRefresh = _host.Services.GetRequiredService<IFeedRefreshService>();
+            await feedRefresh.InitializeAsync(CancellationToken.None).ConfigureAwait(true);
             HistoryViewModel history = _host.Services.GetRequiredService<HistoryViewModel>();
             await history.InitializeAsync(CancellationToken.None).ConfigureAwait(true);
 
@@ -98,10 +100,13 @@ public partial class App : Application
         services.AddSingleton<IAccountSessionService>(static services =>
             services.GetRequiredService<WorkerAccountSessionService>());
         services.AddSingleton<IFeedCatalogRepository, FeedCatalogRepository>();
+        services.AddSingleton<IFeedFetchStateRepository, FeedFetchStateRepository>();
+        services.AddSingleton<IFeedEntryWriter, FeedEntryWriter>();
         services.AddSingleton(FeedCatalogSyncOptions.Default);
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton<IFeedCatalogSyncService, FeedCatalogSyncService>();
         services.AddFeedDiscovery(CreateFeedDiscoveryOptions());
+        services.AddFeedRefresh(FeedRefreshOptions.Default);
         services.AddSingleton<MediaJobRepository>();
         services.AddSingleton<IMediaJobRepository>(static services =>
             services.GetRequiredService<MediaJobRepository>());
