@@ -1,6 +1,6 @@
 # 测试报告
 
-测试日期：.NET / Worker 2026-07-22（Asia/Shanghai）
+测试日期：.NET 2026-07-23 / Worker 2026-07-22（Asia/Shanghai）
 版本：0.1.0  
 配置：Release / win-x64 / .NET SDK 10.0.302
 
@@ -9,14 +9,14 @@
 | 测试组 | 结果 |
 |---|---:|
 | LenxTool.Core.Tests | 37 passed |
-| LenxTool.Infrastructure.Tests | 160 passed |
-| LenxTool.App.Tests | 58 passed |
+| LenxTool.Infrastructure.Tests | 164 passed |
+| LenxTool.App.Tests | 67 passed |
 | Cloudflare Worker Vitest | 34 passed |
 | Worker TypeScript strict typecheck | passed |
 | .NET build warnings | 0 |
 | NuGet vulnerable packages | 0 detected |
 
-本轮执行 `dotnet build LenxTools.slnx -c Release --no-restore`，结果为 0 警告、0 错误；执行 `dotnet test LenxTools.slnx -c Release --no-build --no-restore`，结果为 Core 37、Infrastructure 160、App 58，共 255/255 通过且无跳过。
+本轮执行 `dotnet build LenxTools.slnx -c Release --no-restore`，结果为 0 警告、0 错误；执行 `dotnet test LenxTools.slnx -c Release --no-build --no-restore`，结果为 Core 37、Infrastructure 164、App 67，共 268/268 通过且无跳过。
 
 P0-08 覆盖 4 项 SQLite 集成场景并同步既有 schema 断言：新建库创建目录状态、分类、Feed、抓取状态、条目、索引和搜索映射；真实 schema v2 哨兵数据经 v3/v4 原位升级后仍可由现有仓储读取；迁移对象冲突时完整回滚且版本停留在 v3；相同外部 ID、URL 和内容哈希可存在于不同 Feed，同一 Feed 内重复外部 ID 被约束拒绝。既有包含未 checkpoint WAL 提交的一致性备份测试继续通过。
 
@@ -33,6 +33,8 @@ P0-13 新增 25 项 Infrastructure 测试：20 项刷新服务/传输测试覆�
 P0-14 新增 6 项 Infrastructure 测试：4 项条目仓储测试覆盖同 Feed/外部 ID 幂等更新、唯一 FTS 文档、稳定分页和 `HasMore`、Feed/分类/日期/未读占位筛选、统一搜索结果来源/URL，以及 180 天清理对收藏和标签的保护与 FTS 同步删除；2 项 schema v4→v5 测试覆盖既有 Feed 条目索引回填、三个同步触发器和触发器冲突时回填/版本整批回滚。既有批次写入中途失败测试新增 FTS 零残留断言，旧 schema v1/v2 迁移断言同步提升至 v5。
 
 P0-C 新增 21 项 Infrastructure 测试实例：1 项语料清单断言锁定至少 20 个独立文件、11 个 RSS/9 个 Atom 及中文/异常编码覆盖；20 项参数化解析实例逐份验证文档类型、稳定身份、内容哈希和脚本净化，并单独验证 ISO-8859-1、带 BOM 的 UTF-16 LE/BE、重复 guid 去重和签名 query 保留。该检查点同时复用 P0-11 的 SSRF/XXE/压缩炸弹/重定向绕过拒绝测试，以及 P0-13 的跨源故障隔离、既有缓存保留和巨型响应拒绝测试。
+
+P0-15 新增 4 项 Infrastructure 测试和 9 项 App 测试：写客户端覆盖六类分类/Feed CRUD 请求中的版本头、幂等键和 JSON 映射，401 刷新后保持同一幂等键，409 不自动覆盖，以及普通用户直接构造管理请求仍被 Worker 403 拒绝；ViewModel 覆盖 admin/user 目录隔离、安全发现预览、当前版本写入后同步、409 刷新不重放、写入成功但同步失败锁定、同步中角色降级清空、启停/排序/两步删除和删除后编辑清理；XAML/DI 测试覆盖管理服务解析、全部操作绑定、自动化名称、实时状态与窄窗滚动边界。真实 Worker 管理端点继续复用既有 34/34 workerd/D1 集成结果。
 
 桌面账号新增 8 项 Infrastructure 测试和 7 项 App 测试：覆盖登录、refresh token 恢复、`/v1/me`、并发 401 单次刷新、每请求最多重放一次、失效清理、离线退出、DPAPI 删除/写入失败脱敏、登录密码清空、过期与额度显示、admin/user 导航隔离、角色降级回退和 XAML 自动化名称/绑定。
 
@@ -83,4 +85,4 @@ D1 目录迁移测试明确执行“0001 → 写入旧 schema 哨兵数据 → �
 
 ## 需要外部环境的验收
 
-以下测试需要真实账号、模型或较长运行时间，不在无凭据自动化环境中执行：真实 Groq/DeepSeek 请求、Cloudflare 生产 D1 并发压测、超长视频全程转写、各代 CPU 的本地大型模型性能、真实 GitHub Release 更新覆盖、已签 Authenticode 的 SmartScreen 声誉、Windows 10/11 多台物理机 100%～200% DPI 矩阵。对应测试步骤已写入规格与发布指南，生产发布前必须执行。
+以下测试需要真实账号、模型或较长运行时间，不在无凭据自动化环境中执行：真实 Groq/DeepSeek 请求、真实 Worker 管理员账号下的目录写入与冲突演练、Cloudflare 生产 D1 并发压测、超长视频全程转写、各代 CPU 的本地大型模型性能、真实 GitHub Release 更新覆盖、已签 Authenticode 的 SmartScreen 声誉、Windows 10/11 多台物理机 100%～200% DPI（含管理页 900×620～4K）矩阵。对应测试步骤已写入规格与发布指南，生产发布前必须执行。
