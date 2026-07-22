@@ -27,3 +27,25 @@ public sealed record ParsedFeedDocument(
     string? SiteUrl,
     FeedDocumentKind Kind,
     IReadOnlyList<FeedEntry> Entries);
+
+public enum FeedEntryReadFilter
+{
+    All,
+    Unread,
+    Read
+}
+
+public sealed record FeedEntryQuery(
+    string? SearchText,
+    string? FeedId,
+    string? CategoryId,
+    DateTimeOffset? PublishedFrom,
+    DateTimeOffset? PublishedBefore,
+    FeedEntryReadFilter ReadFilter,
+    int Offset,
+    int Limit);
+
+public sealed record FeedEntryPage(
+    IReadOnlyList<FeedEntry> Items,
+    int Offset,
+    bool HasMore);

@@ -4,7 +4,8 @@ public enum ContentSearchResultType
 {
     News,
     Trend,
-    AiReport
+    AiReport,
+    FeedEntry
 }
 
 public sealed record ContentSearchResult(
@@ -21,6 +22,7 @@ public sealed record ContentSearchResult(
         ContentSearchResultType.News => "早报",
         ContentSearchResultType.Trend => "热点",
         ContentSearchResultType.AiReport => "AI 报告",
+        ContentSearchResultType.FeedEntry => "订阅条目",
         _ => "内容"
     };
 }

@@ -21,7 +21,7 @@ public sealed class FeedEntryWriterTests : IDisposable
     public async Task RepeatedExternalIdUpdatesEntryWithoutCreatingDuplicate()
     {
         using SqliteDatabase database = await CreateDatabaseAsync();
-        var writer = new FeedEntryWriter(database);
+        var writer = new FeedEntryRepository(database);
         FeedEntry original = ParseEntry("Original", "body", "https://cdn.example/one.mp3");
         FeedEntry updated = ParseEntry("Updated", "new body", "https://cdn.example/two.mp3");
 
@@ -65,11 +65,13 @@ public sealed class FeedEntryWriterTests : IDisposable
             Now).Entries;
 
         await Assert.ThrowsAsync<SqliteException>(
-            () => new FeedEntryWriter(database).UpsertAsync(FeedId, entries, CancellationToken.None));
+            () => new FeedEntryRepository(database).UpsertAsync(FeedId, entries, CancellationToken.None));
 
         await using SqliteConnection verification = await database.OpenConnectionAsync(CancellationToken.None);
         await using SqliteCommand count = verification.CreateCommand();
         count.CommandText = "SELECT COUNT(*) FROM feed_entries;";
+        Assert.Equal(0L, (long)(await count.ExecuteScalarAsync(CancellationToken.None))!);
+        count.CommandText = "SELECT COUNT(*) FROM content_fts WHERE entity_type='feed_entry';";
         Assert.Equal(0L, (long)(await count.ExecuteScalarAsync(CancellationToken.None))!);
     }
 

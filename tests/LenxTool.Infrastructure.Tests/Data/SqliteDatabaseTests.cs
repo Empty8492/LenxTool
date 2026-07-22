@@ -72,7 +72,7 @@ public sealed class SqliteDatabaseTests : IDisposable
 
         await using SqliteCommand versionCommand = connection.CreateCommand();
         versionCommand.CommandText = "SELECT COUNT(*) FROM schema_versions";
-        Assert.Equal(4L, (long)(await versionCommand.ExecuteScalarAsync(
+        Assert.Equal(5L, (long)(await versionCommand.ExecuteScalarAsync(
             CancellationToken.None))!);
     }
 
@@ -98,7 +98,7 @@ public sealed class SqliteDatabaseTests : IDisposable
         await using SqliteConnection connection = await upgraded.OpenConnectionAsync(CancellationToken.None);
         await using SqliteCommand version = connection.CreateCommand();
         version.CommandText = "SELECT MAX(version) FROM schema_versions;";
-        Assert.Equal(4L, (long)(await version.ExecuteScalarAsync(CancellationToken.None))!);
+        Assert.Equal(5L, (long)(await version.ExecuteScalarAsync(CancellationToken.None))!);
         Assert.Single(Directory.GetFiles(CreatePaths().BackupDirectory, "lenx-pre-migration-*.db"));
     }
 
@@ -152,6 +152,87 @@ public sealed class SqliteDatabaseTests : IDisposable
         SqliteException duplicate = await Assert.ThrowsAsync<SqliteException>(
             () => command.ExecuteNonQueryAsync(CancellationToken.None));
         Assert.Equal(19, duplicate.SqliteErrorCode);
+    }
+
+    [Fact]
+    public async Task SchemaVersionFourUpgradeSeedsFeedFtsAndInstallsSynchronizationTriggers()
+    {
+        using (SqliteDatabase versionFour = CreateDatabase())
+        {
+            await versionFour.InitializeAsync(CancellationToken.None);
+            await using SqliteConnection connection = await versionFour.OpenConnectionAsync(CancellationToken.None);
+            await using SqliteCommand command = connection.CreateCommand();
+            command.CommandText = """
+                DROP TRIGGER feed_entries_fts_insert;
+                DROP TRIGGER feed_entries_fts_update;
+                DROP TRIGGER feed_entries_fts_delete;
+                DELETE FROM schema_versions WHERE version=5;
+                DELETE FROM content_fts WHERE entity_type='feed_entry';
+                INSERT INTO feed_entries(
+                    id, feed_id, external_id, title, summary, sanitized_content,
+                    enclosure_json, content_hash, fetched_at)
+                VALUES(
+                    'legacy-feed-entry', '30000000-0000-4000-8000-000000000001',
+                    'legacy-guid', '旧订阅标题', '旧摘要', '迁移全文标记', '[]',
+                    'legacy-content-hash', '2026-01-01T00:00:00.0000000+00:00');
+                """;
+            await command.ExecuteNonQueryAsync(CancellationToken.None);
+        }
+
+        using SqliteDatabase upgraded = CreateDatabase();
+        await upgraded.InitializeAsync(CancellationToken.None);
+        await using SqliteConnection verification = await upgraded.OpenConnectionAsync(CancellationToken.None);
+        await using SqliteCommand check = verification.CreateCommand();
+        check.CommandText = """
+            SELECT COUNT(*) FROM content_fts
+            WHERE entity_type='feed_entry' AND entity_id='legacy-feed-entry'
+              AND content_fts MATCH '"迁移全文"*';
+            """;
+        Assert.Equal(1L, (long)(await check.ExecuteScalarAsync(CancellationToken.None))!);
+        check.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE type='trigger' AND name LIKE 'feed_entries_fts_%';";
+        Assert.Equal(3L, (long)(await check.ExecuteScalarAsync(CancellationToken.None))!);
+        check.CommandText = "SELECT MAX(version) FROM schema_versions;";
+        Assert.Equal(5L, (long)(await check.ExecuteScalarAsync(CancellationToken.None))!);
+    }
+
+    [Fact]
+    public async Task FeedFtsMigrationFailureRollsBackSeedAndVersion()
+    {
+        using (SqliteDatabase versionFour = CreateDatabase())
+        {
+            await versionFour.InitializeAsync(CancellationToken.None);
+            await using SqliteConnection connection = await versionFour.OpenConnectionAsync(CancellationToken.None);
+            await using SqliteCommand command = connection.CreateCommand();
+            command.CommandText = """
+                DROP TRIGGER feed_entries_fts_update;
+                DROP TRIGGER feed_entries_fts_delete;
+                DELETE FROM schema_versions WHERE version=5;
+                DELETE FROM content_fts WHERE entity_type='feed_entry';
+                INSERT INTO feed_entries(
+                    id, feed_id, external_id, title, summary, sanitized_content,
+                    enclosure_json, content_hash, fetched_at)
+                VALUES(
+                    'rollback-feed-entry', '30000000-0000-4000-8000-000000000001',
+                    'rollback-guid', '回滚标题', '', '不应留下的索引', '[]',
+                    'rollback-content-hash', '2026-01-01T00:00:00.0000000+00:00');
+                DELETE FROM content_fts WHERE entity_type='feed_entry';
+                """;
+            await command.ExecuteNonQueryAsync(CancellationToken.None);
+        }
+
+        using SqliteDatabase database = CreateDatabase();
+        AppException exception = await Assert.ThrowsAsync<AppException>(
+            () => database.InitializeAsync(CancellationToken.None));
+
+        Assert.Equal(AppErrorCode.DatabaseMigrationFailed, exception.Error.Code);
+        await using var verification = new SqliteConnection(
+            $"Data Source={CreatePaths().DatabasePath};Pooling=False");
+        await verification.OpenAsync(CancellationToken.None);
+        await using SqliteCommand check = verification.CreateCommand();
+        check.CommandText = "SELECT MAX(version) FROM schema_versions;";
+        Assert.Equal(4L, (long)(await check.ExecuteScalarAsync(CancellationToken.None))!);
+        check.CommandText = "SELECT COUNT(*) FROM content_fts WHERE entity_type='feed_entry';";
+        Assert.Equal(0L, (long)(await check.ExecuteScalarAsync(CancellationToken.None))!);
     }
 
     [Fact]

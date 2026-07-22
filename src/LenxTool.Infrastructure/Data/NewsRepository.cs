@@ -82,23 +82,27 @@ public sealed class NewsRepository(SqliteDatabase database) : INewsRepository
                        WHEN 'news' THEN n.summary
                        WHEN 'trend' THEN t.heat
                        WHEN 'report' THEN substr(a.content, 1, 240)
+                       WHEN 'feed_entry' THEN e.summary
                        ELSE ''
                    END AS summary,
                    CASE f.entity_type
                        WHEN 'news' THEN n.source
                        WHEN 'trend' THEN t.platform
                        WHEN 'report' THEN a.model
+                       WHEN 'feed_entry' THEN COALESCE(fc.display_name, 'RSS/Atom')
                        ELSE ''
                    END AS source,
                    CASE f.entity_type
                        WHEN 'news' THEN n.url
                        WHEN 'trend' THEN t.url
+                       WHEN 'feed_entry' THEN e.normalized_url
                        ELSE NULL
                    END AS url,
                    CASE f.entity_type
                        WHEN 'news' THEN n.fetched_at
                        WHEN 'trend' THEN t.captured_at
                        WHEN 'report' THEN a.created_at
+                       WHEN 'feed_entry' THEN COALESCE(e.published_at, e.updated_at, e.fetched_at)
                        ELSE NULL
                    END AS result_timestamp
             FROM content_fts f
@@ -108,12 +112,16 @@ public sealed class NewsRepository(SqliteDatabase database) : INewsRepository
                 ON f.entity_type = 'trend' AND f.entity_id = t.id
             LEFT JOIN ai_reports a
                 ON f.entity_type = 'report' AND f.entity_id = a.id
+            LEFT JOIN feed_entries e
+                ON f.entity_type = 'feed_entry' AND f.entity_id = e.id
+            LEFT JOIN feed_catalog fc ON fc.id=e.feed_id
             WHERE content_fts MATCH $query
-              AND f.entity_type IN ('news', 'trend', 'report')
+              AND f.entity_type IN ('news', 'trend', 'report', 'feed_entry')
               AND CASE f.entity_type
                       WHEN 'news' THEN n.fetched_at
                       WHEN 'trend' THEN t.captured_at
                       WHEN 'report' THEN a.created_at
+                      WHEN 'feed_entry' THEN e.fetched_at
                   END IS NOT NULL
             ORDER BY bm25(content_fts), result_timestamp DESC
             LIMIT $limit;
@@ -435,6 +443,7 @@ public sealed class NewsRepository(SqliteDatabase database) : INewsRepository
         "news" => ContentSearchResultType.News,
         "trend" => ContentSearchResultType.Trend,
         "report" => ContentSearchResultType.AiReport,
+        "feed_entry" => ContentSearchResultType.FeedEntry,
         _ => throw new InvalidDataException($"不支持的搜索结果类型：{value}")
     };
 }

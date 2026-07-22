@@ -10,7 +10,7 @@ public sealed partial class SqliteDatabase(
     AppPaths paths,
     ILogger<SqliteDatabase> logger) : IDisposable
 {
-    private const int CurrentSchemaVersion = 4;
+    private const int CurrentSchemaVersion = 5;
     private readonly SemaphoreSlim _initializationGate = new(1, 1);
     private bool _initialized;
     private bool _disposed;
@@ -178,6 +178,18 @@ public sealed partial class SqliteDatabase(
                 command.CommandText = "INSERT INTO schema_versions(version, applied_at, checksum) VALUES (4, $appliedAt, $checksum);";
                 command.Parameters.AddWithValue("$appliedAt", DateTimeOffset.UtcNow.ToString("O"));
                 command.Parameters.AddWithValue("$checksum", "lenx-schema-v4-feed-catalog-and-entries");
+                await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                version = 4;
+            }
+
+            if (version < 5)
+            {
+                command.CommandText = MigrationFiveSql;
+                command.Parameters.Clear();
+                await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                command.CommandText = "INSERT INTO schema_versions(version, applied_at, checksum) VALUES (5, $appliedAt, $checksum);";
+                command.Parameters.AddWithValue("$appliedAt", DateTimeOffset.UtcNow.ToString("O"));
+                command.Parameters.AddWithValue("$checksum", "lenx-schema-v5-feed-entry-fts");
                 await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
             }
         }
@@ -428,5 +440,39 @@ public sealed partial class SqliteDatabase(
             title,
             trim(summary || char(10) || sanitized_content) AS content
         FROM feed_entries;
+        """;
+
+    private const string MigrationFiveSql = """
+        DELETE FROM content_fts WHERE entity_type='feed_entry';
+        INSERT INTO content_fts(entity_type, entity_id, title, content)
+        SELECT 'feed_entry', id, title, trim(summary || char(10) || sanitized_content)
+        FROM feed_entries;
+
+        CREATE TRIGGER feed_entries_fts_insert
+        AFTER INSERT ON feed_entries
+        BEGIN
+            INSERT INTO content_fts(entity_type, entity_id, title, content)
+            VALUES(
+                'feed_entry', NEW.id, NEW.title,
+                trim(NEW.summary || char(10) || NEW.sanitized_content));
+        END;
+
+        CREATE TRIGGER feed_entries_fts_update
+        AFTER UPDATE ON feed_entries
+        BEGIN
+            DELETE FROM content_fts
+            WHERE entity_type='feed_entry' AND entity_id=OLD.id;
+            INSERT INTO content_fts(entity_type, entity_id, title, content)
+            VALUES(
+                'feed_entry', NEW.id, NEW.title,
+                trim(NEW.summary || char(10) || NEW.sanitized_content));
+        END;
+
+        CREATE TRIGGER feed_entries_fts_delete
+        AFTER DELETE ON feed_entries
+        BEGIN
+            DELETE FROM content_fts
+            WHERE entity_type='feed_entry' AND entity_id=OLD.id;
+        END;
         """;
 }

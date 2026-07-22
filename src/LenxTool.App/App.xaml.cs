@@ -101,7 +101,11 @@ public partial class App : Application
             services.GetRequiredService<WorkerAccountSessionService>());
         services.AddSingleton<IFeedCatalogRepository, FeedCatalogRepository>();
         services.AddSingleton<IFeedFetchStateRepository, FeedFetchStateRepository>();
-        services.AddSingleton<IFeedEntryWriter, FeedEntryWriter>();
+        services.AddSingleton<FeedEntryRepository>();
+        services.AddSingleton<IFeedEntryWriter>(static services =>
+            services.GetRequiredService<FeedEntryRepository>());
+        services.AddSingleton<IFeedEntryRepository>(static services =>
+            services.GetRequiredService<FeedEntryRepository>());
         services.AddSingleton(FeedCatalogSyncOptions.Default);
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton<IFeedCatalogSyncService, FeedCatalogSyncService>();
