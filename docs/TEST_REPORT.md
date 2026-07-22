@@ -1,6 +1,6 @@
 # 测试报告
 
-测试日期：.NET 2026-07-21；Worker 2026-07-22（Asia/Shanghai）
+测试日期：.NET / Worker 2026-07-22（Asia/Shanghai）
 版本：0.1.0  
 配置：Release / win-x64 / .NET SDK 10.0.302
 
@@ -9,14 +9,16 @@
 | 测试组 | 结果 |
 |---|---:|
 | LenxTool.Core.Tests | 37 passed |
-| LenxTool.Infrastructure.Tests | 33 passed |
-| LenxTool.App.Tests | 50 passed |
+| LenxTool.Infrastructure.Tests | 41 passed |
+| LenxTool.App.Tests | 57 passed |
 | Cloudflare Worker Vitest | 34 passed |
 | Worker TypeScript strict typecheck | passed |
 | .NET build warnings | 0 |
 | NuGet vulnerable packages | 0 detected |
 
-本轮执行 `dotnet build LenxTools.slnx -c Release`，结果为 0 警告、0 错误；执行 `dotnet test LenxTools.slnx -c Release`，结果为 Core 37、Infrastructure 33、App 50，共 120/120 通过且无跳过。
+本轮执行 `dotnet build LenxTools.slnx -c Release`，结果为 0 警告、0 错误；执行 `dotnet test LenxTools.slnx -c Release`，结果为 Core 37、Infrastructure 41、App 57，共 135/135 通过且无跳过。
+
+桌面账号新增 8 项 Infrastructure 测试和 7 项 App 测试：覆盖登录、refresh token 恢复、`/v1/me`、并发 401 单次刷新、每请求最多重放一次、失效清理、离线退出、DPAPI 删除/写入失败脱敏、登录密码清空、过期与额度显示、admin/user 导航隔离、角色降级回退和 XAML 自动化名称/绑定。
 
 Worker 使用 Cloudflare 官方 Vitest pool 在本地 workerd 中应用真实 D1 迁移并执行路由测试。身份测试覆盖单次邀请码的并发原子消费、`GET /v1/me` 公开字段与额度、登录响应、logout 撤销/幂等及原子审计、refresh 同 token 并发只有一个成功者、旧 token 重放、refresh 过期错误、禁用账号 access/refresh、过期/伪造 JWT、401/403 与 `AppError` 错误体、未知字段不消耗 token、无长度头正文的流式大小限制，以及临时 bootstrap secret 的首管理员初始化、原子审计和重复执行安全失败；共 12/12 通过。
 
@@ -61,6 +63,7 @@ D1 目录迁移测试明确执行“0001 → 写入旧 schema 哨兵数据 → �
 - 热点页真实呈现 13 个带 TogglePattern 的来源筛选胶囊；取消“知乎”后即时显示 12/13，知乎卡片隐藏而筛选入口保留，“全选”启用并可恢复 13/13。选中标签使用完整背景和底部强调线，不再依赖容易产生缺边错觉的四周描边。
 - Gate0-02 真实 WPF 验收：通过“导入媒体 / SRT”文件选择器导入中文和空格路径下的黄金 SRT，界面显示“已导入 1 个 SRT，共 2 个片段”、`ImportedSrt / Completed`；关闭并重启应用后，该任务仍从本地 SQLite 恢复。
 - Gate0-05/06 当前 WPF 构建 UI Automation 冒烟：可导航媒体工作台并找到字幕任务、目标语言、模型、翻译/取消、四种导出和打开目录控件；可导航任务历史并找到媒体任务、字幕原文/译文详情、历史导出格式和本地导出控件。进程 `Responding=True`，本项未发出真实模型请求。
+- P0-07 最新 Release 程序集真实 WPF 验收：侧栏显示“云服务未配置 · 可离线使用”，普通用户导航不包含管理员入口；设置页显示共享账号卡片、未配置提示、用户名/密码自动化名称和禁用登录态。密码框可获得焦点，Tab 会跳过禁用登录按钮进入下一个输入框；本项未输入真实凭据、未发出 Worker 请求。
 
 ## 需要外部环境的验收
 

@@ -181,21 +181,23 @@ npm.cmd test -- --run
 - P0-01～P0-03 已完成 Worker v1 账号/目录契约、身份生命周期与 D1 共享目录 schema：支持 `/v1/me`、refresh 轮换、幂等 logout、实时禁用检查、一次性首管理员初始化，以及带约束和迁移测试的分类/Managed Feed 表。
 - P0-04 已完成管理员分类和 Feed CRUD：服务端支持新增、编辑、启停、排序、移动和软删除；全部写端点执行 admin 授权、`If-Match` 全局版本、`Idempotency-Key`、参数化 D1 写入和仅含元数据的版本审计。user/匿名权限矩阵、并发、幂等、重复与危险 URL 均有 workerd/D1 集成测试。
 - P0-05 已完成只读目录发布：user 只能读取 ACTIVE，admin 可读取 ACTIVE/ALL；服务端从单个 D1 batch 发布稳定排序的原子快照，并支持强 ETag、304、矛盾缓存条件校验和客户端版本超前拒绝。软删除记录及 ACTIVE 下的停用资源不会返回。
+- P0-06 已完成桌面安全会话：access token 只驻内存，refresh token 由 DPAPI CurrentUser 保存；启动恢复、`/v1/me`、并发 401 单次刷新、请求最多重放一次、失效清理和离线退出均有自动测试。
+- P0-07 已完成账号与角色 UI：设置页支持登录、退出、过期提示和额度显示；侧栏显示真实会话状态，管理员入口随服务端角色出现或移除。该入口目前只说明 P0-15 管理界面尚待实现，Worker 仍是授权真相来源。
 
 ### 10.2 下一里程碑
 
-Gate 0 字幕闭环已经完成。P0“管理员策展 RSS”已完成服务端契约、身份生命周期、目录 schema、管理员 CRUD 和只读目录（P0-01～P0-05）；下一里程碑是 P0-06“桌面会话模型与安全令牌存储”，不再继续扩张字幕数据模型。
+Gate 0 字幕闭环已经完成。P0“管理员策展 RSS”已完成服务端契约、身份生命周期、目录 schema、管理员 CRUD、只读目录、桌面安全会话和账号 UI（P0-01～P0-07）；下一里程碑是 P0-08“本地 Feed schema v3 与迁移”，不再继续扩张字幕数据模型。
 
 字幕闭环完成后的产品主路线已确定为“管理员策展 RSS”：管理员维护共享 RSS/Atom 目录，普通用户只能同步和阅读，不得修改共享订阅、分类、抓取策略或自动化规则。为保持现有“云端不存新闻正文”边界，首版采用 Worker/D1 保存权威目录、各桌面客户端本地抓取和 SQLite 缓存的模式。
 
 详细执行顺序如下：
 
 1. Gate 0 字幕闭环已完成；验收记录见 [`plans/EXISTING_BACKLOG_ALIGNMENT.md`](plans/EXISTING_BACKLOG_ALIGNMENT.md)。
-2. P0-01～P0-05 已完成；下一步实现 P0-06 桌面会话与安全令牌存储，再继续本地目录、安全抓取、OPML、时间线和首页真实数据；具体见 [`plans/RSS_P0_ADMIN_CATALOG.md`](plans/RSS_P0_ADMIN_CATALOG.md)。
+2. P0-01～P0-07 已完成；下一步实现 P0-08 本地 Feed schema v3 与迁移，再继续目录落库同步、安全抓取、OPML、时间线和首页真实数据；具体见 [`plans/RSS_P0_ADMIN_CATALOG.md`](plans/RSS_P0_ADMIN_CATALOG.md)。
 3. 实现私人阅读状态、全文/图片离线、AI 摘要/翻译、管理员规则、媒体衔接和统一搜索；具体见 [`plans/RSS_P1_READING_INTELLIGENCE.md`](plans/RSS_P1_READING_INTELLIGENCE.md)。
 4. 实现多内容视图、外部导出适配器、本地定时摘要和通知；具体见 [`plans/RSS_P2_VIEWS_INTEGRATIONS.md`](plans/RSS_P2_VIEWS_INTEGRATIONS.md)。
 
-总路线、参考项目和许可证边界见 [`plans/RSS_MASTER_ROADMAP.md`](plans/RSS_MASTER_ROADMAP.md)，架构决策见 [`decisions/ADR-001-admin-curated-rss.md`](decisions/ADR-001-admin-curated-rss.md)。只有上述 P0-01～P0-05 可作为已实现的服务端基础；桌面接线、抓取和后续 P1/P2 仍不能作为已交付功能宣传。
+总路线、参考项目和许可证边界见 [`plans/RSS_MASTER_ROADMAP.md`](plans/RSS_MASTER_ROADMAP.md)，架构决策见 [`decisions/ADR-001-admin-curated-rss.md`](decisions/ADR-001-admin-curated-rss.md)。只有上述 P0-01～P0-07 可作为已实现基础；本地目录镜像、真实管理界面、抓取和后续 P1/P2 仍不能作为已交付功能宣传。
 
 ### 10.3 其他尚未完成的产品功能
 
@@ -208,9 +210,9 @@ Gate 0 字幕闭环已经完成。P0“管理员策展 RSS”已完成服务端�
 
 云端与管理缺口：
 
-- 客户端共享账号登录、注册、额度展示和管理端；Worker 虽有接口，但桌面端尚未接线。
+- 客户端已接入共享账号登录、退出、过期状态、角色和额度；注册与真正的管理员目录管理界面尚未实现。
 - Worker 认证、令牌轮换和管理员目录写入已有 workerd/D1 自动化；生产 D1 并发压测、共享额度代理链路和真实部署仍未验收。
-- 管理员分类/Feed 写 API 已实现；普通用户只读目录、目录 ETag/304、桌面角色与管理界面尚未实现。
+- 管理员分类/Feed 写 API、普通用户只读目录、ETag/304 和桌面角色可见性已实现；本地目录落库同步与管理交互仍未实现。
 - 通用 Feed 条目模型、安全发现/抓取、OPML、时间线、Feed 健康、全文/图片离线、自动化规则和外部导出均仅有详细计划，尚无实现代码。
 
 ### 10.4 普通本地使用需要配置
@@ -218,6 +220,7 @@ Gate 0 字幕闭环已经完成。P0“管理员策展 RSS”已完成服务端�
 - 云端转写：在设置页保存有效的 Groq API Key。
 - 离线转写：导入兼容 whisper.cpp、文件大于 1 MiB 的 `ggml-*.bin` 模型。
 - DeepSeek Key：生成单条解读或每日趋势报告时需要；在设置页保存后由 DPAPI CurrentUser 加密，报告正文和 token 用量写入本地 SQLite。
+- 共享账号：部署 Worker 后，以 `LENXTOOL_WORKER_BASE_URL` 配置其 HTTPS 根地址；登录界面才会启用。该变量不是凭据，账号 refresh token 仍只由 DPAPI CurrentUser 保存。
 - WebView2 Runtime：当前电脑已安装；早报正文已不再依赖它，安装器和未来富文本能力仍保留运行时检查。
 - Microsoft Word：当前电脑已安装，Word 转 PDF 无需额外配置。
 - .NET SDK 与 Node/npm：当前开发机已满足；安装自包含正式包的普通用户不需要 .NET SDK。

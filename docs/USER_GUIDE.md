@@ -15,6 +15,19 @@
 - 侧栏：进入首页、资讯中心、媒体工作台、文档与数据、历史与数据、设置。
 - 设置可切换深色模式和减少动画；点击“保存外观”后，重启会自动恢复。
 
+## 共享账号
+
+共享账号需要部署方先配置 Worker 的 HTTPS 根地址。开发环境可在启动应用的同一个 PowerShell 窗口中执行：
+
+```powershell
+$env:LENXTOOL_WORKER_BASE_URL='https://<your-worker-host>'
+dotnet run --project src/LenxTool.App/LenxTool.App.csproj
+```
+
+`LENXTOOL_WORKER_BASE_URL` 不是密钥；地址缺失或不是 HTTPS 时，应用保持离线可用并禁用登录按钮。配置后进入“设置 → 共享账号”，输入用户名和密码登录。密码在每次登录尝试后立即从界面状态清空；短期 access token 只驻留内存，refresh token 使用 Windows DPAPI CurrentUser 写入 `%LocalAppData%\LenxTool\Secrets\secrets.dat`，不会进入 SQLite 或日志。
+
+登录后设置页显示角色和当日 AI/语音额度，侧栏显示账号状态。只有 Worker 返回 admin 角色时才显示“订阅管理”；当前该页面只是管理能力说明，完整分类/Feed 管理交互将在 P0-15 提供。客户端隐藏入口只改善体验，每个管理请求仍由 Worker 重新授权。点击“退出”会先清除本地会话；即使 Worker 暂时离线，本地 access token 也不会继续保留。
+
 ## 资讯中心
 
 资讯中心分为“每日早报”“热点趋势”和“AI 报告”三个标签页。进入“每日早报”时默认显示当天内容；需要查看历史早报时，在右上角“选择日期”下拉框选择已有缓存日期。若当天没有缓存，页面会自动选择最近一个可用日期。正文使用原生 WPF 富文本视图，可按原始顺序显示正文配图、标题、列表和可点击链接，不依赖 WebView2。

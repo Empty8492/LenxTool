@@ -77,6 +77,8 @@ AI 报告使用自备 DeepSeek Key 经请求级 Bearer 授权调用 `deepseek-v4
 ## 4. 密钥与认证
 
 - 自备 Groq/DeepSeek Key 写入 `%LocalAppData%\LenxTool\Secrets\secrets.dat`，使用 Windows DPAPI `CurrentUser` 加密并通过产品 entropy 隔离。
+- `IAccountSessionService` 是桌面会话边界：短期 access token 只驻进程内存，refresh token 复用 `ISecretStore` 以 DPAPI CurrentUser 保存；启动恢复后必须通过 `/v1/me` 重新取得最小用户与额度快照。
+- `WorkerAccountSessionService` 用会话代次和单飞刷新协调并发 401；同一失效会话只轮换一次，每个原请求最多携带新 access token 重放一次。失败、重放或退出会先清除内存状态，再尽力更新 DPAPI 文件。
 - 日志过滤 Authorization、Cookie、password、api key、refresh token、音频 multipart 正文和大段模型内容。
 - Worker 中真实共享 Key 仅来自 Secret Binding。D1 保存密码摘要、邀请码摘要、角色、额度、聚合用量、刷新令牌摘要与审计元数据。
 - 额度使用“预留—结算—释放”状态机；D1 原子条件更新确保并发请求不能超过余额。
@@ -115,6 +117,6 @@ UI 错误卡根据能力显示重试、复制脱敏详情、打开设置、切�
 
 后续资讯架构采用“Worker/D1 权威共享目录 + 桌面客户端本地抓取/缓存”：管理员通过服务端授权的写端点维护 Feed、分类和策略，普通用户只读同步目录；文章正文、AI 结果、字幕和本地文件仍不写入 D1。详细理由和备选方案见 [ADR-001](decisions/ADR-001-admin-curated-rss.md)，实施批次见 [RSS 集成总路线图](plans/RSS_MASTER_ROADMAP.md)。
 
-当前已完成 Worker v1 契约、身份生命周期、D1 共享目录 schema、管理员分类/Feed 写 API 和版本化只读目录。目录写入以服务端 admin 角色为授权真相，使用 `If-Match` 单调版本、`Idempotency-Key`、参数化 SQL 和同一 D1 batch 内的资源写入/最小审计/幂等结果；目录读取以同一 D1 batch 生成确定排序的原子快照，ACTIVE/ALL 由服务端角色隔离，并用强 ETag、304 和超前版本拒绝保护客户端缓存；D1 仍不保存文章正文。
+当前已完成 Worker v1 契约、身份生命周期、D1 共享目录 schema、管理员分类/Feed 写 API、版本化只读目录，以及桌面安全会话与账号/角色/额度 UI。目录写入以服务端 admin 角色为授权真相，使用 `If-Match` 单调版本、`Idempotency-Key`、参数化 SQL 和同一 D1 batch 内的资源写入/最小审计/幂等结果；目录读取以同一 D1 batch 生成确定排序的原子快照，ACTIVE/ALL 由服务端角色隔离，并用强 ETag、304 和超前版本拒绝保护客户端缓存；桌面角色只控制入口可见性，D1 仍不保存文章正文。
 
-尚未实现桌面会话与管理员订阅页、本地 Feed schema、安全抓取和普通用户目录落库同步，因此当前版本仍不具备通用 RSS 阅读闭环。
+尚未实现真正的管理员订阅管理交互、本地 Feed schema、安全抓取和普通用户目录落库同步，因此当前版本仍不具备通用 RSS 阅读闭环。
