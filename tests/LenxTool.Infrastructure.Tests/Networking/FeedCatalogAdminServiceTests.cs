@@ -12,6 +12,86 @@ namespace LenxTool.Infrastructure.Tests.Networking;
 public sealed class FeedCatalogAdminServiceTests
 {
     [Fact]
+    public async Task BatchSerializesCategoryReferenceAndReturnsOrderedResults()
+    {
+        var handler = new StubHandler(async (request, cancellationToken) =>
+        {
+            if (request.RequestUri?.AbsolutePath == "/v1/auth/login")
+                return JsonResponse(HttpStatusCode.OK, LoginJson("ADMIN"));
+
+            Assert.Equal(HttpMethod.Post, request.Method);
+            Assert.Equal("/v1/admin/feed-catalog-batches", request.RequestUri?.AbsolutePath);
+            Assert.Equal("\"catalog-all-41\"", request.Headers.GetValues("If-Match").Single());
+            using JsonDocument body = JsonDocument.Parse(await request.Content!.ReadAsStringAsync(cancellationToken));
+            JsonElement operations = body.RootElement.GetProperty("operations");
+            Assert.Equal(2, operations.GetArrayLength());
+            Assert.Equal("CREATE_CATEGORY", operations[0].GetProperty("type").GetString());
+            Assert.Equal("技术", operations[0].GetProperty("input").GetProperty("name").GetString());
+            Assert.Equal("CREATE_FEED", operations[1].GetProperty("type").GetString());
+            Assert.Equal(
+                "category-1",
+                operations[1].GetProperty("input").GetProperty("categoryRef").GetProperty("operationId").GetString());
+            Assert.False(operations[1].GetProperty("input").TryGetProperty("categoryId", out _));
+            return JsonResponse(HttpStatusCode.OK, """
+                {"catalogVersion":42,"results":[
+                  {"operationId":"category-1","resourceType":"FEED_CATEGORY","resourceId":"10000000-0000-4000-8000-000000000002"},
+                  {"operationId":"feed-1","resourceType":"FEED","resourceId":"10000000-0000-4000-8000-000000000003"}
+                ]}
+                """);
+        });
+        using WorkerAccountSessionService account = CreateAccount(handler);
+        await account.LoginAsync("owner", "password", CancellationToken.None);
+        var service = new FeedCatalogAdminService(account);
+
+        FeedCatalogBatchResult result = await service.ApplyAsync(
+            [
+                new("category-1", FeedCatalogBatchOperationType.CreateCategory,
+                    CategoryInput: new("技术", 100, true)),
+                new("feed-1", FeedCatalogBatchOperationType.CreateFeed,
+                    FeedInput: new(
+                        "https://feeds.example/rss.xml",
+                        "示例源",
+                        "https://feeds.example/",
+                        null,
+                        FeedViewKind.Article,
+                        60,
+                        100,
+                        true),
+                    CategoryOperationId: "category-1")
+            ],
+            41,
+            CancellationToken.None);
+
+        Assert.Equal(42, result.CatalogVersion);
+        Assert.Equal(["category-1", "feed-1"], result.Results.Select(item => item.OperationId));
+    }
+
+    [Fact]
+    public async Task BatchRejectsDuplicateOperationIdsBeforeSending()
+    {
+        int adminCalls = 0;
+        var handler = new StubHandler((request, cancellationToken) =>
+        {
+            if (request.RequestUri?.AbsolutePath == "/v1/auth/login")
+                return Task.FromResult(JsonResponse(HttpStatusCode.OK, LoginJson("ADMIN")));
+            adminCalls++;
+            return Task.FromResult(JsonResponse(HttpStatusCode.OK, "{}"));
+        });
+        using WorkerAccountSessionService account = CreateAccount(handler);
+        await account.LoginAsync("owner", "password", CancellationToken.None);
+        var service = new FeedCatalogAdminService(account);
+        FeedCatalogBatchOperation[] operations =
+        [
+            new("same", FeedCatalogBatchOperationType.CreateCategory, CategoryInput: new("技术", 0, true)),
+            new("same", FeedCatalogBatchOperationType.CreateCategory, CategoryInput: new("产品", 1, true))
+        ];
+
+        await Assert.ThrowsAsync<ArgumentException>(() => service.ApplyAsync(operations, 1, CancellationToken.None));
+
+        Assert.Equal(0, adminCalls);
+    }
+
+    [Fact]
     public async Task CreateCategorySendsVersionAndIdempotencyHeadersAndReturnsNewVersion()
     {
         string? idempotencyKey = null;
