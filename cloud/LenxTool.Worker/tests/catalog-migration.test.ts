@@ -12,7 +12,7 @@ beforeEach(async () => {
   ]);
 });
 
-describe("0002 feed catalog migration", () => {
+describe("feed catalog migrations", () => {
   it("upgrades populated 0001 data and can safely re-run the migration flow", async () => {
     const sentinelBefore = await env.DB.prepare(
       "SELECT attempts FROM auth_attempts WHERE key_hash='migration-v1-sentinel'"
@@ -35,7 +35,8 @@ describe("0002 feed catalog migration", () => {
     expect(sentinelAfter?.attempts).toBe(7);
     expect(migrations.results.map(row => row.name)).toEqual([
       "0001_initial.sql",
-      "0002_feed_catalog.sql"
+      "0002_feed_catalog.sql",
+      "0003_catalog_mutations.sql"
     ]);
   });
 
@@ -197,10 +198,13 @@ describe("0002 feed catalog migration", () => {
     expect(feed).toBeNull();
   });
 
-  it("contains only shared subscription configuration fields", async () => {
+  it("keeps shared configuration and mutation metadata within their privacy allowlists", async () => {
     const categoryColumns = await tableColumns("feed_categories");
     const feedColumns = await tableColumns("managed_feeds");
     const stateColumns = await tableColumns("feed_catalog_state");
+    const idempotencyColumns = await tableColumns("catalog_idempotency");
+    const guardColumns = await tableColumns("catalog_mutation_guards");
+    const auditColumns = await tableColumns("audit_events");
 
     expect(categoryColumns).toEqual([
       "id", "name", "name_norm", "sort_order", "is_enabled", "deleted_at", "version", "created_at", "updated_at"
@@ -209,10 +213,17 @@ describe("0002 feed catalog migration", () => {
       "id", "original_url", "normalized_url", "display_name", "site_url", "category_id", "view_kind",
       "refresh_interval_minutes", "sort_order", "is_enabled", "deleted_at", "version", "created_at", "updated_at"
     ]);
-    expect(stateColumns).toEqual(["singleton_id", "catalog_version", "updated_at"]);
+    expect(stateColumns).toEqual(["singleton_id", "catalog_version", "updated_at", "last_mutation_id"]);
+    expect(idempotencyColumns).toEqual([
+      "actor_user_id", "http_method", "normalized_path", "idempotency_key", "request_hash",
+      "status_code", "response_body", "created_at", "expires_at"
+    ]);
+    expect(guardColumns).toEqual(["mutation_id", "valid"]);
+    expect(auditColumns).toContain("catalog_version");
 
     const allColumns = [...categoryColumns, ...feedColumns, ...stateColumns].join(" ");
     expect(allColumns).not.toMatch(/article|body|content|summary|ai|path|file|user_state/iu);
+    expect(idempotencyColumns.join(" ")).not.toMatch(/request_body|password|secret|token_hash|credential/iu);
   });
 });
 

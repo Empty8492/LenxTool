@@ -1,3 +1,5 @@
+import { CatalogApiError, handleCatalogAdminRequest } from "./catalog";
+
 export interface Env {
   DB: D1Database;
   TOKEN_SECRET: string;
@@ -43,13 +45,21 @@ export default {
       const auth = await authenticate(request, env, requestId);
       if (request.method === "POST" && url.pathname === "/v1/auth/logout") return await logout(request, env, auth);
       if (request.method === "GET" && url.pathname === "/v1/me") return await currentUser(env, auth);
+      const catalogResponse = await handleCatalogAdminRequest(request, env.DB, {
+        userId: auth.user.id,
+        role: auth.user.role,
+        requestId: auth.requestId
+      }, url);
+      if (catalogResponse) return catalogResponse;
       if (request.method === "POST" && url.pathname === "/v1/admin/invites") return await createInvite(request, env, auth);
       if (request.method === "PATCH" && url.pathname.startsWith("/v1/admin/users/")) return await updateUser(request, env, auth, url.pathname.split("/").at(-1)!);
       if (request.method === "POST" && url.pathname === "/v1/proxy/ai") return await proxyAi(request, env, auth);
       if (request.method === "POST" && url.pathname === "/v1/proxy/transcriptions") return await proxySpeech(request, env, auth);
       throw new ApiError(404, "RESOURCE_NOT_FOUND", "接口不存在");
     } catch (error) {
-      const apiError = error instanceof ApiError
+      const apiError = error instanceof CatalogApiError
+        ? new ApiError(error.status, error.code, error.userMessage, undefined, error.details, error.isRetryable)
+        : error instanceof ApiError
         ? error
         : new ApiError(500, "INTERNAL_ERROR", "服务暂时不可用");
       return json({ error: apiError.toBody(requestId) }, apiError.status, requestId, apiError.retryAfter);
@@ -565,7 +575,14 @@ function fromBase64Url(value:string){const base=value.replaceAll("-","+").replac
 function timingSafeEqual(left:string,right:string){if(left.length!==right.length)return false;let diff=0;for(let i=0;i<left.length;i++)diff|=left.charCodeAt(i)^right.charCodeAt(i);return diff===0;}
 
 class ApiError extends Error {
-  constructor(public status:number,public code:string,public userMessage:string,public retryAfter?:number){super(userMessage);}
+  constructor(
+    public status:number,
+    public code:string,
+    public userMessage:string,
+    public retryAfter?:number,
+    public details?:Record<string,unknown>,
+    public retryable?:boolean
+  ){super(userMessage);}
   toBody(requestId:string){
     const title=this.status===401?"认证失败":this.status===403?"没有访问权限":
       this.status===404?"资源不存在":this.status===409?"请求发生冲突":
@@ -575,7 +592,8 @@ class ApiError extends Error {
       this.status===429?"请在限制解除后重试。":this.status>=500?"请稍后重试。":"请检查输入后重试。";
     return {
       code:this.code,title,userMessage:this.userMessage,suggestion,provider:"LenxTool Worker",requestId,
-      retryAfterSeconds:this.retryAfter??null,isRetryable:this.status===429||this.status>=500
+      retryAfterSeconds:this.retryAfter??null,isRetryable:this.retryable??(this.status===429||this.status>=500),
+      ...(this.details ? { details:this.details } : {})
     };
   }
 }
