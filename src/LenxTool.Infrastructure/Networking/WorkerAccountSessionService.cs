@@ -157,6 +157,40 @@ public sealed class WorkerAccountSessionService : IAccountSessionService, IDispo
             cancellationToken);
     }
 
+    internal Task<HttpResponseMessage> SendCatalogMutationAsync(
+        HttpMethod method,
+        string path,
+        long expectedCatalogVersion,
+        object? payload,
+        CancellationToken cancellationToken)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (method != HttpMethod.Post && method != HttpMethod.Patch && method != HttpMethod.Delete)
+            throw new ArgumentException("Catalog mutations only support POST, PATCH, or DELETE.", nameof(method));
+        if (string.IsNullOrWhiteSpace(path)
+            || path.Length > 256
+            || !path.StartsWith("/v1/admin/", StringComparison.Ordinal)
+            || path.Contains('?', StringComparison.Ordinal)
+            || path.Contains('#', StringComparison.Ordinal)
+            || path.Contains('\\', StringComparison.Ordinal)
+            || expectedCatalogVersion is < 0 or > 9_007_199_254_740_991)
+        {
+            throw new ArgumentException("The catalog mutation path or version is invalid.", nameof(path));
+        }
+
+        string idempotencyKey = Guid.NewGuid().ToString("N");
+        return SendAuthorizedAsync(token =>
+        {
+            HttpRequestMessage request = CreateAuthorizedRequest(method, path, token.AccessToken);
+            request.Headers.TryAddWithoutValidation(
+                "If-Match",
+                $"\"catalog-all-{expectedCatalogVersion}\"");
+            request.Headers.TryAddWithoutValidation("Idempotency-Key", idempotencyKey);
+            if (payload is not null) request.Content = JsonContent.Create(payload);
+            return request;
+        }, cancellationToken);
+    }
+
     private async Task<HttpResponseMessage> SendAuthorizedAsync(
         Func<TokenState, HttpRequestMessage> requestFactory,
         CancellationToken cancellationToken)
@@ -327,7 +361,7 @@ public sealed class WorkerAccountSessionService : IAccountSessionService, IDispo
         throw new AppException(mapped);
     }
 
-    private static async Task<T> ReadJsonAsync<T>(
+    internal static async Task<T> ReadJsonAsync<T>(
         HttpResponseMessage response,
         CancellationToken cancellationToken)
     {

@@ -26,6 +26,11 @@ public static class AppErrorFactory
                 AppErrorCode.AccessDenied, "没有访问权限",
                 "当前账号或密钥无权使用该模型或功能。",
                 "请检查账号状态、模型权限或联系管理员。", technicalDetails, provider, requestId),
+            HttpStatusCode.Conflict => new(
+                AppErrorCode.Conflict, "数据版本冲突",
+                "远端数据已被其他操作更新，当前更改没有覆盖新版本。",
+                "请刷新最新数据、确认内容后再重试。", technicalDetails, provider, requestId,
+                IsRetryable: true),
             HttpStatusCode.TooManyRequests => CreateRateLimitError(
                 provider, requestId, technicalDetails, retryAfter, limit, used),
             >= HttpStatusCode.InternalServerError => new(
