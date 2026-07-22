@@ -9,14 +9,14 @@
 | 测试组 | 结果 |
 |---|---:|
 | LenxTool.Core.Tests | 37 passed |
-| LenxTool.Infrastructure.Tests | 108 passed |
+| LenxTool.Infrastructure.Tests | 133 passed |
 | LenxTool.App.Tests | 58 passed |
 | Cloudflare Worker Vitest | 34 passed |
 | Worker TypeScript strict typecheck | passed |
 | .NET build warnings | 0 |
 | NuGet vulnerable packages | 0 detected |
 
-本轮执行 `dotnet build LenxTools.slnx -c Release --no-restore`，结果为 0 警告、0 错误；执行 `dotnet test LenxTools.slnx -c Release --no-build --no-restore`，结果为 Core 37、Infrastructure 108、App 58，共 203/203 通过且无跳过。
+本轮执行 `dotnet build LenxTools.slnx -c Release --no-restore`，结果为 0 警告、0 错误；执行 `dotnet test LenxTools.slnx -c Release --no-build --no-restore`，结果为 Core 37、Infrastructure 133、App 58，共 228/228 通过且无跳过。
 
 P0-08 覆盖 4 项 SQLite 集成场景并同步既有 schema 断言：新建库创建目录状态、分类、Feed、抓取状态、条目、索引和搜索映射；真实 schema v2 哨兵数据经 v3/v4 原位升级后仍可由现有仓储读取；迁移对象冲突时完整回滚且版本停留在 v3；相同外部 ID、URL 和内容哈希可存在于不同 Feed，同一 Feed 内重复外部 ID 被约束拒绝。既有包含未 checkpoint WAL 提交的一致性备份测试继续通过。
 
@@ -27,6 +27,8 @@ P0-10 新增 13 项假 Worker 同步测试、1 项 SQLite 时间戳条件更新�
 P0-11 新增 31 项 Infrastructure 测试：覆盖默认 HTTPS、HTTP/私网双白名单、非默认端口、环回/私网/链路本地/CGNAT/组播/文档 IPv4、IPv6 loopback/ULA/link-local/documentation/NAT64 私网嵌入、混合 DNS、同主机重定向 DNS rebinding、重定向到私网、循环/次数上限、地址钉住、不可解析域名经指定 IP 的真实本地 TCP 连接、HTML 相对 alternate、候选故障隔离、MIME、压缩头、gzip 解压炸弹、XXE、有效标题后的畸形 XML、调用方取消和总超时。测试断言所有被拒目标均未到达传输层。
 
 P0-12 新增 14 项 Infrastructure 测试与 2 份真实 RSS/Atom fixture：覆盖 RSS 2.0、Atom 命名空间、CDATA、Dublin Core 作者/日期、Atom 作者回退、分类、enclosure、重复外部 ID、缺字段、非法日期、id/guid→URL→Feed 内容指纹身份回退、大小写敏感哈希、签名/身份 query 原序保留、明确追踪参数删除、危险协议丢弃、脚本标题/正文清除、DTD/XXE、畸形/不支持文档、4 MiB 字节上限和 2000 条目上限。组合根测试同时确认 `IFeedParser` 可解析。
+
+P0-13 新增 25 项 Infrastructure 测试：20 项刷新服务/传输测试覆盖 200 先写条目后提交验证器、304 不写条目、无条件 304 拒绝、ETag/Last-Modified、429 Retry-After、5xx 指数退避与 6 小时上限、非法 XML、响应大小、跨 authority 重定向验证器清除、生产地址钉住条件头、总超时、调用方/退出取消、同 Feed 单飞、全局并发 2 的测试配置和跨源故障隔离；3 项 SQLite 抓取状态测试覆盖启用目录投影、到期筛选、条件头/时间/错误往返、upsert 和目录删除竞态；2 项条目写入测试覆盖重复外部 ID 更新及批次中途失败整批回滚。组合根测试同时确认抓取状态仓储、条目写入器和刷新服务均可解析。
 
 桌面账号新增 8 项 Infrastructure 测试和 7 项 App 测试：覆盖登录、refresh token 恢复、`/v1/me`、并发 401 单次刷新、每请求最多重放一次、失效清理、离线退出、DPAPI 删除/写入失败脱敏、登录密码清空、过期与额度显示、admin/user 导航隔离、角色降级回退和 XAML 自动化名称/绑定。
 
