@@ -73,14 +73,14 @@ AI 报告使用自备 DeepSeek Key 经请求级 Bearer 授权调用 `deepseek-v4
 - `tags`、`entity_tags`：标签与多态关联。
 - `app_settings`：非秘密设置。
 - `schema_versions`：已应用迁移及校验和。
-- `content_fts`：早报、热点、AI 报告的 FTS5 外部内容索引。
-- `feed_entry_search_documents`：把 Feed 条目映射为统一搜索文档；实际 FTS 同步在 P0-14 接入。
+- `content_fts`：早报、热点、AI 报告和 Feed 条目的统一 FTS5 内容索引。
+- `feed_entry_search_documents`：Feed 条目的搜索文档投影；schema v5 触发器负责与 `content_fts` 同事务同步。
 
-本地数据库当前版本为 schema v4。schema v3 已用于字幕翻译服务和 token 用量，因此 Feed 表使用独立的前向迁移；旧 v2 数据会依次应用 v3、v4，任何一步失败均在事务中回滚且不提升版本。
+本地数据库当前版本为 schema v5。schema v3 用于字幕翻译服务和 token 用量，v4 新增 Feed 目录/条目，v5 回填 Feed FTS 并安装同步触发器；旧 v2 数据会依次应用 v3、v4、v5，任何一步失败均在事务中回滚且不提升版本。
 
 `IFeedCatalogRepository` 是共享目录的本地边界。服务端快照写入时，分类、Feed、作用域、目录版本、生成时间和最后同步时间在同一事务提交；版本倒退在删除前拒绝，失败回滚整批替换。目录移除不会删除 `feed_entries`，仍存在 Feed 的 `feed_fetch_state` 会跨替换保留。读取状态、分类和 Feed 使用同一读事务，ACTIVE 投影过滤停用资源；若本地只同步过 ACTIVE，ALL 查询返回不可用而不是伪造管理员完整目录。
 
-`IFeedRefreshService` 只从 ACTIVE 投影选择到期 Feed，并通过 `FeedNetworkPolicy` 与固定地址传输执行条件 GET。调度有全局并发上限和 Feed 级单飞门闩；每次重定向重新做 SSRF 校验，跨 authority 不携带条件验证器。200 的提交顺序固定为“解析 → `IFeedEntryWriter` 单事务 upsert → `IFeedFetchStateRepository` 保存 ETag/Last-Modified 与下次时间”，因此条目写失败不会提交新验证器；状态保存失败最多造成下一次幂等重抓。304 不调用条目写入。完整 FTS、查询和保留策略由 P0-14 在该写入边界上扩展。
+`IFeedRefreshService` 只从 ACTIVE 投影选择到期 Feed，并通过 `FeedNetworkPolicy` 与固定地址传输执行条件 GET。调度有全局并发上限和 Feed 级单飞门闩；每次重定向重新做 SSRF 校验，跨 authority 不携带条件验证器。200 的提交顺序固定为“解析 → `IFeedEntryRepository` 单事务 upsert/FTS → `IFeedFetchStateRepository` 保存 ETag/Last-Modified 与下次时间”，因此条目写失败不会提交新验证器；状态保存失败最多造成下一次幂等重抓。304 不调用条目写入。仓储查询按稳定时间/ID 顺序分页，并以目录表关联 Feed/分类；清理接口排除收藏和标签，P1 私人阅读状态完成前不进入后台调度。
 
 参数化语句与事务由仓储负责；页面无法取得原始数据库连接。
 
@@ -127,6 +127,6 @@ UI 错误卡根据能力显示重试、复制脱敏详情、打开设置、切�
 
 后续资讯架构采用“Worker/D1 权威共享目录 + 桌面客户端本地抓取/缓存”：管理员通过服务端授权的写端点维护 Feed、分类和策略，普通用户只读同步目录；文章正文、AI 结果、字幕和本地文件仍不写入 D1。详细理由和备选方案见 [ADR-001](decisions/ADR-001-admin-curated-rss.md)，实施批次见 [RSS 集成总路线图](plans/RSS_MASTER_ROADMAP.md)。
 
-当前已完成 Worker v1 契约、身份生命周期、D1 共享目录 schema、管理员分类/Feed 写 API、版本化只读目录、桌面安全会话与账号/角色/额度 UI、本地 Feed schema v4 和目录原子仓储。目录写入以服务端 admin 角色为授权真相，使用 `If-Match` 单调版本、`Idempotency-Key`、参数化 SQL 和同一 D1 batch 内的资源写入/最小审计/幂等结果；目录读取以同一 D1 batch 生成确定排序的原子快照，ACTIVE/ALL 由服务端角色隔离，并用强 ETag、304 和超前版本拒绝保护客户端缓存；本地仓储拒绝版本倒退并以读写事务维持完整快照，桌面角色只控制入口可见性，D1 仍不保存文章正文。
+当前已完成 Worker v1 契约、身份生命周期、D1 共享目录 schema、管理员分类/Feed 写 API、版本化只读目录、桌面安全会话与账号/角色/额度 UI、本地 schema v5、目录原子仓储、安全发现/解析、条件调度和条目 FTS/查询。目录写入以服务端 admin 角色为授权真相，使用 `If-Match` 单调版本、`Idempotency-Key`、参数化 SQL 和同一 D1 batch 内的资源写入/最小审计/幂等结果；目录读取以同一 D1 batch 生成确定排序的原子快照，ACTIVE/ALL 由服务端角色隔离，并用强 ETag、304 和超前版本拒绝保护客户端缓存；本地仓储拒绝版本倒退并以读写事务维持完整快照，桌面角色只控制入口可见性，D1 仍不保存文章正文。
 
-尚未实现真正的管理员订阅管理交互、自动目录同步、安全抓取和普通用户内容阅读，因此当前版本仍不具备通用 RSS 阅读闭环。
+尚未补齐 P0-C 的 20 fixture 检查点，也未实现真正的管理员订阅管理和普通用户时间线，因此当前版本仍不具备可见的通用 RSS 阅读闭环。
