@@ -186,21 +186,22 @@ npm.cmd test -- --run
 - P0-07 已完成账号与角色 UI：设置页支持登录、退出、过期提示和额度显示；侧栏显示真实会话状态，管理员入口随服务端角色出现或移除。该入口目前只说明 P0-15 管理界面尚待实现，Worker 仍是授权真相来源。
 - P0-08 已完成本地 Feed schema v4：新增目录状态、分类、Feed、抓取状态和通用条目表；v2 用户按 v2 → v3 → v4 原位升级，旧早报、热点、AI 报告、媒体任务和设置保持可读。Feed 外部 ID 只在 Feed 内唯一，规范化 URL 与内容哈希不作全局去重。
 - P0-09 已完成本地目录仓储：`IFeedCatalogRepository` 在单一 SQLite 事务内替换分类、Feed 和目录状态；拒绝版本倒退，中途失败回滚到上一完整版本，保留已下载文章及仍存在 Feed 的抓取状态。ACTIVE 查询稳定过滤停用资源，管理员 ALL 仅在本地确实保存过完整快照时可用。
+- P0-10 已完成目录同步服务：启动恢复和后续登录会立即同步，成功后每 15 分钟检查版本，失败执行有界指数退避。user 只能通过受限同源 GET 读取 ACTIVE，admin 读取 ALL；401 复用账号单飞刷新且请求最多重放一次。首次或 ACTIVE→ALL 范围升级强制完整快照，304 仅更新时间戳；旧版、409、超时、离线、取消或无效/超限 DTO 均保留最后完整目录。设置页显示目录版本、最后同步时间与 stale 状态。
 
 ### 10.2 下一里程碑
 
-Gate 0 字幕闭环已经完成。P0“管理员策展 RSS”已完成服务端契约、身份生命周期、目录 schema、管理员 CRUD、只读目录、桌面安全会话、账号 UI、本地 Feed schema 和目录原子仓储（P0-01～P0-09）；下一里程碑是 P0-10“目录同步服务”。
+Gate 0 字幕闭环已经完成。P0“管理员策展 RSS”已完成服务端契约、身份生命周期、目录 schema、管理员 CRUD、只读目录、桌面安全会话、账号 UI、本地 Feed schema、目录原子仓储和自动同步（P0-01～P0-10/P0-B）；下一里程碑是 P0-11“Feed URL 发现与 SSRF 防护”。
 
 字幕闭环完成后的产品主路线已确定为“管理员策展 RSS”：管理员维护共享 RSS/Atom 目录，普通用户只能同步和阅读，不得修改共享订阅、分类、抓取策略或自动化规则。为保持现有“云端不存新闻正文”边界，首版采用 Worker/D1 保存权威目录、各桌面客户端本地抓取和 SQLite 缓存的模式。
 
 详细执行顺序如下：
 
 1. Gate 0 字幕闭环已完成；验收记录见 [`plans/EXISTING_BACKLOG_ALIGNMENT.md`](plans/EXISTING_BACKLOG_ALIGNMENT.md)。
-2. P0-01～P0-09 已完成；下一步实现 P0-10 目录同步服务，再继续安全抓取、OPML、时间线和首页真实数据；具体见 [`plans/RSS_P0_ADMIN_CATALOG.md`](plans/RSS_P0_ADMIN_CATALOG.md)。
+2. P0-01～P0-10 与 P0-B 已完成；下一步实现 P0-11 Feed URL 发现与 SSRF 防护，再继续解析、抓取、OPML、时间线和首页真实数据；具体见 [`plans/RSS_P0_ADMIN_CATALOG.md`](plans/RSS_P0_ADMIN_CATALOG.md)。
 3. 实现私人阅读状态、全文/图片离线、AI 摘要/翻译、管理员规则、媒体衔接和统一搜索；具体见 [`plans/RSS_P1_READING_INTELLIGENCE.md`](plans/RSS_P1_READING_INTELLIGENCE.md)。
 4. 实现多内容视图、外部导出适配器、本地定时摘要和通知；具体见 [`plans/RSS_P2_VIEWS_INTEGRATIONS.md`](plans/RSS_P2_VIEWS_INTEGRATIONS.md)。
 
-总路线、参考项目和许可证边界见 [`plans/RSS_MASTER_ROADMAP.md`](plans/RSS_MASTER_ROADMAP.md)，架构决策见 [`decisions/ADR-001-admin-curated-rss.md`](decisions/ADR-001-admin-curated-rss.md)。只有上述 P0-01～P0-09 可作为已实现基础；目录同步、真实管理界面、抓取和后续 P1/P2 仍不能作为已交付功能宣传。
+总路线、参考项目和许可证边界见 [`plans/RSS_MASTER_ROADMAP.md`](plans/RSS_MASTER_ROADMAP.md)，架构决策见 [`decisions/ADR-001-admin-curated-rss.md`](decisions/ADR-001-admin-curated-rss.md)。只有上述 P0-01～P0-10 可作为已实现基础；安全发现/抓取、真实管理界面和后续 P1/P2 仍不能作为已交付功能宣传。
 
 ### 10.3 其他尚未完成的产品功能
 
@@ -215,7 +216,7 @@ Gate 0 字幕闭环已经完成。P0“管理员策展 RSS”已完成服务端�
 
 - 客户端已接入共享账号登录、退出、过期状态、角色和额度；注册与真正的管理员目录管理界面尚未实现。
 - Worker 认证、令牌轮换和管理员目录写入已有 workerd/D1 自动化；生产 D1 并发压测、共享额度代理链路和真实部署仍未验收。
-- 管理员分类/Feed 写 API、普通用户只读目录、ETag/304 和桌面角色可见性已实现；本地目录落库同步与管理交互仍未实现。
+- 管理员分类/Feed 写 API、普通用户只读目录、ETag/304、桌面角色可见性和本地目录自动同步已实现；安全发现/抓取与管理交互仍未实现。
 - 通用 Feed 条目模型、安全发现/抓取、OPML、时间线、Feed 健康、全文/图片离线、自动化规则和外部导出均仅有详细计划，尚无实现代码。
 
 ### 10.4 普通本地使用需要配置
