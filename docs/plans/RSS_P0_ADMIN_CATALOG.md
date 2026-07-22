@@ -1,6 +1,6 @@
 # P0 详细计划：管理员订阅与普通用户只读目录
 
-状态：进行中，P0-01～P0-04 已完成
+状态：进行中，P0-01～P0-05 已完成
 最后核对：2026-07-22
 上位文档：[RSS 集成总路线图](RSS_MASTER_ROADMAP.md)
 参考项目：RSSNext/Folo（发现、OPML、订阅状态和内容视图的行为参考），LenxTool 当前 Worker/SQLite/资讯中心（实现基础）
@@ -119,19 +119,21 @@ P0 不包含全文抓取、图片离线缓存、AI 摘要/翻译、自动化规�
 
 **验收：**
 
-- [ ] 返回启用分类/Feed、目录版本和服务端时间，不返回软删除记录。
-- [ ] 未变化时支持 304 或等价的版本未变化响应。
-- [ ] 目录排序确定，同一版本序列化结果稳定。
+- [x] 返回启用分类/Feed、目录版本和服务端时间，不返回软删除记录。
+- [x] 未变化时支持 304 或等价的版本未变化响应。
+- [x] 目录排序确定，同一版本序列化结果稳定。
 
 **验证：** 空目录、增量版本、排序、缓存头和禁用 Feed 测试。
 
 **参考：** Folo 客户端订阅 store 的同步思想；由 LenxTool 独立定义 API。
 
+**完成记录（2026-07-22）：** 已实现认证后的 `GET /v1/feeds/catalog`。普通用户只能读取 ACTIVE，管理员可读取 ACTIVE/ALL；版本状态、分类和 Feed 在同一 D1 batch 中组成原子快照，软删除及 ACTIVE 下的停用资源不会泄露。响应按契约确定排序，以目录状态更新时间固定 `generatedAt`，发送 `Cache-Control: private, no-cache`、`Vary: Authorization` 和强 ETag；支持 `afterVersion`/`If-None-Match` 的 304、矛盾条件 400 与超前版本 409。新增 7 项 workerd/D1 测试后 Worker 34/34 通过。
+
 ### 检查点 P0-A
 
-- [ ] Worker typecheck/test 全部通过，测试不再只有用户名规范化 1 项。
-- [ ] 权限矩阵中所有 admin 写端点均有 user/匿名拒绝证据。
-- [ ] `THREAT_MODEL.md` 已覆盖目录投毒、越权、重放和审计。
+- [x] Worker typecheck/test 全部通过，测试不再只有用户名规范化 1 项。
+- [x] 权限矩阵中所有 admin 写端点均有 user/匿名拒绝证据。
+- [x] `THREAT_MODEL.md` 已覆盖目录投毒、越权、重放和审计。
 
 ## 阶段 P0-B：桌面会话与本地目录
 

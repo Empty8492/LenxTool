@@ -115,6 +115,6 @@ UI 错误卡根据能力显示重试、复制脱敏详情、打开设置、切�
 
 后续资讯架构采用“Worker/D1 权威共享目录 + 桌面客户端本地抓取/缓存”：管理员通过服务端授权的写端点维护 Feed、分类和策略，普通用户只读同步目录；文章正文、AI 结果、字幕和本地文件仍不写入 D1。详细理由和备选方案见 [ADR-001](decisions/ADR-001-admin-curated-rss.md)，实施批次见 [RSS 集成总路线图](plans/RSS_MASTER_ROADMAP.md)。
 
-当前已完成 Worker v1 契约、身份生命周期、D1 共享目录 schema 和管理员分类/Feed 写 API。目录写入以服务端 admin 角色为授权真相，使用 `If-Match` 单调版本、`Idempotency-Key`、参数化 SQL 和同一 D1 batch 内的资源写入/最小审计/幂等结果；D1 仍不保存文章正文。
+当前已完成 Worker v1 契约、身份生命周期、D1 共享目录 schema、管理员分类/Feed 写 API 和版本化只读目录。目录写入以服务端 admin 角色为授权真相，使用 `If-Match` 单调版本、`Idempotency-Key`、参数化 SQL 和同一 D1 batch 内的资源写入/最小审计/幂等结果；目录读取以同一 D1 batch 生成确定排序的原子快照，ACTIVE/ALL 由服务端角色隔离，并用强 ETag、304 和超前版本拒绝保护客户端缓存；D1 仍不保存文章正文。
 
-尚未实现只读目录发布、桌面会话与管理员订阅页、本地 Feed schema、安全抓取和普通用户目录同步，因此当前版本仍不具备通用 RSS 阅读闭环。
+尚未实现桌面会话与管理员订阅页、本地 Feed schema、安全抓取和普通用户目录落库同步，因此当前版本仍不具备通用 RSS 阅读闭环。

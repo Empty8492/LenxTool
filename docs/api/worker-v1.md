@@ -1,7 +1,7 @@
 # Worker v1 账号与共享订阅目录 API 契约
 
-状态：已冻结，P0-02 身份端点和 P0-03 D1 目录 schema 已实现，待 P0-04～P0-06
-最后核对：2026-07-21
+状态：已冻结，P0-02～P0-05 身份、目录 schema、管理员写入和只读目录已实现，待 P0-06 桌面接线
+最后核对：2026-07-22
 适用范围：LenxTool 桌面端与 `cloud/LenxTool.Worker` 之间的账号、会话和管理员策展目录接口
 
 本文是 P0 的契约真相源。实现顺序和验收见 [P0 详细计划](../plans/RSS_P0_ADMIN_CATALOG.md)，安全边界见 [威胁模型](../THREAT_MODEL.md)，云端只保存共享目录配置的决策见 [ADR-001](../decisions/ADR-001-admin-curated-rss.md)。
@@ -73,7 +73,7 @@
 
 ### 1.3 目录版本、ETag 与分页
 
-- D1 保存单调递增的 64 位非负整数 `catalogVersion`；空目录为 0。
+- D1 保存单调递增的 JSON 安全非负整数 `catalogVersion`；空目录为 0，上限为 `2^53-1`。SQLite INTEGER 可容纳更大值，但 Worker/JSON 无法在该范围外保证精确比较，因此应用层不得越过此上限。
 - 每个成功的单项目录写入使版本增加 1；一个成功批次无论含多少操作只增加 1。校验失败、授权失败、冲突、事务回滚和幂等重放都不增加版本。
 - 分类/Feed 的 `version` 表示该资源最后一次改变时的全局目录版本。
 - 目录响应 ETag 为强 ETag：`"catalog-active-42"` 或 `"catalog-all-42"`。客户端必须把目录内容和版本在同一 SQLite 事务中原子替换。
@@ -171,7 +171,7 @@ Idempotency-Key: 018f87d4-0f7e-7ad0-9c06-b285e52e7664
 | `POST /v1/auth/logout` | user/admin | JSON 4 KiB；token 32～512 | 204，无响应体 | 通用认证错误 | `auth.logout` |
 | `GET /v1/me` | user/admin | 无请求体、无查询参数 | 200 `MeResponse` | 通用认证错误 | 无 |
 | `POST /v1/bootstrap/admin` | 临时 bootstrap secret，且 D1 无用户 | JSON 8 KiB；用户名 3～40；密码 12～128；secret ≥32 | 201 `PublicUser` | `BOOTSTRAP_AUTH_INVALID`、`BOOTSTRAP_ALREADY_COMPLETED` | `bootstrap.admin.created` / `bootstrap.admin.failed` |
-| `GET /v1/feeds/catalog` | user/admin | URL 2 KiB；`afterVersion` 0～2^63-1；`scope` 枚举 | 200 `CatalogSnapshot` 或 304 | `CATALOG_VERSION_AHEAD`、`ADMIN_REQUIRED` | 无 |
+| `GET /v1/feeds/catalog` | user/admin | URL 2 KiB；`afterVersion` 0～2^53-1；`scope` 枚举 | 200 `CatalogSnapshot` 或 304 | `CATALOG_VERSION_AHEAD`、`ADMIN_REQUIRED` | 无 |
 | `POST /v1/admin/feed-categories` | admin | JSON 8 KiB；名称 1～80 | 201 `CatalogMutation<Category>` | 版本/幂等冲突、`DUPLICATE_CATEGORY`、容量超限 | `feed_category.created` |
 | `PATCH /v1/admin/feed-categories/{id}` | admin | JSON 8 KiB；ID 36；名称 1～80 | 200 `CatalogMutation<Category>` | 版本/幂等冲突、`RESOURCE_NOT_FOUND`、重复分类 | `feed_category.updated` |
 | `DELETE /v1/admin/feed-categories/{id}` | admin | 无请求体；ID 36 | 200 `CatalogDeletion` | 版本/幂等冲突、`RESOURCE_NOT_FOUND`、`CATEGORY_NOT_EMPTY` | `feed_category.deleted` |
@@ -284,6 +284,7 @@ Content-Type: application/json
 - 若 `afterVersion` 小于当前版本，返回当前完整快照；v1 不返回增量补丁。
 - 若 `afterVersion` 大于当前版本，返回 `409 CATALOG_VERSION_AHEAD`，防止用服务器旧状态覆盖本地更新版本。
 - 客户端也可发送 `If-None-Match`。它必须与 `scope` 和 `afterVersion` 一致；矛盾的条件返回 `400 VALIDATION_ERROR`。
+- `generatedAt` 是该目录版本写入 `feed_catalog_state` 的 UTC 时间，不是每次请求的当前时间；因此同一版本和 scope 的 JSON 序列化保持稳定。
 
 200 响应：
 
@@ -297,7 +298,7 @@ Content-Type: application/json
 }
 ```
 
-排序是契约的一部分：分类按 `sortOrder`、`name`、`id`；Feed 按分类顺序、`sortOrder`、`displayName`、`id`。即使客户端重新排序，也不能依赖 D1 的未指定行顺序。
+排序是契约的一部分：分类按 `sortOrder`、`name`、`id`；Feed 按分类顺序、`sortOrder`、`displayName`、`id`，未分类 Feed 排在已分类 Feed 之后。即使客户端重新排序，也不能依赖 D1 的未指定行顺序。
 
 ## 6. 管理员分类端点
 
@@ -445,8 +446,8 @@ Content-Type: application/json
 | 首管理员初始化 | 临时 Secret + 空库条件写入 + 受控终端脚本；重复执行安全失败 | P0-02 已完成 |
 | 统一 `AppError` 可映射错误体 | 身份及现有路由已统一，并补 401/403、请求 ID 与可重试字段测试 | P0-02 已完成，后续端点复用 |
 | 分类/Feed D1 表与全局版本 | 已由 [0002 迁移与 schema 文档](worker-d1-schema.md) 实现；活动唯一索引、范围约束和分类 `RESTRICT` 外键已有迁移测试 | P0-03 已完成 |
-| 分类/Feed/批量管理员路由、幂等记录 | 缺失 | P0-04 |
-| 只读目录、ETag、RBAC/版本并发测试 | 缺失 | P0-05 |
+| 分类/Feed 管理员路由、幂等记录 | 已实现 6 个单项 CRUD 路由；批量路由按计划留待 P0-14 | P0-04 已完成 |
+| 只读目录、ETag、RBAC/版本并发测试 | 已实现 ACTIVE/ALL 原子快照、强 ETag、304、超前版本拒绝和权限/排序/缓存测试 | P0-05 已完成 |
 | 桌面账号/目录 DTO | 缺失 | P0-06～P0-10 |
 
 实现不得为了迁就当前单文件 Worker 的偶然行为而改变本文语义。确需变更时，先更新契约、威胁模型和受影响测试，再修改服务端与桌面端。

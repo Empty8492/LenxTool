@@ -1,6 +1,6 @@
 # Worker D1 Schema
 
-状态：P0-04 已实现
+状态：P0-04 schema/写入已实现，P0-05 只读发布已接入
 最后核对：2026-07-22
 权威迁移：[0001_initial.sql](../../cloud/LenxTool.Worker/migrations/0001_initial.sql)、[0002_feed_catalog.sql](../../cloud/LenxTool.Worker/migrations/0002_feed_catalog.sql)、[0003_catalog_mutations.sql](../../cloud/LenxTool.Worker/migrations/0003_catalog_mutations.sql)
 接口语义：[Worker v1 API 契约](worker-v1.md)
@@ -35,7 +35,7 @@ D1 是账号和管理员发布的共享订阅配置的权威来源。它保存�
 | 字段 | 约束与职责 |
 |---|---|
 | `singleton_id` | 整数主键，`CHECK = 1`，防止出现多个全局版本源 |
-| `catalog_version` | 非负 SQLite INTEGER；初始值 0，承载契约的 64 位单调版本 |
+| `catalog_version` | 非负 SQLite INTEGER；初始值 0，应用层限制为 JSON 安全整数 `0～2^53-1` |
 | `updated_at` | 20～40 字符的 UTC 时间文本 |
 | `last_mutation_id` | 可空 36 字符内部事务标记；用于把条件版本更新与同一 D1 batch 的业务写入绑定，不进入公开 DTO |
 

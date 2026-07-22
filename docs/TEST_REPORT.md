@@ -11,7 +11,7 @@
 | LenxTool.Core.Tests | 37 passed |
 | LenxTool.Infrastructure.Tests | 33 passed |
 | LenxTool.App.Tests | 50 passed |
-| Cloudflare Worker Vitest | 27 passed |
+| Cloudflare Worker Vitest | 34 passed |
 | Worker TypeScript strict typecheck | passed |
 | .NET build warnings | 0 |
 | NuGet vulnerable packages | 0 detected |
@@ -23,6 +23,8 @@ Worker 使用 Cloudflare 官方 Vitest pool 在本地 workerd 中应用真实 D1
 D1 目录迁移测试明确执行“0001 → 写入旧 schema 哨兵数据 → 全部迁移”，覆盖带数据升级、重复应用、全局版本初值、保留有意义 query、活动分类规范名与 Feed 规范 URL 唯一、软删除后安全重建、分类外键与硬删除 `RESTRICT`、枚举/范围/布尔/HTTPS/单例约束、失败 batch 回滚，以及目录/幂等/审计字段隐私白名单；迁移测试 8/8 通过。
 
 管理员目录写入新增 7 项 workerd/D1 集成测试：覆盖分类与 Feed 新增、编辑、启停、排序、移动、软删除，全部 6 个写端点的 user/匿名 403/401，NFKC 分类重复、规范 URL 重复、危险 URL、停用分类、非空分类删除、同版本并发单赢家、幂等重放/错用、版本冲突安全详情，以及操作者/目标/动作/目录版本/请求 ID 审计；Worker 合计 27/27 通过。
+
+只读目录新增 7 项 workerd/D1 集成测试：覆盖 ACTIVE/ALL 权限隔离、软删除与停用过滤、完整公共 DTO、分类/Feed 确定排序、同版本字节级稳定序列化、强 ETag 与缓存头、`afterVersion`/`If-None-Match` 304、旧版本全量快照、超前版本 409、矛盾缓存条件和未知/重复/越界参数拒绝，以及空目录版本 0 仍返回完整快照；Worker 合计 34/34 通过。
 
 `npm audit` 当前报告 4 个 high，均位于开发依赖 `@cloudflare/vitest-pool-workers` / `wrangler` 经 `miniflare` 引入的 `sharp < 0.35.0`，生产依赖计数为 1，且审计结果标记暂无可用修复。没有执行破坏性 `audit fix --force`；发布前需跟踪 Cloudflare 工具链升级并重新审计。
 
