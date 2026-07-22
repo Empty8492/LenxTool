@@ -138,6 +138,25 @@ public sealed class WorkerAccountSessionService : IAccountSessionService, IDispo
         _disposed = true;
     }
 
+    internal Task<HttpResponseMessage> GetAuthorizedAsync(
+        string pathAndQuery,
+        CancellationToken cancellationToken)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (string.IsNullOrWhiteSpace(pathAndQuery)
+            || pathAndQuery.Length > 2048
+            || pathAndQuery[0] != '/'
+            || pathAndQuery.StartsWith("//", StringComparison.Ordinal)
+            || pathAndQuery.Contains('\\', StringComparison.Ordinal))
+        {
+            throw new ArgumentException("The Worker path must be a bounded origin-relative path.", nameof(pathAndQuery));
+        }
+
+        return SendAuthorizedAsync(
+            token => CreateAuthorizedRequest(HttpMethod.Get, pathAndQuery, token.AccessToken),
+            cancellationToken);
+    }
+
     private async Task<HttpResponseMessage> SendAuthorizedAsync(
         Func<TokenState, HttpRequestMessage> requestFactory,
         CancellationToken cancellationToken)
@@ -288,7 +307,7 @@ public sealed class WorkerAccountSessionService : IAccountSessionService, IDispo
         }
     }
 
-    private static async Task EnsureSuccessAsync(
+    internal static async Task EnsureSuccessAsync(
         HttpResponseMessage response,
         CancellationToken cancellationToken)
     {

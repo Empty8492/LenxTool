@@ -12,5 +12,10 @@ public interface IFeedCatalogRepository
         FeedCatalogScope scope,
         CancellationToken cancellationToken);
 
+    Task MarkSynchronizedAsync(
+        long expectedVersion,
+        DateTimeOffset synchronizedAt,
+        CancellationToken cancellationToken);
+
     Task<FeedCatalogState> GetStateAsync(CancellationToken cancellationToken);
 }

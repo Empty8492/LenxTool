@@ -461,6 +461,11 @@
                                            Style="{StaticResource MetaTextStyle}"
                                            Text="{Binding AccountStatus}"
                                            TextWrapping="Wrap" />
+                                <TextBlock Margin="0,6,0,0"
+                                           AutomationProperties.Name="共享目录同步状态"
+                                           Style="{StaticResource MetaTextStyle}"
+                                           Text="{Binding CatalogSyncStatus}"
+                                           TextWrapping="Wrap" />
                                 <Grid Margin="0,16,0,0"
                                       Visibility="{Binding IsSignedOut, Converter={StaticResource BooleanToVisibilityConverter}}">
                                     <Grid.ColumnDefinitions>

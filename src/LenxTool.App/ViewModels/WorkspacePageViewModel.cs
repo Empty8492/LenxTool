@@ -6,6 +6,7 @@ using LenxTool.App.Services;
 using LenxTool.Core.Accounts;
 using LenxTool.Core.Contracts;
 using LenxTool.Core.Errors;
+using LenxTool.Core.Models;
 using LenxTool.Core.Updates;
 
 namespace LenxTool.App.ViewModels;
@@ -29,6 +30,7 @@ public sealed class SettingsViewModel : PageViewModel
     private readonly ISecretStore _secretStore;
     private readonly IAppSettingsRepository _settings;
     private readonly IAccountSessionService _accountSession;
+    private readonly IFeedCatalogSyncService _catalogSync;
     private readonly SynchronizationContext? _synchronizationContext;
     private readonly string _databaseLocation = "%LocalAppData%\\LenxTool\\Data\\lenx.db";
     private readonly string _secretStorage = "Windows DPAPI · 当前用户";
@@ -45,6 +47,7 @@ public sealed class SettingsViewModel : PageViewModel
     private string _accountUsernameInput = string.Empty;
     private string _accountPasswordInput = string.Empty;
     private string _accountStatus = "云服务未登录；本地功能仍可使用。";
+    private string _catalogSyncStatus = "共享目录尚未同步。";
     private AccountSessionSnapshot _account = AccountSessionSnapshot.SignedOut;
 
     public SettingsViewModel(
@@ -52,7 +55,8 @@ public sealed class SettingsViewModel : PageViewModel
         IUpdateService updateService,
         ISecretStore secretStore,
         IAppSettingsRepository settings,
-        IAccountSessionService accountSession)
+        IAccountSessionService accountSession,
+        IFeedCatalogSyncService catalogSync)
         : base("设置", "外观、服务凭据、数据与更新")
     {
         _themeService = themeService;
@@ -60,6 +64,7 @@ public sealed class SettingsViewModel : PageViewModel
         _secretStore = secretStore;
         _settings = settings;
         _accountSession = accountSession;
+        _catalogSync = catalogSync;
         _synchronizationContext = SynchronizationContext.Current;
         CheckForUpdatesCommand = new(CheckForUpdatesAsync);
         DownloadUpdateCommand = new(DownloadUpdateAsync, () => _candidate is not null);
@@ -70,7 +75,9 @@ public sealed class SettingsViewModel : PageViewModel
         LogoutCommand = new(LogoutAsync, () => IsSignedIn);
         RefreshAccountCommand = new(RefreshAccountAsync, () => IsSignedIn);
         _accountSession.SessionChanged += OnAccountSessionChanged;
+        _catalogSync.StatusChanged += OnCatalogSyncStatusChanged;
         ApplyAccountSession(_accountSession.Current);
+        ApplyCatalogSyncStatus(_catalogSync.Current);
     }
 
     public bool IsDarkMode
@@ -172,6 +179,11 @@ public sealed class SettingsViewModel : PageViewModel
         get => _accountStatus;
         private set => SetProperty(ref _accountStatus, value);
     }
+    public string CatalogSyncStatus
+    {
+        get => _catalogSyncStatus;
+        private set => SetProperty(ref _catalogSyncStatus, value);
+    }
     public bool IsSignedIn => _account.IsAuthenticated;
     public bool IsSignedOut => !IsSignedIn;
     public bool IsAdmin => _account.IsAdmin;
@@ -205,6 +217,9 @@ public sealed class SettingsViewModel : PageViewModel
             ApplyAccountSession(_accountSession.Current);
             AccountStatus = "账号令牌文件暂时无法读取；请检查当前 Windows 用户的目录权限。";
         }
+
+        await _catalogSync.InitializeAsync(cancellationToken);
+        ApplyCatalogSyncStatus(_catalogSync.Current);
     }
 
     private async Task SaveAppearanceAsync(CancellationToken cancellationToken)
@@ -373,6 +388,38 @@ public sealed class SettingsViewModel : PageViewModel
             return;
         }
         ApplyAccountSession(eventArgs.Session);
+    }
+
+    private void OnCatalogSyncStatusChanged(
+        object? sender,
+        FeedCatalogSyncStatusChangedEventArgs eventArgs)
+    {
+        if (_synchronizationContext is not null && SynchronizationContext.Current != _synchronizationContext)
+        {
+            _synchronizationContext.Post(_ => ApplyCatalogSyncStatus(eventArgs.Status), null);
+            return;
+        }
+        ApplyCatalogSyncStatus(eventArgs.Status);
+    }
+
+    private void ApplyCatalogSyncStatus(FeedCatalogSyncStatus status)
+    {
+        if (status.IsSynchronizing)
+        {
+            CatalogSyncStatus = "共享目录正在同步…";
+            return;
+        }
+        if (status.LastSynchronizedAt is null)
+        {
+            CatalogSyncStatus = status.Error is null
+                ? "共享目录尚未同步。登录后将自动获取。"
+                : "共享目录暂时无法同步；稍后会自动重试。";
+            return;
+        }
+
+        string freshness = status.IsStale ? "已过期，继续使用本地版本" : "已是最新";
+        CatalogSyncStatus = $"共享目录 v{status.Version} · 上次同步 " +
+            $"{status.LastSynchronizedAt.Value.ToLocalTime():yyyy-MM-dd HH:mm} · {freshness}";
     }
 
     private void ApplyAccountSession(AccountSessionSnapshot session)

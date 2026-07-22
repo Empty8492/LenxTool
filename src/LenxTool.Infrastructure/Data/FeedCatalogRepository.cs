@@ -102,6 +102,31 @@ public sealed class FeedCatalogRepository(SqliteDatabase database) : IFeedCatalo
         return await ReadStateAsync(connection, transaction: null, cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task MarkSynchronizedAsync(
+        long expectedVersion,
+        DateTimeOffset synchronizedAt,
+        CancellationToken cancellationToken)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(expectedVersion);
+
+        await using SqliteConnection connection = await database.OpenConnectionAsync(cancellationToken)
+            .ConfigureAwait(false);
+        await using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = """
+            UPDATE feed_catalog_state
+            SET last_synced_at=$lastSyncedAt
+            WHERE singleton_id=1 AND catalog_version=$expectedVersion;
+            """;
+        command.Parameters.AddWithValue("$lastSyncedAt", FormatTimestamp(synchronizedAt));
+        command.Parameters.AddWithValue("$expectedVersion", expectedVersion);
+        int rows = await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        if (rows != 1)
+        {
+            throw new InvalidOperationException(
+                "The feed catalog version changed while marking synchronization complete.");
+        }
+    }
+
     private static async Task ClearCatalogAsync(
         SqliteConnection connection,
         SqliteTransaction transaction,

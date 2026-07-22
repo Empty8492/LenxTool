@@ -1,5 +1,6 @@
 using System.Reflection;
 using LenxTool.Core.Contracts;
+using LenxTool.Infrastructure.Data;
 using LenxTool.Infrastructure.Networking;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -21,5 +22,9 @@ public sealed class DependencyInjectionTests
 
         ISubtitleTranslator translator = provider.GetRequiredService<ISubtitleTranslator>();
         Assert.IsType<DeepSeekSubtitleTranslator>(translator);
+        var account = provider.GetRequiredService<WorkerAccountSessionService>();
+        Assert.Same(account, provider.GetRequiredService<IAccountSessionService>());
+        Assert.IsType<FeedCatalogRepository>(provider.GetRequiredService<IFeedCatalogRepository>());
+        Assert.IsType<FeedCatalogSyncService>(provider.GetRequiredService<IFeedCatalogSyncService>());
     }
 }

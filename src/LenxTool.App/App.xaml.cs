@@ -94,7 +94,13 @@ public partial class App : Application
         services.AddSingleton<ISubtitleTranslator, DeepSeekSubtitleTranslator>();
         services.AddSingleton<ISecretStore, DpapiSecretStore>();
         services.AddSingleton(CreateWorkerAccountOptions());
-        services.AddSingleton<IAccountSessionService, WorkerAccountSessionService>();
+        services.AddSingleton<WorkerAccountSessionService>();
+        services.AddSingleton<IAccountSessionService>(static services =>
+            services.GetRequiredService<WorkerAccountSessionService>());
+        services.AddSingleton<IFeedCatalogRepository, FeedCatalogRepository>();
+        services.AddSingleton(FeedCatalogSyncOptions.Default);
+        services.AddSingleton(TimeProvider.System);
+        services.AddSingleton<IFeedCatalogSyncService, FeedCatalogSyncService>();
         services.AddSingleton<MediaJobRepository>();
         services.AddSingleton<IMediaJobRepository>(static services =>
             services.GetRequiredService<MediaJobRepository>());

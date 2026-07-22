@@ -2,6 +2,7 @@ using LenxTool.App.Services;
 using LenxTool.App.ViewModels;
 using LenxTool.Core.Accounts;
 using LenxTool.Core.Contracts;
+using LenxTool.Core.Models;
 using LenxTool.Core.Updates;
 
 namespace LenxTool.App.Tests.ViewModels;
@@ -17,7 +18,8 @@ public sealed class SettingsViewModelTests
             new FakeUpdateService(),
             secrets,
             new FakeSettingsRepository(),
-            new FakeAccountSessionService());
+            new FakeAccountSessionService(),
+            new FakeFeedCatalogSyncService());
 
         Assert.False(viewModel.SaveSecretsCommand.CanExecute(null));
 
@@ -48,7 +50,12 @@ public sealed class SettingsViewModelTests
             }
         };
         var viewModel = new SettingsViewModel(
-            theme, new FakeUpdateService(), new FakeSecretStore(), settings, new FakeAccountSessionService());
+            theme,
+            new FakeUpdateService(),
+            new FakeSecretStore(),
+            settings,
+            new FakeAccountSessionService(),
+            new FakeFeedCatalogSyncService());
 
         await viewModel.InitializeAsync(CancellationToken.None);
 
@@ -137,12 +144,38 @@ public sealed class SettingsViewModelTests
         Assert.DoesNotContain("test failure", viewModel.AccountStatus, StringComparison.Ordinal);
     }
 
-    private static SettingsViewModel CreateViewModel(IAccountSessionService account) => new(
+    [Fact]
+    public async Task InitializeStartsCatalogSyncAndDisplaysLastSuccessfulStaleState()
+    {
+        var sync = new FakeFeedCatalogSyncService();
+        var viewModel = CreateViewModel(new FakeAccountSessionService(), sync);
+
+        await viewModel.InitializeAsync(CancellationToken.None);
+        sync.SetStatus(new(
+            false,
+            12,
+            FeedCatalogScope.Active,
+            new DateTimeOffset(2026, 7, 22, 8, 30, 0, TimeSpan.Zero),
+            true,
+            1,
+            new DateTimeOffset(2026, 7, 22, 8, 31, 0, TimeSpan.Zero),
+            null));
+
+        Assert.Equal(1, sync.InitializeCalls);
+        Assert.Contains("v12", viewModel.CatalogSyncStatus, StringComparison.Ordinal);
+        Assert.Contains("已过期", viewModel.CatalogSyncStatus, StringComparison.Ordinal);
+        Assert.Contains("本地版本", viewModel.CatalogSyncStatus, StringComparison.Ordinal);
+    }
+
+    private static SettingsViewModel CreateViewModel(
+        IAccountSessionService account,
+        IFeedCatalogSyncService? sync = null) => new(
         new FakeThemeService(),
         new FakeUpdateService(),
         new FakeSecretStore(),
         new FakeSettingsRepository(),
-        account);
+        account,
+        sync ?? new FakeFeedCatalogSyncService());
 
     private static AccountSessionSnapshot SignedIn(AccountRole role) => new(
         AccountSessionStatus.SignedIn,
@@ -233,6 +266,39 @@ public sealed class SettingsViewModelTests
         {
             Current = session;
             SessionChanged?.Invoke(this, new(session));
+        }
+    }
+
+    private sealed class FakeFeedCatalogSyncService : IFeedCatalogSyncService
+    {
+        public FeedCatalogSyncStatus Current { get; private set; } = new(
+            false,
+            0,
+            FeedCatalogScope.Active,
+            null,
+            true,
+            0,
+            null,
+            null);
+        public int InitializeCalls { get; private set; }
+        public event EventHandler<FeedCatalogSyncStatusChangedEventArgs>? StatusChanged;
+
+        public Task InitializeAsync(CancellationToken cancellationToken)
+        {
+            InitializeCalls++;
+            return Task.CompletedTask;
+        }
+
+        public Task<FeedCatalogSyncResult> SyncAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(new FeedCatalogSyncResult(
+                FeedCatalogSyncOutcome.SkippedNotAuthenticated,
+                Current.Version,
+                Current.LastSynchronizedAt));
+
+        public void SetStatus(FeedCatalogSyncStatus status)
+        {
+            Current = status;
+            StatusChanged?.Invoke(this, new(status));
         }
     }
 }

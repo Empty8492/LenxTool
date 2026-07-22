@@ -186,6 +186,38 @@ public sealed class FeedCatalogRepositoryTests : IDisposable
         Assert.Equal(1L, (long)(await count.ExecuteScalarAsync(CancellationToken.None))!);
     }
 
+    [Fact]
+    public async Task MarkSynchronizedOnlyUpdatesMatchingVersionTimestamp()
+    {
+        using SqliteDatabase database = CreateDatabase();
+        await database.InitializeAsync(CancellationToken.None);
+        var repository = new FeedCatalogRepository(database);
+        FeedCatalogSnapshot original = Catalog(
+            9,
+            FeedCatalogScope.All,
+            [Category(EnabledCategoryId, "技术", 100, isEnabled: true)],
+            [Feed(EnabledFeedId, "one", "来源一", EnabledCategoryId, 100, isEnabled: true)]);
+        await repository.ReplaceAsync(original, CancellationToken.None);
+        DateTimeOffset synchronizedAt = DateTimeOffset.Parse(
+            "2026-07-22T09:15:00Z",
+            CultureInfo.InvariantCulture);
+
+        await repository.MarkSynchronizedAsync(9, synchronizedAt, CancellationToken.None);
+
+        FeedCatalogSnapshot stored = Assert.IsType<FeedCatalogSnapshot>(
+            await repository.GetCatalogAsync(FeedCatalogScope.All, CancellationToken.None));
+        Assert.Equal(synchronizedAt, stored.State.LastSyncedAt);
+        Assert.Equal(original.State.GeneratedAt, stored.State.GeneratedAt);
+        Assert.Equal(original.Categories, stored.Categories);
+        Assert.Equal(original.Feeds, stored.Feeds);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => repository.MarkSynchronizedAsync(8, synchronizedAt.AddMinutes(1), CancellationToken.None));
+        Assert.Equal(
+            synchronizedAt,
+            (await repository.GetStateAsync(CancellationToken.None)).LastSyncedAt);
+    }
+
     public void Dispose()
     {
         SqliteConnection.ClearAllPools();
