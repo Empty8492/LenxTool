@@ -158,7 +158,7 @@ npm.cmd test -- --run
 
 ## 10. 当前版本边界与交付状态
 
-本节是当前交付状态的唯一准绳，最后核对日期为 **2026-07-21**。`IMPLEMENTATION_PLAN.md` 保留完整任务与验收条件；其中未勾选的任务可能已有部分实现，但表示尚未满足该任务的全部验收条件。
+本节是当前交付状态的唯一准绳，最后核对日期为 **2026-07-22**。`IMPLEMENTATION_PLAN.md` 保留完整任务与验收条件；其中未勾选的任务可能已有部分实现，但表示尚未满足该任务的全部验收条件。
 
 ### 10.1 本轮已完成
 
@@ -178,21 +178,23 @@ npm.cmd test -- --run
 - 字幕批量翻译契约已定义：只向翻译器暴露原序号与原文，按可取消的异步批次返回译文；批次携带模型、请求数、token 用量和幂等恢复点，结构化失败复用 `AppError`，合并时保证原文、时间轴、置信指标和列表顺序不变。
 - Gate0-04 已完成 DeepSeek 字幕翻译适配器：从 DPAPI 密钥仓储读取 Key，按字符上限分批，只发送序号和原文；严格校验缺项、增项与重复项，按输入顺序返回译文，并携带模型、token、实际请求数和精确恢复点。每批最多请求 3 次，429 尊重受限 `Retry-After`，超时短退避，取消不重试。
 - Gate0-05/06 已完成字幕交付闭环：媒体工作台接入翻译、取消、断点恢复和四种导出；转写及每个翻译批次把字幕、恢复点和模型用量在同一 SQLite 事务中提交。schema v3 保存翻译服务、目标语言、请求数及输入/输出/总 token；历史页可查看原文/译文与脱敏错误，并仅依赖本地数据重新导出。
+- P0-01～P0-03 已完成 Worker v1 账号/目录契约、身份生命周期与 D1 共享目录 schema：支持 `/v1/me`、refresh 轮换、幂等 logout、实时禁用检查、一次性首管理员初始化，以及带约束和迁移测试的分类/Managed Feed 表。
+- P0-04 已完成管理员分类和 Feed CRUD：服务端支持新增、编辑、启停、排序、移动和软删除；全部写端点执行 admin 授权、`If-Match` 全局版本、`Idempotency-Key`、参数化 D1 写入和仅含元数据的版本审计。user/匿名权限矩阵、并发、幂等、重复与危险 URL 均有 workerd/D1 集成测试。
 
 ### 10.2 下一里程碑
 
-Gate 0 字幕闭环已经完成：严格 SRT 导入、媒体转写片段入库、可恢复 DeepSeek 批量翻译、原文/译文/双语 SRT 与 TXT 导出，以及字幕历史和模型/token 用量均已接线并通过自动化与 WPF UI 冒烟。下一里程碑进入 P0“管理员策展 RSS”，不再继续扩张字幕数据模型。
+Gate 0 字幕闭环已经完成。P0“管理员策展 RSS”已完成契约、身份生命周期、目录 schema 和管理员 CRUD（P0-01～P0-04）；下一里程碑是 P0-05“只读目录发布与增量同步”，不再继续扩张字幕数据模型。
 
 字幕闭环完成后的产品主路线已确定为“管理员策展 RSS”：管理员维护共享 RSS/Atom 目录，普通用户只能同步和阅读，不得修改共享订阅、分类、抓取策略或自动化规则。为保持现有“云端不存新闻正文”边界，首版采用 Worker/D1 保存权威目录、各桌面客户端本地抓取和 SQLite 缓存的模式。
 
 详细执行顺序如下：
 
 1. Gate 0 字幕闭环已完成；验收记录见 [`plans/EXISTING_BACKLOG_ALIGNMENT.md`](plans/EXISTING_BACKLOG_ALIGNMENT.md)。
-2. 下一步实现管理员 RBAC、共享 Feed 目录、安全抓取、OPML、时间线和首页真实数据；具体见 [`plans/RSS_P0_ADMIN_CATALOG.md`](plans/RSS_P0_ADMIN_CATALOG.md)。
+2. P0-01～P0-04 已完成；下一步实现 P0-05 只读目录发布，再继续桌面会话、本地目录、安全抓取、OPML、时间线和首页真实数据；具体见 [`plans/RSS_P0_ADMIN_CATALOG.md`](plans/RSS_P0_ADMIN_CATALOG.md)。
 3. 实现私人阅读状态、全文/图片离线、AI 摘要/翻译、管理员规则、媒体衔接和统一搜索；具体见 [`plans/RSS_P1_READING_INTELLIGENCE.md`](plans/RSS_P1_READING_INTELLIGENCE.md)。
 4. 实现多内容视图、外部导出适配器、本地定时摘要和通知；具体见 [`plans/RSS_P2_VIEWS_INTEGRATIONS.md`](plans/RSS_P2_VIEWS_INTEGRATIONS.md)。
 
-总路线、参考项目和许可证边界见 [`plans/RSS_MASTER_ROADMAP.md`](plans/RSS_MASTER_ROADMAP.md)，架构决策见 [`decisions/ADR-001-admin-curated-rss.md`](decisions/ADR-001-admin-curated-rss.md)。这些能力当前均处于计划状态，不能作为已交付功能宣传。
+总路线、参考项目和许可证边界见 [`plans/RSS_MASTER_ROADMAP.md`](plans/RSS_MASTER_ROADMAP.md)，架构决策见 [`decisions/ADR-001-admin-curated-rss.md`](decisions/ADR-001-admin-curated-rss.md)。只有上述 P0-01～P0-04 可作为已实现的服务端基础；目录读取、桌面接线、抓取和后续 P1/P2 仍不能作为已交付功能宣传。
 
 ### 10.3 其他尚未完成的产品功能
 
@@ -206,8 +208,8 @@ Gate 0 字幕闭环已经完成：严格 SRT 导入、媒体转写片段入库�
 云端与管理缺口：
 
 - 客户端共享账号登录、注册、额度展示和管理端；Worker 虽有接口，但桌面端尚未接线。
-- Worker 的认证、令牌轮换、并发额度和 Groq/DeepSeek 代理链路仍缺少充分自动化验收；当前只有基础安全测试。
-- 管理员共享 RSS/Atom 目录、分类、目录版本、管理员订阅 API、桌面角色接线和普通用户只读目录尚未实现。
+- Worker 认证、令牌轮换和管理员目录写入已有 workerd/D1 自动化；生产 D1 并发压测、共享额度代理链路和真实部署仍未验收。
+- 管理员分类/Feed 写 API 已实现；普通用户只读目录、目录 ETag/304、桌面角色与管理界面尚未实现。
 - 通用 Feed 条目模型、安全发现/抓取、OPML、时间线、Feed 健康、全文/图片离线、自动化规则和外部导出均仅有详细计划，尚无实现代码。
 
 ### 10.4 普通本地使用需要配置
@@ -224,7 +226,7 @@ Gate 0 字幕闭环已经完成：严格 SRT 导入、媒体转写片段入库�
 - 将 `cloud/LenxTool.Worker/wrangler.toml` 中的 D1 占位 `database_id` 替换为真实 ID。
 - 配置必需的 `TOKEN_SECRET`，按启用能力配置 `GROQ_API_KEY`、`DEEPSEEK_API_KEY`。
 - 执行远端 D1 migration。
-- 在受控终端手工初始化首个管理员；仓库目前没有可直接使用的 bootstrap 脚本。
+- 临时配置 `BOOTSTRAP_TOKEN` 后，在受控终端运行 `cloud/LenxTool.Worker/scripts/bootstrap-admin.ps1` 初始化首个管理员；成功后立即删除该 Secret。
 
 ### 10.6 正式发布前需要配置或完成
 

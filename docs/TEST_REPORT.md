@@ -1,6 +1,6 @@
 # 测试报告
 
-测试日期：2026-07-21（Asia/Shanghai）
+测试日期：.NET 2026-07-21；Worker 2026-07-22（Asia/Shanghai）
 版本：0.1.0  
 配置：Release / win-x64 / .NET SDK 10.0.302
 
@@ -11,7 +11,7 @@
 | LenxTool.Core.Tests | 37 passed |
 | LenxTool.Infrastructure.Tests | 33 passed |
 | LenxTool.App.Tests | 50 passed |
-| Cloudflare Worker Vitest | 20 passed |
+| Cloudflare Worker Vitest | 27 passed |
 | Worker TypeScript strict typecheck | passed |
 | .NET build warnings | 0 |
 | NuGet vulnerable packages | 0 detected |
@@ -20,7 +20,11 @@
 
 Worker 使用 Cloudflare 官方 Vitest pool 在本地 workerd 中应用真实 D1 迁移并执行路由测试。身份测试覆盖单次邀请码的并发原子消费、`GET /v1/me` 公开字段与额度、登录响应、logout 撤销/幂等及原子审计、refresh 同 token 并发只有一个成功者、旧 token 重放、refresh 过期错误、禁用账号 access/refresh、过期/伪造 JWT、401/403 与 `AppError` 错误体、未知字段不消耗 token、无长度头正文的流式大小限制，以及临时 bootstrap secret 的首管理员初始化、原子审计和重复执行安全失败；共 12/12 通过。
 
-D1 目录迁移测试明确执行“0001 → 写入旧 schema 哨兵数据 → 全部迁移”，覆盖带数据升级、重复应用、全局版本初值、保留有意义 query、活动分类规范名与 Feed 规范 URL 唯一、软删除后安全重建、分类外键与硬删除 `RESTRICT`、枚举/范围/布尔/HTTPS/单例约束、失败 batch 回滚，以及表字段隐私白名单；新增 8 项，Worker 合计 20/20 通过。
+D1 目录迁移测试明确执行“0001 → 写入旧 schema 哨兵数据 → 全部迁移”，覆盖带数据升级、重复应用、全局版本初值、保留有意义 query、活动分类规范名与 Feed 规范 URL 唯一、软删除后安全重建、分类外键与硬删除 `RESTRICT`、枚举/范围/布尔/HTTPS/单例约束、失败 batch 回滚，以及目录/幂等/审计字段隐私白名单；迁移测试 8/8 通过。
+
+管理员目录写入新增 7 项 workerd/D1 集成测试：覆盖分类与 Feed 新增、编辑、启停、排序、移动、软删除，全部 6 个写端点的 user/匿名 403/401，NFKC 分类重复、规范 URL 重复、危险 URL、停用分类、非空分类删除、同版本并发单赢家、幂等重放/错用、版本冲突安全详情，以及操作者/目标/动作/目录版本/请求 ID 审计；Worker 合计 27/27 通过。
+
+`npm audit` 当前报告 4 个 high，均位于开发依赖 `@cloudflare/vitest-pool-workers` / `wrangler` 经 `miniflare` 引入的 `sharp < 0.35.0`，生产依赖计数为 1，且审计结果标记暂无可用修复。没有执行破坏性 `audit fix --force`；发布前需跟踪 Cloudflare 工具链升级并重新审计。
 
 覆盖点包括：统一 HTTP 错误、Groq 429 与 Retry-After、DeepSeek 当前模型请求与 token 用量解析、DeepSeek 字幕批次成功与 token、模型乱序输出复序、缺项拒绝、取消、429 重试与实际请求数、超时退避耗尽后的精确断点、畸形超大 `Retry-After` 限界、部分批次恢复和组合根 `ISubtitleTranslator` 解析、AI 报告生成状态和 SQLite/FTS5 持久化、语义版本、签名篡改、严格 SRT 解析/四种导出、UTF-8 无 BOM、原序号保留、畸形块错误行定位、已有 SRT 任务与片段原子创建、转写片段入库、字幕批量翻译输入快照、批大小边界、取消令牌、流式批次、模型/请求数/token 用量、幂等恢复点、首批失败后的第二次断点恢复、翻译取消状态与恢复位置、历史原文/译文详情、脱敏错误和不调用模型的本地再导出、字幕与翻译用量同事务提交、schema v3 重开往返、字幕序号/时间轴唯一性、覆盖写入、批次中途失败回滚和 schema v1 升级保留、重叠合并、音频分片计划、JSON/编码/文本工具、SQLite schema/FTS/损坏、早报/热点/AI 报告统一全文搜索、包含未 checkpoint WAL 提交的一致性迁移备份、RSS 富内容持久化、HTML/Markdown 正文配图顺序与安全 URL 解析、受大小限制的图片下载、标题/列表/链接解析与朗读标记清理、NewsNow 13 来源目录与响应解析、恶意子域名拒绝、按平台缓存快照替换、热点平台分组、多选来源过滤、全选恢复与安全原文命令、PasswordBox TwoWay Binding 保留、Key 保存命令状态与 DPAPI 配置反馈、资讯页统一控件样式、无缺边歧义的标签指示器、单一整页滚动、回顶渐显和缓动布局、设置持久化、DPAPI 与脱敏、中文/空格/超过 260 字符的路径、媒体 Queued/Running/Completed/Failed 状态与进度持久化、重启恢复、失败计数和重试、资讯默认当天/日期切换/当天缺失回退、导航和 Ctrl+K 状态。
 
