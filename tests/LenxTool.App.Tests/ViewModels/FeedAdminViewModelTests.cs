@@ -1,4 +1,5 @@
 using LenxTool.App.ViewModels;
+using LenxTool.App.Services;
 using LenxTool.Core.Accounts;
 using LenxTool.Core.Contracts;
 using LenxTool.Core.Errors;
@@ -9,6 +10,107 @@ namespace LenxTool.App.Tests.ViewModels;
 public sealed class FeedAdminViewModelTests
 {
     private static readonly DateTimeOffset Now = new(2026, 7, 23, 8, 0, 0, TimeSpan.Zero);
+
+    [Fact]
+    public async Task OpmlPreviewNeverSubmitsAndClassifiesItemsAgainstCurrentCatalog()
+    {
+        var context = CreateViewModel(Snapshot(7), AccountRole.Admin);
+        context.OpmlFiles.Loaded = new(
+            "导入",
+            [
+                new("新订阅", "https://new.example/feed.xml", null, ["技术", "开发"]),
+                new("示例源", Snapshot(7).Feeds[0].OriginalUrl, null, ["技术"]),
+                new("不安全", "http://unsafe.example/feed.xml", null, [])
+            ]);
+        context.Dialogs.ImportPath = "selected.opml";
+        await context.ViewModel.InitializeAsync(CancellationToken.None);
+
+        await context.ViewModel.PreviewOpmlCommand.ExecuteAsync();
+
+        Assert.Equal(3, context.ViewModel.OpmlItems.Count);
+        Assert.Equal(OpmlCatalogItemStatus.New, context.ViewModel.OpmlItems[0].Status);
+        Assert.Equal(OpmlCatalogItemStatus.Duplicate, context.ViewModel.OpmlItems[1].Status);
+        Assert.Equal(OpmlCatalogItemStatus.Invalid, context.ViewModel.OpmlItems[2].Status);
+        Assert.Empty(context.Batch.Calls);
+        Assert.Equal(1, context.ViewModel.SelectedOpmlCount);
+    }
+
+    [Fact]
+    public async Task SelectedOpmlIsDiscoveredThenSubmittedAsOneCategoryReferenceBatch()
+    {
+        var context = CreateViewModel(Snapshot(7), AccountRole.Admin);
+        context.OpmlFiles.Loaded = new(
+            "导入",
+            [new("新订阅", "https://new.example/feed.xml", "https://new.example/", ["技术", "开发"])]);
+        context.Dialogs.ImportPath = "selected.opml";
+        context.Discovery.Result = new(
+            "https://new.example/feed.xml",
+            [new("https://new.example/feed.xml", "发现标题", FeedDocumentKind.Atom)]);
+        context.Sync.OnSync = () => context.Repository.Snapshot = Snapshot(8);
+        await context.ViewModel.InitializeAsync(CancellationToken.None);
+        await context.ViewModel.PreviewOpmlCommand.ExecuteAsync();
+
+        await context.ViewModel.ImportSelectedOpmlCommand.ExecuteAsync();
+
+        BatchCall call = Assert.Single(context.Batch.Calls);
+        Assert.Equal(7, call.ExpectedVersion);
+        Assert.Collection(
+            call.Operations,
+            category =>
+            {
+                Assert.Equal(FeedCatalogBatchOperationType.CreateCategory, category.Type);
+                Assert.Equal("技术 / 开发", category.CategoryInput!.Name);
+            },
+            feed =>
+            {
+                Assert.Equal(FeedCatalogBatchOperationType.CreateFeed, feed.Type);
+                Assert.Equal("category-1", feed.CategoryOperationId);
+                Assert.Equal("https://new.example/feed.xml", feed.FeedInput!.OriginalUrl);
+            });
+        Assert.Equal(1, context.Sync.SyncCount);
+        Assert.Empty(context.ViewModel.OpmlItems);
+        Assert.Contains("原子导入", context.ViewModel.Status, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task OpmlExportContainsOnlyCatalogProjection()
+    {
+        var context = CreateViewModel(Snapshot(7), AccountRole.Admin);
+        context.Dialogs.ExportPath = "export.opml";
+        await context.ViewModel.InitializeAsync(CancellationToken.None);
+
+        await context.ViewModel.ExportOpmlCommand.ExecuteAsync();
+
+        Assert.NotNull(context.OpmlFiles.Saved);
+        OpmlDocument exported = context.OpmlFiles.Saved;
+        Assert.Equal("LenxTool 共享订阅 v7", exported.Title);
+        OpmlFeed feed = Assert.Single(exported.Feeds);
+        Assert.Equal("示例源", feed.Title);
+        Assert.Equal(["技术"], feed.GroupPath);
+    }
+
+    [Fact]
+    public async Task OpmlDiscoveryFailureMarksItemInvalidAndDoesNotSubmitBatch()
+    {
+        var context = CreateViewModel(Snapshot(7), AccountRole.Admin);
+        context.OpmlFiles.Loaded = new(
+            "导入",
+            [new("失败订阅", "https://failed.example/feed.xml", null, [])]);
+        context.Dialogs.ImportPath = "selected.opml";
+        context.Discovery.Failure = new AppException(new(
+            AppErrorCode.ProviderUnavailable,
+            "发现失败",
+            "无法读取订阅",
+            "检查地址后重试"));
+        await context.ViewModel.InitializeAsync(CancellationToken.None);
+        await context.ViewModel.PreviewOpmlCommand.ExecuteAsync();
+
+        await context.ViewModel.ImportSelectedOpmlCommand.ExecuteAsync();
+
+        Assert.Empty(context.Batch.Calls);
+        Assert.Equal(OpmlCatalogItemStatus.Invalid, Assert.Single(context.ViewModel.OpmlItems).Status);
+        Assert.Contains("未提交任何", context.ViewModel.Status, StringComparison.Ordinal);
+    }
 
     [Fact]
     public async Task AdminInitializationLoadsAllCatalogWhileUserCommandsRemainUnavailable()
@@ -226,8 +328,19 @@ public sealed class FeedAdminViewModelTests
         var admin = new FakeCatalogAdminService();
         var discovery = new FakeDiscoveryService();
         var account = new FakeAccountSessionService(SignedIn(role));
-        var viewModel = new FeedAdminViewModel(admin, repository, sync, discovery, account);
-        return new(viewModel, admin, repository, sync, discovery, account);
+        var batch = new FakeCatalogBatchService();
+        var opmlFiles = new FakeOpmlFileService();
+        var dialogs = new FakeOpmlFileDialogs();
+        var viewModel = new FeedAdminViewModel(
+            admin,
+            repository,
+            sync,
+            discovery,
+            account,
+            batch,
+            opmlFiles,
+            dialogs);
+        return new(viewModel, admin, repository, sync, discovery, account, batch, opmlFiles, dialogs);
     }
 
     private static FeedCatalogSnapshot Snapshot(long version) => new(
@@ -264,7 +377,59 @@ public sealed class FeedAdminViewModelTests
         FakeCatalogRepository Repository,
         FakeCatalogSyncService Sync,
         FakeDiscoveryService Discovery,
-        FakeAccountSessionService Account);
+        FakeAccountSessionService Account,
+        FakeCatalogBatchService Batch,
+        FakeOpmlFileService OpmlFiles,
+        FakeOpmlFileDialogs Dialogs);
+
+    private sealed record BatchCall(
+        IReadOnlyList<FeedCatalogBatchOperation> Operations,
+        long ExpectedVersion);
+
+    private sealed class FakeCatalogBatchService : IFeedCatalogBatchService
+    {
+        public List<BatchCall> Calls { get; } = [];
+
+        public Task<FeedCatalogBatchResult> ApplyAsync(
+            IReadOnlyList<FeedCatalogBatchOperation> operations,
+            long expectedCatalogVersion,
+            CancellationToken cancellationToken)
+        {
+            Calls.Add(new(operations, expectedCatalogVersion));
+            FeedCatalogBatchOperationResult[] results = operations.Select((operation, index) => new FeedCatalogBatchOperationResult(
+                operation.OperationId,
+                operation.Type is FeedCatalogBatchOperationType.CreateCategory
+                    or FeedCatalogBatchOperationType.PatchCategory
+                    or FeedCatalogBatchOperationType.DeleteCategory
+                    ? "FEED_CATEGORY"
+                    : "FEED",
+                $"10000000-0000-4000-8000-{index + 100:D12}")).ToArray();
+            return Task.FromResult(new FeedCatalogBatchResult(expectedCatalogVersion + 1, results));
+        }
+    }
+
+    private sealed class FakeOpmlFileService : IOpmlFileService
+    {
+        public OpmlDocument? Loaded { get; set; }
+        public OpmlDocument? Saved { get; private set; }
+
+        public Task<OpmlDocument> LoadAsync(string path, CancellationToken cancellationToken) =>
+            Task.FromResult(Loaded ?? throw new InvalidOperationException("Missing OPML fixture."));
+
+        public Task SaveAsync(string path, OpmlDocument document, CancellationToken cancellationToken)
+        {
+            Saved = document;
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class FakeOpmlFileDialogs : IOpmlFileDialogService
+    {
+        public string? ImportPath { get; set; }
+        public string? ExportPath { get; set; }
+        public string? PickOpmlImport() => ImportPath;
+        public string? PickOpmlExport(string suggestedFileName) => ExportPath;
+    }
 
     private sealed record FeedCall(
         string Operation,
@@ -348,8 +513,11 @@ public sealed class FeedAdminViewModelTests
     private sealed class FakeDiscoveryService : IFeedDiscoveryService
     {
         public FeedDiscoveryResult? Result { get; set; }
+        public AppException? Failure { get; set; }
         public Task<FeedDiscoveryResult> DiscoverAsync(string url, CancellationToken token) =>
-            Task.FromResult(Result ?? throw new InvalidOperationException("Missing discovery result."));
+            Failure is null
+                ? Task.FromResult(Result ?? throw new InvalidOperationException("Missing discovery result."))
+                : Task.FromException<FeedDiscoveryResult>(Failure);
     }
 
     private sealed class FakeAccountSessionService(AccountSessionSnapshot current) : IAccountSessionService

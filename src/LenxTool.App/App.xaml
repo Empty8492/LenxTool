@@ -810,6 +810,131 @@
                                     </Border>
                                 </Grid>
                             </TabItem>
+
+                            <TabItem Header="OPML 导入/导出">
+                                <Grid Margin="0,16,0,0">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="14" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+
+                                    <Border Style="{StaticResource BentoCardStyle}">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel>
+                                                <TextBlock Style="{StaticResource SectionTitleStyle}" Text="先预览，再原子导入" />
+                                                <TextBlock Margin="0,7,0,0"
+                                                           MaxWidth="620"
+                                                           Style="{StaticResource MetaTextStyle}"
+                                                           Text="最多读取 2 MiB OPML；禁用 DTD/外部实体。嵌套分组展平为“父 / 子”分类，重复、冲突和无效项默认不可选。"
+                                                           TextWrapping="Wrap" />
+                                                <TextBlock Margin="0,12,0,0"
+                                                           AutomationProperties.Name="OPML 预览摘要"
+                                                           AutomationProperties.LiveSetting="Polite"
+                                                           FontWeight="SemiBold"
+                                                           Text="{Binding OpmlSummary}"
+                                                           TextWrapping="Wrap" />
+                                            </StackPanel>
+                                            <WrapPanel Grid.Column="1"
+                                                       Margin="20,0,0,0"
+                                                       HorizontalAlignment="Right"
+                                                       VerticalAlignment="Top">
+                                                <Button Margin="0,0,8,8"
+                                                        AutomationProperties.Name="选择并预览 OPML"
+                                                        Command="{Binding PreviewOpmlCommand}"
+                                                        Content="选择并预览" />
+                                                <Button Margin="0,0,8,8"
+                                                        AutomationProperties.Name="导出共享目录 OPML"
+                                                        Command="{Binding ExportOpmlCommand}"
+                                                        Content="导出目录" />
+                                                <Button Margin="0,0,0,8"
+                                                        Style="{StaticResource AccentButtonStyle}"
+                                                        AutomationProperties.Name="原子导入已选 OPML 项"
+                                                        Command="{Binding ImportSelectedOpmlCommand}"
+                                                        Content="验证并原子导入" />
+                                            </WrapPanel>
+                                        </Grid>
+                                    </Border>
+
+                                    <Border Grid.Row="2" Style="{StaticResource BentoCardStyle}" Padding="0">
+                                        <Grid>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="52" />
+                                                <RowDefinition Height="420" />
+                                            </Grid.RowDefinitions>
+                                            <DockPanel Margin="16,0">
+                                                <TextBlock VerticalAlignment="Center"
+                                                           Style="{StaticResource SectionTitleStyle}"
+                                                           Text="导入预览" />
+                                                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                                                    <Button Margin="0,0,8,0"
+                                                            Padding="10,5"
+                                                            AutomationProperties.Name="选择所有 OPML 新增项"
+                                                            Command="{Binding SelectAllNewOpmlCommand}"
+                                                            Content="全选新增" />
+                                                    <Button Padding="10,5"
+                                                            AutomationProperties.Name="清除 OPML 选择"
+                                                            Command="{Binding ClearOpmlSelectionCommand}"
+                                                            Content="清除选择" />
+                                                </StackPanel>
+                                            </DockPanel>
+                                            <ListView Grid.Row="1"
+                                                      AutomationProperties.Name="OPML 导入预览列表"
+                                                      ItemsSource="{Binding OpmlItems}"
+                                                      Background="Transparent"
+                                                      BorderThickness="0"
+                                                      ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                                <ListView.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <Grid Margin="10,8" MinWidth="590">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="34" />
+                                                                <ColumnDefinition Width="2*" />
+                                                                <ColumnDefinition Width="120" />
+                                                                <ColumnDefinition Width="90" />
+                                                                <ColumnDefinition Width="2*" />
+                                                            </Grid.ColumnDefinitions>
+                                                            <CheckBox VerticalAlignment="Center"
+                                                                      AutomationProperties.Name="选择此 OPML 项"
+                                                                      IsEnabled="{Binding IsSelectable}"
+                                                                      IsChecked="{Binding IsSelected, Mode=TwoWay}" />
+                                                            <StackPanel Grid.Column="1" Margin="0,0,14,0">
+                                                                <TextBlock FontWeight="SemiBold"
+                                                                           Text="{Binding Title}"
+                                                                           TextTrimming="CharacterEllipsis" />
+                                                                <TextBlock Margin="0,4,0,0"
+                                                                           Style="{StaticResource MetaTextStyle}"
+                                                                           Text="{Binding FeedUrl}"
+                                                                           TextTrimming="CharacterEllipsis" />
+                                                            </StackPanel>
+                                                            <TextBlock Grid.Column="2"
+                                                                       Margin="0,0,14,0"
+                                                                       VerticalAlignment="Center"
+                                                                       Style="{StaticResource MetaTextStyle}"
+                                                                       Text="{Binding CategoryName, TargetNullValue=未分类}"
+                                                                       TextTrimming="CharacterEllipsis" />
+                                                            <TextBlock Grid.Column="3"
+                                                                       VerticalAlignment="Center"
+                                                                       Foreground="{DynamicResource Brush.Accent}"
+                                                                       FontWeight="SemiBold"
+                                                                       Text="{Binding StatusLabel}" />
+                                                            <TextBlock Grid.Column="4"
+                                                                       VerticalAlignment="Center"
+                                                                       Style="{StaticResource MetaTextStyle}"
+                                                                       Text="{Binding Message}"
+                                                                       TextWrapping="Wrap" />
+                                                        </Grid>
+                                                    </DataTemplate>
+                                                </ListView.ItemTemplate>
+                                            </ListView>
+                                        </Grid>
+                                    </Border>
+                                </Grid>
+                            </TabItem>
                         </TabControl>
                     </Grid>
                 </ScrollViewer>

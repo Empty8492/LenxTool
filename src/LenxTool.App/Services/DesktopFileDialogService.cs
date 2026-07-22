@@ -15,7 +15,13 @@ public interface IDesktopFileDialogService
     void OpenUri(string uri);
 }
 
-public sealed class DesktopFileDialogService : IDesktopFileDialogService
+public interface IOpmlFileDialogService
+{
+    string? PickOpmlImport();
+    string? PickOpmlExport(string suggestedFileName);
+}
+
+public sealed class DesktopFileDialogService : IDesktopFileDialogService, IOpmlFileDialogService
 {
     public IReadOnlyList<string> PickMediaFiles()
     {
@@ -71,6 +77,31 @@ public sealed class DesktopFileDialogService : IDesktopFileDialogService
             AddExtension = true
         };
         return save.ShowDialog() == true ? (open.FileName, save.FileName) : null;
+    }
+
+    public string? PickOpmlImport()
+    {
+        var dialog = new OpenFileDialog
+        {
+            Title = "选择要预览的 OPML 订阅文件",
+            Filter = "OPML 订阅文件|*.opml;*.xml|所有文件|*.*",
+            Multiselect = false,
+            CheckFileExists = true
+        };
+        return dialog.ShowDialog() == true ? dialog.FileName : null;
+    }
+
+    public string? PickOpmlExport(string suggestedFileName)
+    {
+        var dialog = new SaveFileDialog
+        {
+            Title = "导出共享订阅目录",
+            Filter = "OPML 订阅文件|*.opml",
+            FileName = suggestedFileName,
+            AddExtension = true,
+            DefaultExt = ".opml"
+        };
+        return dialog.ShowDialog() == true ? dialog.FileName : null;
     }
 
     public void OpenFolder(string path)

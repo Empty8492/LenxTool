@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using LenxTool.App.Mvvm;
+using LenxTool.App.Services;
 using LenxTool.Core.Accounts;
 using LenxTool.Core.Contracts;
 using LenxTool.Core.Errors;
@@ -19,6 +20,9 @@ public sealed partial class FeedAdminViewModel : PageViewModel
     private readonly IFeedCatalogSyncService _catalogSync;
     private readonly IFeedDiscoveryService _discoveryService;
     private readonly IAccountSessionService _accountSession;
+    private readonly IFeedCatalogBatchService _batchService;
+    private readonly IOpmlFileService _opmlFileService;
+    private readonly IOpmlFileDialogService _opmlFileDialogs;
     private bool _isAdmin;
     private bool _catalogIsCurrent;
     private long _catalogVersion;
@@ -51,7 +55,10 @@ public sealed partial class FeedAdminViewModel : PageViewModel
         IFeedCatalogRepository repository,
         IFeedCatalogSyncService catalogSync,
         IFeedDiscoveryService discoveryService,
-        IAccountSessionService accountSession)
+        IAccountSessionService accountSession,
+        IFeedCatalogBatchService batchService,
+        IOpmlFileService opmlFileService,
+        IOpmlFileDialogService opmlFileDialogs)
         : base("订阅管理", "维护所有用户共享的 RSS/Atom 目录；权限与版本仍由 Worker 强制校验")
     {
         _adminService = adminService;
@@ -59,8 +66,12 @@ public sealed partial class FeedAdminViewModel : PageViewModel
         _catalogSync = catalogSync;
         _discoveryService = discoveryService;
         _accountSession = accountSession;
+        _batchService = batchService;
+        _opmlFileService = opmlFileService;
+        _opmlFileDialogs = opmlFileDialogs;
         Categories = [];
         Feeds = [];
+        OpmlItems = [];
         CategoryChoices = [];
         ViewKindChoices =
         [
@@ -99,6 +110,11 @@ public sealed partial class FeedAdminViewModel : PageViewModel
         PrepareDeleteFeedCommand = new RelayCommand<FeedCatalogItem>(PrepareDeleteFeed, item => CanManage && item is not null);
         ConfirmDeleteFeedCommand = new(ConfirmDeleteFeedAsync, () => CanManage && PendingDeleteFeedId is not null);
         CancelDeleteFeedCommand = new(CancelDeleteFeed, () => PendingDeleteFeedId is not null);
+        PreviewOpmlCommand = new(PreviewOpmlAsync, () => CanManage && !_isOpmlBusy);
+        ImportSelectedOpmlCommand = new(ImportSelectedOpmlAsync, CanImportSelectedOpml);
+        SelectAllNewOpmlCommand = new(SelectAllNewOpml, () => HasOpmlPreview && !_isOpmlBusy);
+        ClearOpmlSelectionCommand = new(ClearOpmlSelection, () => HasOpmlPreview && !_isOpmlBusy);
+        ExportOpmlCommand = new(ExportOpmlAsync, () => CanManage && Feeds.Count > 0 && !_isOpmlBusy);
 
         _accountSession.SessionChanged += OnSessionChanged;
         ApplySession(_accountSession.Current);
@@ -107,6 +123,7 @@ public sealed partial class FeedAdminViewModel : PageViewModel
     public ObservableCollection<FeedCategory> Categories { get; }
     public ObservableCollection<FeedCatalogItem> Feeds { get; }
     public ObservableCollection<FeedCategoryChoice> CategoryChoices { get; }
+    public ObservableCollection<OpmlImportItemViewModel> OpmlItems { get; }
     public IReadOnlyList<FeedViewKindChoice> ViewKindChoices { get; }
     public AsyncRelayCommand RefreshCommand { get; }
     public RelayCommand BeginNewCategoryCommand { get; }
@@ -126,9 +143,19 @@ public sealed partial class FeedAdminViewModel : PageViewModel
     public RelayCommand<FeedCatalogItem> PrepareDeleteFeedCommand { get; }
     public AsyncRelayCommand ConfirmDeleteFeedCommand { get; }
     public RelayCommand CancelDeleteFeedCommand { get; }
+    public AsyncRelayCommand PreviewOpmlCommand { get; }
+    public AsyncRelayCommand ImportSelectedOpmlCommand { get; }
+    public RelayCommand SelectAllNewOpmlCommand { get; }
+    public RelayCommand ClearOpmlSelectionCommand { get; }
+    public AsyncRelayCommand ExportOpmlCommand { get; }
 
     public bool IsAdmin => _isAdmin;
     public bool CanManage => IsAdmin && _catalogIsCurrent;
+    public bool HasOpmlPreview => OpmlItems.Count > 0;
+    public int SelectedOpmlCount => OpmlItems.Count(item => item.IsSelected);
+    public string OpmlSummary => HasOpmlPreview
+        ? $"共 {OpmlItems.Count} 项：新增 {OpmlItems.Count(item => item.Status == OpmlCatalogItemStatus.New)}，重复 {OpmlItems.Count(item => item.Status == OpmlCatalogItemStatus.Duplicate)}，冲突 {OpmlItems.Count(item => item.Status == OpmlCatalogItemStatus.Conflict)}，无效 {OpmlItems.Count(item => item.Status == OpmlCatalogItemStatus.Invalid)}；已选 {SelectedOpmlCount}。"
+        : "尚未选择 OPML 文件；预览不会自动写入共享目录。";
     public long CatalogVersion => _catalogVersion;
     public string Status
     {

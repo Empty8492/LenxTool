@@ -1,5 +1,6 @@
 using System.Reflection;
 using LenxTool.App.ViewModels;
+using LenxTool.App.Services;
 using LenxTool.Core.Contracts;
 using LenxTool.Infrastructure.Data;
 using LenxTool.Infrastructure.Networking;
@@ -28,6 +29,14 @@ public sealed class DependencyInjectionTests
         Assert.IsType<FeedCatalogRepository>(provider.GetRequiredService<IFeedCatalogRepository>());
         Assert.IsType<FeedCatalogSyncService>(provider.GetRequiredService<IFeedCatalogSyncService>());
         Assert.IsType<FeedCatalogAdminService>(provider.GetRequiredService<IFeedCatalogAdminService>());
+        Assert.Same(
+            provider.GetRequiredService<IFeedCatalogAdminService>(),
+            provider.GetRequiredService<IFeedCatalogBatchService>());
+        Assert.NotNull(provider.GetRequiredService<IOpmlCodec>());
+        Assert.NotNull(provider.GetRequiredService<IOpmlFileService>());
+        Assert.Same(
+            provider.GetRequiredService<IDesktopFileDialogService>(),
+            provider.GetRequiredService<IOpmlFileDialogService>());
         Assert.NotNull(provider.GetRequiredService<FeedAdminViewModel>());
         Assert.NotNull(provider.GetRequiredService<IFeedDiscoveryService>());
         Assert.NotNull(provider.GetRequiredService<IFeedParser>());

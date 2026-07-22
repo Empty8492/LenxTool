@@ -111,7 +111,13 @@ public partial class App : Application
         services.AddSingleton(FeedCatalogSyncOptions.Default);
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton<IFeedCatalogSyncService, FeedCatalogSyncService>();
-        services.AddSingleton<IFeedCatalogAdminService, FeedCatalogAdminService>();
+        services.AddSingleton<FeedCatalogAdminService>();
+        services.AddSingleton<IFeedCatalogAdminService>(static services =>
+            services.GetRequiredService<FeedCatalogAdminService>());
+        services.AddSingleton<IFeedCatalogBatchService>(static services =>
+            services.GetRequiredService<FeedCatalogAdminService>());
+        services.AddSingleton<IOpmlCodec, OpmlCodec>();
+        services.AddSingleton<IOpmlFileService, OpmlFileService>();
         services.AddFeedDiscovery(CreateFeedDiscoveryOptions());
         services.AddFeedRefresh(FeedRefreshOptions.Default);
         services.AddSingleton<MediaJobRepository>();
@@ -127,7 +133,11 @@ public partial class App : Application
         services.AddSingleton<ITranscriptionService, GroqWhisperClient>();
         services.AddSingleton<ILocalTranscriptionService, LocalWhisperTranscriptionService>();
         services.AddSingleton<IMediaAudioService, MediaFoundationAudioService>();
-        services.AddSingleton<IDesktopFileDialogService, DesktopFileDialogService>();
+        services.AddSingleton<DesktopFileDialogService>();
+        services.AddSingleton<IDesktopFileDialogService>(static services =>
+            services.GetRequiredService<DesktopFileDialogService>());
+        services.AddSingleton<IOpmlFileDialogService>(static services =>
+            services.GetRequiredService<DesktopFileDialogService>());
         services.AddSingleton<ISubtitleExportService, SubtitleExportService>();
         services.AddSingleton(CreateUpdateOptions());
         services.AddSingleton<IUpdateService, UpdateService>();

@@ -26,7 +26,10 @@ public sealed class FeedAdminLayoutTests
             "Feed 视图类型",
             "Feed 刷新间隔",
             "Feed 排序",
-            "Feed 安全验证预览"
+            "Feed 安全验证预览",
+            "OPML 预览摘要",
+            "OPML 导入预览列表",
+            "选择此 OPML 项"
         })
         {
             Assert.Contains(template.Descendants(), element =>
@@ -52,7 +55,12 @@ public sealed class FeedAdminLayoutTests
             "MoveFeedUpCommand",
             "MoveFeedDownCommand",
             "PrepareDeleteFeedCommand",
-            "ConfirmDeleteFeedCommand"
+            "ConfirmDeleteFeedCommand",
+            "PreviewOpmlCommand",
+            "ImportSelectedOpmlCommand",
+            "SelectAllNewOpmlCommand",
+            "ClearOpmlSelectionCommand",
+            "ExportOpmlCommand"
         })
         {
             Assert.Contains(template.Descendants(), element =>
@@ -68,6 +76,13 @@ public sealed class FeedAdminLayoutTests
         {
             Assert.Contains(preview.Descendants(), element =>
                 element.Attribute("Text")?.Value.Contains(binding, StringComparison.Ordinal) == true);
+        }
+
+        foreach (string binding in new[] { "OpmlItems", "IsSelected", "StatusLabel", "Message" })
+        {
+            Assert.Contains(template.DescendantsAndSelf(), element =>
+                element.Attributes().Any(attribute =>
+                    attribute.Value.Contains(binding, StringComparison.Ordinal)));
         }
     }
 

@@ -96,6 +96,8 @@ public sealed partial class FeedAdminViewModel
             CategoryChoices.Add(new(category.Id, category.Name, category.IsEnabled));
 
         SetProperty(ref _catalogVersion, snapshot.State.Version, nameof(CatalogVersion));
+        if (_opmlPreviewCatalogVersion is not null && _opmlPreviewCatalogVersion != snapshot.State.Version)
+            ClearOpmlPreview();
         _catalogIsCurrent = snapshot.State.Scope == FeedCatalogScope.All
             && (minimumVersion is null || snapshot.State.Version >= minimumVersion.Value);
         SelectedCategory = Categories.FirstOrDefault(category => category.Id == selectedCategoryId);
@@ -181,6 +183,7 @@ public sealed partial class FeedAdminViewModel
     private void ClearAdminCatalog()
     {
         _catalogIsCurrent = false;
+        ClearOpmlPreview();
         Categories.Clear();
         Feeds.Clear();
         CategoryChoices.Clear();
@@ -209,6 +212,7 @@ public sealed partial class FeedAdminViewModel
         PrepareDeleteFeedCommand.NotifyCanExecuteChanged();
         NotifyCategoryCommands();
         NotifyFeedCommands();
+        NotifyOpmlCommands();
     }
 
     private void NotifyCategoryCommands()
