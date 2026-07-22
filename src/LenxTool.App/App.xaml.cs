@@ -46,6 +46,8 @@ public partial class App : Application
             await media.InitializeAsync(CancellationToken.None).ConfigureAwait(true);
             SettingsViewModel settings = _host.Services.GetRequiredService<SettingsViewModel>();
             await settings.InitializeAsync(CancellationToken.None).ConfigureAwait(true);
+            FeedAdminViewModel feedAdmin = _host.Services.GetRequiredService<FeedAdminViewModel>();
+            await feedAdmin.InitializeAsync(CancellationToken.None).ConfigureAwait(true);
             IFeedRefreshService feedRefresh = _host.Services.GetRequiredService<IFeedRefreshService>();
             await feedRefresh.InitializeAsync(CancellationToken.None).ConfigureAwait(true);
             HistoryViewModel history = _host.Services.GetRequiredService<HistoryViewModel>();
@@ -109,6 +111,7 @@ public partial class App : Application
         services.AddSingleton(FeedCatalogSyncOptions.Default);
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton<IFeedCatalogSyncService, FeedCatalogSyncService>();
+        services.AddSingleton<IFeedCatalogAdminService, FeedCatalogAdminService>();
         services.AddFeedDiscovery(CreateFeedDiscoveryOptions());
         services.AddFeedRefresh(FeedRefreshOptions.Default);
         services.AddSingleton<MediaJobRepository>();
@@ -142,6 +145,7 @@ public partial class App : Application
         services.AddSingleton<HistoryViewModel>();
         services.AddSingleton<ToolsViewModel>();
         services.AddSingleton<SettingsViewModel>();
+        services.AddSingleton<FeedAdminViewModel>();
         services.AddSingleton(CreateShellViewModel);
         services.AddSingleton<MainWindow>();
     }
@@ -155,7 +159,7 @@ public partial class App : Application
         ToolsViewModel tools = services.GetRequiredService<ToolsViewModel>();
         SettingsViewModel settings = services.GetRequiredService<SettingsViewModel>();
         IAccountSessionService accountSession = services.GetRequiredService<IAccountSessionService>();
-        WorkspacePageViewModel feedAdmin = CreateFeedAdminPage();
+        FeedAdminViewModel feedAdmin = services.GetRequiredService<FeedAdminViewModel>();
 
         return new(
         [
@@ -203,16 +207,6 @@ public partial class App : Application
         }
         return hosts;
     }
-
-    private static WorkspacePageViewModel CreateFeedAdminPage() => new(
-        "订阅管理",
-        "仅管理员可见；服务端仍会对每个写请求重新验证角色",
-        "管理共享目录",
-        [
-            new("CATALOG", "共享目录已接通", "Worker 已支持分类和 Feed CRUD、版本并发与审计。", "P0-04/05"),
-            new("UI", "管理界面待接入", "列表、编辑、排序和发布交互将在 P0-15 完成。", "未完成"),
-            new("SECURITY", "权限以服务端为准", "隐藏入口只改善体验，不能替代 Worker 的 admin 校验。", "强制")
-        ]);
 
     private static UpdateOptions CreateUpdateOptions()
     {

@@ -410,6 +410,411 @@
                 </Grid>
             </DataTemplate>
 
+            <DataTemplate DataType="{x:Type vm:FeedAdminViewModel}">
+                <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                              VerticalScrollBarVisibility="Auto"
+                              Focusable="False">
+                    <Grid MinWidth="650" Margin="28,24,28,36">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="12" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="16" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <DockPanel LastChildFill="False">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource PageTitleStyle}" Text="{Binding Title}" />
+                                <TextBlock Margin="0,7,0,0"
+                                           Style="{StaticResource MetaTextStyle}"
+                                           Text="{Binding Subtitle}"
+                                           TextWrapping="Wrap" />
+                            </StackPanel>
+                            <Button DockPanel.Dock="Right"
+                                    AutomationProperties.Name="刷新共享订阅目录"
+                                    Command="{Binding RefreshCommand}"
+                                    Content="刷新目录" />
+                        </DockPanel>
+
+                        <Border Grid.Row="2"
+                                Padding="14,10"
+                                Background="{DynamicResource Brush.SurfaceMuted}"
+                                CornerRadius="8">
+                            <DockPanel>
+                                <TextBlock FontWeight="SemiBold"
+                                           Foreground="{DynamicResource Brush.Accent}"
+                                           Text="{Binding CatalogVersion, StringFormat=目录版本 v{0}}" />
+                                <TextBlock DockPanel.Dock="Right"
+                                           Margin="16,0,0,0"
+                                           AutomationProperties.LiveSetting="Polite"
+                                           Style="{StaticResource MetaTextStyle}"
+                                           Text="{Binding Status}"
+                                           TextWrapping="Wrap" />
+                            </DockPanel>
+                        </Border>
+
+                        <TabControl Grid.Row="4">
+                            <TabItem Header="分类">
+                                <Grid Margin="0,16,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="280" />
+                                        <ColumnDefinition Width="14" />
+                                        <ColumnDefinition Width="*" MinWidth="340" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <Border Style="{StaticResource BentoCardStyle}" Padding="0">
+                                        <Grid>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="52" />
+                                                <RowDefinition Height="280" />
+                                                <RowDefinition Height="Auto" />
+                                            </Grid.RowDefinitions>
+                                            <DockPanel Margin="16,0">
+                                                <TextBlock VerticalAlignment="Center"
+                                                           Style="{StaticResource SectionTitleStyle}"
+                                                           Text="共享分类" />
+                                                <Button DockPanel.Dock="Right"
+                                                        Padding="10,5"
+                                                        AutomationProperties.Name="新增共享分类"
+                                                        Command="{Binding BeginNewCategoryCommand}"
+                                                        Content="新增" />
+                                            </DockPanel>
+                                            <ListBox Grid.Row="1"
+                                                     AutomationProperties.Name="共享分类列表"
+                                                     ItemsSource="{Binding Categories}"
+                                                     SelectedItem="{Binding SelectedCategory}"
+                                                     Background="Transparent"
+                                                     BorderThickness="0"
+                                                     ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                                <ListBox.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <Grid Margin="10,7" MinWidth="225">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="*" />
+                                                                <ColumnDefinition Width="Auto" />
+                                                            </Grid.ColumnDefinitions>
+                                                            <StackPanel>
+                                                                <TextBlock FontWeight="SemiBold" Text="{Binding Name}" />
+                                                                <TextBlock Margin="0,3,0,0"
+                                                                           Style="{StaticResource MetaTextStyle}"
+                                                                           Text="{Binding SortOrder, StringFormat=排序 {0}}" />
+                                                            </StackPanel>
+                                                            <TextBlock Grid.Column="1"
+                                                                       VerticalAlignment="Center"
+                                                                       Style="{StaticResource MetaTextStyle}"
+                                                                       Text="{Binding IsEnabled, StringFormat=启用 {0}}" />
+                                                        </Grid>
+                                                    </DataTemplate>
+                                                </ListBox.ItemTemplate>
+                                            </ListBox>
+                                            <Grid Grid.Row="2" Margin="12,10,12,12">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="6" />
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="6" />
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="6" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <Button AutomationProperties.Name="分类上移"
+                                                        Command="{Binding MoveCategoryUpCommand}"
+                                                        CommandParameter="{Binding SelectedCategory}"
+                                                        Content="上移" />
+                                                <Button Grid.Column="2"
+                                                        AutomationProperties.Name="分类下移"
+                                                        Command="{Binding MoveCategoryDownCommand}"
+                                                        CommandParameter="{Binding SelectedCategory}"
+                                                        Content="下移" />
+                                                <Button Grid.Column="4"
+                                                        AutomationProperties.Name="切换分类启用状态"
+                                                        Command="{Binding ToggleCategoryCommand}"
+                                                        CommandParameter="{Binding SelectedCategory}"
+                                                        Content="启停" />
+                                                <Button Grid.Column="6"
+                                                        AutomationProperties.Name="删除共享分类"
+                                                        Command="{Binding PrepareDeleteCategoryCommand}"
+                                                        CommandParameter="{Binding SelectedCategory}"
+                                                        Content="删除" />
+                                            </Grid>
+                                        </Grid>
+                                    </Border>
+
+                                    <Border Grid.Column="2" Style="{StaticResource BentoCardStyle}">
+                                        <StackPanel>
+                                            <TextBlock Style="{StaticResource SectionTitleStyle}" Text="分类编辑器" />
+                                            <TextBlock Margin="0,16,0,6" Style="{StaticResource MetaTextStyle}" Text="名称" />
+                                            <TextBox MaxLength="80"
+                                                     AutomationProperties.Name="分类名称"
+                                                     Text="{Binding CategoryNameInput, UpdateSourceTrigger=PropertyChanged}" />
+                                            <TextBlock Margin="0,12,0,6" Style="{StaticResource MetaTextStyle}" Text="排序（0～1,000,000）" />
+                                            <TextBox AutomationProperties.Name="分类排序"
+                                                     Text="{Binding CategorySortOrder, UpdateSourceTrigger=PropertyChanged}" />
+                                            <CheckBox Margin="0,14,0,0"
+                                                      Foreground="{DynamicResource Brush.TextPrimary}"
+                                                      IsChecked="{Binding CategoryIsEnabled}"
+                                                      Content="允许普通用户同步此分类" />
+                                            <Button Margin="0,18,0,0"
+                                                    HorizontalAlignment="Left"
+                                                    Style="{StaticResource AccentButtonStyle}"
+                                                    AutomationProperties.Name="保存共享分类"
+                                                    Command="{Binding SaveCategoryCommand}"
+                                                    Content="保存分类" />
+
+                                            <Border Margin="0,18,0,0"
+                                                    Padding="12"
+                                                    Background="{DynamicResource Brush.SurfaceMuted}"
+                                                    CornerRadius="8"
+                                                    Visibility="{Binding IsCategoryDeletePending, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                                <StackPanel>
+                                                    <TextBlock FontWeight="SemiBold" Text="确认删除分类？" />
+                                                    <TextBlock Margin="0,5,0,10"
+                                                               Style="{StaticResource MetaTextStyle}"
+                                                               Text="若分类仍含 Feed，Worker 会拒绝删除。"
+                                                               TextWrapping="Wrap" />
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <Button Margin="0,0,8,0"
+                                                                AutomationProperties.Name="取消删除分类"
+                                                                Command="{Binding CancelDeleteCategoryCommand}"
+                                                                Content="取消" />
+                                                        <Button AutomationProperties.Name="确认删除分类"
+                                                                Command="{Binding ConfirmDeleteCategoryCommand}"
+                                                                Content="确认删除" />
+                                                    </StackPanel>
+                                                </StackPanel>
+                                            </Border>
+                                        </StackPanel>
+                                    </Border>
+                                </Grid>
+                            </TabItem>
+
+                            <TabItem Header="Feed">
+                                <Grid Margin="0,16,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="300" />
+                                        <ColumnDefinition Width="14" />
+                                        <ColumnDefinition Width="*" MinWidth="360" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <Border Style="{StaticResource BentoCardStyle}" Padding="0">
+                                        <Grid>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="52" />
+                                                <RowDefinition Height="420" />
+                                                <RowDefinition Height="Auto" />
+                                            </Grid.RowDefinitions>
+                                            <DockPanel Margin="16,0">
+                                                <TextBlock VerticalAlignment="Center"
+                                                           Style="{StaticResource SectionTitleStyle}"
+                                                           Text="共享 Feed" />
+                                                <Button DockPanel.Dock="Right"
+                                                        Padding="10,5"
+                                                        AutomationProperties.Name="新增共享 Feed"
+                                                        Command="{Binding BeginNewFeedCommand}"
+                                                        Content="新增" />
+                                            </DockPanel>
+                                            <ListBox Grid.Row="1"
+                                                     AutomationProperties.Name="共享 Feed 列表"
+                                                     ItemsSource="{Binding Feeds}"
+                                                     SelectedItem="{Binding SelectedFeed}"
+                                                     Background="Transparent"
+                                                     BorderThickness="0"
+                                                     ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                                <ListBox.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <StackPanel Margin="10,7" MinWidth="245">
+                                                            <DockPanel>
+                                                                <TextBlock FontWeight="SemiBold"
+                                                                           Text="{Binding DisplayName}"
+                                                                           TextTrimming="CharacterEllipsis" />
+                                                                <TextBlock DockPanel.Dock="Right"
+                                                                           Style="{StaticResource MetaTextStyle}"
+                                                                           Text="{Binding IsEnabled, StringFormat=启用 {0}}" />
+                                                            </DockPanel>
+                                                            <TextBlock Margin="0,4,0,0"
+                                                                       Style="{StaticResource MetaTextStyle}"
+                                                                       Text="{Binding OriginalUrl}"
+                                                                       TextTrimming="CharacterEllipsis" />
+                                                        </StackPanel>
+                                                    </DataTemplate>
+                                                </ListBox.ItemTemplate>
+                                            </ListBox>
+                                            <Grid Grid.Row="2" Margin="12,10,12,12">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="6" />
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="6" />
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="6" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <Button AutomationProperties.Name="Feed 上移"
+                                                        Command="{Binding MoveFeedUpCommand}"
+                                                        CommandParameter="{Binding SelectedFeed}"
+                                                        Content="上移" />
+                                                <Button Grid.Column="2"
+                                                        AutomationProperties.Name="Feed 下移"
+                                                        Command="{Binding MoveFeedDownCommand}"
+                                                        CommandParameter="{Binding SelectedFeed}"
+                                                        Content="下移" />
+                                                <Button Grid.Column="4"
+                                                        AutomationProperties.Name="切换 Feed 启用状态"
+                                                        Command="{Binding ToggleFeedCommand}"
+                                                        CommandParameter="{Binding SelectedFeed}"
+                                                        Content="启停" />
+                                                <Button Grid.Column="6"
+                                                        AutomationProperties.Name="删除共享 Feed"
+                                                        Command="{Binding PrepareDeleteFeedCommand}"
+                                                        CommandParameter="{Binding SelectedFeed}"
+                                                        Content="删除" />
+                                            </Grid>
+                                        </Grid>
+                                    </Border>
+
+                                    <Border Grid.Column="2" Style="{StaticResource BentoCardStyle}">
+                                        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                            <StackPanel>
+                                                <TextBlock Style="{StaticResource SectionTitleStyle}" Text="Feed 编辑器" />
+                                                <TextBlock Margin="0,16,0,6" Style="{StaticResource MetaTextStyle}" Text="站点或 Feed URL" />
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="8" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBox MaxLength="2048"
+                                                             AutomationProperties.Name="Feed 地址"
+                                                             Text="{Binding FeedUrlInput, UpdateSourceTrigger=PropertyChanged}" />
+                                                    <Button Grid.Column="2"
+                                                            AutomationProperties.Name="安全验证 Feed 地址"
+                                                            Command="{Binding DiscoverCommand}"
+                                                            Content="安全验证" />
+                                                </Grid>
+
+                                                <Border Margin="0,12,0,0"
+                                                        Padding="12"
+                                                        AutomationProperties.Name="Feed 安全验证预览"
+                                                        Background="{DynamicResource Brush.SurfaceMuted}"
+                                                        CornerRadius="8">
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="Auto" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <StackPanel>
+                                                            <TextBlock FontWeight="SemiBold" Text="{Binding DiscoveryTitle}" />
+                                                            <TextBlock Margin="0,4,0,0"
+                                                                       Style="{StaticResource MetaTextStyle}"
+                                                                       Text="{Binding DiscoverySite}"
+                                                                       TextWrapping="Wrap" />
+                                                            <TextBlock Margin="0,6,0,0"
+                                                                       Style="{StaticResource MetaTextStyle}"
+                                                                       Text="{Binding DiscoveryWarning}"
+                                                                       TextWrapping="Wrap" />
+                                                        </StackPanel>
+                                                        <TextBlock Grid.Column="1"
+                                                                   Margin="12,0,0,0"
+                                                                   Foreground="{DynamicResource Brush.Accent}"
+                                                                   FontWeight="SemiBold"
+                                                                   Text="{Binding DiscoveryType}" />
+                                                    </Grid>
+                                                </Border>
+
+                                                <TextBlock Margin="0,14,0,6" Style="{StaticResource MetaTextStyle}" Text="显示名称" />
+                                                <TextBox MaxLength="160"
+                                                         AutomationProperties.Name="Feed 显示名称"
+                                                         Text="{Binding FeedDisplayNameInput, UpdateSourceTrigger=PropertyChanged}" />
+                                                <TextBlock Margin="0,12,0,6" Style="{StaticResource MetaTextStyle}" Text="站点地址（可选）" />
+                                                <TextBox MaxLength="2048"
+                                                         AutomationProperties.Name="Feed 站点地址"
+                                                         Text="{Binding FeedSiteUrlInput, UpdateSourceTrigger=PropertyChanged}" />
+
+                                                <Grid Margin="0,12,0,0">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="10" />
+                                                        <ColumnDefinition Width="*" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <StackPanel>
+                                                        <TextBlock Margin="0,0,0,6" Style="{StaticResource MetaTextStyle}" Text="分类" />
+                                                        <ComboBox AutomationProperties.Name="Feed 分类"
+                                                                  ItemsSource="{Binding CategoryChoices}"
+                                                                  DisplayMemberPath="Name"
+                                                                  SelectedValuePath="Id"
+                                                                  SelectedValue="{Binding SelectedCategoryId}" />
+                                                    </StackPanel>
+                                                    <StackPanel Grid.Column="2">
+                                                        <TextBlock Margin="0,0,0,6" Style="{StaticResource MetaTextStyle}" Text="视图类型" />
+                                                        <ComboBox AutomationProperties.Name="Feed 视图类型"
+                                                                  ItemsSource="{Binding ViewKindChoices}"
+                                                                  DisplayMemberPath="Label"
+                                                                  SelectedItem="{Binding SelectedViewKind}" />
+                                                    </StackPanel>
+                                                </Grid>
+
+                                                <Grid Margin="0,12,0,0">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="10" />
+                                                        <ColumnDefinition Width="*" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <StackPanel>
+                                                        <TextBlock Margin="0,0,0,6" Style="{StaticResource MetaTextStyle}" Text="刷新间隔（分钟）" />
+                                                        <TextBox AutomationProperties.Name="Feed 刷新间隔"
+                                                                 Text="{Binding FeedRefreshIntervalMinutes, UpdateSourceTrigger=PropertyChanged}" />
+                                                    </StackPanel>
+                                                    <StackPanel Grid.Column="2">
+                                                        <TextBlock Margin="0,0,0,6" Style="{StaticResource MetaTextStyle}" Text="排序" />
+                                                        <TextBox AutomationProperties.Name="Feed 排序"
+                                                                 Text="{Binding FeedSortOrder, UpdateSourceTrigger=PropertyChanged}" />
+                                                    </StackPanel>
+                                                </Grid>
+
+                                                <CheckBox Margin="0,14,0,0"
+                                                          Foreground="{DynamicResource Brush.TextPrimary}"
+                                                          IsChecked="{Binding FeedIsEnabled}"
+                                                          Content="允许普通用户同步此 Feed" />
+                                                <Button Margin="0,18,0,0"
+                                                        HorizontalAlignment="Left"
+                                                        Style="{StaticResource AccentButtonStyle}"
+                                                        AutomationProperties.Name="保存共享 Feed"
+                                                        Command="{Binding SaveFeedCommand}"
+                                                        Content="保存 Feed" />
+
+                                                <Border Margin="0,18,0,0"
+                                                        Padding="12"
+                                                        Background="{DynamicResource Brush.SurfaceMuted}"
+                                                        CornerRadius="8"
+                                                        Visibility="{Binding IsFeedDeletePending, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                                    <StackPanel>
+                                                        <TextBlock FontWeight="SemiBold" Text="确认删除 Feed？" />
+                                                        <TextBlock Margin="0,5,0,10"
+                                                                   Style="{StaticResource MetaTextStyle}"
+                                                                   Text="只删除共享目录项，已缓存文章继续保留。"
+                                                                   TextWrapping="Wrap" />
+                                                        <StackPanel Orientation="Horizontal">
+                                                            <Button Margin="0,0,8,0"
+                                                                    AutomationProperties.Name="取消删除 Feed"
+                                                                    Command="{Binding CancelDeleteFeedCommand}"
+                                                                    Content="取消" />
+                                                            <Button AutomationProperties.Name="确认删除 Feed"
+                                                                    Command="{Binding ConfirmDeleteFeedCommand}"
+                                                                    Content="确认删除" />
+                                                        </StackPanel>
+                                                    </StackPanel>
+                                                </Border>
+                                            </StackPanel>
+                                        </ScrollViewer>
+                                    </Border>
+                                </Grid>
+                            </TabItem>
+                        </TabControl>
+                    </Grid>
+                </ScrollViewer>
+            </DataTemplate>
+
             <DataTemplate DataType="{x:Type vm:WorkspacePageViewModel}">
                 <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
                     <StackPanel Margin="32,28,32,40">
