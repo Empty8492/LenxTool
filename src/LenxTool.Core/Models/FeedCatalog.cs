@@ -21,6 +21,11 @@ public sealed record FeedCatalogState(
     DateTimeOffset? GeneratedAt,
     DateTimeOffset? LastSyncedAt);
 
+public sealed record FeedCatalogSnapshot(
+    FeedCatalogState State,
+    IReadOnlyList<FeedCategory> Categories,
+    IReadOnlyList<FeedCatalogItem> Feeds);
+
 public sealed record FeedCategory(
     string Id,
     string Name,
