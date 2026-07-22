@@ -1,6 +1,6 @@
 # P0 详细计划：管理员订阅与普通用户只读目录
 
-状态：进行中，P0-01～P0-10 与检查点 P0-B 已完成
+状态：进行中，P0-01～P0-11 与检查点 P0-B 已完成
 最后核对：2026-07-22
 上位文档：[RSS 集成总路线图](RSS_MASTER_ROADMAP.md)
 参考项目：RSSNext/Folo（发现、OPML、订阅状态和内容视图的行为参考），LenxTool 当前 Worker/SQLite/资讯中心（实现基础）
@@ -257,13 +257,15 @@ P0 不包含全文抓取、图片离线缓存、AI 摘要/翻译、自动化规�
 
 **验收：**
 
-- [ ] 默认仅 HTTPS；显式策略才允许 HTTP。
-- [ ] DNS 解析后拒绝环回、链路本地、私网、保留地址和重定向到这些地址；内网 Feed 必须单独可信主机配置。
-- [ ] 限制重定向次数、响应字节、解压后大小、MIME、连接/总超时；XML 禁用 DTD 和外部实体。
+- [x] 默认仅 HTTPS；显式策略才允许 HTTP。
+- [x] DNS 解析后拒绝环回、链路本地、私网、保留地址和重定向到这些地址；内网 Feed 必须单独可信主机配置。
+- [x] 限制重定向次数、响应字节、解压后大小、MIME、连接/总超时；XML 禁用 DTD 和外部实体。
 
 **验证：** 私网 IP、DNS 重绑定模拟、重定向链、巨型/压缩响应、XXE 和错误 MIME 测试。
 
 **参考：** LenxTool 现有受控 URL/图片下载边界；Folo 发现入口只作交互参考。
+
+**完成记录（2026-07-22）：** 已新增 `IFeedDiscoveryService`、HTML alternate 发现器、安全网络策略和生产固定地址传输层。默认只允许公网 HTTPS/443；HTTP/80 与私网主机分别通过 `LENXTOOL_FEED_HTTP_HOSTS`、`LENXTOOL_FEED_PRIVATE_HOSTS` 精确列名，私网 HTTP 必须同时满足两项。DNS 结果只要混入本机、私网、链路本地、组播、文档、保留或已知 IPv4 嵌入地址即拒绝；批准地址直接传给 `SocketsHttpHandler.ConnectCallback`，关闭代理和自动重定向，TLS 仍按原主机验证，消除校验后重新解析的 DNS rebinding 窗口。每次重定向重新校验并最多 5 次；连接 5 秒、总计 20 秒，压缩 2 MiB、解压 4 MiB，MIME 与内容编码白名单。XML 使用 `DtdProcessing.Prohibit`、空 `XmlResolver` 并读到文档末尾验证良构；HTML 最多验证 20 个 RSS/Atom 候选且坏候选互相隔离。31 项自动测试覆盖私网/IP 分类、HTTP/端口双策略、DNS 重绑定、固定 IP 实际连接、重定向、MIME、压缩炸弹、XXE、尾部畸形 XML、取消和超时。
 
 ### P0-12：RSS 2.0 / Atom 解析与稳定标识
 

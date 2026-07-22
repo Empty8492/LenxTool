@@ -9,20 +9,22 @@
 | 测试组 | 结果 |
 |---|---:|
 | LenxTool.Core.Tests | 37 passed |
-| LenxTool.Infrastructure.Tests | 63 passed |
+| LenxTool.Infrastructure.Tests | 94 passed |
 | LenxTool.App.Tests | 58 passed |
 | Cloudflare Worker Vitest | 34 passed |
 | Worker TypeScript strict typecheck | passed |
 | .NET build warnings | 0 |
 | NuGet vulnerable packages | 0 detected |
 
-本轮执行 `dotnet build LenxTools.slnx -c Release --no-restore`，结果为 0 警告、0 错误；执行 `dotnet test LenxTools.slnx -c Release --no-build --no-restore`，结果为 Core 37、Infrastructure 63、App 58，共 158/158 通过且无跳过。
+本轮执行 `dotnet build LenxTools.slnx -c Release --no-restore`，结果为 0 警告、0 错误；执行 `dotnet test LenxTools.slnx -c Release --no-build --no-restore`，结果为 Core 37、Infrastructure 94、App 58，共 189/189 通过且无跳过。
 
 P0-08 覆盖 4 项 SQLite 集成场景并同步既有 schema 断言：新建库创建目录状态、分类、Feed、抓取状态、条目、索引和搜索映射；真实 schema v2 哨兵数据经 v3/v4 原位升级后仍可由现有仓储读取；迁移对象冲突时完整回滚且版本停留在 v3；相同外部 ID、URL 和内容哈希可存在于不同 Feed，同一 Feed 内重复外部 ID 被约束拒绝。既有包含未 checkpoint WAL 提交的一致性备份测试继续通过。
 
 P0-09 新增 5 项 SQLite 仓储集成测试：覆盖新库空 ACTIVE 状态与 ALL 不可伪造、完整 ALL 快照往返及 ACTIVE 投影、相同分类排序下按名称/ID 的契约顺序、版本倒退拒绝、中途插入失败后整批回滚、空目录替换，以及删除目录 Feed 后继续保留本地文章。读取状态、分类和 Feed 使用同一读事务，避免观察到混合版本。
 
 P0-10 新增 13 项假 Worker 同步测试、1 项 SQLite 时间戳条件更新测试和 1 项设置页状态测试：覆盖首次 ACTIVE、admin 强制 ALL、304 不重写目录、登录后立即同步、定时同步、401 refresh 后单次重放、断网、超时、调用方取消、指数退避、服务端超前冲突、200 旧快照、首次错误 304 拒绝、10 MiB 响应上限，以及 UI 最后同步时间/stale 文案。全部失败路径均断言不清空或降级本地快照；组合根测试同时确认账号接口与同步服务共享同一会话实例。
+
+P0-11 新增 31 项 Infrastructure 测试：覆盖默认 HTTPS、HTTP/私网双白名单、非默认端口、环回/私网/链路本地/CGNAT/组播/文档 IPv4、IPv6 loopback/ULA/link-local/documentation/NAT64 私网嵌入、混合 DNS、同主机重定向 DNS rebinding、重定向到私网、循环/次数上限、地址钉住、不可解析域名经指定 IP 的真实本地 TCP 连接、HTML 相对 alternate、候选故障隔离、MIME、压缩头、gzip 解压炸弹、XXE、有效标题后的畸形 XML、调用方取消和总超时。测试断言所有被拒目标均未到达传输层。
 
 桌面账号新增 8 项 Infrastructure 测试和 7 项 App 测试：覆盖登录、refresh token 恢复、`/v1/me`、并发 401 单次刷新、每请求最多重放一次、失效清理、离线退出、DPAPI 删除/写入失败脱敏、登录密码清空、过期与额度显示、admin/user 导航隔离、角色降级回退和 XAML 自动化名称/绑定。
 

@@ -157,7 +157,7 @@ Idempotency-Key: 018f87d4-0f7e-7ad0-9c06-b285e52e7664
 ```
 
 - `viewKind` 的 v1 值为 `ARTICLE`、`PICTURE`、`AUDIO`、`VIDEO`、`NOTIFICATION`；旧桌面端遇到未知值必须回退 `ARTICLE`。
-- 管理端只提交 `originalUrl`；`normalizedUrl` 由服务端生成并用于重复检测。目录写路由只做语法、方案和规范化校验，不发起网络请求。DNS、重定向、响应大小和 XML 安全验证由 P0-11 的发现服务执行。
+- 管理端只提交 `originalUrl`；`normalizedUrl` 由服务端生成并用于重复检测。目录写路由只做语法、方案和规范化校验，不发起网络请求。DNS、固定地址连接、重定向、响应/解压大小、MIME 和 XML 安全验证由桌面 P0-11 发现服务执行；P0-15 管理界面在提交写 API 前调用该服务。
 - 普通目录响应只含未删除、已启用且分类已启用的 Feed；它不含抓取结果、正文、健康详情或用户私人状态。
 
 ## 3. 端点总表
