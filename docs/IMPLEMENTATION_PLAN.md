@@ -15,7 +15,7 @@
 | 执行顺序 | 专项计划 | 状态 |
 |---:|---|---|
 | 0 | [现有未完成项与 RSS 路线对齐](plans/EXISTING_BACKLOG_ALIGNMENT.md) | [x] Gate 0 已完成 |
-| 1 | [P0：管理员订阅与普通用户只读目录](plans/RSS_P0_ADMIN_CATALOG.md) | [ ] 进行中：P0-01～P0-07 已完成，下一步 P0-08 |
+| 1 | [P0：管理员订阅与普通用户只读目录](plans/RSS_P0_ADMIN_CATALOG.md) | [ ] 进行中：P0-01～P0-08 已完成，下一步 P0-09 |
 | 2 | [P1：阅读增强、AI 与自动化](plans/RSS_P1_READING_INTELLIGENCE.md) | [ ] 未开始 |
 | 3 | [P2：内容视图、导出与定时摘要](plans/RSS_P2_VIEWS_INTEGRATIONS.md) | [ ] 未开始 |
 

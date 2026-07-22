@@ -66,11 +66,17 @@ AI 报告使用自备 DeepSeek Key 经请求级 Bearer 授权调用 `deepseek-v4
 - `ai_reports`：对象类型/ID、报告类型、模型和安全渲染内容。
 - `media_jobs`：输入、输出、状态、进度、引擎、模型、用量和结构化错误。
 - `subtitle_segments`：任务、序号、时间、原文、译文、置信指标。
+- `feed_catalog_state`、`feed_categories`、`feed_catalog`：本地目录版本、作用域、分类和共享 Feed 镜像。
+- `feed_fetch_state`：按 Feed 隔离的条件请求、调度和连续失败状态。
+- `feed_entries`：通用 RSS/Atom 条目；外部 ID 只在 Feed 内唯一，规范化 URL 与内容哈希不承担全局唯一职责。
 - `favorites`：通用实体收藏和备注。
 - `tags`、`entity_tags`：标签与多态关联。
 - `app_settings`：非秘密设置。
 - `schema_versions`：已应用迁移及校验和。
 - `content_fts`：早报、热点、AI 报告的 FTS5 外部内容索引。
+- `feed_entry_search_documents`：把 Feed 条目映射为统一搜索文档；实际 FTS 同步在 P0-14 接入。
+
+本地数据库当前版本为 schema v4。schema v3 已用于字幕翻译服务和 token 用量，因此 Feed 表使用独立的前向迁移；旧 v2 数据会依次应用 v3、v4，任何一步失败均在事务中回滚且不提升版本。
 
 参数化语句与事务由仓储负责；页面无法取得原始数据库连接。
 

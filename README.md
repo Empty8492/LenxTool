@@ -20,9 +20,9 @@ Lenx Tools 是面向 Windows 10/11 x64 的本地优先桌面效率应用，统�
 
 状态核对日期：2026-07-22。当前源码已经具备资讯刷新与缓存、13 个可多选筛选的分组热点平台、可用的 Groq/DeepSeek Key 加密保存、AI 解读/趋势报告、Groq/本地 Whisper 转写、完整字幕翻译/导出闭环、文档与数据工具、全局搜索、数据库备份恢复和签名更新检查等预览能力。
 
-字幕 Gate 0 已完成。当前下一里程碑是 **P0-08 本地 Feed schema v3 与迁移**；P0-01～P0-07 已完成 API 契约、Worker 身份生命周期、D1 目录 schema、管理员分类/Feed CRUD、版本化只读目录，以及桌面安全会话和账号/角色/额度 UI。其他主要未完成项包括：首页接入真实数据，资讯收藏/标签/备注，封面图片离线缓存，JSON 双栏 Diff，以及真正的管理员目录管理界面。完整状态、运行配置和发布阻塞项以 [`docs/PROJECT_GUIDE.md` 第 10 节](docs/PROJECT_GUIDE.md#10-当前版本边界与交付状态)为准。
+字幕 Gate 0 已完成。当前下一里程碑是 **P0-09 本地目录仓储与原子替换**；P0-01～P0-08 已完成 API 契约、Worker 身份生命周期、D1 目录 schema、管理员分类/Feed CRUD、版本化只读目录、桌面安全会话和账号/角色/额度 UI，以及本地 Feed schema v4 与兼容迁移。其他主要未完成项包括：首页接入真实数据，资讯收藏/标签/备注，封面图片离线缓存，JSON 双栏 Diff，以及真正的管理员目录管理界面。完整状态、运行配置和发布阻塞项以 [`docs/PROJECT_GUIDE.md` 第 10 节](docs/PROJECT_GUIDE.md#10-当前版本边界与交付状态)为准。
 
-字幕闭环之后的主路线为 **管理员策展 RSS**：只有管理员能维护共享 RSS/Atom 目录，普通用户只能同步和阅读。P0/P1/P2 的完整任务、现有欠账对齐、参考项目和许可证边界见 [`docs/plans/RSS_MASTER_ROADMAP.md`](docs/plans/RSS_MASTER_ROADMAP.md)。当前 P0-01～P0-07 已实现，其余能力仍按计划推进。
+字幕闭环之后的主路线为 **管理员策展 RSS**：只有管理员能维护共享 RSS/Atom 目录，普通用户只能同步和阅读。P0/P1/P2 的完整任务、现有欠账对齐、参考项目和许可证边界见 [`docs/plans/RSS_MASTER_ROADMAP.md`](docs/plans/RSS_MASTER_ROADMAP.md)。当前 P0-01～P0-08 已实现，其余能力仍按计划推进。
 
 ## 常用命令
 
