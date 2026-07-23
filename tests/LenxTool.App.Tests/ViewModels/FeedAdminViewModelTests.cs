@@ -134,6 +134,60 @@ public sealed class FeedAdminViewModelTests
     }
 
     [Fact]
+    public async Task AdminInitializationLoadsFetchHealthWithRedactedErrorLabels()
+    {
+        var context = CreateViewModel(Snapshot(7), AccountRole.Admin);
+        context.FetchStates.Targets =
+        [
+            new(
+                Snapshot(7).Feeds[0],
+                new(
+                    Snapshot(7).Feeds[0].Id,
+                    null,
+                    null,
+                    Now.AddMinutes(20),
+                    null,
+                    Now,
+                    3,
+                    "http_503",
+                    Now))
+        ];
+
+        await context.ViewModel.InitializeAsync(CancellationToken.None);
+
+        FeedHealthItem health = Assert.Single(context.ViewModel.HealthItems);
+        Assert.Equal("失败 · 连续 3 次", health.StatusLabel);
+        Assert.Equal("HTTP 503", health.ErrorLabel);
+        Assert.DoesNotContain("secret", health.ErrorLabel, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("从未成功", health.LastSuccessText, StringComparison.Ordinal);
+        Assert.Contains("下次", health.NextRetryText, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ManualRetryUsesForcedRefreshAndReportsOutcome()
+    {
+        var context = CreateViewModel(Snapshot(7), AccountRole.Admin);
+        context.FetchStates.Targets =
+        [
+            new(Snapshot(7).Feeds[0], null)
+        ];
+        context.Refresh.Results[Snapshot(7).Feeds[0].Id] = new(
+            Snapshot(7).Feeds[0].Id,
+            FeedRefreshOutcome.Updated,
+            4,
+            Now.AddHours(1),
+            null);
+
+        await context.ViewModel.InitializeAsync(CancellationToken.None);
+        FeedHealthItem health = Assert.Single(context.ViewModel.HealthItems);
+
+        await context.ViewModel.RetryFeedCommand.ExecuteAsync(health);
+
+        Assert.Equal([(Snapshot(7).Feeds[0].Id, true)], context.Refresh.Calls);
+        Assert.Contains("已抓取 4 条", context.ViewModel.Status, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task DiscoveryShowsTitleSiteTypeAndWarningBeforeEnablingSave()
     {
         var context = CreateViewModel(Snapshot(7), AccountRole.Admin);
@@ -331,6 +385,8 @@ public sealed class FeedAdminViewModelTests
         var batch = new FakeCatalogBatchService();
         var opmlFiles = new FakeOpmlFileService();
         var dialogs = new FakeOpmlFileDialogs();
+        var fetchStates = new FakeFeedFetchStateRepository();
+        var refresh = new FakeFeedRefreshService();
         var viewModel = new FeedAdminViewModel(
             admin,
             repository,
@@ -339,8 +395,10 @@ public sealed class FeedAdminViewModelTests
             account,
             batch,
             opmlFiles,
-            dialogs);
-        return new(viewModel, admin, repository, sync, discovery, account, batch, opmlFiles, dialogs);
+            dialogs,
+            fetchStates,
+            refresh);
+        return new(viewModel, admin, repository, sync, discovery, account, batch, opmlFiles, dialogs, fetchStates, refresh);
     }
 
     private static FeedCatalogSnapshot Snapshot(long version) => new(
@@ -380,7 +438,9 @@ public sealed class FeedAdminViewModelTests
         FakeAccountSessionService Account,
         FakeCatalogBatchService Batch,
         FakeOpmlFileService OpmlFiles,
-        FakeOpmlFileDialogs Dialogs);
+        FakeOpmlFileDialogs Dialogs,
+        FakeFeedFetchStateRepository FetchStates,
+        FakeFeedRefreshService Refresh);
 
     private sealed record BatchCall(
         IReadOnlyList<FeedCatalogBatchOperation> Operations,
@@ -429,6 +489,52 @@ public sealed class FeedAdminViewModelTests
         public string? ExportPath { get; set; }
         public string? PickOpmlImport() => ImportPath;
         public string? PickOpmlExport(string suggestedFileName) => ExportPath;
+    }
+
+    private sealed class FakeFeedFetchStateRepository : IFeedFetchStateRepository
+    {
+        public IReadOnlyList<FeedRefreshTarget> Targets { get; set; } = [];
+
+        public Task<FeedRefreshTarget?> GetTargetAsync(
+            string feedId,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(Targets.FirstOrDefault(target => target.Feed.Id == feedId));
+
+        public Task<IReadOnlyList<FeedRefreshTarget>> GetAllTargetsAsync(
+            CancellationToken cancellationToken) =>
+            Task.FromResult(Targets);
+
+        public Task<IReadOnlyList<FeedRefreshTarget>> GetDueTargetsAsync(
+            DateTimeOffset now,
+            int maximumCount,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<FeedRefreshTarget>>([]);
+
+        public Task<bool> SaveStateAsync(
+            FeedFetchState state,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(true);
+    }
+
+    private sealed class FakeFeedRefreshService : IFeedRefreshService
+    {
+        public List<(string FeedId, bool Force)> Calls { get; } = [];
+        public Dictionary<string, FeedRefreshResult> Results { get; } = [];
+
+        public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+        public Task<FeedRefreshResult> RefreshAsync(
+            string feedId,
+            bool force,
+            CancellationToken cancellationToken)
+        {
+            Calls.Add((feedId, force));
+            return Task.FromResult(Results.GetValueOrDefault(feedId)
+                ?? new(feedId, FeedRefreshOutcome.Failed, 0, null, "network"));
+        }
+
+        public Task<FeedRefreshBatchResult> RefreshDueAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(new FeedRefreshBatchResult(0, 0, 0, 0));
     }
 
     private sealed record FeedCall(

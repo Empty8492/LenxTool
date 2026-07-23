@@ -79,6 +79,7 @@ public sealed partial class FeedAdminViewModel
         if (snapshot is null)
         {
             _catalogIsCurrent = false;
+            ClearHealth();
             Status = "尚无管理员完整目录缓存，请刷新后再编辑。";
             NotifyAllCommands();
             return;
@@ -107,6 +108,7 @@ public sealed partial class FeedAdminViewModel
         if (!_catalogIsCurrent && minimumVersion is not null)
             Status = "远端写入已完成，但本地目录尚未刷新到新版本；请刷新后继续。";
         NotifyAllCommands();
+        await LoadHealthAsync(cancellationToken);
     }
 
     private void ApplyFeed(FeedCatalogItem feed)
@@ -187,6 +189,7 @@ public sealed partial class FeedAdminViewModel
         Categories.Clear();
         Feeds.Clear();
         CategoryChoices.Clear();
+        ClearHealth();
         SelectedCategory = null;
         SelectedFeed = null;
         Status = "需要管理员账号才能读取和修改共享订阅目录。";
@@ -213,6 +216,7 @@ public sealed partial class FeedAdminViewModel
         NotifyCategoryCommands();
         NotifyFeedCommands();
         NotifyOpmlCommands();
+        RetryFeedCommand.NotifyCanExecuteChanged();
     }
 
     private void NotifyCategoryCommands()

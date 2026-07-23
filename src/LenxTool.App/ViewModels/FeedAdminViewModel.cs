@@ -58,7 +58,9 @@ public sealed partial class FeedAdminViewModel : PageViewModel
         IAccountSessionService accountSession,
         IFeedCatalogBatchService batchService,
         IOpmlFileService opmlFileService,
-        IOpmlFileDialogService opmlFileDialogs)
+        IOpmlFileDialogService opmlFileDialogs,
+        IFeedFetchStateRepository fetchStateRepository,
+        IFeedRefreshService feedRefreshService)
         : base("订阅管理", "维护所有用户共享的 RSS/Atom 目录；权限与版本仍由 Worker 强制校验")
     {
         _adminService = adminService;
@@ -69,6 +71,8 @@ public sealed partial class FeedAdminViewModel : PageViewModel
         _batchService = batchService;
         _opmlFileService = opmlFileService;
         _opmlFileDialogs = opmlFileDialogs;
+        _fetchStateRepository = fetchStateRepository;
+        _feedRefreshService = feedRefreshService;
         Categories = [];
         Feeds = [];
         OpmlItems = [];
@@ -115,6 +119,7 @@ public sealed partial class FeedAdminViewModel : PageViewModel
         SelectAllNewOpmlCommand = new(SelectAllNewOpml, () => HasOpmlPreview && !_isOpmlBusy);
         ClearOpmlSelectionCommand = new(ClearOpmlSelection, () => HasOpmlPreview && !_isOpmlBusy);
         ExportOpmlCommand = new(ExportOpmlAsync, () => CanManage && Feeds.Count > 0 && !_isOpmlBusy);
+        RetryFeedCommand = new(RetryFeedAsync, item => IsAdmin && item is not null && item.CanRetry);
 
         _accountSession.SessionChanged += OnSessionChanged;
         ApplySession(_accountSession.Current);
