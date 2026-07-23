@@ -11,12 +11,12 @@
 | LenxTool.Core.Tests | 39 passed |
 | LenxTool.Infrastructure.Tests | 184 passed |
 | LenxTool.App.Tests | 87 passed |
-| Cloudflare Worker Vitest | 38 passed |
+| Cloudflare Worker Vitest | 39 passed |
 | Worker TypeScript strict typecheck | passed |
 | .NET build warnings | 0 |
 | NuGet vulnerable packages | 0 detected |
 
-本轮执行 `dotnet build LenxTools.slnx -c Release --no-restore` 与 `dotnet test LenxTools.slnx -c Release --no-build`，结果为 0 警告、0 错误；Core 39、Infrastructure 184、App 87，共 310/310 通过且无跳过。Worker 严格 typecheck 和官方 workerd/D1 Vitest 38/38 同轮通过（Wrangler 日志目录受当前沙箱权限限制，但不影响断言）。
+本轮执行 `dotnet build LenxTools.slnx -c Release --no-restore` 与 `dotnet test LenxTools.slnx -c Release --no-build`，结果为 0 警告、0 错误；Core 39、Infrastructure 184、App 87，共 310/310 通过且无跳过。Worker 严格 typecheck 和官方 workerd/D1 Vitest 39/39 同轮通过（Wrangler 日志目录受当前沙箱权限限制，但不影响断言）。
 
 P0-08 覆盖 4 项 SQLite 集成场景并同步既有 schema 断言：新建库创建目录状态、分类、Feed、抓取状态、条目、索引和搜索映射；真实 schema v2 哨兵数据经 v3/v4 原位升级后仍可由现有仓储读取；迁移对象冲突时完整回滚且版本停留在 v3；相同外部 ID、URL 和内容哈希可存在于不同 Feed，同一 Feed 内重复外部 ID 被约束拒绝。既有包含未 checkpoint WAL 提交的一致性备份测试继续通过。
 
@@ -77,6 +77,8 @@ D1 目录迁移测试明确执行“0001 → 写入旧 schema 哨兵数据 → �
 以上安装器冒烟记录对应 2026-07-20 01:44 的旧制品。本轮源码已更新，但当前机器缺少 Inno Setup 6，且本轮未提供仓库外离线私钥路径，因此尚未覆盖生成签名安装器；不得将旧 `LenxTool_Setup.exe` 视为包含本轮修复。
 
 本轮已生成未签名的开发验收便携包 `artifacts\LenxTool_Portable_0.1.0-preview-rich-reader.zip`（74,359,890 bytes，SHA-256 `7DB438205065AE3BC58C0FFDEFD3CBF2EF9CA9F97749D1D010F97C3BF1DE2CA6`）。它包含资讯分段页签、RSS 富内容迁移和原生富文本早报阅读器，但不能替代正式签名安装包。
+
+P0 最终检查点第一片新增 `p0-final-acceptance.test.ts`：真实 bootstrap/login 后完成管理员分类与 Feed 发布、目录刷新、普通用户同步/阅读、六类管理员写端点 403 拒绝、Feed 停用后的 ACTIVE/ALL 投影和最小审计字段。目标测试 1/1、Worker typecheck 通过；该证据关闭 P0 最终检查点前两项，OPML/断网/坏源/旧库迁移/10k 汇总及最终文档闸门仍未关闭。
 
 ## 本次已验证的异常路径
 
