@@ -29,4 +29,8 @@ public sealed record FeedTimelineItem(
     public bool IsStarred => Favorite is not null || (State?.IsStarred ?? false);
     public double Progress => State?.Progress ?? 0;
     public string Note => Favorite?.Note ?? State?.Note ?? string.Empty;
+    public string ReadGlyph => IsRead ? "●" : "○";
+    public string StarGlyph => IsStarred ? "★" : "☆";
+    public string ReadActionLabel => IsRead ? "标为未读" : "标为已读";
+    public string StarActionLabel => IsStarred ? "取消收藏" : "收藏";
 }

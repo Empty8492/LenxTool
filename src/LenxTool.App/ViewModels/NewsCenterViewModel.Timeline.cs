@@ -33,6 +33,7 @@ public sealed partial class NewsCenterViewModel
     private string _timelineKeyword = string.Empty;
     private string _timelineStatus = "正在读取本地 Feed 缓存…";
     private string _selectedTimelineNote = string.Empty;
+    private string _selectedTimelineSavedNote = string.Empty;
     private string _timelineTagInput = string.Empty;
     private string _timelineEditorStatus = "收藏、备注和标签仅保存在本机。";
     private Task _selectedTimelineEditorLoad = Task.CompletedTask;
@@ -61,6 +62,7 @@ public sealed partial class NewsCenterViewModel
     public AsyncRelayCommand<FeedTimelineItem> ToggleTimelineReadCommand { get; private set; } = null!;
     public AsyncRelayCommand<FeedTimelineItem> ToggleTimelineStarCommand { get; private set; } = null!;
     public AsyncRelayCommand SaveTimelineNoteCommand { get; private set; } = null!;
+    public RelayCommand CancelTimelineNoteEditCommand { get; private set; } = null!;
     public AsyncRelayCommand AddTimelineTagCommand { get; private set; } = null!;
     public AsyncRelayCommand<TagItem> RemoveTimelineTagCommand { get; private set; } = null!;
 
@@ -95,13 +97,14 @@ public sealed partial class NewsCenterViewModel
             if (SetProperty(ref _selectedTimelineEntry, value))
             {
                 SelectedFeedArticle = value is null ? null : CreateReaderArticle(value);
-                SelectedTimelineNote = value?.Note ?? string.Empty;
+                UpdateTimelineSavedNote(value?.Note ?? string.Empty, replaceEditorText: true);
                 TimelineTagInput = string.Empty;
                 SelectedTimelineTags.Clear();
                 int generation = Interlocked.Increment(ref _timelineEditorGeneration);
                 _selectedTimelineEditorLoad = LoadSelectedTimelineEditorAsync(value, generation);
                 OnPropertyChanged(nameof(SelectedTimelineEditorLoad));
                 SaveTimelineNoteCommand.NotifyCanExecuteChanged();
+                CancelTimelineNoteEditCommand.NotifyCanExecuteChanged();
                 AddTimelineTagCommand.NotifyCanExecuteChanged();
             }
         }
@@ -167,9 +170,21 @@ public sealed partial class NewsCenterViewModel
             {
                 normalized = normalized[..MaximumTimelineNoteLength];
             }
-            SetProperty(ref _selectedTimelineNote, normalized);
+            if (SetProperty(ref _selectedTimelineNote, normalized))
+            {
+                OnPropertyChanged(nameof(IsTimelineNoteDirty));
+                SaveTimelineNoteCommand.NotifyCanExecuteChanged();
+                CancelTimelineNoteEditCommand.NotifyCanExecuteChanged();
+            }
         }
     }
+
+    public bool IsTimelineNoteDirty =>
+        SelectedTimelineEntry is not null
+        && !string.Equals(
+            SelectedTimelineNote,
+            _selectedTimelineSavedNote,
+            StringComparison.Ordinal);
 
     public string TimelineTagInput
     {
@@ -226,7 +241,10 @@ public sealed partial class NewsCenterViewModel
         ToggleTimelineStarCommand = new(ToggleTimelineStarAsync, item => item is not null);
         SaveTimelineNoteCommand = new(
             SaveTimelineNoteAsync,
-            () => SelectedTimelineEntry is not null);
+            () => IsTimelineNoteDirty);
+        CancelTimelineNoteEditCommand = new(
+            CancelTimelineNoteEdit,
+            () => IsTimelineNoteDirty);
         AddTimelineTagCommand = new(
             AddTimelineTagAsync,
             () => SelectedTimelineEntry is not null
@@ -578,6 +596,39 @@ public sealed partial class NewsCenterViewModel
                 TimelineEditorStatus = "标签读取失败；正文和已缓存状态仍可使用。";
             }
         }
+
+        await MarkTimelineEntryReadOnOpenAsync(item, expectedGeneration);
+    }
+
+    private async Task MarkTimelineEntryReadOnOpenAsync(
+        FeedTimelineItem item,
+        int expectedGeneration)
+    {
+        if (item.IsRead) return;
+        try
+        {
+            EntryState state = await _entryStateRepository.PatchAsync(
+                item.Entry.Id,
+                DefaultTimelineProfile,
+                new EntryStatePatch(IsRead: true),
+                CancellationToken.None);
+            if (_timelineDisposed) return;
+            ReplaceTimelineItem(item, state);
+        }
+        catch (Exception) when (!_timelineDisposed)
+        {
+            SetTimelineEditorStatusIfCurrent(
+                item,
+                expectedGeneration,
+                "自动标记已读失败，可使用“已读”按钮重试。");
+        }
+    }
+
+    private void CancelTimelineNoteEdit()
+    {
+        if (!IsTimelineNoteDirty) return;
+        UpdateTimelineSavedNote(_selectedTimelineSavedNote, replaceEditorText: true);
+        TimelineEditorStatus = "已撤销未保存的私人备注编辑。";
     }
 
     private async Task SaveTimelineNoteAsync(CancellationToken cancellationToken)
@@ -620,7 +671,8 @@ public sealed partial class NewsCenterViewModel
                 item,
                 state,
                 favorite,
-                replaceFavorite: item.IsStarred);
+                replaceFavorite: item.IsStarred,
+                replaceEditorNote: IsCurrentTimelineEditor(item, editorGeneration));
             SetTimelineEditorStatusIfCurrent(
                 item,
                 editorGeneration,
@@ -754,7 +806,8 @@ public sealed partial class NewsCenterViewModel
         FeedTimelineItem item,
         EntryState state,
         FavoriteItem? favorite = null,
-        bool replaceFavorite = false)
+        bool replaceFavorite = false,
+        bool replaceEditorNote = false)
     {
         int index = -1;
         for (int position = 0; position < TimelineEntries.Count; position++)
@@ -784,8 +837,25 @@ public sealed partial class NewsCenterViewModel
             _selectedTimelineEntry = updated;
             OnPropertyChanged(nameof(SelectedTimelineEntry));
             SelectedFeedArticle = CreateReaderArticle(updated);
-            SelectedTimelineNote = updated.Note;
+            UpdateTimelineSavedNote(updated.Note, replaceEditorNote);
         }
+    }
+
+    private void UpdateTimelineSavedNote(
+        string note,
+        bool replaceEditorText)
+    {
+        _selectedTimelineSavedNote = note;
+        if (replaceEditorText)
+        {
+            SetProperty(
+                ref _selectedTimelineNote,
+                note,
+                nameof(SelectedTimelineNote));
+        }
+        OnPropertyChanged(nameof(IsTimelineNoteDirty));
+        SaveTimelineNoteCommand.NotifyCanExecuteChanged();
+        CancelTimelineNoteEditCommand.NotifyCanExecuteChanged();
     }
 
     private bool IsCurrentTimelineEditor(

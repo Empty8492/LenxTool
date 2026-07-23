@@ -48,7 +48,7 @@
                                                 Background="Transparent"
                                                 Command="{Binding DataContext.ToggleTimelineStarCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                 CommandParameter="{Binding}"
-                                                Content="☆"
+                                                Content="{Binding StarGlyph}"
                                                 ToolTip="切换收藏"
                                                 AutomationProperties.Name="切换 Feed 收藏" />
                                         <Button Margin="4,0,0,0"
@@ -57,7 +57,7 @@
                                                 Background="Transparent"
                                                 Command="{Binding DataContext.ToggleTimelineReadCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                 CommandParameter="{Binding}"
-                                                Content="已读"
+                                                Content="{Binding ReadGlyph}"
                                                 ToolTip="切换已读状态"
                                                 AutomationProperties.Name="切换 Feed 已读状态" />
                                     </StackPanel>
@@ -166,14 +166,14 @@
                                         Padding="10,5"
                                         Command="{Binding ToggleTimelineStarCommand}"
                                         CommandParameter="{Binding SelectedTimelineEntry}"
-                                        Content="收藏"
+                                        Content="{Binding SelectedTimelineEntry.StarActionLabel}"
                                         AutomationProperties.Name="切换当前 Feed 收藏" />
                                 <Button MinWidth="72"
                                         Margin="8,0,0,0"
                                         Padding="10,5"
                                         Command="{Binding ToggleTimelineReadCommand}"
                                         CommandParameter="{Binding SelectedTimelineEntry}"
-                                        Content="已读"
+                                        Content="{Binding SelectedTimelineEntry.ReadActionLabel}"
                                         AutomationProperties.Name="切换当前 Feed 已读状态" />
                             </StackPanel>
                             <StackPanel>
@@ -198,13 +198,21 @@
                                  TextWrapping="Wrap"
                                  VerticalScrollBarVisibility="Auto"
                                  AutomationProperties.Name="Feed 私人备注" />
-                        <Button Margin="0,7,0,0"
-                                MinWidth="96"
-                                HorizontalAlignment="Right"
-                                Padding="12,5"
-                                Command="{Binding SaveTimelineNoteCommand}"
-                                Content="保存备注"
-                                AutomationProperties.Name="保存 Feed 私人备注" />
+                        <StackPanel Margin="0,7,0,0"
+                                    HorizontalAlignment="Right"
+                                    Orientation="Horizontal">
+                            <Button MinWidth="80"
+                                    Padding="12,5"
+                                    Command="{Binding CancelTimelineNoteEditCommand}"
+                                    Content="取消"
+                                    AutomationProperties.Name="取消 Feed 私人备注编辑" />
+                            <Button MinWidth="96"
+                                    Margin="8,0,0,0"
+                                    Padding="12,5"
+                                    Command="{Binding SaveTimelineNoteCommand}"
+                                    Content="保存备注"
+                                    AutomationProperties.Name="保存 Feed 私人备注" />
+                        </StackPanel>
 
                         <TextBlock Margin="0,12,0,5"
                                    FontWeight="SemiBold"

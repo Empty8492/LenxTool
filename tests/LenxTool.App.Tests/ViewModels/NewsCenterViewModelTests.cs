@@ -268,6 +268,30 @@ public sealed class NewsCenterViewModelTests
     }
 
     [Fact]
+    public async Task SelectingUnreadTimelineEntryMarksItReadAndManualToggleRestoresUnread()
+    {
+        FeedEntry entry = CreateFeedEntry(0);
+        var states = new StubEntryStateRepository();
+        using NewsCenterViewModel viewModel = CreateViewModel(
+            CreateSnapshot(),
+            feedEntries: new([entry]),
+            entryStates: states);
+
+        await viewModel.InitializeAsync(CancellationToken.None);
+        await viewModel.SelectedTimelineEditorLoad;
+
+        FeedTimelineItem opened = Assert.Single(viewModel.TimelineEntries);
+        Assert.True(opened.IsRead);
+        Assert.True(states.States[entry.Id].IsRead);
+
+        await viewModel.ToggleTimelineReadCommand.ExecuteAsync(opened);
+
+        Assert.False(Assert.Single(viewModel.TimelineEntries).IsRead);
+        Assert.False(states.States[entry.Id].IsRead);
+        Assert.Equal(2, states.PatchCalls);
+    }
+
+    [Fact]
     public async Task TimelineFavoriteNoteAndTagsPersistThroughPrivateRepositories()
     {
         FeedEntry entry = CreateFeedEntry(0);
@@ -353,6 +377,36 @@ public sealed class NewsCenterViewModelTests
         Assert.Equal("只记备注，不收藏", saved.Note);
         Assert.Equal("只记备注，不收藏", states.States[entry.Id].Note);
         Assert.Null(favorites.GetFavorite(entry.Id));
+    }
+
+    [Fact]
+    public async Task TimelineNoteCancelRestoresSavedTextAfterStateToggle()
+    {
+        FeedEntry entry = CreateFeedEntry(0);
+        var states = new StubEntryStateRepository();
+        var favorites = new StubFavoriteRepository();
+        favorites.SeedFavorite(entry.Id, "已保存备注");
+        using NewsCenterViewModel viewModel = CreateViewModel(
+            CreateSnapshot(),
+            feedEntries: new([entry]),
+            entryStates: states,
+            favorites: favorites);
+        await viewModel.InitializeAsync(CancellationToken.None);
+        await viewModel.SelectedTimelineEditorLoad;
+        viewModel.SelectedTimelineNote = "尚未保存的编辑";
+        FeedTimelineItem opened = Assert.Single(viewModel.TimelineEntries);
+
+        await viewModel.ToggleTimelineReadCommand.ExecuteAsync(opened);
+
+        Assert.Equal("尚未保存的编辑", viewModel.SelectedTimelineNote);
+        int patchCallsBeforeCancel = states.PatchCalls;
+        Assert.True(viewModel.CancelTimelineNoteEditCommand.CanExecute(null));
+        viewModel.CancelTimelineNoteEditCommand.Execute(null);
+
+        Assert.Equal("已保存备注", viewModel.SelectedTimelineNote);
+        Assert.Equal(patchCallsBeforeCancel, states.PatchCalls);
+        Assert.Contains("已撤销", viewModel.TimelineEditorStatus);
+        Assert.False(viewModel.CancelTimelineNoteEditCommand.CanExecute(null));
     }
 
     [Theory]

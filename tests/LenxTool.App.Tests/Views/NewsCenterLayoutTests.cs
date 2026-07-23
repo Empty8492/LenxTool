@@ -229,6 +229,11 @@ public sealed class NewsCenterLayoutTests
             element => element.Name.LocalName == "Button"
                 && element.Attribute("AutomationProperties.Name")?.Value == "保存 Feed 私人备注"
                 && element.Attribute("Command")?.Value == "{Binding SaveTimelineNoteCommand}");
+        Assert.Contains(
+            timelineBrowser.Descendants(),
+            element => element.Name.LocalName == "Button"
+                && element.Attribute("AutomationProperties.Name")?.Value == "取消 Feed 私人备注编辑"
+                && element.Attribute("Command")?.Value == "{Binding CancelTimelineNoteEditCommand}");
 
         XElement tagInput = Assert.Single(
             timelineBrowser.Descendants(),
@@ -250,6 +255,11 @@ public sealed class NewsCenterLayoutTests
             timelineBrowser.Descendants(),
             element => element.Name.LocalName == "TextBlock"
                 && element.Attribute("Text")?.Value == "{Binding TimelineEditorStatus}");
+        Assert.Contains(
+            timelineBrowser.Descendants(),
+            element => element.Name.LocalName == "Button"
+                && element.Attribute("AutomationProperties.Name")?.Value == "切换当前 Feed 已读状态"
+                && element.Attribute("Content")?.Value == "{Binding SelectedTimelineEntry.ReadActionLabel}");
     }
 
     private static XElement LoadNewsCenterTemplate()
