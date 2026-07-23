@@ -104,8 +104,9 @@ public sealed class FeedEntryRepositoryTests : IDisposable
         FeedEntry expired = Entry("expired", "Expired", "remove-marker", Now.AddDays(-200));
         FeedEntry favorite = Entry("favorite", "Favorite", "favorite-marker", Now.AddDays(-210));
         FeedEntry tagged = Entry("tagged", "Tagged", "tagged-marker", Now.AddDays(-220));
+        FeedEntry stateful = Entry("stateful", "Stateful", "stateful-marker", Now.AddDays(-230));
         FeedEntry recent = Entry("recent", "Recent", "recent-marker", Now.AddDays(-20));
-        await repository.UpsertAsync(FeedId, [expired, favorite, tagged, recent], CancellationToken.None);
+        await repository.UpsertAsync(FeedId, [expired, favorite, tagged, stateful, recent], CancellationToken.None);
         await using (SqliteConnection connection = await database.OpenConnectionAsync(CancellationToken.None))
         await using (SqliteCommand state = connection.CreateCommand())
         {
@@ -116,9 +117,13 @@ public sealed class FeedEntryRepositoryTests : IDisposable
                 VALUES('tag-state', 'keep', 'neutral', $now);
                 INSERT INTO entity_tags(entity_type, entity_id, tag_id)
                 VALUES('feed_entry', $taggedId, 'tag-state');
+                INSERT INTO user_entry_states(
+                    entry_id, local_profile, is_read, is_starred, progress, note, updated_at)
+                VALUES($statefulId, 'default', 1, 0, 25, 'keep', $now);
                 """;
             state.Parameters.AddWithValue("$favoriteId", favorite.Id);
             state.Parameters.AddWithValue("$taggedId", tagged.Id);
+            state.Parameters.AddWithValue("$statefulId", stateful.Id);
             state.Parameters.AddWithValue("$now", Now.ToString("O"));
             await state.ExecuteNonQueryAsync(CancellationToken.None);
         }
@@ -131,7 +136,7 @@ public sealed class FeedEntryRepositoryTests : IDisposable
         Assert.Equal(1, deleted);
         FeedEntryPage remaining = await repository.QueryAsync(Query(), CancellationToken.None);
         Assert.Equal(
-            ["favorite", "recent", "tagged"],
+            ["favorite", "recent", "stateful", "tagged"],
             remaining.Items.Select(item => item.ExternalId).Order().ToArray());
         Assert.Empty((await repository.QueryAsync(
             Query(searchText: "remove-marker"),

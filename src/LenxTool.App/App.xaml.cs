@@ -96,6 +96,7 @@ public partial class App : Application
         services.AddSingleton<SqliteDatabase>();
         services.AddSingleton<INewsRepository, NewsRepository>();
         services.AddSingleton<IFavoriteRepository, FavoriteRepository>();
+        services.AddSingleton<IEntryStateRepository, EntryStateRepository>();
         services.AddSingleton<INewsCenterService, NewsCenterService>();
         services.AddSingleton<IAiReportService, DeepSeekReportService>();
         services.AddSingleton<ISubtitleTranslator, DeepSeekSubtitleTranslator>();

@@ -44,7 +44,8 @@ public sealed class SqliteDatabaseTests : IDisposable
             "subtitle_segments", "favorites", "tags", "entity_tags",
             "app_settings", "schema_versions", "content_fts",
             "feed_catalog_state", "feed_categories", "feed_catalog",
-            "feed_fetch_state", "feed_entries", "feed_entry_search_documents"
+            "feed_fetch_state", "feed_entries", "feed_entry_search_documents",
+            "user_entry_states"
         ];
         Assert.All(required, table => Assert.Contains(table, names));
 
@@ -63,6 +64,7 @@ public sealed class SqliteDatabaseTests : IDisposable
         Assert.Contains("ux_feed_entries_feed_external_id", indexes);
         Assert.Contains("ix_feed_entries_normalized_url", indexes);
         Assert.Contains("ix_feed_entries_content_hash", indexes);
+        Assert.Contains("ix_user_entry_states_profile_updated", indexes);
 
         await using SqliteCommand catalogStateCommand = connection.CreateCommand();
         catalogStateCommand.CommandText =
@@ -72,7 +74,7 @@ public sealed class SqliteDatabaseTests : IDisposable
 
         await using SqliteCommand versionCommand = connection.CreateCommand();
         versionCommand.CommandText = "SELECT COUNT(*) FROM schema_versions";
-        Assert.Equal(5L, (long)(await versionCommand.ExecuteScalarAsync(
+        Assert.Equal(6L, (long)(await versionCommand.ExecuteScalarAsync(
             CancellationToken.None))!);
     }
 
@@ -98,7 +100,7 @@ public sealed class SqliteDatabaseTests : IDisposable
         await using SqliteConnection connection = await upgraded.OpenConnectionAsync(CancellationToken.None);
         await using SqliteCommand version = connection.CreateCommand();
         version.CommandText = "SELECT MAX(version) FROM schema_versions;";
-        Assert.Equal(5L, (long)(await version.ExecuteScalarAsync(CancellationToken.None))!);
+        Assert.Equal(6L, (long)(await version.ExecuteScalarAsync(CancellationToken.None))!);
         Assert.Single(Directory.GetFiles(CreatePaths().BackupDirectory, "lenx-pre-migration-*.db"));
     }
 
@@ -166,7 +168,7 @@ public sealed class SqliteDatabaseTests : IDisposable
                 DROP TRIGGER feed_entries_fts_insert;
                 DROP TRIGGER feed_entries_fts_update;
                 DROP TRIGGER feed_entries_fts_delete;
-                DELETE FROM schema_versions WHERE version=5;
+                DELETE FROM schema_versions WHERE version IN (5, 6);
                 DELETE FROM content_fts WHERE entity_type='feed_entry';
                 INSERT INTO feed_entries(
                     id, feed_id, external_id, title, summary, sanitized_content,
@@ -192,7 +194,7 @@ public sealed class SqliteDatabaseTests : IDisposable
         check.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE type='trigger' AND name LIKE 'feed_entries_fts_%';";
         Assert.Equal(3L, (long)(await check.ExecuteScalarAsync(CancellationToken.None))!);
         check.CommandText = "SELECT MAX(version) FROM schema_versions;";
-        Assert.Equal(5L, (long)(await check.ExecuteScalarAsync(CancellationToken.None))!);
+        Assert.Equal(6L, (long)(await check.ExecuteScalarAsync(CancellationToken.None))!);
     }
 
     [Fact]
@@ -206,7 +208,7 @@ public sealed class SqliteDatabaseTests : IDisposable
             command.CommandText = """
                 DROP TRIGGER feed_entries_fts_update;
                 DROP TRIGGER feed_entries_fts_delete;
-                DELETE FROM schema_versions WHERE version=5;
+                DELETE FROM schema_versions WHERE version IN (5, 6);
                 DELETE FROM content_fts WHERE entity_type='feed_entry';
                 INSERT INTO feed_entries(
                     id, feed_id, external_id, title, summary, sanitized_content,

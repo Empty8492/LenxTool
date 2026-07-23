@@ -54,7 +54,7 @@ LenxTool/
 - 数据源部分失败时返回成功来源；完全断网时回退 SQLite 缓存。
 - 文章以内容指纹去重并保存；FTS5 覆盖早报、热点和 AI 报告。
 - “每日早报”和“热点趋势”是两个独立标签页；早报默认选择当天，有缓存的历史日期可从日期下拉框切换。
-- “Feed 时间线”按 50 条分页读取本地缓存，支持全部/分类/Feed、发布日期和关键词组合筛选；滚动接近底部自动追加，列表使用 Recycling 虚拟化，选择条目后在现有原生只读阅读器中显示。
+- “Feed 时间线”按 50 条分页读取本地缓存，支持全部/分类/Feed、发布日期和关键词组合筛选；滚动接近底部自动追加，列表使用 Recycling 虚拟化，选择条目后在现有原生只读阅读器中显示。条目会水合本机 `user_entry_states`，可切换已读/收藏并显示进度，不修改共享目录。
 - 断网或目录同步失败时，时间线保留已缓存条目，并显示最后抓取与目录同步时间；该页面不提供任何共享订阅编辑控件。
 - 热点按平台卡片分组并使用平台内排名；列表条目可安全打开 HTTP/HTTPS 原文，卡片本身不创建嵌套滚动容器。
 - 热点顶部提供 13 个带选中勾号的来源胶囊，可多选过滤、显示已选数量和全选恢复；每日趋势报告只分析当前选中的来源。
@@ -98,7 +98,7 @@ LenxTool/
 
 数据库：`%LocalAppData%\LenxTool\Data\lenx.db`。
 
-主要表：`news_articles`、`trend_items`、`ai_reports`、`media_jobs`、`subtitle_segments`、`favorites`、`tags`、`entity_tags`、`app_settings`、`feed_catalog_state`、`feed_categories`、`feed_catalog`、`feed_fetch_state`、`feed_entries`、`schema_versions`。
+主要表：`news_articles`、`trend_items`、`ai_reports`、`media_jobs`、`subtitle_segments`、`favorites`、`tags`、`entity_tags`、`app_settings`、`feed_catalog_state`、`feed_categories`、`feed_catalog`、`feed_fetch_state`、`feed_entries`、`user_entry_states`、`schema_versions`。
 
 实现原则：
 
@@ -192,24 +192,25 @@ npm.cmd test -- --run
 - P0-11 已完成 Feed URL 发现与 SSRF 防护：默认只允许公网 HTTPS/443；HTTP 与私网主机需要独立精确白名单。DNS 返回地址经完整 IPv4/IPv6 分类后直接钉住到无代理、无自动重定向的 TCP 连接，每次跳转重新解析校验。服务限制连接/总超时、跳转、候选数、压缩/解压大小、MIME 和编码；RSS/Atom XML 禁用 DTD/外部实体并完整读到文档末尾，HTML 只提取有界 `rel=alternate` 候选。
 - P0-12 已完成 RSS 2.0 / Atom 统一解析与稳定身份：支持 CDATA、常见日期、作者、分类、enclosure、缺失字段和重复项；外部身份按 id/guid、规范 URL、Feed 作用域内容指纹依次回退。URL 只删除明确追踪参数，遇到签名或身份参数则保留完整 query；XML 禁用 DTD/实体并限制文档与条目规模，不可信正文只产出不执行脚本的纯文本。
 - P0-13 已完成条件抓取、调度与退避：启用 Feed 在启动后和每分钟调度中按到期时间刷新，每批 100、全局并发 4、同 Feed 单飞。请求继续使用 SSRF 校验和地址钉住，发送 ETag/Last-Modified；200 先事务 upsert 条目再保存新条件头，304 不重写条目。单源的超时、解析、HTTP、响应上限或存储失败只更新该源的脱敏状态，并按 1 分钟至 6 小时指数退避；429 可在上限内延长到 Retry-After，退出会取消在途调度。
-- P0-14 已完成 Feed 条目仓储、FTS 与安全保留边界：schema v5 为既有条目回填统一 `content_fts` 并用事务触发器持续同步；仓储支持稳定分页、Feed/分类/日期/全文/未读占位筛选，统一内容搜索可返回 Feed 条目。显式 180 天清理保护已有收藏和标签，且在 P1 私人状态模型完成前不自动调度。
+- P0-14 已完成 Feed 条目仓储、FTS 与安全保留边界：schema v5 为既有条目回填统一 `content_fts` 并用事务触发器持续同步；仓储支持稳定分页、Feed/分类/日期/全文/未读占位筛选，统一内容搜索可返回 Feed 条目。显式 180 天清理保护已有收藏和标签，且在私人状态模型完成前不自动调度。
 - P0-C 已完成兼容与安全检查点：20 个独立 fixture（11 个 RSS、9 个 Atom）全部参数化通过，覆盖中文、ISO-8859-1、带 BOM 的 UTF-16 LE/BE、CDATA、扩展命名空间、相对链接、签名 query、重复身份和 enclosure。既有批次故障隔离、缓存保留、SSRF、XXE、巨型响应和重定向绕过拒绝测试共同完成检查点证据。
 - P0-15 已完成管理员订阅管理页：管理员可刷新 ALL 目录，安全发现 Feed，并新增、编辑、启停、排序或两步删除分类和 Feed；每次写入携带目录版本与幂等键。409 只刷新而不自动覆盖，写入成功但同步失败会锁定旧版本继续写入，角色降级会清空管理目录。普通用户无入口且 Worker 仍对直接请求返回 403；页面具备键盘控件、自动化名称、实时状态和窄窗滚动边界。
 - P0-16 已完成 OPML 预览、选择导入与导出：2 MiB 有界 codec 禁用 DTD/外部实体并限制结构深度和数量；嵌套分组展平为 `父 / 子` 分类，预览区分新增、重复、冲突和无效项且默认不提交。选中项先逐个通过安全 Feed 发现并复核最终 URL，再以最多 100 个操作、单次版本增量的 Worker batch 原子写入；导出只投影公开目录字段。
 - P0-17 已完成普通用户 Feed 时间线与筛选：ACTIVE 目录条目按 50 条稳定分页，支持全部/分类/Feed、日期和 200 字符关键词筛选；筛选代次丢弃过期页，滚动加载使用回收虚拟化并通过 ID 去重。选择条目复用原生只读阅读器，离线时显示最后抓取/目录同步时间，目录版本前进会刷新筛选项并保留有效选择，页面不含共享订阅编辑控件；10k 假缓存首屏只物化 50 条。
 - P0-18 已完成管理员 Feed 健康与诊断：健康 Tab 一次读取本机全部目录 Feed（含停用项）的抓取状态，显示最后成功/失败、连续失败、下次重试和固定错误类别；错误不带令牌、完整响应或网络内部详情。管理员可对启用 Feed 执行单条强制重试，仍复用原有 SSRF、响应大小、超时、解析和单 Feed 门闩策略，命令本身串行避免重复点击。
 - P0-19 已完成首页真实数据与旧早报兼容：首页并行读取 ACTIVE Feed 条目、旧 `news_articles`、热点、媒体任务和收藏计数，状态文案不再包含固定日期/标题/任务演示数据；Feed 与旧早报按规范 URL/内容指纹去重。空目录管理员新建 Feed 时预填 `FeedCompatibilitySeed`（`https://daily.juya.uk/rss.xml`），旧 schema v2 早报继续可搜索和阅读。
+- P0-20 已完成本机私人阅读状态基础：schema v6 新增 `user_entry_states`，按 profile 隔离已读、收藏、0～100% 进度和私人备注；局部 patch 保留未修改字段，条目清理保护有状态的旧条目。Feed 时间线首屏/分页批量读取状态，提供已读/收藏切换和进度展示；共享目录与 Worker 契约不变。
 
 ### 10.2 下一里程碑
 
-Gate 0 字幕闭环已经完成。P0“管理员策展 RSS”已完成服务端契约、身份生命周期、目录 schema、管理员 CRUD/原子批量写入、只读目录、桌面安全会话、账号 UI、本地 Feed schema、目录原子仓储、自动同步、安全发现、统一解析、条件调度抓取、条目仓储/FTS、兼容安全检查点、管理员管理页、OPML 管理、普通用户时间线、Feed 健康诊断和首页真实数据兼容（P0-01～P0-19/P0-B/P0-C）。下一里程碑是 P0-20 私人阅读状态与收藏编辑。
+Gate 0 字幕闭环已经完成。P0“管理员策展 RSS”已完成服务端契约、身份生命周期、目录 schema、管理员 CRUD/原子批量写入、只读目录、桌面安全会话、账号 UI、本地 Feed schema、目录原子仓储、自动同步、安全发现、统一解析、条件调度抓取、条目仓储/FTS、兼容安全检查点、管理员管理页、OPML 管理、普通用户时间线、Feed 健康诊断、首页真实数据兼容和 P0-20 私人阅读状态基础（P0-01～P0-20/P0-B/P0-C）。后续继续补齐标签、备注编辑和完整阅读进度恢复。
 
 字幕闭环完成后的产品主路线已确定为“管理员策展 RSS”：管理员维护共享 RSS/Atom 目录，普通用户只能同步和阅读，不得修改共享订阅、分类、抓取策略或自动化规则。为保持现有“云端不存新闻正文”边界，首版采用 Worker/D1 保存权威目录、各桌面客户端本地抓取和 SQLite 缓存的模式。
 
 详细执行顺序如下：
 
 1. Gate 0 字幕闭环已完成；验收记录见 [`plans/EXISTING_BACKLOG_ALIGNMENT.md`](plans/EXISTING_BACKLOG_ALIGNMENT.md)。
-2. P0-01～P0-19 与 P0-B/P0-C 已完成；下一步实现私人阅读状态、收藏编辑和阅读进度，再继续 P1 阅读增强；具体见 [`plans/RSS_P0_ADMIN_CATALOG.md`](plans/RSS_P0_ADMIN_CATALOG.md)。
+2. P0-01～P0-20 与 P0-B/P0-C 已完成；下一步实现标签、备注编辑和完整阅读进度恢复，再继续 P1 阅读增强；具体见 [`plans/RSS_P0_ADMIN_CATALOG.md`](plans/RSS_P0_ADMIN_CATALOG.md)。
 3. 实现私人阅读状态、全文/图片离线、AI 摘要/翻译、管理员规则、媒体衔接和统一搜索；具体见 [`plans/RSS_P1_READING_INTELLIGENCE.md`](plans/RSS_P1_READING_INTELLIGENCE.md)。
 4. 实现多内容视图、外部导出适配器、本地定时摘要和通知；具体见 [`plans/RSS_P2_VIEWS_INTEGRATIONS.md`](plans/RSS_P2_VIEWS_INTEGRATIONS.md)。
 

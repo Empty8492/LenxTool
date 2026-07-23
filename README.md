@@ -20,9 +20,9 @@ Lenx Tools 是面向 Windows 10/11 x64 的本地优先桌面效率应用，统�
 
 状态核对日期：2026-07-23。当前源码已经具备资讯刷新与缓存、13 个可多选筛选的分组热点平台、可用的 Groq/DeepSeek Key 加密保存、AI 解读/趋势报告、Groq/本地 Whisper 转写、完整字幕翻译/导出闭环、文档与数据工具、全局搜索、数据库备份恢复和签名更新检查等预览能力。
 
-字幕 Gate 0 已完成。P0-01～P0-19 与 P0-B/P0-C 已完成 API 契约、Worker 身份/目录/RBAC、桌面会话与同步、Feed schema v5、安全发现/解析、条件调度、条目事务仓储、统一 FTS、**20 个 RSS/Atom fixture** 的兼容安全检查点、管理员分类/Feed 与 OPML 管理、普通用户只读 Feed 时间线、管理员 Feed 健康诊断与安全重试，以及首页真实数据聚合与旧早报兼容；`https://daily.juya.uk/rss.xml` 作为兼容种子在空目录的新建 Feed 表单中预填。其他主要未完成项包括：资讯收藏/标签/备注的完整编辑入口，封面图片离线缓存和 JSON 双栏 Diff。完整状态、运行配置和发布阻塞项以 [`docs/PROJECT_GUIDE.md` 第 10 节](docs/PROJECT_GUIDE.md#10-当前版本边界与交付状态)为准。
+字幕 Gate 0 已完成。P0-01～P0-20 与 P0-B/P0-C 已完成 API 契约、Worker 身份/目录/RBAC、桌面会话与同步、Feed schema v6、安全发现/解析、条件调度、条目事务仓储、统一 FTS、**20 个 RSS/Atom fixture** 的兼容安全检查点、管理员分类/Feed 与 OPML 管理、普通用户只读 Feed 时间线、管理员 Feed 健康诊断与安全重试、首页真实数据聚合与旧早报兼容，以及本机私人已读/收藏状态基础；`https://daily.juya.uk/rss.xml` 作为兼容种子在空目录的新建 Feed 表单中预填。其他主要未完成项包括：标签/备注的完整编辑入口、阅读位置恢复、封面图片离线缓存和 JSON 双栏 Diff。完整状态、运行配置和发布阻塞项以 [`docs/PROJECT_GUIDE.md` 第 10 节](docs/PROJECT_GUIDE.md#10-当前版本边界与交付状态)为准。
 
-字幕闭环之后的主路线为 **管理员策展 RSS**：只有管理员能维护共享 RSS/Atom 目录，普通用户只能同步和阅读。P0/P1/P2 的完整任务、现有欠账对齐、参考项目和许可证边界见 [`docs/plans/RSS_MASTER_ROADMAP.md`](docs/plans/RSS_MASTER_ROADMAP.md)。当前 P0-01～P0-19 与 P0-B/P0-C 已实现，其余能力仍按计划推进。
+字幕闭环之后的主路线为 **管理员策展 RSS**：只有管理员能维护共享 RSS/Atom 目录，普通用户只能同步和阅读。P0/P1/P2 的完整任务、现有欠账对齐、参考项目和许可证边界见 [`docs/plans/RSS_MASTER_ROADMAP.md`](docs/plans/RSS_MASTER_ROADMAP.md)。当前 P0-01～P0-20 与 P0-B/P0-C 已实现，其余能力仍按计划推进。
 
 ## 常用命令
 

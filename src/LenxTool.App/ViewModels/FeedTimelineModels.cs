@@ -10,7 +10,8 @@ public sealed record FeedTimelineFilterOption(
 public sealed record FeedTimelineItem(
     FeedEntry Entry,
     string FeedName,
-    string CategoryName)
+    string CategoryName,
+    EntryState? State = null)
 {
     public DateTimeOffset DisplayTime =>
         Entry.PublishedAt ?? Entry.UpdatedAt ?? Entry.FetchedAt;
@@ -18,4 +19,9 @@ public sealed record FeedTimelineItem(
     public string Summary => string.IsNullOrWhiteSpace(Entry.Summary)
         ? Entry.SanitizedContent
         : Entry.Summary;
+
+    public bool IsRead => State?.IsRead ?? false;
+    public bool IsStarred => State?.IsStarred ?? false;
+    public double Progress => State?.Progress ?? 0;
+    public string Note => State?.Note ?? string.Empty;
 }

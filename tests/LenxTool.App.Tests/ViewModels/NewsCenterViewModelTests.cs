@@ -81,7 +81,8 @@ public sealed class NewsCenterViewModelTests
             new StubDesktopFileDialogService(),
             new StubFeedEntryRepository([]),
             new StubFeedCatalogRepository(CreateCatalog()),
-            new StubFeedCatalogSyncService());
+            new StubFeedCatalogSyncService(),
+            new StubEntryStateRepository());
         await viewModel.InitializeAsync(CancellationToken.None);
 
         await viewModel.GenerateArticleReportCommand.ExecuteAsync();
@@ -177,7 +178,8 @@ public sealed class NewsCenterViewModelTests
             new StubDesktopFileDialogService(),
             new StubFeedEntryRepository([]),
             new StubFeedCatalogRepository(CreateCatalog()),
-            new StubFeedCatalogSyncService());
+            new StubFeedCatalogSyncService(),
+            new StubEntryStateRepository());
         await viewModel.InitializeAsync(CancellationToken.None);
         Assert.Single(viewModel.SourceFilters, filter => filter.Platform == "GitHub")
             .IsSelected = false;
@@ -228,6 +230,39 @@ public sealed class NewsCenterViewModelTests
         FeedEntryQuery query = Assert.Single(entries.Queries);
         Assert.Equal(0, query.Offset);
         Assert.Equal(50, query.Limit);
+    }
+
+    [Fact]
+    public async Task TimelineHydratesPrivateStateAndToggleCommandsPersistChanges()
+    {
+        FeedEntry entry = CreateFeedEntry(0);
+        var stateRepository = new StubEntryStateRepository();
+        stateRepository.States[entry.Id] = new(
+            entry.Id,
+            "default",
+            true,
+            false,
+            42,
+            "稍后回看",
+            TimelineNow);
+        using NewsCenterViewModel viewModel = CreateViewModel(
+            CreateSnapshot(),
+            feedEntries: new([entry]),
+            entryStates: stateRepository);
+
+        await viewModel.InitializeAsync(CancellationToken.None);
+
+        FeedTimelineItem item = Assert.Single(viewModel.TimelineEntries);
+        Assert.True(item.IsRead);
+        Assert.False(item.IsStarred);
+        Assert.Equal(42, item.Progress);
+        Assert.Equal("稍后回看", item.Note);
+
+        await viewModel.ToggleTimelineStarCommand.ExecuteAsync(item);
+        FeedTimelineItem updated = Assert.Single(viewModel.TimelineEntries);
+        Assert.True(updated.IsStarred);
+        Assert.True(updated.IsRead);
+        Assert.Equal(1, stateRepository.PatchCalls);
     }
 
     [Fact]
@@ -376,7 +411,8 @@ public sealed class NewsCenterViewModelTests
         StubDesktopFileDialogService? dialogs = null,
         StubFeedEntryRepository? feedEntries = null,
         StubFeedCatalogSyncService? catalogSync = null,
-        StubFeedCatalogRepository? catalogRepository = null) =>
+        StubFeedCatalogRepository? catalogRepository = null,
+        StubEntryStateRepository? entryStates = null) =>
         new(
             new StubNewsCenterService(snapshot),
             new StubAiReportService(null),
@@ -384,7 +420,8 @@ public sealed class NewsCenterViewModelTests
             dialogs ?? new StubDesktopFileDialogService(),
             feedEntries ?? new StubFeedEntryRepository([]),
             catalogRepository ?? new StubFeedCatalogRepository(CreateCatalog()),
-            catalogSync ?? new StubFeedCatalogSyncService());
+            catalogSync ?? new StubFeedCatalogSyncService(),
+            entryStates ?? new StubEntryStateRepository());
 
     private static NewsCenterSnapshot CreateSnapshot(params NewsArticle[] articles) =>
         new(articles, [], true, DateTimeOffset.Now, null);
@@ -557,6 +594,46 @@ public sealed class NewsCenterViewModelTests
 
         private static DateTimeOffset EntryTime(FeedEntry entry) =>
             entry.PublishedAt ?? entry.UpdatedAt ?? entry.FetchedAt;
+    }
+
+    private sealed class StubEntryStateRepository : IEntryStateRepository
+    {
+        public Dictionary<string, EntryState> States { get; } = new(StringComparer.Ordinal);
+        public int PatchCalls { get; private set; }
+
+        public Task<IReadOnlyDictionary<string, EntryState>> GetAsync(
+            IReadOnlyCollection<string> entryIds,
+            string localProfile,
+            CancellationToken cancellationToken)
+        {
+            IReadOnlyDictionary<string, EntryState> result = entryIds
+                .Where(States.ContainsKey)
+                .Select(id => States[id])
+                .Where(state => state.LocalProfile == localProfile)
+                .ToDictionary(state => state.EntryId, StringComparer.Ordinal);
+            return Task.FromResult(result);
+        }
+
+        public Task<EntryState> PatchAsync(
+            string entryId,
+            string localProfile,
+            EntryStatePatch patch,
+            CancellationToken cancellationToken)
+        {
+            PatchCalls++;
+            EntryState current = States.GetValueOrDefault(entryId)
+                ?? new(entryId, localProfile, false, false, 0, string.Empty, TimelineNow);
+            EntryState updated = current with
+            {
+                IsRead = patch.IsRead ?? current.IsRead,
+                IsStarred = patch.IsStarred ?? current.IsStarred,
+                Progress = patch.Progress ?? current.Progress,
+                Note = patch.Note ?? current.Note,
+                UpdatedAt = TimelineNow
+            };
+            States[entryId] = updated;
+            return Task.FromResult(updated);
+        }
     }
 
     private sealed class StubFeedCatalogRepository(FeedCatalogSnapshot catalog) : IFeedCatalogRepository

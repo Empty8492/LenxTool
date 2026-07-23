@@ -1,6 +1,6 @@
 # P0 详细计划：管理员订阅与普通用户只读目录
 
-状态：进行中，P0-01～P0-19 与检查点 P0-B/P0-C 已完成
+状态：进行中，P0-01～P0-20 与检查点 P0-B/P0-C 已完成
 最后核对：2026-07-23
 上位文档：[RSS 集成总路线图](RSS_MASTER_ROADMAP.md)
 参考项目：RSSNext/Folo（发现、OPML、订阅状态和内容视图的行为参考），LenxTool 当前 Worker/SQLite/资讯中心（实现基础）
@@ -436,6 +436,24 @@ P0 不包含全文抓取、图片离线缓存、AI 摘要/翻译、自动化规�
 **参考：** LenxTool 现有首页/每日早报；Folo 不提供这部分迁移方案。
 
 **完成记录（2026-07-23）：** `DashboardViewModel` 改为从本地 Feed 条目、ACTIVE 目录、旧 `news_articles`、热点、媒体任务和 `favorites` 表并行读取，不再包含固定日期、标题或任务演示数据；首页绑定真实缓存状态、趋势更新时间和收藏计数。Feed 查询新增 `ActiveOnly` 条件，空目录管理员新建 Feed 表单预填 `FeedCompatibilitySeed`（`https://daily.juya.uk/rss.xml`），作为可管理的兼容种子。首页聚合按规范 URL/内容指纹过滤旧早报与 Feed 重复条目；历史全文搜索也在 ViewModel 层合并相同 URL。空库、离线读取、旧条目去重、收藏计数、UI 绑定和 ACTIVE 过滤均有自动测试；本轮 .NET Core 39、Infrastructure 177、App 86，共 302/302 通过，Worker 38/38 通过。
+
+### P0-20：本机私人阅读状态基础
+
+**目标：** 为普通用户提供不改变共享目录的本机已读、收藏和阅读进度基础状态。
+
+**依赖：** P0-17、P0-19。
+**预计范围：** M。
+**主要文件：** `SqliteDatabase.cs`、`IEntryStateRepository.cs`、`EntryStateRepository.cs`、Feed 时间线 ViewModel/视图。
+
+**验收：**
+
+- [x] schema v6 创建 `(entry_id, local_profile)` 唯一的 `user_entry_states`，字段覆盖已读、收藏、0～100% 进度、私人备注和更新时间。
+- [x] 局部 patch 保留未修改字段；状态不依赖 Feed 外键，清理会保护仍有私人状态的条目。
+- [x] Feed 时间线按页批量水合状态，并可切换已读/收藏、显示进度；共享目录和 Worker 契约不变。
+
+**验证：** 迁移/重启往返、profile 隔离、局部 patch、边界校验、清理保护、时间线状态水合与切换命令测试。
+
+**完成记录（2026-07-23）：** 本地 schema 从 v5 升至 v6，新增 `user_entry_states` 及 profile/更新时间索引；`EntryStateRepository` 使用参数化 SQL、局部 patch 和事务 upsert，限制条目 ID、profile、备注及进度范围。Feed 条目清理显式排除拥有私人状态的条目，状态表不建立 Feed 外键，因此目录软删除或清理不会删除用户状态。时间线首屏和追加页一次读取当前页状态，列表提供已读/收藏切换并显示已保存进度；新增 2 项 Infrastructure、1 项 App 状态测试及 schema v6 迁移断言。Release 构建 0 警告、0 错误，.NET Core 39、Infrastructure 179、App 87，共 305/305 通过；Worker typecheck 及 38/38 通过。完整标签、备注编辑和滚动位置恢复保留在 P1。
 
 ### P0 最终检查点
 

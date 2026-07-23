@@ -75,12 +75,13 @@ AI 报告使用自备 DeepSeek Key 经请求级 Bearer 授权调用 `deepseek-v4
 - `schema_versions`：已应用迁移及校验和。
 - `content_fts`：早报、热点、AI 报告和 Feed 条目的统一 FTS5 内容索引。
 - `feed_entry_search_documents`：Feed 条目的搜索文档投影；schema v5 触发器负责与 `content_fts` 同事务同步。
+- `user_entry_states`：按 `(entry_id, local_profile)` 保存本机已读、收藏、阅读进度、私人备注和更新时间；不建立 Feed 外键，确保目录软删除或条目清理不会误删私人状态。
 
-本地数据库当前版本为 schema v5。schema v3 用于字幕翻译服务和 token 用量，v4 新增 Feed 目录/条目，v5 回填 Feed FTS 并安装同步触发器；旧 v2 数据会依次应用 v3、v4、v5，任何一步失败均在事务中回滚且不提升版本。
+本地数据库当前版本为 schema v6。schema v3 用于字幕翻译服务和 token 用量，v4 新增 Feed 目录/条目，v5 回填 Feed FTS 并安装同步触发器，v6 新增本机 `user_entry_states` 私人阅读状态；旧 v2 数据会依次应用 v3、v4、v5、v6，任何一步失败均在事务中回滚且不提升版本。
 
 `IFeedCatalogRepository` 是共享目录的本地边界。服务端快照写入时，分类、Feed、作用域、目录版本、生成时间和最后同步时间在同一事务提交；版本倒退在删除前拒绝，失败回滚整批替换。目录移除不会删除 `feed_entries`，仍存在 Feed 的 `feed_fetch_state` 会跨替换保留。读取状态、分类和 Feed 使用同一读事务，ACTIVE 投影过滤停用资源；若本地只同步过 ACTIVE，ALL 查询返回不可用而不是伪造管理员完整目录。
 
-`IFeedRefreshService` 只从 ACTIVE 投影选择到期 Feed，并通过 `FeedNetworkPolicy` 与固定地址传输执行条件 GET。调度有全局并发上限和 Feed 级单飞门闩；每次重定向重新做 SSRF 校验，跨 authority 不携带条件验证器。200 的提交顺序固定为“解析 → `IFeedEntryRepository` 单事务 upsert/FTS → `IFeedFetchStateRepository` 保存 ETag/Last-Modified 与下次时间”，因此条目写失败不会提交新验证器；状态保存失败最多造成下一次幂等重抓。304 不调用条目写入。仓储查询按稳定时间/ID 顺序分页，并以目录表关联 Feed/分类；清理接口排除收藏和标签，P1 私人阅读状态完成前不进入后台调度。
+`IFeedRefreshService` 只从 ACTIVE 投影选择到期 Feed，并通过 `FeedNetworkPolicy` 与固定地址传输执行条件 GET。调度有全局并发上限和 Feed 级单飞门闩；每次重定向重新做 SSRF 校验，跨 authority 不携带条件验证器。200 的提交顺序固定为“解析 → `IFeedEntryRepository` 单事务 upsert/FTS → `IFeedFetchStateRepository` 保存 ETag/Last-Modified 与下次时间”，因此条目写失败不会提交新验证器；状态保存失败最多造成下一次幂等重抓。304 不调用条目写入。仓储查询按稳定时间/ID 顺序分页，并以目录表关联 Feed/分类；清理接口排除收藏、标签和 `user_entry_states`，完整私人阅读闭环完成前不进入后台自动调度。
 
 资讯中心的 Feed 时间线只读取 `IFeedEntryRepository` 和 ACTIVE 目录投影，不取得目录写服务。ViewModel 每页请求 50 条，按分类、Feed、本地日期边界和有界 FTS 关键词构造查询；筛选代次会丢弃过期分页结果，追加页同时记录仓储偏移并按条目 ID 去重。目录同步事件的版本高于已加载快照时，ViewModel 会回到 UI 上下文重新读取 ACTIVE 目录、重建筛选项并保留仍有效的分类/Feed 选择。固定高度的 `PagedListBox` 使用 `VirtualizingStackPanel` Recycling 模式，在接近底部时请求下一页；选择项映射为现有 `RichArticleView` 的只读模型，正文仍走原生净化渲染。同步或网络失败只更新“离线缓存/最后抓取/目录同步”状态，不清空已显示条目。
 
@@ -132,6 +133,6 @@ UI 错误卡根据能力显示重试、复制脱敏详情、打开设置、切�
 
 后续资讯架构采用“Worker/D1 权威共享目录 + 桌面客户端本地抓取/缓存”：管理员通过服务端授权的写端点维护 Feed、分类和策略，普通用户只读同步目录；文章正文、AI 结果、字幕和本地文件仍不写入 D1。详细理由和备选方案见 [ADR-001](decisions/ADR-001-admin-curated-rss.md)，实施批次见 [RSS 集成总路线图](plans/RSS_MASTER_ROADMAP.md)。
 
-当前已完成 Worker v1 契约、身份生命周期、D1 共享目录 schema、管理员分类/Feed 单项与原子批量写 API、版本化只读目录、桌面安全会话与账号/角色/额度 UI、本地 schema v5、目录原子仓储、安全发现/解析、条件调度、条目 FTS/查询、P0-C 兼容安全检查点、P0-15 管理页、P0-16 OPML 管理、P0-17 普通用户 Feed 时间线、P0-18 管理员 Feed 健康诊断和 P0-19 首页真实数据兼容。目录写入以服务端 admin 角色为授权真相，使用 `If-Match` 单调版本、`Idempotency-Key`、参数化 SQL 和同一 D1 batch 内的资源写入/最小审计/幂等结果；OPML 批量使用内存模拟后约 12 条聚合语句原子提交，跨操作 `categoryRef` 可引用同批次较早创建的分类，成功只增加一次版本。桌面导入在写入前先执行有界 XXE-safe 解析、预览分类、用户选择、安全 Feed 发现和发现后重复复核，任一前置项失败不会提交；导出采用目录字段白名单。目录读取以同一 D1 batch 生成确定排序的原子快照，ACTIVE/ALL 由服务端角色隔离，并用强 ETag、304 和超前版本拒绝保护客户端缓存；本地仓储拒绝版本倒退并以读写事务维持完整快照，桌面角色只控制入口可见性且角色降级后清空管理员投影，D1 仍不保存文章正文。解析层的 20 个独立 RSS/Atom fixture 覆盖中文、ISO-8859-1 与 UTF-16 LE/BE，安全抓取测试覆盖单源隔离、缓存保留、SSRF、XXE、响应上限和重定向绕过。
+当前已完成 Worker v1 契约、身份生命周期、D1 共享目录 schema、管理员分类/Feed 单项与原子批量写 API、版本化只读目录、桌面安全会话与账号/角色/额度 UI、本地 schema v6、目录原子仓储、安全发现/解析、条件调度、条目 FTS/查询、P0-C 兼容安全检查点、P0-15 管理页、P0-16 OPML 管理、P0-17 普通用户 Feed 时间线、P0-18 管理员 Feed 健康诊断、P0-19 首页真实数据兼容和 P0-20 私人阅读状态基础。目录写入以服务端 admin 角色为授权真相，使用 `If-Match` 单调版本、`Idempotency-Key`、参数化 SQL 和同一 D1 batch 内的资源写入/最小审计/幂等结果；OPML 批量使用内存模拟后约 12 条聚合语句原子提交，跨操作 `categoryRef` 可引用同批次较早创建的分类，成功只增加一次版本。桌面导入在写入前先执行有界 XXE-safe 解析、预览分类、用户选择、安全 Feed 发现和发现后重复复核，任一前置项失败不会提交；导出采用目录字段白名单。目录读取以同一 D1 batch 生成确定排序的原子快照，ACTIVE/ALL 由服务端角色隔离，并用强 ETag、304 和超前版本拒绝保护客户端缓存；本地仓储拒绝版本倒退并以读写事务维持完整快照，桌面角色只控制入口可见性且角色降级后清空管理员投影，D1 仍不保存文章正文。解析层的 20 个独立 RSS/Atom fixture 覆盖中文、ISO-8859-1 与 UTF-16 LE/BE，安全抓取测试覆盖单源隔离、缓存保留、SSRF、XXE、响应上限和重定向绕过。
 
-下一步是 P0-20 私人阅读状态与收藏编辑；全文/图片离线和自动化仍属于后续 P1/P2。
+P0-20 已交付本机私人状态表、局部 patch 仓储、清理保护，以及时间线状态水合和已读/收藏切换；完整标签、备注编辑和阅读位置恢复仍属于后续 P1。

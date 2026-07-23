@@ -30,7 +30,8 @@ public sealed partial class NewsCenterViewModel : PageViewModel, IDisposable
         IDesktopFileDialogService dialogs,
         IFeedEntryRepository feedEntryRepository,
         IFeedCatalogRepository feedCatalogRepository,
-        IFeedCatalogSyncService feedCatalogSync)
+        IFeedCatalogSyncService feedCatalogSync,
+        IEntryStateRepository entryStateRepository)
         : base("资讯中心", "Feed 时间线、每日早报与热点趋势")
     {
         _newsCenterService = newsCenterService;
@@ -40,6 +41,7 @@ public sealed partial class NewsCenterViewModel : PageViewModel, IDisposable
         _feedEntryRepository = feedEntryRepository;
         _feedCatalogRepository = feedCatalogRepository;
         _feedCatalogSync = feedCatalogSync;
+        _entryStateRepository = entryStateRepository;
         _timelineSynchronizationContext =
             SynchronizationContext.Current is System.Windows.Threading.DispatcherSynchronizationContext dispatcherContext
             && System.Windows.Application.Current is not null

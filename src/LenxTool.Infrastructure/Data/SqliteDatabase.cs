@@ -10,7 +10,7 @@ public sealed partial class SqliteDatabase(
     AppPaths paths,
     ILogger<SqliteDatabase> logger) : IDisposable
 {
-    private const int CurrentSchemaVersion = 5;
+    private const int CurrentSchemaVersion = 6;
     private readonly SemaphoreSlim _initializationGate = new(1, 1);
     private bool _initialized;
     private bool _disposed;
@@ -190,6 +190,17 @@ public sealed partial class SqliteDatabase(
                 command.CommandText = "INSERT INTO schema_versions(version, applied_at, checksum) VALUES (5, $appliedAt, $checksum);";
                 command.Parameters.AddWithValue("$appliedAt", DateTimeOffset.UtcNow.ToString("O"));
                 command.Parameters.AddWithValue("$checksum", "lenx-schema-v5-feed-entry-fts");
+                await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            if (version < 6)
+            {
+                command.CommandText = MigrationSixSql;
+                command.Parameters.Clear();
+                await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                command.CommandText = "INSERT INTO schema_versions(version, applied_at, checksum) VALUES (6, $appliedAt, $checksum);";
+                command.Parameters.AddWithValue("$appliedAt", DateTimeOffset.UtcNow.ToString("O"));
+                command.Parameters.AddWithValue("$checksum", "lenx-schema-v6-private-entry-state");
                 await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
             }
         }
@@ -474,5 +485,21 @@ public sealed partial class SqliteDatabase(
             DELETE FROM content_fts
             WHERE entity_type='feed_entry' AND entity_id=OLD.id;
         END;
+        """;
+
+    private const string MigrationSixSql = """
+        CREATE TABLE IF NOT EXISTS user_entry_states(
+            entry_id TEXT NOT NULL CHECK(length(entry_id) BETWEEN 1 AND 128),
+            local_profile TEXT NOT NULL DEFAULT 'default'
+                CHECK(length(local_profile) BETWEEN 1 AND 64),
+            is_read INTEGER NOT NULL DEFAULT 0 CHECK(is_read IN (0, 1)),
+            is_starred INTEGER NOT NULL DEFAULT 0 CHECK(is_starred IN (0, 1)),
+            progress REAL NOT NULL DEFAULT 0 CHECK(progress >= 0 AND progress <= 100),
+            note TEXT NOT NULL DEFAULT '' CHECK(length(note) <= 4000),
+            updated_at TEXT NOT NULL CHECK(length(updated_at) BETWEEN 20 AND 40),
+            PRIMARY KEY(entry_id, local_profile)
+        );
+        CREATE INDEX IF NOT EXISTS ix_user_entry_states_profile_updated
+            ON user_entry_states(local_profile, updated_at DESC, entry_id);
         """;
 }

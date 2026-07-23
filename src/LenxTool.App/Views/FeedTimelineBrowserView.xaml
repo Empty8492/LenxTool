@@ -40,6 +40,27 @@
                                     <RowDefinition Height="Auto" />
                                 </Grid.RowDefinitions>
                                 <DockPanel LastChildFill="True">
+                                    <StackPanel DockPanel.Dock="Right"
+                                                Orientation="Horizontal">
+                                        <Button Margin="4,0,0,0"
+                                                Padding="4,0"
+                                                BorderThickness="0"
+                                                Background="Transparent"
+                                                Command="{Binding DataContext.ToggleTimelineStarCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                CommandParameter="{Binding}"
+                                                Content="☆"
+                                                ToolTip="切换收藏"
+                                                AutomationProperties.Name="切换 Feed 收藏" />
+                                        <Button Margin="4,0,0,0"
+                                                Padding="4,0"
+                                                BorderThickness="0"
+                                                Background="Transparent"
+                                                Command="{Binding DataContext.ToggleTimelineReadCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                CommandParameter="{Binding}"
+                                                Content="已读"
+                                                ToolTip="切换已读状态"
+                                                AutomationProperties.Name="切换 Feed 已读状态" />
+                                    </StackPanel>
                                     <TextBlock DockPanel.Dock="Right"
                                                Margin="8,0,0,0"
                                                Style="{StaticResource MetaTextStyle}"
@@ -68,6 +89,10 @@
                                     <TextBlock Style="{StaticResource MetaTextStyle}"
                                                Text="{Binding Summary}"
                                                TextTrimming="CharacterEllipsis" />
+                                    <TextBlock DockPanel.Dock="Right"
+                                               Margin="8,0,0,0"
+                                               Style="{StaticResource MetaTextStyle}"
+                                               Text="{Binding Progress, StringFormat={}{0:0}%}" />
                                 </DockPanel>
                             </Grid>
                         </DataTemplate>

@@ -12,6 +12,7 @@ public sealed partial class NewsCenterViewModel
     private readonly IFeedEntryRepository _feedEntryRepository;
     private readonly IFeedCatalogRepository _feedCatalogRepository;
     private readonly IFeedCatalogSyncService _feedCatalogSync;
+    private readonly IEntryStateRepository _entryStateRepository;
     private readonly SynchronizationContext? _timelineSynchronizationContext;
     private FeedCatalogSnapshot? _timelineCatalog;
     private FeedTimelineFilterOption? _selectedTimelineCategory;
@@ -35,6 +36,8 @@ public sealed partial class NewsCenterViewModel
     public AsyncRelayCommand ApplyTimelineFiltersCommand { get; private set; } = null!;
     public AsyncRelayCommand LoadMoreTimelineCommand { get; private set; } = null!;
     public AsyncRelayCommand ClearTimelineFiltersCommand { get; private set; } = null!;
+    public AsyncRelayCommand<FeedTimelineItem> ToggleTimelineReadCommand { get; private set; } = null!;
+    public AsyncRelayCommand<FeedTimelineItem> ToggleTimelineStarCommand { get; private set; } = null!;
 
     public FeedTimelineFilterOption? SelectedTimelineCategory
     {
@@ -128,6 +131,8 @@ public sealed partial class NewsCenterViewModel
             LoadMoreTimelineAsync,
             () => HasMoreTimelineEntries);
         ClearTimelineFiltersCommand = new(ClearTimelineFiltersAsync);
+        ToggleTimelineReadCommand = new(ToggleTimelineReadAsync, item => item is not null);
+        ToggleTimelineStarCommand = new(ToggleTimelineStarAsync, item => item is not null);
         _feedCatalogSync.StatusChanged += OnTimelineCatalogSyncStatusChanged;
     }
 
@@ -188,7 +193,15 @@ public sealed partial class NewsCenterViewModel
         }
 
         TimelineEntries.Clear();
-        AppendTimelinePage(page);
+        await AppendTimelinePageAsync(
+            page,
+            generation,
+            cancellationToken: cancellationToken);
+        if (_timelineDisposed
+            || generation != Volatile.Read(ref _timelineQueryGeneration))
+        {
+            return;
+        }
         SelectedTimelineEntry = TimelineEntries.FirstOrDefault();
         OnPropertyChanged(nameof(TimelineEntrySummary));
     }
@@ -208,7 +221,12 @@ public sealed partial class NewsCenterViewModel
             return;
         }
 
-        AppendTimelinePage(page);
+        await AppendTimelinePageAsync(
+            page,
+            generation,
+            expectedVisibleCount,
+            expectedOffset,
+            cancellationToken);
         OnPropertyChanged(nameof(TimelineEntrySummary));
     }
 
@@ -243,17 +261,39 @@ public sealed partial class NewsCenterViewModel
             TimelinePageSize);
     }
 
-    private void AppendTimelinePage(FeedEntryPage page)
+    private async Task AppendTimelinePageAsync(
+        FeedEntryPage page,
+        int expectedGeneration,
+        int? expectedVisibleCount = null,
+        int? expectedOffset = null,
+        CancellationToken cancellationToken = default)
     {
-        _timelineNextOffset = checked(page.Offset + page.Items.Count);
         HashSet<string> existingIds = TimelineEntries
             .Select(item => item.Entry.Id)
             .ToHashSet(StringComparer.Ordinal);
+        IReadOnlyDictionary<string, EntryState> states = page.Items.Count == 0
+            ? new Dictionary<string, EntryState>(StringComparer.Ordinal)
+            : await _entryStateRepository.GetAsync(
+                page.Items.Select(item => item.Id).ToArray(),
+                "default",
+                cancellationToken);
+        if (_timelineDisposed
+            || expectedGeneration != Volatile.Read(ref _timelineQueryGeneration)
+            || (expectedVisibleCount is not null
+                && expectedVisibleCount.Value != TimelineEntries.Count)
+            || (expectedOffset is not null
+                && expectedOffset.Value != _timelineNextOffset))
+        {
+            return;
+        }
+        _timelineNextOffset = checked(page.Offset + page.Items.Count);
         foreach (FeedEntry entry in page.Items)
         {
             if (existingIds.Add(entry.Id))
             {
-                TimelineEntries.Add(CreateTimelineItem(entry));
+                TimelineEntries.Add(CreateTimelineItem(
+                    entry,
+                    states.GetValueOrDefault(entry.Id)));
             }
 
             if (_lastTimelineRefreshAt is null || entry.FetchedAt > _lastTimelineRefreshAt)
@@ -266,7 +306,47 @@ public sealed partial class NewsCenterViewModel
         UpdateTimelineStatus(_feedCatalogSync.Current);
     }
 
-    private FeedTimelineItem CreateTimelineItem(FeedEntry entry)
+    private async Task ToggleTimelineReadAsync(
+        FeedTimelineItem? item,
+        CancellationToken cancellationToken)
+    {
+        if (item is null) return;
+        EntryState state = await _entryStateRepository.PatchAsync(
+            item.Entry.Id,
+            "default",
+            new EntryStatePatch(IsRead: !item.IsRead),
+            cancellationToken);
+        ReplaceTimelineItem(item, state);
+    }
+
+    private async Task ToggleTimelineStarAsync(
+        FeedTimelineItem? item,
+        CancellationToken cancellationToken)
+    {
+        if (item is null) return;
+        EntryState state = await _entryStateRepository.PatchAsync(
+            item.Entry.Id,
+            "default",
+            new EntryStatePatch(IsStarred: !item.IsStarred),
+            cancellationToken);
+        ReplaceTimelineItem(item, state);
+    }
+
+    private void ReplaceTimelineItem(FeedTimelineItem item, EntryState state)
+    {
+        int index = TimelineEntries.IndexOf(item);
+        if (index < 0) return;
+        FeedTimelineItem updated = item with { State = state };
+        TimelineEntries[index] = updated;
+        if (ReferenceEquals(SelectedTimelineEntry, item))
+        {
+            SelectedTimelineEntry = updated;
+        }
+    }
+
+    private FeedTimelineItem CreateTimelineItem(
+        FeedEntry entry,
+        EntryState? state = null)
     {
         FeedCatalogItem? feed = _timelineCatalog?.Feeds.FirstOrDefault(
             item => string.Equals(item.Id, entry.FeedId, StringComparison.Ordinal));
@@ -277,7 +357,8 @@ public sealed partial class NewsCenterViewModel
         return new(
             entry,
             feed?.DisplayName ?? "已移除 Feed",
-            category?.Name ?? "未分类");
+            category?.Name ?? "未分类",
+            state);
     }
 
     private NewsArticle CreateReaderArticle(FeedTimelineItem item)
@@ -412,6 +493,8 @@ public sealed partial class NewsCenterViewModel
         ApplyTimelineFiltersCommand.Dispose();
         LoadMoreTimelineCommand.Dispose();
         ClearTimelineFiltersCommand.Dispose();
+        ToggleTimelineReadCommand.Dispose();
+        ToggleTimelineStarCommand.Dispose();
     }
 
     private static DateTimeOffset ToTimelineBoundary(DateTime value)

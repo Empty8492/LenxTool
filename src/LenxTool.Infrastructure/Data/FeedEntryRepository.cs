@@ -111,6 +111,9 @@ public sealed class FeedEntryRepository(SqliteDatabase database) : IFeedEntryRep
                       SELECT 1 FROM entity_tags private_tag
                       WHERE private_tag.entity_type='feed_entry'
                         AND private_tag.entity_id=e.id)
+                  AND NOT EXISTS (
+                      SELECT 1 FROM user_entry_states private_state
+                      WHERE private_state.entry_id=e.id)
                 ORDER BY julianday(COALESCE(e.updated_at, e.published_at, e.fetched_at)), e.id
                 LIMIT $maximumCount);
             """;
