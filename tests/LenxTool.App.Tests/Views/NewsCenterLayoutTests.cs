@@ -260,6 +260,25 @@ public sealed class NewsCenterLayoutTests
             element => element.Name.LocalName == "Button"
                 && element.Attribute("AutomationProperties.Name")?.Value == "切换当前 Feed 已读状态"
                 && element.Attribute("Content")?.Value == "{Binding SelectedTimelineEntry.ReadActionLabel}");
+        Assert.Contains(
+            timelineBrowser.Descendants(),
+            element => element.Name.LocalName == "TextBlock"
+                && element.Attribute("Text")?.Value.Contains(
+                    "SelectedTimelineEntry.Progress",
+                    StringComparison.Ordinal) == true);
+        Assert.Contains(
+            timelineBrowser.Descendants(),
+            element => element.Name.LocalName == "Button"
+                && element.Attribute("AutomationProperties.Name")?.Value == "重置 Feed 阅读进度"
+                && element.Attribute("Command")?.Value == "{Binding ResetTimelineProgressCommand}");
+        XElement articleScrollViewer = Assert.Single(
+            timelineBrowser.Descendants(),
+            element => element.Name.LocalName == "ScrollViewer"
+                && element.Attribute("{http://schemas.microsoft.com/winfx/2006/xaml}Name")?.Value
+                    == "ArticleScrollViewer");
+        Assert.Equal(
+            "ArticleScrollViewer_OnScrollChanged",
+            articleScrollViewer.Attribute("ScrollChanged")?.Value);
     }
 
     [Fact]

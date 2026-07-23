@@ -175,10 +175,20 @@
                                         CommandParameter="{Binding SelectedTimelineEntry}"
                                         Content="{Binding SelectedTimelineEntry.ReadActionLabel}"
                                         AutomationProperties.Name="切换当前 Feed 已读状态" />
+                                <Button MinWidth="72"
+                                        Margin="8,0,0,0"
+                                        Padding="10,5"
+                                        Command="{Binding ResetTimelineProgressCommand}"
+                                        Content="从头阅读"
+                                        Click="ResetTimelineProgressClick"
+                                        AutomationProperties.Name="重置 Feed 阅读进度" />
                             </StackPanel>
                             <StackPanel>
                                 <TextBlock Style="{StaticResource SectionTitleStyle}"
                                            Text="私人阅读状态" />
+                                <TextBlock Margin="0,3,12,0"
+                                           Style="{StaticResource MetaTextStyle}"
+                                           Text="{Binding SelectedTimelineEntry.Progress, StringFormat={}阅读进度 {0:0}%}" />
                                 <TextBlock Margin="0,3,12,0"
                                            Style="{StaticResource MetaTextStyle}"
                                            Text="{Binding TimelineEditorStatus}"
@@ -263,10 +273,12 @@
                         </StackPanel>
                     </Border>
                 </ScrollViewer>
-                <ScrollViewer Grid.Row="1"
+                <ScrollViewer x:Name="ArticleScrollViewer"
+                              Grid.Row="1"
                               VerticalScrollBarVisibility="Auto"
                               HorizontalScrollBarVisibility="Disabled"
-                              PanningMode="VerticalOnly">
+                              PanningMode="VerticalOnly"
+                              ScrollChanged="ArticleScrollViewer_OnScrollChanged">
                     <controls:RichArticleView Article="{Binding SelectedFeedArticle}" />
                 </ScrollViewer>
                 <Border Grid.RowSpan="2"

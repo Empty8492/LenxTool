@@ -292,6 +292,40 @@ public sealed class NewsCenterViewModelTests
     }
 
     [Fact]
+    public async Task TimelineProgressIsDebouncedPersistsAndCanReset()
+    {
+        FeedEntry entry = CreateFeedEntry(0);
+        var states = new StubEntryStateRepository();
+        states.States[entry.Id] = new(
+            entry.Id,
+            "default",
+            true,
+            false,
+            10,
+            string.Empty,
+            TimelineNow);
+        using NewsCenterViewModel viewModel = CreateViewModel(
+            CreateSnapshot(),
+            feedEntries: new([entry]),
+            entryStates: states);
+        await viewModel.InitializeAsync(CancellationToken.None);
+        FeedTimelineItem item = Assert.Single(viewModel.TimelineEntries);
+
+        viewModel.QueueTimelineProgress(item, 25);
+        viewModel.QueueTimelineProgress(item, 55);
+        await viewModel.TimelineProgressWrite;
+
+        Assert.Equal(55, states.States[entry.Id].Progress);
+        Assert.Equal(55, Assert.Single(viewModel.TimelineEntries).Progress);
+
+        viewModel.ResetTimelineProgressCommand.Execute(null);
+        await viewModel.TimelineProgressWrite;
+
+        Assert.Equal(0, states.States[entry.Id].Progress);
+        Assert.Equal(0, Assert.Single(viewModel.TimelineEntries).Progress);
+    }
+
+    [Fact]
     public async Task TimelineFavoriteNoteAndTagsPersistThroughPrivateRepositories()
     {
         FeedEntry entry = CreateFeedEntry(0);

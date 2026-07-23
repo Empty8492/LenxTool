@@ -21,6 +21,8 @@ public sealed partial class NewsCenterViewModel
     private readonly IFavoriteRepository _favoriteRepository;
     private readonly SynchronizationContext? _timelineSynchronizationContext;
     private FeedCatalogSnapshot? _timelineCatalog;
+    private CancellationTokenSource? _timelineProgressCancellation;
+    private Task _timelineProgressWrite = Task.CompletedTask;
     private FeedTimelineFilterOption? _selectedTimelineCategory;
     private FeedTimelineFilterOption? _selectedTimelineFeed;
     private FeedTimelineReadFilterOption? _selectedTimelineReadFilter;
@@ -65,6 +67,7 @@ public sealed partial class NewsCenterViewModel
     public RelayCommand CancelTimelineNoteEditCommand { get; private set; } = null!;
     public AsyncRelayCommand AddTimelineTagCommand { get; private set; } = null!;
     public AsyncRelayCommand<TagItem> RemoveTimelineTagCommand { get; private set; } = null!;
+    public RelayCommand ResetTimelineProgressCommand { get; private set; } = null!;
 
     public FeedTimelineFilterOption? SelectedTimelineCategory
     {
@@ -106,6 +109,7 @@ public sealed partial class NewsCenterViewModel
                 SaveTimelineNoteCommand.NotifyCanExecuteChanged();
                 CancelTimelineNoteEditCommand.NotifyCanExecuteChanged();
                 AddTimelineTagCommand.NotifyCanExecuteChanged();
+                ResetTimelineProgressCommand.NotifyCanExecuteChanged();
             }
         }
     }
@@ -211,6 +215,8 @@ public sealed partial class NewsCenterViewModel
 
     public Task SelectedTimelineEditorLoad => _selectedTimelineEditorLoad;
 
+    public Task TimelineProgressWrite => _timelineProgressWrite;
+
     public bool HasMoreTimelineEntries
     {
         get => _hasMoreTimelineEntries;
@@ -252,7 +258,62 @@ public sealed partial class NewsCenterViewModel
         RemoveTimelineTagCommand = new(
             RemoveTimelineTagAsync,
             tag => SelectedTimelineEntry is not null && tag is not null);
+        ResetTimelineProgressCommand = new(
+            ResetTimelineProgress,
+            () => SelectedTimelineEntry is not null && SelectedTimelineEntry.Progress > 0);
         _feedCatalogSync.StatusChanged += OnTimelineCatalogSyncStatusChanged;
+    }
+
+    public void QueueTimelineProgress(FeedTimelineItem? item, double progress)
+    {
+        if (item is null || double.IsNaN(progress) || double.IsInfinity(progress)) return;
+        double normalized = Math.Clamp(progress, 0, 100);
+        if (Math.Abs(normalized - item.Progress) < 1) return;
+
+        _timelineProgressCancellation?.Cancel();
+        _timelineProgressCancellation?.Dispose();
+        var cancellation = new CancellationTokenSource();
+        _timelineProgressCancellation = cancellation;
+        _timelineProgressWrite = PersistTimelineProgressAfterDelayAsync(
+            item,
+            normalized,
+            cancellation.Token);
+        OnPropertyChanged(nameof(TimelineProgressWrite));
+    }
+
+    private void ResetTimelineProgress()
+    {
+        FeedTimelineItem? item = SelectedTimelineEntry;
+        if (item is null) return;
+        QueueTimelineProgress(item, 0);
+        TimelineEditorStatus = "已将阅读位置重置为开头。";
+    }
+
+    private async Task PersistTimelineProgressAfterDelayAsync(
+        FeedTimelineItem item,
+        double progress,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(500), cancellationToken);
+            EntryState state = await _entryStateRepository.PatchAsync(
+                item.Entry.Id,
+                DefaultTimelineProfile,
+                new EntryStatePatch(Progress: progress),
+                cancellationToken);
+            if (_timelineDisposed) return;
+            ReplaceTimelineItem(item, state);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+        catch (Exception) when (!_timelineDisposed)
+        {
+            SetTimelineEditorStatusIfSelected(
+                item,
+                "阅读进度保存失败，正文仍可继续阅读。");
+        }
     }
 
     private async Task InitializeTimelineAsync(CancellationToken cancellationToken)
@@ -838,6 +899,7 @@ public sealed partial class NewsCenterViewModel
             OnPropertyChanged(nameof(SelectedTimelineEntry));
             SelectedFeedArticle = CreateReaderArticle(updated);
             UpdateTimelineSavedNote(updated.Note, replaceEditorNote);
+            ResetTimelineProgressCommand.NotifyCanExecuteChanged();
         }
     }
 
@@ -1036,6 +1098,9 @@ public sealed partial class NewsCenterViewModel
     private void DisposeTimeline()
     {
         _timelineDisposed = true;
+        _timelineProgressCancellation?.Cancel();
+        _timelineProgressCancellation?.Dispose();
+        _timelineProgressCancellation = null;
         Interlocked.Increment(ref _timelineCatalogGeneration);
         Interlocked.Increment(ref _timelineQueryGeneration);
         Interlocked.Increment(ref _timelineEditorGeneration);
