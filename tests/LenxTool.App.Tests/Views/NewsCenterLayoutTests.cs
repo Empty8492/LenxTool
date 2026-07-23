@@ -192,7 +192,10 @@ public sealed class NewsCenterLayoutTests
             "Feed 分类筛选",
             "Feed 来源筛选",
             "Feed 日期筛选",
-            "Feed 关键词筛选"
+            "Feed 关键词筛选",
+            "Feed 阅读状态筛选",
+            "仅看 Feed 收藏",
+            "Feed 标签筛选"
         ];
 
         Assert.All(

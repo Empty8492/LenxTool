@@ -65,6 +65,38 @@
                                 SelectedDate="{Binding SelectedTimelineDate}"
                                 AutomationProperties.Name="Feed 日期筛选" />
                 </StackPanel>
+                <StackPanel Width="140" Margin="0,0,10,8">
+                    <TextBlock Margin="2,0,0,5"
+                               Style="{StaticResource MetaTextStyle}"
+                               Text="阅读状态" />
+                    <ComboBox MinHeight="36"
+                              Style="{StaticResource CompactComboBoxStyle}"
+                              ItemsSource="{Binding TimelineReadFilters}"
+                              SelectedItem="{Binding SelectedTimelineReadFilter}"
+                              DisplayMemberPath="Label"
+                              AutomationProperties.Name="Feed 阅读状态筛选" />
+                </StackPanel>
+                <StackPanel Width="130" Margin="0,0,10,8">
+                    <TextBlock Margin="2,0,0,5"
+                               Style="{StaticResource MetaTextStyle}"
+                               Text="收藏" />
+                    <CheckBox MinHeight="36"
+                              VerticalContentAlignment="Center"
+                              IsChecked="{Binding TimelineFavoritesOnly}"
+                              Content="仅看收藏"
+                              AutomationProperties.Name="仅看 Feed 收藏" />
+                </StackPanel>
+                <StackPanel Width="170" Margin="0,0,10,8">
+                    <TextBlock Margin="2,0,0,5"
+                               Style="{StaticResource MetaTextStyle}"
+                               Text="标签" />
+                    <ComboBox MinHeight="36"
+                              Style="{StaticResource CompactComboBoxStyle}"
+                              ItemsSource="{Binding TimelineTags}"
+                              SelectedItem="{Binding SelectedTimelineTag}"
+                              DisplayMemberPath="Label"
+                              AutomationProperties.Name="Feed 标签筛选" />
+                </StackPanel>
                 <StackPanel Width="230" Margin="0,0,0,8">
                     <TextBlock Margin="2,0,0,5"
                                Style="{StaticResource MetaTextStyle}"

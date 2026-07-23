@@ -52,7 +52,7 @@ public sealed class FeedEntryRepositoryTests : IDisposable
     }
 
     [Fact]
-    public async Task QuerySupportsStablePagingFeedCategoryDateAndUnreadPlaceholderFilters()
+    public async Task QuerySupportsStablePagingAndPrivateStateFilters()
     {
         using SqliteDatabase database = await CreateDatabaseAsync();
         var repository = new FeedEntryRepository(database);
@@ -66,6 +66,30 @@ public sealed class FeedEntryRepositoryTests : IDisposable
             SecondFeedId);
         await repository.UpsertAsync(FeedId, [older, newest], CancellationToken.None);
         await repository.UpsertAsync(SecondFeedId, [otherFeed], CancellationToken.None);
+        const string tagId = "50000000-0000-4000-8000-000000000001";
+        await using (SqliteConnection connection = await database.OpenConnectionAsync(CancellationToken.None))
+        await using (SqliteCommand privateState = connection.CreateCommand())
+        {
+            privateState.CommandText = """
+                INSERT INTO user_entry_states(
+                    entry_id, local_profile, is_read, is_starred, progress, note, updated_at)
+                VALUES($readId, 'default', 1, 0, 0, '', $now),
+                      ($stateFavoriteId, 'default', 0, 1, 0, '', $now),
+                      ($repositoryFavoriteId, 'secondary', 1, 0, 0, '', $now);
+                INSERT INTO favorites(id, entity_type, entity_id, note, created_at)
+                VALUES('favorite-filter', 'feed_entry', $repositoryFavoriteId, '', $now);
+                INSERT INTO tags(id, name, color, created_at)
+                VALUES($tagId, '精读', '#4B6B88', $now);
+                INSERT INTO entity_tags(entity_type, entity_id, tag_id)
+                VALUES('feed_entry', $stateFavoriteId, $tagId);
+                """;
+            privateState.Parameters.AddWithValue("$readId", newest.Id);
+            privateState.Parameters.AddWithValue("$stateFavoriteId", older.Id);
+            privateState.Parameters.AddWithValue("$repositoryFavoriteId", otherFeed.Id);
+            privateState.Parameters.AddWithValue("$tagId", tagId);
+            privateState.Parameters.AddWithValue("$now", Now.ToString("O"));
+            await privateState.ExecuteNonQueryAsync(CancellationToken.None);
+        }
 
         FeedEntryPage first = await repository.QueryAsync(
             Query(feedId: FeedId, offset: 0, limit: 1),
@@ -85,6 +109,17 @@ public sealed class FeedEntryRepositoryTests : IDisposable
         FeedEntryPage read = await repository.QueryAsync(
             Query(readFilter: FeedEntryReadFilter.Read),
             CancellationToken.None);
+        FeedEntryPage secondaryRead = await repository.QueryAsync(
+            Query(
+                readFilter: FeedEntryReadFilter.Read,
+                localProfile: "secondary"),
+            CancellationToken.None);
+        FeedEntryPage favorites = await repository.QueryAsync(
+            Query(favoritesOnly: true),
+            CancellationToken.None);
+        FeedEntryPage tagged = await repository.QueryAsync(
+            Query(tagId: tagId),
+            CancellationToken.None);
 
         Assert.Equal(["newest"], first.Items.Select(item => item.ExternalId));
         Assert.True(first.HasMore);
@@ -92,8 +127,13 @@ public sealed class FeedEntryRepositoryTests : IDisposable
         Assert.False(second.HasMore);
         Assert.Equal(["other"], category.Items.Select(item => item.ExternalId));
         Assert.Equal(["newest", "older"], date.Items.Select(item => item.ExternalId));
-        Assert.Equal(3, unread.Items.Count);
-        Assert.Empty(read.Items);
+        Assert.Equal(["older", "other"], unread.Items.Select(item => item.ExternalId).Order().ToArray());
+        Assert.Equal(["newest"], read.Items.Select(item => item.ExternalId));
+        Assert.Equal(["other"], secondaryRead.Items.Select(item => item.ExternalId));
+        Assert.Equal(
+            ["older", "other"],
+            favorites.Items.Select(item => item.ExternalId).Order().ToArray());
+        Assert.Equal(["older"], tagged.Items.Select(item => item.ExternalId));
     }
 
     [Fact]
@@ -276,7 +316,10 @@ public sealed class FeedEntryRepositoryTests : IDisposable
         FeedEntryReadFilter readFilter = FeedEntryReadFilter.All,
         int offset = 0,
         int limit = 20,
-        bool activeOnly = false) => new(
+        bool activeOnly = false,
+        bool favoritesOnly = false,
+        string? tagId = null,
+        string localProfile = "default") => new(
             searchText,
             feedId,
             categoryId,
@@ -285,5 +328,8 @@ public sealed class FeedEntryRepositoryTests : IDisposable
             readFilter,
             offset,
             limit,
-            activeOnly);
+            activeOnly,
+            favoritesOnly,
+            tagId,
+            localProfile);
 }

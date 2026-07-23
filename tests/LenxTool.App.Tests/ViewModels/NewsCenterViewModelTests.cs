@@ -301,6 +301,7 @@ public sealed class NewsCenterViewModelTests
 
         Assert.Equal(string.Empty, viewModel.TimelineTagInput);
         Assert.Contains(viewModel.SelectedTimelineTags, tag => tag.Name == "本地模型");
+        Assert.Contains(viewModel.TimelineTags, tag => tag.Label == "本地模型");
         TagItem added = Assert.Single(viewModel.SelectedTimelineTags, tag => tag.Name == "本地模型");
 
         await viewModel.RemoveTimelineTagCommand.ExecuteAsync(added);
@@ -493,6 +494,44 @@ public sealed class NewsCenterViewModelTests
         Assert.Equal(new DateOnly(2026, 7, 22), DateOnly.FromDateTime(query.PublishedFrom!.Value.LocalDateTime));
         Assert.Equal(new DateOnly(2026, 7, 23), DateOnly.FromDateTime(query.PublishedBefore!.Value.LocalDateTime));
         Assert.Equal(0, query.Offset);
+    }
+
+    [Fact]
+    public async Task TimelinePrivateFiltersFlowIntoQueryAndClearTogether()
+    {
+        var entries = new StubFeedEntryRepository([CreateFeedEntry(0)]);
+        var favorites = new StubFavoriteRepository();
+        TagItem tag = favorites.SeedTag("精读", "#4B6B88");
+        using NewsCenterViewModel viewModel = CreateViewModel(
+            CreateSnapshot(),
+            feedEntries: entries,
+            favorites: favorites);
+        await viewModel.InitializeAsync(CancellationToken.None);
+        viewModel.SelectedTimelineReadFilter = Assert.Single(
+            viewModel.TimelineReadFilters,
+            option => option.Value == FeedEntryReadFilter.Unread);
+        viewModel.TimelineFavoritesOnly = true;
+        viewModel.SelectedTimelineTag = Assert.Single(
+            viewModel.TimelineTags,
+            option => option.Id == tag.Id);
+
+        await viewModel.ApplyTimelineFiltersCommand.ExecuteAsync();
+
+        FeedEntryQuery filtered = entries.Queries[^1];
+        Assert.Equal(FeedEntryReadFilter.Unread, filtered.ReadFilter);
+        Assert.True(filtered.FavoritesOnly);
+        Assert.Equal(tag.Id, filtered.TagId);
+        Assert.Equal("default", filtered.LocalProfile);
+
+        await viewModel.ClearTimelineFiltersCommand.ExecuteAsync();
+
+        FeedEntryQuery cleared = entries.Queries[^1];
+        Assert.Equal(FeedEntryReadFilter.All, cleared.ReadFilter);
+        Assert.False(cleared.FavoritesOnly);
+        Assert.Null(cleared.TagId);
+        Assert.Equal(FeedEntryReadFilter.All, viewModel.SelectedTimelineReadFilter?.Value);
+        Assert.False(viewModel.TimelineFavoritesOnly);
+        Assert.Null(viewModel.SelectedTimelineTag?.Id);
     }
 
     [Fact]

@@ -33,8 +33,6 @@ public sealed class FeedEntryRepository(SqliteDatabase database) : IFeedEntryRep
         CancellationToken cancellationToken)
     {
         ValidateQuery(query);
-        if (query.ReadFilter == FeedEntryReadFilter.Read)
-            return new([], query.Offset, false);
 
         string? search = string.IsNullOrWhiteSpace(query.SearchText)
             ? null
@@ -55,6 +53,38 @@ public sealed class FeedEntryRepository(SqliteDatabase database) : IFeedEntryRep
               AND ($activeOnly = 0 OR (f.is_enabled = 1 AND (f.category_id IS NULL OR c.is_enabled = 1)))
               AND ($publishedFrom IS NULL OR julianday(COALESCE(e.published_at, e.updated_at, e.fetched_at)) >= julianday($publishedFrom))
               AND ($publishedBefore IS NULL OR julianday(COALESCE(e.published_at, e.updated_at, e.fetched_at)) < julianday($publishedBefore))
+              AND (
+                    $readFilter = 0
+                    OR ($readFilter = 1 AND NOT EXISTS (
+                        SELECT 1
+                        FROM user_entry_states private_read
+                        WHERE private_read.entry_id=e.id
+                          AND private_read.local_profile=$localProfile
+                          AND private_read.is_read=1))
+                    OR ($readFilter = 2 AND EXISTS (
+                        SELECT 1
+                        FROM user_entry_states private_read
+                        WHERE private_read.entry_id=e.id
+                          AND private_read.local_profile=$localProfile
+                          AND private_read.is_read=1)))
+              AND ($favoritesOnly = 0
+                   OR EXISTS (
+                        SELECT 1
+                        FROM favorites private_favorite
+                        WHERE private_favorite.entity_type='feed_entry'
+                          AND private_favorite.entity_id=e.id)
+                   OR EXISTS (
+                        SELECT 1
+                        FROM user_entry_states private_star
+                        WHERE private_star.entry_id=e.id
+                          AND private_star.local_profile=$localProfile
+                          AND private_star.is_starred=1))
+              AND ($tagId IS NULL OR EXISTS (
+                    SELECT 1
+                    FROM entity_tags private_tag
+                    WHERE private_tag.entity_type='feed_entry'
+                      AND private_tag.entity_id=e.id
+                      AND private_tag.tag_id=$tagId))
               AND ($search IS NULL OR e.id IN (
                     SELECT entity_id
                     FROM content_fts
@@ -67,6 +97,10 @@ public sealed class FeedEntryRepository(SqliteDatabase database) : IFeedEntryRep
         command.Parameters.AddWithValue("$activeOnly", query.ActiveOnly ? 1 : 0);
         command.Parameters.AddWithValue("$publishedFrom", FormatNullableTimestamp(query.PublishedFrom));
         command.Parameters.AddWithValue("$publishedBefore", FormatNullableTimestamp(query.PublishedBefore));
+        command.Parameters.AddWithValue("$readFilter", (int)query.ReadFilter);
+        command.Parameters.AddWithValue("$favoritesOnly", query.FavoritesOnly ? 1 : 0);
+        command.Parameters.AddWithValue("$tagId", (object?)query.TagId ?? DBNull.Value);
+        command.Parameters.AddWithValue("$localProfile", query.LocalProfile);
         command.Parameters.AddWithValue("$search", (object?)search ?? DBNull.Value);
         command.Parameters.AddWithValue("$limitPlusOne", query.Limit + 1);
         command.Parameters.AddWithValue("$offset", query.Offset);
@@ -213,6 +247,8 @@ public sealed class FeedEntryRepository(SqliteDatabase database) : IFeedEntryRep
             throw new ArgumentOutOfRangeException(nameof(query));
         ValidateOptionalGuid(query.FeedId, nameof(query.FeedId), required: false);
         ValidateOptionalGuid(query.CategoryId, nameof(query.CategoryId), required: false);
+        ValidateOptionalIdentifier(query.TagId, nameof(query.TagId));
+        ValidateProfile(query.LocalProfile);
         if (!Enum.IsDefined(query.ReadFilter)
             || query.Offset is < 0 or > 1_000_000
             || query.Limit is < 1 or > 200
@@ -229,6 +265,27 @@ public sealed class FeedEntryRepository(SqliteDatabase database) : IFeedEntryRep
         if (value is null && !required) return;
         if (!Guid.TryParseExact(value, "D", out _))
             throw new ArgumentException("Identifier must be a canonical GUID.", parameterName);
+    }
+
+    private static void ValidateOptionalIdentifier(string? value, string parameterName)
+    {
+        if (value is null) return;
+        if (string.IsNullOrWhiteSpace(value)
+            || value.Length > 128
+            || value.Any(char.IsControl))
+        {
+            throw new ArgumentException("Identifier is invalid.", parameterName);
+        }
+    }
+
+    private static void ValidateProfile(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value)
+            || value.Length > 64
+            || value.Any(char.IsControl))
+        {
+            throw new ArgumentException("Local profile is invalid.", nameof(value));
+        }
     }
 
     private static string EscapeFtsPrefix(string value)

@@ -13,6 +13,7 @@ public sealed partial class NewsCenterViewModel
     private const int MaximumTimelineTagLength = 80;
     private const string FeedEntryFavoriteType = "feed_entry";
     private const string DefaultTimelineTagColor = "#4B6B88";
+    private const string DefaultTimelineProfile = "default";
     private readonly IFeedEntryRepository _feedEntryRepository;
     private readonly IFeedCatalogRepository _feedCatalogRepository;
     private readonly IFeedCatalogSyncService _feedCatalogSync;
@@ -22,6 +23,8 @@ public sealed partial class NewsCenterViewModel
     private FeedCatalogSnapshot? _timelineCatalog;
     private FeedTimelineFilterOption? _selectedTimelineCategory;
     private FeedTimelineFilterOption? _selectedTimelineFeed;
+    private FeedTimelineReadFilterOption? _selectedTimelineReadFilter;
+    private FeedTimelineFilterOption? _selectedTimelineTag;
     private FeedTimelineItem? _selectedTimelineEntry;
     private NewsArticle? _selectedFeedArticle;
     private DateTime? _selectedTimelineDate;
@@ -34,6 +37,7 @@ public sealed partial class NewsCenterViewModel
     private string _timelineEditorStatus = "收藏、备注和标签仅保存在本机。";
     private Task _selectedTimelineEditorLoad = Task.CompletedTask;
     private bool _hasMoreTimelineEntries;
+    private bool _timelineFavoritesOnly;
     private bool _timelineDisposed;
     private int _timelineCatalogGeneration;
     private int _timelineQueryGeneration;
@@ -43,6 +47,13 @@ public sealed partial class NewsCenterViewModel
     public ObservableCollection<FeedTimelineItem> TimelineEntries { get; } = [];
     public ObservableCollection<FeedTimelineFilterOption> TimelineCategories { get; } = [];
     public ObservableCollection<FeedTimelineFilterOption> TimelineFeeds { get; } = [];
+    public ObservableCollection<FeedTimelineReadFilterOption> TimelineReadFilters { get; } =
+    [
+        new(FeedEntryReadFilter.All, "全部"),
+        new(FeedEntryReadFilter.Unread, "未读"),
+        new(FeedEntryReadFilter.Read, "已读")
+    ];
+    public ObservableCollection<FeedTimelineFilterOption> TimelineTags { get; } = [];
     public ObservableCollection<TagItem> SelectedTimelineTags { get; } = [];
     public AsyncRelayCommand ApplyTimelineFiltersCommand { get; private set; } = null!;
     public AsyncRelayCommand LoadMoreTimelineCommand { get; private set; } = null!;
@@ -128,6 +139,24 @@ public sealed partial class NewsCenterViewModel
         private set => SetProperty(ref _timelineStatus, value);
     }
 
+    public FeedTimelineReadFilterOption? SelectedTimelineReadFilter
+    {
+        get => _selectedTimelineReadFilter;
+        set => SetProperty(ref _selectedTimelineReadFilter, value);
+    }
+
+    public bool TimelineFavoritesOnly
+    {
+        get => _timelineFavoritesOnly;
+        set => SetProperty(ref _timelineFavoritesOnly, value);
+    }
+
+    public FeedTimelineFilterOption? SelectedTimelineTag
+    {
+        get => _selectedTimelineTag;
+        set => SetProperty(ref _selectedTimelineTag, value);
+    }
+
     public string SelectedTimelineNote
     {
         get => _selectedTimelineNote;
@@ -187,6 +216,7 @@ public sealed partial class NewsCenterViewModel
 
     private void ConfigureTimeline()
     {
+        _selectedTimelineReadFilter = TimelineReadFilters[0];
         ApplyTimelineFiltersCommand = new(ApplyTimelineFiltersAsync);
         LoadMoreTimelineCommand = new(
             LoadMoreTimelineAsync,
@@ -209,7 +239,32 @@ public sealed partial class NewsCenterViewModel
 
     private async Task InitializeTimelineAsync(CancellationToken cancellationToken)
     {
+        await ReloadTimelineTagChoicesAsync(cancellationToken);
         await ReloadTimelineCatalogAsync(preserveSelection: false, cancellationToken);
+    }
+
+    private async Task ReloadTimelineTagChoicesAsync(CancellationToken cancellationToken)
+    {
+        string? selectedTagId = SelectedTimelineTag?.Id;
+        IReadOnlyList<TagItem> tags;
+        try
+        {
+            tags = await _favoriteRepository.GetTagsAsync(cancellationToken);
+        }
+        catch (Exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            tags = [];
+        }
+
+        TimelineTags.Clear();
+        TimelineTags.Add(new(null, "全部标签"));
+        foreach (TagItem tag in tags)
+        {
+            TimelineTags.Add(new(tag.Id, tag.Name));
+        }
+        SelectedTimelineTag = TimelineTags.FirstOrDefault(
+            option => string.Equals(option.Id, selectedTagId, StringComparison.Ordinal))
+            ?? TimelineTags[0];
     }
 
     private async Task ReloadTimelineCatalogAsync(
@@ -305,6 +360,9 @@ public sealed partial class NewsCenterViewModel
     {
         SelectedTimelineCategory = TimelineCategories.FirstOrDefault();
         SelectedTimelineFeed = TimelineFeeds.FirstOrDefault();
+        SelectedTimelineReadFilter = TimelineReadFilters[0];
+        TimelineFavoritesOnly = false;
+        SelectedTimelineTag = TimelineTags.FirstOrDefault();
         SelectedTimelineDate = null;
         TimelineKeyword = string.Empty;
         await ApplyTimelineFiltersAsync(cancellationToken);
@@ -327,9 +385,12 @@ public sealed partial class NewsCenterViewModel
             SelectedTimelineCategory?.Id,
             publishedFrom,
             publishedBefore,
-            FeedEntryReadFilter.All,
+            SelectedTimelineReadFilter?.Value ?? FeedEntryReadFilter.All,
             offset,
-            TimelinePageSize);
+            TimelinePageSize,
+            FavoritesOnly: TimelineFavoritesOnly,
+            TagId: SelectedTimelineTag?.Id,
+            LocalProfile: DefaultTimelineProfile);
     }
 
     private async Task AppendTimelinePageAsync(
@@ -346,7 +407,7 @@ public sealed partial class NewsCenterViewModel
             ? new Dictionary<string, EntryState>(StringComparer.Ordinal)
             : await _entryStateRepository.GetAsync(
                 page.Items.Select(item => item.Id).ToArray(),
-                "default",
+                DefaultTimelineProfile,
                 cancellationToken);
         IReadOnlyDictionary<string, FavoriteItem> favorites = page.Items.Count == 0
             ? new Dictionary<string, FavoriteItem>(StringComparer.Ordinal)
@@ -391,7 +452,7 @@ public sealed partial class NewsCenterViewModel
         if (item is null) return;
         EntryState state = await _entryStateRepository.PatchAsync(
             item.Entry.Id,
-            "default",
+            DefaultTimelineProfile,
             new EntryStatePatch(IsRead: !item.IsRead),
             cancellationToken);
         ReplaceTimelineItem(item, state);
@@ -431,7 +492,7 @@ public sealed partial class NewsCenterViewModel
             {
                 state = await _entryStateRepository.PatchAsync(
                     item.Entry.Id,
-                    "default",
+                    DefaultTimelineProfile,
                     new EntryStatePatch(
                         IsStarred: isStarred,
                         Note: isStarred ? null : item.Note),
@@ -543,7 +604,7 @@ public sealed partial class NewsCenterViewModel
             {
                 state = await _entryStateRepository.PatchAsync(
                     item.Entry.Id,
-                    "default",
+                    DefaultTimelineProfile,
                     new EntryStatePatch(Note: note),
                     cancellationToken);
             }
@@ -613,6 +674,7 @@ public sealed partial class NewsCenterViewModel
             {
                 SelectedTimelineTags.Add(tag);
             }
+            UpsertTimelineTagChoice(tag);
             TimelineTagInput = string.Empty;
             TimelineEditorStatus = $"已添加标签“{tag.Name}”。";
         }
@@ -623,6 +685,34 @@ public sealed partial class NewsCenterViewModel
                 editorGeneration,
                 "标签保存失败，现有标签未从界面移除。");
         }
+    }
+
+    private void UpsertTimelineTagChoice(TagItem tag)
+    {
+        FeedTimelineFilterOption? existing = TimelineTags.FirstOrDefault(
+            option => string.Equals(option.Id, tag.Id, StringComparison.Ordinal));
+        var updated = new FeedTimelineFilterOption(tag.Id, tag.Name);
+        if (existing is not null)
+        {
+            int index = TimelineTags.IndexOf(existing);
+            TimelineTags[index] = updated;
+            if (ReferenceEquals(SelectedTimelineTag, existing))
+            {
+                SelectedTimelineTag = updated;
+            }
+            return;
+        }
+
+        int insertionIndex = 1;
+        while (insertionIndex < TimelineTags.Count
+               && string.Compare(
+                   TimelineTags[insertionIndex].Label,
+                   tag.Name,
+                   StringComparison.OrdinalIgnoreCase) < 0)
+        {
+            insertionIndex++;
+        }
+        TimelineTags.Insert(insertionIndex, updated);
     }
 
     private async Task RemoveTimelineTagAsync(

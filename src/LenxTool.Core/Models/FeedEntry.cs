@@ -44,7 +44,10 @@ public sealed record FeedEntryQuery(
     FeedEntryReadFilter ReadFilter,
     int Offset,
     int Limit,
-    bool ActiveOnly = false);
+    bool ActiveOnly = false,
+    bool FavoritesOnly = false,
+    string? TagId = null,
+    string LocalProfile = "default");
 
 public sealed record FeedEntryPage(
     IReadOnlyList<FeedEntry> Items,

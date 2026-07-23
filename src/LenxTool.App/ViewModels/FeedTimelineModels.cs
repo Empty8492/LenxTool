@@ -7,6 +7,10 @@ public sealed record FeedTimelineFilterOption(
     string Label,
     string? CategoryId = null);
 
+public sealed record FeedTimelineReadFilterOption(
+    FeedEntryReadFilter Value,
+    string Label);
+
 public sealed record FeedTimelineItem(
     FeedEntry Entry,
     string FeedName,
