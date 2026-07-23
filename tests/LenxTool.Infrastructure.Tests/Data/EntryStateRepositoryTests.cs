@@ -74,6 +74,71 @@ public sealed class EntryStateRepositoryTests : IDisposable
                 CancellationToken.None));
     }
 
+    [Fact]
+    public async Task ConcurrentPartialPatchesMergeWithoutDroppingIndependentFields()
+    {
+        using SqliteDatabase database = await CreateDatabaseAsync();
+        var repository = new EntryStateRepository(database);
+        await repository.PatchAsync(
+            "entry-1",
+            "default",
+            new(Note: "keep this note"),
+            CancellationToken.None);
+
+        Task<EntryState>[] patches =
+        [
+            repository.PatchAsync(
+                "entry-1",
+                "default",
+                new(IsRead: true),
+                CancellationToken.None),
+            repository.PatchAsync(
+                "entry-1",
+                "default",
+                new(IsStarred: true),
+                CancellationToken.None)
+        ];
+
+        EntryState[] results = await Task.WhenAll(patches);
+        IReadOnlyDictionary<string, EntryState> states = await repository.GetAsync(
+            ["entry-1"],
+            "default",
+            CancellationToken.None);
+
+        EntryState final = Assert.Single(states).Value;
+        Assert.True(final.IsRead);
+        Assert.True(final.IsStarred);
+        Assert.Equal("keep this note", final.Note);
+        Assert.All(results, result => Assert.Equal("default", result.LocalProfile));
+    }
+
+    [Fact]
+    public async Task PrivateStateSurvivesDatabaseReopen()
+    {
+        using (SqliteDatabase firstDatabase = await CreateDatabaseAsync())
+        {
+            var repository = new EntryStateRepository(firstDatabase);
+            await repository.PatchAsync(
+                "entry-restart",
+                "default",
+                new(IsRead: true, IsStarred: true, Progress: 87.5, Note: "resume"),
+                CancellationToken.None);
+        }
+
+        using SqliteDatabase reopened = await CreateDatabaseAsync();
+        var reopenedRepository = new EntryStateRepository(reopened);
+        IReadOnlyDictionary<string, EntryState> states = await reopenedRepository.GetAsync(
+            ["entry-restart"],
+            "default",
+            CancellationToken.None);
+
+        EntryState state = Assert.Single(states).Value;
+        Assert.True(state.IsRead);
+        Assert.True(state.IsStarred);
+        Assert.Equal(87.5, state.Progress);
+        Assert.Equal("resume", state.Note);
+    }
+
     private async Task<SqliteDatabase> CreateDatabaseAsync()
     {
         var database = new SqliteDatabase(

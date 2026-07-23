@@ -9,14 +9,14 @@
 | 测试组 | 结果 |
 |---|---:|
 | LenxTool.Core.Tests | 39 passed |
-| LenxTool.Infrastructure.Tests | 179 passed |
+| LenxTool.Infrastructure.Tests | 181 passed |
 | LenxTool.App.Tests | 87 passed |
 | Cloudflare Worker Vitest | 38 passed |
 | Worker TypeScript strict typecheck | passed |
 | .NET build warnings | 0 |
 | NuGet vulnerable packages | 0 detected |
 
-本轮执行 `dotnet build LenxTools.slnx -c Release --no-restore` 与 `dotnet test LenxTools.slnx -c Release --no-build`，结果为 0 警告、0 错误；Core 39、Infrastructure 179、App 87，共 305/305 通过且无跳过。Worker 严格 typecheck 和官方 workerd/D1 Vitest 38/38 同轮通过（Wrangler 日志目录受当前沙箱权限限制，但不影响断言）。
+本轮执行 `dotnet build LenxTools.slnx -c Release --no-restore` 与 `dotnet test LenxTools.slnx -c Release --no-build`，结果为 0 警告、0 错误；Core 39、Infrastructure 181、App 87，共 307/307 通过且无跳过。Worker 严格 typecheck 和官方 workerd/D1 Vitest 38/38 同轮通过（Wrangler 日志目录受当前沙箱权限限制，但不影响断言）。
 
 P0-08 覆盖 4 项 SQLite 集成场景并同步既有 schema 断言：新建库创建目录状态、分类、Feed、抓取状态、条目、索引和搜索映射；真实 schema v2 哨兵数据经 v3/v4 原位升级后仍可由现有仓储读取；迁移对象冲突时完整回滚且版本停留在 v3；相同外部 ID、URL 和内容哈希可存在于不同 Feed，同一 Feed 内重复外部 ID 被约束拒绝。既有包含未 checkpoint WAL 提交的一致性备份测试继续通过。
 
@@ -44,7 +44,7 @@ P0-18 新增 1 项 Infrastructure 和 3 项 App 测试：抓取状态仓储一�
 
 P0-19 新增 2 项 Infrastructure 和 4 项 App 测试：Feed 条目查询的 ACTIVE 投影过滤、favorites 计数读取；首页 ViewModel 并行聚合真实 Feed/旧早报/热点/媒体任务/收藏，验证旧早报与 Feed 相同 URL/指纹去重、空库兼容种子、动态状态和 DI；首页 XAML 不再绑定固定更新时间，历史全文搜索过滤旧早报与 Feed 的重复 URL。真实旧 schema v2 数据仍由既有迁移测试覆盖，聚合只读本地缓存并支持离线启动。
 
-P0-20 新增 schema v6 与 3 项状态测试：`user_entry_states` 按 `(entry_id, local_profile)` 隔离，局部 patch 保留未修改的已读/收藏/进度/备注字段，非法进度和过长备注被拒绝；旧 Feed 条目清理保护拥有私人状态的条目，schema v2/v4→v6 迁移和重复执行继续通过。Feed 时间线首屏/追加页批量读取状态，并通过异步命令切换已读/收藏、显示进度；状态不上传 Worker，也不改变共享目录版本。
+P0-20 / P1-01 新增 schema v6 与 5 项状态测试：`user_entry_states` 按 `(entry_id, local_profile)` 隔离，局部 patch 保留未修改的已读/收藏/进度/备注字段，非法进度和过长备注被拒绝；并发局部 patch 不丢独立字段，数据库重开后状态仍可读；旧 Feed 条目清理保护拥有私人状态的条目，schema v2/v4→v6 迁移和重复执行继续通过。Feed 时间线首屏/追加页批量读取状态，并通过异步命令切换已读/收藏、显示进度；状态不上传 Worker，也不改变共享目录版本。
 
 桌面账号新增 8 项 Infrastructure 测试和 7 项 App 测试：覆盖登录、refresh token 恢复、`/v1/me`、并发 401 单次刷新、每请求最多重放一次、失效清理、离线退出、DPAPI 删除/写入失败脱敏、登录密码清空、过期与额度显示、admin/user 导航隔离、角色降级回退和 XAML 自动化名称/绑定。
 
