@@ -1,7 +1,7 @@
 # P0 详细计划：管理员订阅与普通用户只读目录
 
-状态：进行中，P0-01～P0-20 与检查点 P0-B/P0-C 已完成
-最后核对：2026-07-23
+状态：已完成，P0-01～P0-20、P0-B/P0-C 与最终检查点均已通过
+最后核对：2026-07-24
 上位文档：[RSS 集成总路线图](RSS_MASTER_ROADMAP.md)
 参考项目：RSSNext/Folo（发现、OPML、订阅状态和内容视图的行为参考），LenxTool 当前 Worker/SQLite/资讯中心（实现基础）
 
@@ -460,9 +460,11 @@ P0 不包含全文抓取、图片离线缓存、AI 摘要/翻译、自动化规�
 - [x] admin 完成登录 → 新增 Feed → 分类 → 发布 → 刷新 → 阅读 → 停用 → 审计的端到端流程。
 - [x] user 同步并阅读同一目录，对所有写端点均被拒绝。
 - [x] OPML 导入/导出、断网缓存、坏源隔离、v2 升级和 10k 条目性能通过。
-- [ ] 更新 `SPECIFICATION.md`、`ARCHITECTURE.md`、`THREAT_MODEL.md`、`USER_GUIDE.md`、`TEST_REPORT.md`。
-- [ ] 仅在上述证据齐全后，才在 `IMPLEMENTATION_PLAN.md` 将 P0 标记完成。
+- [x] 更新 `SPECIFICATION.md`、`ARCHITECTURE.md`、`THREAT_MODEL.md`、`USER_GUIDE.md`、`TEST_REPORT.md`。
+- [x] 仅在上述证据齐全后，才在 `IMPLEMENTATION_PLAN.md` 将 P0 标记完成。
 
-**最终检查记录（2026-07-23）：** 新增 `p0-final-acceptance.test.ts`，在真实 Worker/D1 workerd 环境中通过临时 bootstrap secret 创建管理员并走 `/v1/auth/login`，完成分类与 Feed 发布、目录刷新、普通用户注册/同步/读取、六类管理员写端点 403 隔离、Feed 停用后的 ACTIVE/ALL 投影和审计事件最小字段校验。Worker typecheck 通过，目标测试 1/1 通过；P0 的 OPML/断网/坏源/迁移/10k 汇总证据和发布文档仍待下一检查片。
+**最终检查记录（2026-07-23）：** 新增 `p0-final-acceptance.test.ts`，在真实 Worker/D1 workerd 环境中通过临时 bootstrap secret 创建管理员并走 `/v1/auth/login`，完成分类与 Feed 发布、目录刷新、普通用户注册/同步/读取、六类管理员写端点 403 隔离、Feed 停用后的 ACTIVE/ALL 投影和审计事件最小字段校验。Worker typecheck 通过，目标测试 1/1 通过；剩余回归证据已在 2026-07-24 完成。
 
 **最终检查记录（2026-07-24）：** 完整 Release 回归通过 .NET Core 39、Infrastructure 184、App 87（310/310），Worker Vitest 39/39、TypeScript strict typecheck 和 Release build 0 警告/0 错误。证据覆盖 OPML 中文/UTF-16、嵌套组、畸形 XML/XXE/2 MiB 限制、导出原子替换；Feed 刷新断网与跨源坏源隔离并保留缓存；`SchemaVersionTwoUpgradePreservesExistingDataAndAddsFeedSchema` 的 v2 原位升级；`TenThousandCachedEntriesOnlyMaterializeTheFirstPage` 的 10k 首屏性能门限。
+
+**P0 关闭记录（2026-07-24）：** 规格、架构、威胁模型、用户指南和测试报告已同步终验结果；`IMPLEMENTATION_PLAN.md` 仅在上述证据齐全后更新为 P0 已完成。P1 保持未开始。

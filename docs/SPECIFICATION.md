@@ -150,3 +150,7 @@ public sealed class NewsSearchService(INewsRepository repository) : INewsSearchS
 - 冷启动可创建/迁移数据库并进入首页；关键离线功能不依赖网络。
 - 安装包与便携包均能在无 .NET Runtime 的 Windows x64 环境启动。
 - README、用户指南、发布说明、架构和回滚说明与实现一致。
+
+### P0 终验记录（2026-07-24）
+
+P0 管理员策展 RSS 的自动化终验已通过：Worker/D1 workerd 测试覆盖管理员 bootstrap/login、分类与 Feed 发布/刷新/停用/审计、普通用户同步阅读和全部管理写端点 401/403 隔离；本地测试覆盖 OPML 导入/导出安全边界、断网缓存保留、坏源隔离、schema v2 原位升级和 10k 条目首屏虚拟化。Release 构建 0 警告/0 错误，.NET 310/310、Worker 39/39、Worker strict typecheck 通过。
