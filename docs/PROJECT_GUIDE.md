@@ -200,6 +200,7 @@ npm.cmd test -- --run
 - P0-18 已完成管理员 Feed 健康与诊断：健康 Tab 一次读取本机全部目录 Feed（含停用项）的抓取状态，显示最后成功/失败、连续失败、下次重试和固定错误类别；错误不带令牌、完整响应或网络内部详情。管理员可对启用 Feed 执行单条强制重试，仍复用原有 SSRF、响应大小、超时、解析和单 Feed 门闩策略，命令本身串行避免重复点击。
 - P0-19 已完成首页真实数据与旧早报兼容：首页并行读取 ACTIVE Feed 条目、旧 `news_articles`、热点、媒体任务和收藏计数，状态文案不再包含固定日期/标题/任务演示数据；Feed 与旧早报按规范 URL/内容指纹去重。空目录管理员新建 Feed 时预填 `FeedCompatibilitySeed`（`https://daily.juya.uk/rss.xml`），旧 schema v2 早报继续可搜索和阅读。
 - P0-20 / P1-01 已完成本机私人阅读状态：schema v6 新增 `user_entry_states`，按 profile 隔离已读、收藏、0～100% 进度和私人备注；局部 patch 保留未修改字段，条目清理保护有状态的旧条目。已补充并发局部更新与数据库重开往返测试。Feed 时间线首屏/分页批量读取状态，提供已读/收藏切换和进度展示；共享目录与 Worker 契约不变。
+- P1-02 已完成收藏、标签和备注仓储闭环：通用实体可收藏/取消收藏、批量读取和更新私人备注；标签支持 NFKC 规范化、颜色更新、实体关联原子替换和安全删除，删除标签不会删除实体或收藏备注。P1-03 UI 仍待实现。
 
 ### 10.2 下一里程碑
 
@@ -210,7 +211,7 @@ Gate 0 字幕闭环已经完成。P0“管理员策展 RSS”已完成服务端�
 详细执行顺序如下：
 
 1. Gate 0 字幕闭环已完成；验收记录见 [`plans/EXISTING_BACKLOG_ALIGNMENT.md`](plans/EXISTING_BACKLOG_ALIGNMENT.md)。
-2. P0-01～P0-20 与 P0-B/P0-C 已完成，P1-01 私人状态仓储已完成；下一步实现收藏、标签、备注仓储，再继续阅读状态 UI 和完整阅读进度恢复；具体见 [`plans/RSS_P1_READING_INTELLIGENCE.md`](plans/RSS_P1_READING_INTELLIGENCE.md)。
+2. P0-01～P0-20 与 P0-B/P0-C 已完成，P1-01/P1-02 私人状态与收藏标签仓储已完成；下一步实现阅读状态、收藏和标签 UI，再继续完整阅读进度恢复；具体见 [`plans/RSS_P1_READING_INTELLIGENCE.md`](plans/RSS_P1_READING_INTELLIGENCE.md)。
 3. 实现私人阅读状态、全文/图片离线、AI 摘要/翻译、管理员规则、媒体衔接和统一搜索；具体见 [`plans/RSS_P1_READING_INTELLIGENCE.md`](plans/RSS_P1_READING_INTELLIGENCE.md)。
 4. 实现多内容视图、外部导出适配器、本地定时摘要和通知；具体见 [`plans/RSS_P2_VIEWS_INTEGRATIONS.md`](plans/RSS_P2_VIEWS_INTEGRATIONS.md)。
 

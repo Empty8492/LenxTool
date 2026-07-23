@@ -219,6 +219,60 @@ public sealed class DashboardViewModelTests
     {
         public Task<int> GetCountAsync(CancellationToken cancellationToken) =>
             Task.FromResult(count);
+
+        public Task<FavoriteItem?> GetAsync(
+            string entityType,
+            string entityId,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<FavoriteItem?>(null);
+
+        public Task<FavoriteItem> UpsertAsync(
+            string entityType,
+            string entityId,
+            string note,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<bool> RemoveAsync(
+            string entityType,
+            string entityId,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(false);
+
+        public Task<IReadOnlyDictionary<string, FavoriteItem>> GetForEntitiesAsync(
+            string entityType,
+            IReadOnlyCollection<string> entityIds,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyDictionary<string, FavoriteItem>>(
+                new Dictionary<string, FavoriteItem>(StringComparer.Ordinal));
+
+        public Task<TagItem> UpsertTagAsync(
+            string name,
+            string color,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<IReadOnlyList<TagItem>> GetTagsAsync(
+            CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<TagItem>>([]);
+
+        public Task<IReadOnlyList<TagItem>> GetTagsForEntityAsync(
+            string entityType,
+            string entityId,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<TagItem>>([]);
+
+        public Task SetTagsAsync(
+            string entityType,
+            string entityId,
+            IReadOnlyCollection<string> tagIds,
+            CancellationToken cancellationToken) =>
+            Task.CompletedTask;
+
+        public Task<bool> DeleteTagAsync(
+            string tagId,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(false);
     }
 
     private sealed class StubFeedCatalogRepository : IFeedCatalogRepository
