@@ -15,7 +15,7 @@ public sealed class FeedFetchStateRepository(SqliteDatabase database) : IFeedFet
         await using SqliteConnection connection = await database.OpenConnectionAsync(cancellationToken)
             .ConfigureAwait(false);
         await using SqliteCommand command = CreateTargetCommand(connection);
-        command.CommandText += " AND f.id=$feedId LIMIT 1;";
+        command.CommandText += "\n AND f.id=$feedId LIMIT 1;";
         command.Parameters.AddWithValue("$feedId", feedId);
         await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken)
             .ConfigureAwait(false);
@@ -35,11 +35,10 @@ public sealed class FeedFetchStateRepository(SqliteDatabase database) : IFeedFet
         await using SqliteConnection connection = await database.OpenConnectionAsync(cancellationToken)
             .ConfigureAwait(false);
         await using SqliteCommand command = CreateTargetCommand(connection);
-        command.CommandText += """
-             AND (fs.next_fetch_at IS NULL OR fs.next_fetch_at <= $now)
-            ORDER BY COALESCE(fs.next_fetch_at, ''), f.sort_order, f.id
-            LIMIT $maximumCount;
-            """;
+        command.CommandText +=
+            "\n AND (fs.next_fetch_at IS NULL OR fs.next_fetch_at <= $now)"
+            + "\n ORDER BY COALESCE(fs.next_fetch_at, ''), f.sort_order, f.id"
+            + "\n LIMIT $maximumCount;";
         command.Parameters.AddWithValue("$now", FormatTimestamp(now));
         command.Parameters.AddWithValue("$maximumCount", maximumCount);
         var targets = new List<FeedRefreshTarget>();
@@ -58,7 +57,7 @@ public sealed class FeedFetchStateRepository(SqliteDatabase database) : IFeedFet
         await using SqliteConnection connection = await database.OpenConnectionAsync(cancellationToken)
             .ConfigureAwait(false);
         await using SqliteCommand command = CreateTargetCommand(connection, activeOnly: false);
-        command.CommandText += " ORDER BY f.sort_order, f.id;";
+        command.CommandText += "\n ORDER BY f.sort_order, f.id;";
         var targets = new List<FeedRefreshTarget>();
         await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken)
             .ConfigureAwait(false);
@@ -126,10 +125,9 @@ public sealed class FeedFetchStateRepository(SqliteDatabase database) : IFeedFet
             """;
         if (activeOnly)
         {
-            command.CommandText += """
-                WHERE f.is_enabled=1
-                  AND (f.category_id IS NULL OR c.is_enabled=1)
-                """;
+            command.CommandText +=
+                "\n WHERE f.is_enabled=1"
+                + "\n   AND (f.category_id IS NULL OR c.is_enabled=1)";
         }
         return command;
     }
