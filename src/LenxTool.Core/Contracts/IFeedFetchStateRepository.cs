@@ -8,6 +8,9 @@ public interface IFeedFetchStateRepository
         string feedId,
         CancellationToken cancellationToken);
 
+    Task<IReadOnlyList<FeedRefreshTarget>> GetAllTargetsAsync(
+        CancellationToken cancellationToken);
+
     Task<IReadOnlyList<FeedRefreshTarget>> GetDueTargetsAsync(
         DateTimeOffset now,
         int maximumCount,

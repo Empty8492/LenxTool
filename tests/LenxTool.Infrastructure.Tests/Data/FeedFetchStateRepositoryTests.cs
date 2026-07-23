@@ -44,6 +44,39 @@ public sealed class FeedFetchStateRepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task HealthQueryReturnsEveryFeedAndRedactedFetchState()
+    {
+        using SqliteDatabase database = await CreatePopulatedDatabaseAsync(
+            Feed(FeedId, true, CategoryId),
+            Feed("30000000-0000-4000-8000-000000000002", false, CategoryId),
+            Feed("30000000-0000-4000-8000-000000000003", true, DisabledCategoryId));
+        var repository = new FeedFetchStateRepository(database);
+        FeedFetchState failure = new(
+            "30000000-0000-4000-8000-000000000002",
+            null,
+            null,
+            Now.AddMinutes(10),
+            null,
+            Now,
+            3,
+            "http_503",
+            Now);
+        Assert.True(await repository.SaveStateAsync(failure, CancellationToken.None));
+
+        IReadOnlyList<FeedRefreshTarget> health = await repository.GetAllTargetsAsync(
+            CancellationToken.None);
+
+        Assert.Equal(
+            [FeedId, "30000000-0000-4000-8000-000000000002", "30000000-0000-4000-8000-000000000003"],
+            health.Select(target => target.Feed.Id));
+        FeedRefreshTarget failed = Assert.Single(
+            health,
+            target => target.Feed.Id == failure.FeedId);
+        Assert.Equal(failure, failed.State);
+        Assert.DoesNotContain("secret", failed.State?.ErrorCode ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task StateRoundTripsAndFutureScheduleIsNotDue()
     {
         using SqliteDatabase database = await CreatePopulatedDatabaseAsync(Feed(FeedId, true, CategoryId));

@@ -579,6 +579,12 @@ public sealed class FeedRefreshServiceTests
         public Task<FeedRefreshTarget?> GetTargetAsync(string feedId, CancellationToken cancellationToken) =>
             Task.FromResult(_targets.GetValueOrDefault(feedId));
 
+        public Task<IReadOnlyList<FeedRefreshTarget>> GetAllTargetsAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<FeedRefreshTarget>>(_targets.Values
+                .OrderBy(target => target.Feed.SortOrder)
+                .ThenBy(target => target.Feed.Id, StringComparer.Ordinal)
+                .ToArray());
+
         public Task<IReadOnlyList<FeedRefreshTarget>> GetDueTargetsAsync(
             DateTimeOffset now,
             int maximumCount,

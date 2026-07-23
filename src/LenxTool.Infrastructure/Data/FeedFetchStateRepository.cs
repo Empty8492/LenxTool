@@ -52,6 +52,23 @@ public sealed class FeedFetchStateRepository(SqliteDatabase database) : IFeedFet
         return targets;
     }
 
+    public async Task<IReadOnlyList<FeedRefreshTarget>> GetAllTargetsAsync(
+        CancellationToken cancellationToken)
+    {
+        await using SqliteConnection connection = await database.OpenConnectionAsync(cancellationToken)
+            .ConfigureAwait(false);
+        await using SqliteCommand command = CreateTargetCommand(connection, activeOnly: false);
+        command.CommandText += " ORDER BY f.sort_order, f.id;";
+        var targets = new List<FeedRefreshTarget>();
+        await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken)
+            .ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            targets.Add(ReadTarget(reader));
+        }
+        return targets;
+    }
+
     public async Task<bool> SaveStateAsync(
         FeedFetchState state,
         CancellationToken cancellationToken)
@@ -91,7 +108,9 @@ public sealed class FeedFetchStateRepository(SqliteDatabase database) : IFeedFet
         return await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) == 1;
     }
 
-    private static SqliteCommand CreateTargetCommand(SqliteConnection connection)
+    private static SqliteCommand CreateTargetCommand(
+        SqliteConnection connection,
+        bool activeOnly = true)
     {
         SqliteCommand command = connection.CreateCommand();
         command.CommandText = """
@@ -104,9 +123,14 @@ public sealed class FeedFetchStateRepository(SqliteDatabase database) : IFeedFet
             FROM feed_catalog f
             LEFT JOIN feed_categories c ON c.id=f.category_id
             LEFT JOIN feed_fetch_state fs ON fs.feed_id=f.id
-            WHERE f.is_enabled=1
-              AND (f.category_id IS NULL OR c.is_enabled=1)
             """;
+        if (activeOnly)
+        {
+            command.CommandText += """
+                WHERE f.is_enabled=1
+                  AND (f.category_id IS NULL OR c.is_enabled=1)
+                """;
+        }
         return command;
     }
 
