@@ -5,6 +5,7 @@ using LenxTool.App.Services;
 using LenxTool.App.ViewModels;
 using LenxTool.Core.Contracts;
 using LenxTool.Core.Errors;
+using LenxTool.Core.Models;
 using LenxTool.Infrastructure.Data;
 using LenxTool.Infrastructure.Media;
 using LenxTool.Infrastructure.Networking;
@@ -94,6 +95,8 @@ public partial class App : Application
         services.AddSingleton(static services =>
             new ExceptionDiagnosticLog(services.GetRequiredService<AppPaths>().LogsDirectory));
         services.AddSingleton<SqliteDatabase>();
+        services.AddSingleton(AssetCacheOptions.Default);
+        services.AddSingleton<IEntryAssetStore, EntryAssetStore>();
         services.AddSingleton<INewsRepository, NewsRepository>();
         services.AddSingleton<IFavoriteRepository, FavoriteRepository>();
         services.AddSingleton<IEntryStateRepository, EntryStateRepository>();

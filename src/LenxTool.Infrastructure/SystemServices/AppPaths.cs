@@ -10,6 +10,7 @@ public sealed class AppPaths
 
     public string RootDirectory { get; }
     public string DataDirectory => Path.Combine(RootDirectory, "Data");
+    public string AssetCacheDirectory => Path.Combine(DataDirectory, "Assets");
     public string DatabasePath => Path.Combine(DataDirectory, "lenx.db");
     public string BackupDirectory => Path.Combine(DataDirectory, "Backups");
     public string SecretsDirectory => Path.Combine(RootDirectory, "Secrets");
@@ -28,6 +29,7 @@ public sealed class AppPaths
     public void EnsureCreated()
     {
         Directory.CreateDirectory(DataDirectory);
+        Directory.CreateDirectory(AssetCacheDirectory);
         Directory.CreateDirectory(BackupDirectory);
         Directory.CreateDirectory(SecretsDirectory);
         Directory.CreateDirectory(LogsDirectory);

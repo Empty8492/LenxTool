@@ -10,7 +10,7 @@ public sealed partial class SqliteDatabase(
     AppPaths paths,
     ILogger<SqliteDatabase> logger) : IDisposable
 {
-    private const int CurrentSchemaVersion = 6;
+    private const int CurrentSchemaVersion = 7;
     private readonly SemaphoreSlim _initializationGate = new(1, 1);
     private bool _initialized;
     private bool _disposed;
@@ -201,6 +201,17 @@ public sealed partial class SqliteDatabase(
                 command.CommandText = "INSERT INTO schema_versions(version, applied_at, checksum) VALUES (6, $appliedAt, $checksum);";
                 command.Parameters.AddWithValue("$appliedAt", DateTimeOffset.UtcNow.ToString("O"));
                 command.Parameters.AddWithValue("$checksum", "lenx-schema-v6-private-entry-state");
+                await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            if (version < 7)
+            {
+                command.CommandText = MigrationSevenSql;
+                command.Parameters.Clear();
+                await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                command.CommandText = "INSERT INTO schema_versions(version, applied_at, checksum) VALUES (7, $appliedAt, $checksum);";
+                command.Parameters.AddWithValue("$appliedAt", DateTimeOffset.UtcNow.ToString("O"));
+                command.Parameters.AddWithValue("$checksum", "lenx-schema-v7-entry-assets");
                 await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
             }
         }
@@ -501,5 +512,22 @@ public sealed partial class SqliteDatabase(
         );
         CREATE INDEX IF NOT EXISTS ix_user_entry_states_profile_updated
             ON user_entry_states(local_profile, updated_at DESC, entry_id);
+        """;
+
+    private const string MigrationSevenSql = """
+        CREATE TABLE IF NOT EXISTS entry_assets(
+            entry_id TEXT NOT NULL CHECK(length(entry_id) BETWEEN 1 AND 256),
+            source_url TEXT NOT NULL CHECK(length(source_url) BETWEEN 1 AND 4096),
+            content_hash TEXT NOT NULL CHECK(length(content_hash) = 64),
+            mime_type TEXT NOT NULL CHECK(length(mime_type) BETWEEN 1 AND 128),
+            size_bytes INTEGER NOT NULL CHECK(size_bytes >= 0),
+            created_at TEXT NOT NULL,
+            last_accessed_at TEXT NOT NULL,
+            PRIMARY KEY(entry_id, source_url)
+        );
+        CREATE INDEX IF NOT EXISTS ix_entry_assets_lru
+            ON entry_assets(last_accessed_at ASC, content_hash);
+        CREATE INDEX IF NOT EXISTS ix_entry_assets_hash
+            ON entry_assets(content_hash);
         """;
 }
