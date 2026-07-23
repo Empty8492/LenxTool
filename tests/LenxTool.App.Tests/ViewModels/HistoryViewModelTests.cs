@@ -27,7 +27,9 @@ public sealed class HistoryViewModelTests
             new StubDialogs(),
             new StubNewsRepository([expected]),
             new StubMediaJobRepository(),
-            new StubSubtitleExportService());
+            new StubSubtitleExportService(),
+            new StubHistoryEntryStateRepository(),
+            new StubHistoryFavoriteRepository());
         viewModel.SearchQuery = "人工智能";
 
         await viewModel.SearchCommand.ExecuteAsync();
@@ -61,7 +63,9 @@ public sealed class HistoryViewModelTests
             new StubDialogs(),
             new StubNewsRepository([legacy, feed]),
             new StubMediaJobRepository(),
-            new StubSubtitleExportService())
+            new StubSubtitleExportService(),
+            new StubHistoryEntryStateRepository(),
+            new StubHistoryFavoriteRepository())
         {
             SearchQuery = "早报"
         };
@@ -81,7 +85,9 @@ public sealed class HistoryViewModelTests
             new StubDialogs(),
             new StubNewsRepository([]),
             new StubMediaJobRepository(),
-            new StubSubtitleExportService());
+            new StubSubtitleExportService(),
+            new StubHistoryEntryStateRepository(),
+            new StubHistoryFavoriteRepository());
 
         viewModel.SearchQuery = "   ";
 
@@ -131,7 +137,9 @@ public sealed class HistoryViewModelTests
             new StubDialogs(),
             new StubNewsRepository([]),
             repository,
-            exporter);
+            exporter,
+            new StubHistoryEntryStateRepository(),
+            new StubHistoryFavoriteRepository());
 
         await viewModel.InitializeAsync(CancellationToken.None);
         await viewModel.SelectedJobLoad;
@@ -148,6 +156,69 @@ public sealed class HistoryViewModelTests
 
         Assert.Equal(SubtitleExportMode.TranslatedSrt, exporter.Mode);
         Assert.Equal(job.Id, exporter.Job?.Id);
+    }
+
+    [Fact]
+    public async Task FeedSearchResultProvidesConsistentPrivateStateEditor()
+    {
+        var result = new ContentSearchResult(
+            "feed-entry-1",
+            ContentSearchResultType.FeedEntry,
+            "Feed 搜索结果",
+            "本机私人状态",
+            "Daily Feed",
+            "https://feeds.example/entry/1",
+            DateTimeOffset.UtcNow);
+        var states = new StubHistoryEntryStateRepository();
+        var favorites = new StubHistoryFavoriteRepository();
+        TagItem originalTag = favorites.SeedTag("精读");
+        favorites.SeedFavorite(result.EntityId, "已保存备注", originalTag);
+        var viewModel = new HistoryViewModel(
+            new StubMediaJobRepository(),
+            new StubDatabaseMaintenanceService(),
+            new StubDialogs(),
+            new StubNewsRepository([result]),
+            new StubMediaJobRepository(),
+            new StubSubtitleExportService(),
+            states,
+            favorites)
+        {
+            SearchQuery = "Feed"
+        };
+
+        await viewModel.SearchCommand.ExecuteAsync();
+        await viewModel.SelectedSearchPrivateStateLoad;
+
+        Assert.True(viewModel.SelectedSearchIsFeedEntry);
+        Assert.True(viewModel.SelectedSearchIsStarred);
+        Assert.False(viewModel.SelectedSearchIsRead);
+        Assert.Equal("已保存备注", viewModel.SelectedSearchPrivateNote);
+        Assert.Equal(originalTag, Assert.Single(viewModel.SelectedSearchTags));
+
+        await viewModel.ToggleSelectedSearchReadCommand.ExecuteAsync(result);
+        Assert.True(viewModel.SelectedSearchIsRead);
+        Assert.True(states.States[result.EntityId].IsRead);
+
+        viewModel.SelectedSearchPrivateNote = "历史页更新备注";
+        await viewModel.SaveSelectedSearchNoteCommand.ExecuteAsync();
+        Assert.Equal("历史页更新备注", favorites.GetFavorite(result.EntityId)?.Note);
+        Assert.Equal("历史页更新备注", states.States[result.EntityId].Note);
+
+        viewModel.SelectedSearchPrivateNote = "尚未保存";
+        viewModel.CancelSelectedSearchNoteCommand.Execute(null);
+        Assert.Equal("历史页更新备注", viewModel.SelectedSearchPrivateNote);
+
+        viewModel.SelectedSearchTagInput = "稍后阅读";
+        await viewModel.AddSelectedSearchTagCommand.ExecuteAsync();
+        TagItem added = Assert.Single(viewModel.SelectedSearchTags, tag => tag.Name == "稍后阅读");
+        await viewModel.RemoveSelectedSearchTagCommand.ExecuteAsync(added);
+        Assert.DoesNotContain(viewModel.SelectedSearchTags, tag => tag.Id == added.Id);
+
+        await viewModel.ToggleSelectedSearchStarCommand.ExecuteAsync(result);
+        Assert.False(viewModel.SelectedSearchIsStarred);
+        Assert.Null(favorites.GetFavorite(result.EntityId));
+        Assert.False(states.States[result.EntityId].IsStarred);
+        Assert.Equal("历史页更新备注", states.States[result.EntityId].Note);
     }
 
     private sealed class StubNewsRepository(IReadOnlyList<ContentSearchResult> results) : INewsRepository
@@ -241,5 +312,146 @@ public sealed class HistoryViewModelTests
             Mode = mode;
             return Task.FromResult("D:\\Output\\history.translated.srt");
         }
+    }
+
+    private sealed class StubHistoryEntryStateRepository : IEntryStateRepository
+    {
+        public Dictionary<string, EntryState> States { get; } = new(StringComparer.Ordinal);
+
+        public Task<IReadOnlyDictionary<string, EntryState>> GetAsync(
+            IReadOnlyCollection<string> entryIds,
+            string localProfile,
+            CancellationToken cancellationToken)
+        {
+            IReadOnlyDictionary<string, EntryState> result = entryIds
+                .Where(States.ContainsKey)
+                .ToDictionary(id => id, id => States[id], StringComparer.Ordinal);
+            return Task.FromResult(result);
+        }
+
+        public Task<EntryState> PatchAsync(
+            string entryId,
+            string localProfile,
+            EntryStatePatch patch,
+            CancellationToken cancellationToken)
+        {
+            EntryState current = States.GetValueOrDefault(entryId)
+                ?? new(entryId, localProfile, false, false, 0, string.Empty, DateTimeOffset.UtcNow);
+            EntryState updated = current with
+            {
+                IsRead = patch.IsRead ?? current.IsRead,
+                IsStarred = patch.IsStarred ?? current.IsStarred,
+                Progress = patch.Progress ?? current.Progress,
+                Note = patch.Note ?? current.Note,
+                UpdatedAt = DateTimeOffset.UtcNow
+            };
+            States[entryId] = updated;
+            return Task.FromResult(updated);
+        }
+    }
+
+    private sealed class StubHistoryFavoriteRepository : IFavoriteRepository
+    {
+        private const string EntityType = "feed_entry";
+        private readonly Dictionary<string, FavoriteItem> _favorites = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, TagItem> _tags = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, HashSet<string>> _entityTags = new(StringComparer.Ordinal);
+
+        public FavoriteItem? GetFavorite(string entityId) => _favorites.GetValueOrDefault(entityId);
+
+        public TagItem SeedTag(string name)
+        {
+            var tag = new TagItem($"tag-{_tags.Count + 1}", name, "#4B6B88", DateTimeOffset.UtcNow);
+            _tags[tag.Id] = tag;
+            return tag;
+        }
+
+        public void SeedFavorite(string entityId, string note, params TagItem[] tags)
+        {
+            _favorites[entityId] = new(
+                $"favorite-{entityId}",
+                EntityType,
+                entityId,
+                note,
+                DateTimeOffset.UtcNow);
+            _entityTags[entityId] = tags.Select(tag => tag.Id).ToHashSet(StringComparer.Ordinal);
+        }
+
+        public Task<int> GetCountAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(_favorites.Count);
+
+        public Task<FavoriteItem?> GetAsync(
+            string entityType,
+            string entityId,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(_favorites.GetValueOrDefault(entityId));
+
+        public Task<FavoriteItem> UpsertAsync(
+            string entityType,
+            string entityId,
+            string note,
+            CancellationToken cancellationToken)
+        {
+            FavoriteItem favorite = _favorites.GetValueOrDefault(entityId) is { } current
+                ? current with { Note = note }
+                : new($"favorite-{entityId}", entityType, entityId, note, DateTimeOffset.UtcNow);
+            _favorites[entityId] = favorite;
+            return Task.FromResult(favorite);
+        }
+
+        public Task<bool> RemoveAsync(
+            string entityType,
+            string entityId,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(_favorites.Remove(entityId));
+
+        public Task<IReadOnlyDictionary<string, FavoriteItem>> GetForEntitiesAsync(
+            string entityType,
+            IReadOnlyCollection<string> entityIds,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyDictionary<string, FavoriteItem>>(
+                entityIds
+                    .Where(_favorites.ContainsKey)
+                    .ToDictionary(id => id, id => _favorites[id], StringComparer.Ordinal));
+
+        public Task<TagItem> UpsertTagAsync(
+            string name,
+            string color,
+            CancellationToken cancellationToken)
+        {
+            string normalized = name.Trim();
+            TagItem tag = _tags.Values.FirstOrDefault(
+                item => string.Equals(item.Name, normalized, StringComparison.OrdinalIgnoreCase))
+                ?? SeedTag(normalized);
+            return Task.FromResult(tag);
+        }
+
+        public Task<IReadOnlyList<TagItem>> GetTagsAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<TagItem>>(_tags.Values.ToArray());
+
+        public Task<IReadOnlyList<TagItem>> GetTagsForEntityAsync(
+            string entityType,
+            string entityId,
+            CancellationToken cancellationToken)
+        {
+            IReadOnlyList<TagItem> tags = _entityTags.GetValueOrDefault(entityId)?
+                .Select(id => _tags[id])
+                .ToArray()
+                ?? [];
+            return Task.FromResult(tags);
+        }
+
+        public Task SetTagsAsync(
+            string entityType,
+            string entityId,
+            IReadOnlyCollection<string> tagIds,
+            CancellationToken cancellationToken)
+        {
+            _entityTags[entityId] = tagIds.ToHashSet(StringComparer.Ordinal);
+            return Task.CompletedTask;
+        }
+
+        public Task<bool> DeleteTagAsync(string tagId, CancellationToken cancellationToken) =>
+            Task.FromResult(_tags.Remove(tagId));
     }
 }

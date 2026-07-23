@@ -262,6 +262,40 @@ public sealed class NewsCenterLayoutTests
                 && element.Attribute("Content")?.Value == "{Binding SelectedTimelineEntry.ReadActionLabel}");
     }
 
+    [Fact]
+    public void HistoryFeedResultProvidesKeyboardAccessiblePrivateStateEditor()
+    {
+        string xamlPath = Path.Combine(AppContext.BaseDirectory, "Fixtures", "App.xaml");
+        XDocument document = XDocument.Load(xamlPath);
+        XElement history = Assert.Single(
+            document.Descendants(),
+            element => element.Name.LocalName == "DataTemplate"
+                && element.Attribute("DataType")?.Value.Contains(
+                    "HistoryViewModel",
+                    StringComparison.Ordinal) == true);
+        string[] automationNames =
+        [
+            "切换历史 Feed 已读状态",
+            "切换历史 Feed 收藏",
+            "历史 Feed 私人备注",
+            "保存历史 Feed 私人备注",
+            "取消历史 Feed 私人备注编辑",
+            "新增历史 Feed 标签",
+            "添加历史 Feed 标签",
+            "移除历史 Feed 标签"
+        ];
+
+        Assert.All(
+            automationNames,
+            name => Assert.Contains(
+                history.Descendants(),
+                element => element.Attribute("AutomationProperties.Name")?.Value == name));
+        Assert.Contains(
+            history.Descendants(),
+            element => element.Name.LocalName == "ItemsControl"
+                && element.Attribute("ItemsSource")?.Value == "{Binding SelectedSearchTags}");
+    }
+
     private static XElement LoadNewsCenterTemplate()
     {
         string xamlPath = Path.Combine(AppContext.BaseDirectory, "Fixtures", "App.xaml");

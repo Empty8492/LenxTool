@@ -331,15 +331,120 @@
                                         </ListBox>
                                     </Border>
                                     <Border Grid.Column="2" Style="{StaticResource BentoCardStyle}">
-                                        <StackPanel>
+                                        <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                                      HorizontalScrollBarVisibility="Disabled">
+                                            <StackPanel>
                                             <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource Brush.Accent}" Text="RESULT" />
                                             <TextBlock Margin="0,16,0,8" Style="{StaticResource SectionTitleStyle}" Text="{Binding SelectedSearchResult.Title, TargetNullValue=选择一条搜索结果}" TextWrapping="Wrap" />
                                             <TextBlock Style="{StaticResource MetaTextStyle}" Text="{Binding SelectedSearchResult.Summary, TargetNullValue=结果详情会显示在这里。}" TextWrapping="Wrap" />
                                             <TextBlock Margin="0,14,0,0" FontWeight="SemiBold" Text="{Binding SelectedSearchResult.Source}" />
                                             <TextBlock Margin="0,5,0,0" Style="{StaticResource MetaTextStyle}" Text="{Binding SelectedSearchResult.Timestamp, StringFormat={}{0:yyyy-MM-dd HH:mm}}" />
                                             <Button Margin="0,18,0,0" Command="{Binding OpenSearchResultCommand}" Content="打开来源链接" />
+                                            <Border Margin="0,18,0,0"
+                                                    Padding="12"
+                                                    Background="{DynamicResource Brush.SurfaceMuted}"
+                                                    CornerRadius="8"
+                                                    Visibility="{Binding SelectedSearchIsFeedEntry, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                                <StackPanel>
+                                                    <TextBlock FontWeight="SemiBold" Text="Feed 私人状态" />
+                                                    <TextBlock Margin="0,4,0,0"
+                                                               Style="{StaticResource MetaTextStyle}"
+                                                               Text="{Binding SelectedSearchPrivateStatus}"
+                                                               TextWrapping="Wrap" />
+                                                    <StackPanel Margin="0,10,0,0"
+                                                                Orientation="Horizontal">
+                                                        <Button MinWidth="86"
+                                                                Padding="10,5"
+                                                                Command="{Binding ToggleSelectedSearchStarCommand}"
+                                                                CommandParameter="{Binding SelectedSearchResult}"
+                                                                Content="{Binding SelectedSearchStarActionLabel}"
+                                                                AutomationProperties.Name="切换历史 Feed 收藏" />
+                                                        <Button MinWidth="86"
+                                                                Margin="8,0,0,0"
+                                                                Padding="10,5"
+                                                                Command="{Binding ToggleSelectedSearchReadCommand}"
+                                                                CommandParameter="{Binding SelectedSearchResult}"
+                                                                Content="{Binding SelectedSearchReadActionLabel}"
+                                                                AutomationProperties.Name="切换历史 Feed 已读状态" />
+                                                    </StackPanel>
+                                                    <TextBlock Margin="0,12,0,5"
+                                                               FontWeight="SemiBold"
+                                                               Text="私人备注" />
+                                                    <TextBox MinHeight="60"
+                                                             MaxHeight="110"
+                                                             Padding="8,6"
+                                                             AcceptsReturn="True"
+                                                             MaxLength="4000"
+                                                             Text="{Binding SelectedSearchPrivateNote, UpdateSourceTrigger=PropertyChanged}"
+                                                             TextWrapping="Wrap"
+                                                             VerticalScrollBarVisibility="Auto"
+                                                             AutomationProperties.Name="历史 Feed 私人备注" />
+                                                    <StackPanel Margin="0,7,0,0"
+                                                                HorizontalAlignment="Right"
+                                                                Orientation="Horizontal">
+                                                        <Button MinWidth="72"
+                                                                Padding="10,5"
+                                                                Command="{Binding CancelSelectedSearchNoteCommand}"
+                                                                Content="取消"
+                                                                AutomationProperties.Name="取消历史 Feed 私人备注编辑" />
+                                                        <Button MinWidth="88"
+                                                                Margin="8,0,0,0"
+                                                                Padding="10,5"
+                                                                Command="{Binding SaveSelectedSearchNoteCommand}"
+                                                                Content="保存"
+                                                                AutomationProperties.Name="保存历史 Feed 私人备注" />
+                                                    </StackPanel>
+                                                    <TextBlock Margin="0,12,0,5"
+                                                               FontWeight="SemiBold"
+                                                               Text="标签" />
+                                                    <DockPanel LastChildFill="True">
+                                                        <Button DockPanel.Dock="Right"
+                                                                MinWidth="60"
+                                                                Margin="8,0,0,0"
+                                                                Padding="8,5"
+                                                                Command="{Binding AddSelectedSearchTagCommand}"
+                                                                Content="添加"
+                                                                AutomationProperties.Name="添加历史 Feed 标签" />
+                                                        <TextBox MaxLength="80"
+                                                                 Padding="8,5"
+                                                                 Text="{Binding SelectedSearchTagInput, UpdateSourceTrigger=PropertyChanged}"
+                                                                 AutomationProperties.Name="新增历史 Feed 标签" />
+                                                    </DockPanel>
+                                                    <ItemsControl Margin="0,8,0,0"
+                                                                  ItemsSource="{Binding SelectedSearchTags}">
+                                                        <ItemsControl.ItemsPanel>
+                                                            <ItemsPanelTemplate>
+                                                                <WrapPanel />
+                                                            </ItemsPanelTemplate>
+                                                        </ItemsControl.ItemsPanel>
+                                                        <ItemsControl.ItemTemplate>
+                                                            <DataTemplate>
+                                                                <Border Margin="0,0,8,6"
+                                                                        Padding="7,3"
+                                                                        Background="{DynamicResource Brush.SurfaceRaised}"
+                                                                        CornerRadius="4">
+                                                                    <StackPanel Orientation="Horizontal">
+                                                                        <TextBlock VerticalAlignment="Center"
+                                                                                   Text="{Binding Name}" />
+                                                                        <Button Margin="6,0,0,0"
+                                                                                Padding="3,0"
+                                                                                BorderThickness="0"
+                                                                                Background="Transparent"
+                                                                                Command="{Binding DataContext.RemoveSelectedSearchTagCommand, RelativeSource={RelativeSource AncestorType=TabItem}}"
+                                                                                CommandParameter="{Binding}"
+                                                                                Content="×"
+                                                                                ToolTip="从当前 Feed 条目移除标签"
+                                                                                AutomationProperties.Name="移除历史 Feed 标签" />
+                                                                    </StackPanel>
+                                                                </Border>
+                                                            </DataTemplate>
+                                                        </ItemsControl.ItemTemplate>
+                                                    </ItemsControl>
+                                                </StackPanel>
+                                            </Border>
                                             <TextBlock Margin="0,16,0,0" Style="{StaticResource MetaTextStyle}" Text="仅 HTTP/HTTPS 来源会交给系统默认浏览器打开。" TextWrapping="Wrap" />
-                                        </StackPanel>
+                                            </StackPanel>
+                                        </ScrollViewer>
                                     </Border>
                                 </Grid>
                             </Grid>

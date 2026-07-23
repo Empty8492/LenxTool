@@ -10,13 +10,13 @@
 |---|---:|
 | LenxTool.Core.Tests | 39 passed |
 | LenxTool.Infrastructure.Tests | 185 passed |
-| LenxTool.App.Tests | 98 passed |
+| LenxTool.App.Tests | 100 passed |
 | Cloudflare Worker Vitest | 39 passed |
 | Worker TypeScript strict typecheck | passed |
 | .NET build warnings | 0 |
 | NuGet vulnerable packages | 0 detected |
 
-本轮执行 `dotnet build LenxTools.slnx -c Release --no-restore` 与 `dotnet test LenxTools.slnx -c Release --no-build`，结果为 0 警告、0 错误；Core 39、Infrastructure 185、App 98，共 322/322 通过且无跳过。Worker 严格 typecheck 和官方 workerd/D1 Vitest 39/39 保持通过（Wrangler 日志目录受当前沙箱权限限制，但不影响断言）。
+本轮执行 `dotnet build LenxTools.slnx -c Release --no-restore` 与 `dotnet test LenxTools.slnx -c Release --no-build`，结果为 0 警告、0 错误；Core 39、Infrastructure 185、App 100，共 324/324 通过且无跳过。Worker 严格 typecheck 和官方 workerd/D1 Vitest 39/39 保持通过（Wrangler 日志目录受当前沙箱权限限制，但不影响断言）。
 
 P0-08 覆盖 4 项 SQLite 集成场景并同步既有 schema 断言：新建库创建目录状态、分类、Feed、抓取状态、条目、索引和搜索映射；真实 schema v2 哨兵数据经 v3/v4 原位升级后仍可由现有仓储读取；迁移对象冲突时完整回滚且版本停留在 v3；相同外部 ID、URL 和内容哈希可存在于不同 Feed，同一 Feed 内重复外部 ID 被约束拒绝。既有包含未 checkpoint WAL 提交的一致性备份测试继续通过。
 
@@ -53,6 +53,8 @@ P1-03 时间线编辑切片新增 8 个 App 场景与 1 个 Infrastructure 场�
 P1-03 私人筛选切片新增 1 个 App 场景并扩展 Feed 仓储集成场景：阅读状态、仅收藏和标签条件可组合传入查询，清除操作同时恢复三项默认值；SQLite 在 LIMIT/OFFSET 前应用默认 profile 的已读状态、favorites/旧 is_starred 收藏兼容和实体标签 `EXISTS` 条件，XAML 为三个键盘原生控件提供自动化名称。
 
 P1-03 阅读交互切片新增 2 个 App 场景：首次选择未读条目会持久化已读，用户随后可手动恢复未读；未保存备注在已读/收藏状态更新时不会被覆盖，取消命令只恢复已保存文本且不写仓储。阅读器按钮和列表图标随已读/收藏状态变化，取消按钮具有独立自动化名称。
+
+P1-03 历史页一致入口新增 1 个 App 场景：统一搜索选中 Feed 结果后加载已读/收藏/备注/标签，支持同一组保存、取消和移除动作；非 Feed 搜索结果不开放 Feed 私人状态编辑器，历史右栏提供滚动、键盘原生控件和独立自动化名称。
 
 桌面账号新增 8 项 Infrastructure 测试和 7 项 App 测试：覆盖登录、refresh token 恢复、`/v1/me`、并发 401 单次刷新、每请求最多重放一次、失效清理、离线退出、DPAPI 删除/写入失败脱敏、登录密码清空、过期与额度显示、admin/user 导航隔离、角色降级回退和 XAML 自动化名称/绑定。
 

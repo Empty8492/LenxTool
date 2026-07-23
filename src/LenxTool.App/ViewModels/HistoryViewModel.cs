@@ -8,7 +8,7 @@ using LenxTool.Core.Models;
 
 namespace LenxTool.App.ViewModels;
 
-public sealed class HistoryViewModel : PageViewModel
+public sealed partial class HistoryViewModel : PageViewModel
 {
     private readonly IMediaJobRepository _jobs;
     private readonly IDatabaseMaintenanceService _database;
@@ -16,6 +16,8 @@ public sealed class HistoryViewModel : PageViewModel
     private readonly INewsRepository _news;
     private readonly ISubtitleRepository _subtitles;
     private readonly ISubtitleExportService _subtitleExporter;
+    private readonly IEntryStateRepository _entryStates;
+    private readonly IFavoriteRepository _favorites;
     private MediaJob? _selectedJob;
     private ContentSearchResult? _selectedSearchResult;
     private string _searchQuery = string.Empty;
@@ -34,7 +36,9 @@ public sealed class HistoryViewModel : PageViewModel
         IDesktopFileDialogService dialogs,
         INewsRepository news,
         ISubtitleRepository subtitles,
-        ISubtitleExportService subtitleExporter) : base("历史与数据", "搜索任务、查看输出，并管理 SQLite 数据库备份")
+        ISubtitleExportService subtitleExporter,
+        IEntryStateRepository entryStates,
+        IFavoriteRepository favorites) : base("历史与数据", "搜索任务、查看输出，并管理 SQLite 数据库备份")
     {
         _jobs = jobs;
         _database = database;
@@ -42,6 +46,8 @@ public sealed class HistoryViewModel : PageViewModel
         _news = news;
         _subtitles = subtitles;
         _subtitleExporter = subtitleExporter;
+        _entryStates = entryStates;
+        _favorites = favorites;
         _selectedExportOption = ExportOptions[0];
         RefreshCommand = new(LoadAsync);
         BackupCommand = new(BackupAsync);
@@ -50,6 +56,7 @@ public sealed class HistoryViewModel : PageViewModel
         SearchCommand = new(SearchAsync, () => !string.IsNullOrWhiteSpace(SearchQuery));
         OpenSearchResultCommand = new(OpenSearchResult, () => SelectedSearchResult?.Url is not null);
         ExportSubtitleCommand = new(ExportSubtitleAsync, CanExportSubtitle);
+        ConfigureSelectedSearchPrivateState();
     }
 
     public ObservableCollection<MediaJob> Jobs { get; } = [];
@@ -145,6 +152,7 @@ public sealed class HistoryViewModel : PageViewModel
             if (SetProperty(ref _selectedSearchResult, value))
             {
                 OpenSearchResultCommand.NotifyCanExecuteChanged();
+                OnSelectedSearchResultChanged(value);
             }
         }
     }
