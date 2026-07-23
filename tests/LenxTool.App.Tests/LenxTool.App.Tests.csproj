@@ -38,6 +38,9 @@
     <None Include="..\..\src\LenxTool.App\Views\FeedTimelineBrowserView.xaml"
           Link="Fixtures\FeedTimelineBrowserView.xaml"
           CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\src\LenxTool.App\Views\FeedHealthView.xaml"
+          Link="Fixtures\FeedHealthView.xaml"
+          CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

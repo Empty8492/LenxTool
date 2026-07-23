@@ -812,6 +812,10 @@
                                 </Grid>
                             </TabItem>
 
+                            <TabItem Header="健康">
+                                <views:FeedHealthView />
+                            </TabItem>
+
                             <TabItem Header="OPML 导入/导出">
                                 <Grid Margin="0,16,0,0">
                                     <Grid.RowDefinitions>

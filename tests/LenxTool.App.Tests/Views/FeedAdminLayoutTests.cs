@@ -107,4 +107,36 @@ public sealed class FeedAdminLayoutTests
                 attribute.Name.LocalName == "AutomationProperties.LiveSetting"
                 && attribute.Value == "Polite"));
     }
+
+    [Fact]
+    public void HealthTabExposesVirtualizedDiagnosticsAndSafeRetry()
+    {
+        XDocument app = XDocument.Load(
+            Path.Combine(AppContext.BaseDirectory, "Fixtures", "App.xaml"));
+        XElement template = app.Descendants().Single(element =>
+            element.Name.LocalName == "DataTemplate"
+            && element.Attribute("DataType")?.Value.Contains("FeedAdminViewModel", StringComparison.Ordinal) == true);
+        Assert.Contains(
+            template.Descendants(),
+            element => element.Name.LocalName == "TabItem"
+                && element.Attribute("Header")?.Value == "健康"
+                && element.Descendants().Any(child => child.Name.LocalName == "FeedHealthView"));
+
+        XDocument health = XDocument.Load(
+            Path.Combine(AppContext.BaseDirectory, "Fixtures", "FeedHealthView.xaml"));
+        XElement list = Assert.Single(
+            health.Descendants(),
+            element => element.Name.LocalName == "ListBox");
+        Assert.Equal("{Binding HealthItems}", list.Attribute("ItemsSource")?.Value);
+        Assert.Equal("True", list.Attribute("VirtualizingPanel.IsVirtualizing")?.Value);
+        Assert.Equal("Recycling", list.Attribute("VirtualizingPanel.VirtualizationMode")?.Value);
+        Assert.Contains(
+            health.Descendants(),
+            element => element.Name.LocalName == "Button"
+                && element.Attribute("AutomationProperties.Name")?.Value == "重试当前 Feed"
+                && element.Attribute("Command")?.Value.Contains("RetryFeedCommand", StringComparison.Ordinal) == true);
+        Assert.Contains(
+            health.Descendants(),
+            element => element.Attribute("Text")?.Value.Contains("固定类别", StringComparison.Ordinal) == true);
+    }
 }
