@@ -202,6 +202,7 @@ npm.cmd test -- --run
 - P0-20 / P1-01 已完成本机私人阅读状态：schema v6 新增 `user_entry_states`，按 profile 隔离已读、收藏、0～100% 进度和私人备注；局部 patch 保留未修改字段，条目清理保护有状态的旧条目。已补充并发局部更新与数据库重开往返测试。Feed 时间线首屏/分页批量读取状态，提供已读/收藏切换和进度展示；共享目录与 Worker 契约不变。
 - P1-02 已完成收藏、标签和备注仓储闭环：通用实体可收藏/取消收藏、批量读取和更新私人备注；标签支持 NFKC 规范化、颜色更新、实体关联原子替换和安全删除，删除标签不会删除实体或收藏备注。P1-03 UI 仍待实现。
 - P0 最终验收第一片已完成：`p0-final-acceptance.test.ts` 在真实 workerd/D1 中走临时 bootstrap/login，覆盖管理员发布与停用、目录刷新、普通用户同步/阅读、六类管理员写端点 403 隔离和审计字段脱敏；因此 P0 最终检查点前两项已有自动化证据，但 P0 仍未整体关闭。
+- P0 最终验收第二片已完成：完整 .NET 310/310、Worker 39/39、typecheck 和 Release 0 警告/0 错误复核了 OPML 导入/导出、断网缓存、坏源隔离、schema v2 原位升级和 10k 条目首屏性能；P0 只剩最终五份文档同步与 `IMPLEMENTATION_PLAN.md` 关闭闸门。
 
 ### 10.2 下一里程碑
 
@@ -212,7 +213,7 @@ Gate 0 字幕闭环已经完成。P0“管理员策展 RSS”已完成服务端�
 详细执行顺序如下：
 
 1. Gate 0 字幕闭环已完成；验收记录见 [`plans/EXISTING_BACKLOG_ALIGNMENT.md`](plans/EXISTING_BACKLOG_ALIGNMENT.md)。
-2. P0-01～P0-20 与 P0-B/P0-C 已完成，P0 最终检查点前两项已通过；下一步继续补齐 OPML/断网/坏源/旧库迁移/10k 汇总证据和最终文档闸门，未完成前不进入 P1。
+2. P0-01～P0-20 与 P0-B/P0-C 已完成，P0 最终检查点前三项已通过；下一步只同步最终五份文档并在证据齐全后关闭 P0，未完成前不进入 P1。
 3. P1-01/P1-02 的私人状态与收藏标签仓储已完成，但 P1 UI 不在当前开发顺序；P0 完成后再继续阅读状态、收藏和标签 UI，具体见 [`plans/RSS_P1_READING_INTELLIGENCE.md`](plans/RSS_P1_READING_INTELLIGENCE.md)。
 4. 实现多内容视图、外部导出适配器、本地定时摘要和通知；具体见 [`plans/RSS_P2_VIEWS_INTEGRATIONS.md`](plans/RSS_P2_VIEWS_INTEGRATIONS.md)。
 

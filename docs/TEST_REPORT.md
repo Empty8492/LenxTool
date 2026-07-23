@@ -80,6 +80,8 @@ D1 目录迁移测试明确执行“0001 → 写入旧 schema 哨兵数据 → �
 
 P0 最终检查点第一片新增 `p0-final-acceptance.test.ts`：真实 bootstrap/login 后完成管理员分类与 Feed 发布、目录刷新、普通用户同步/阅读、六类管理员写端点 403 拒绝、Feed 停用后的 ACTIVE/ALL 投影和最小审计字段。目标测试 1/1、Worker typecheck 通过；该证据关闭 P0 最终检查点前两项，OPML/断网/坏源/旧库迁移/10k 汇总及最终文档闸门仍未关闭。
 
+P0 最终检查点第二片复核完整回归：OPML 中文/UTF-16、嵌套分组、畸形 XML/XXE/2 MiB 限制和导出原子替换；Feed 刷新断网、坏源跨源隔离及缓存保留；`SchemaVersionTwoUpgradePreservesExistingDataAndAddsFeedSchema` 的 v2 原位升级；`TenThousandCachedEntriesOnlyMaterializeTheFirstPage` 的 10k 首屏性能。对应 .NET 310/310、Worker 39/39、Worker typecheck 和 Release build 0 警告/0 错误均通过。
+
 ## 本次已验证的异常路径
 
 - 完全离线的资讯缓存回退设计与网络错误映射。
