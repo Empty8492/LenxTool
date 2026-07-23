@@ -11,7 +11,8 @@ public sealed record FeedTimelineItem(
     FeedEntry Entry,
     string FeedName,
     string CategoryName,
-    EntryState? State = null)
+    EntryState? State = null,
+    FavoriteItem? Favorite = null)
 {
     public DateTimeOffset DisplayTime =>
         Entry.PublishedAt ?? Entry.UpdatedAt ?? Entry.FetchedAt;
@@ -21,7 +22,7 @@ public sealed record FeedTimelineItem(
         : Entry.Summary;
 
     public bool IsRead => State?.IsRead ?? false;
-    public bool IsStarred => State?.IsStarred ?? false;
+    public bool IsStarred => Favorite is not null || (State?.IsStarred ?? false);
     public double Progress => State?.Progress ?? 0;
-    public string Note => State?.Note ?? string.Empty;
+    public string Note => Favorite?.Note ?? State?.Note ?? string.Empty;
 }

@@ -403,7 +403,10 @@ public sealed class FavoriteRepository(SqliteDatabase database) : IFavoriteRepos
     private static void ValidateNote(string value)
     {
         ArgumentNullException.ThrowIfNull(value);
-        if (value.Length > MaximumNoteLength || value.Any(char.IsControl))
+        if (value.Length > MaximumNoteLength
+            || value.Any(character =>
+                char.IsControl(character)
+                && character is not '\r' and not '\n' and not '\t'))
         {
             throw new ArgumentOutOfRangeException(nameof(value));
         }

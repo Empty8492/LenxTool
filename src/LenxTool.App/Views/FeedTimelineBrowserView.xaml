@@ -147,12 +147,122 @@
         </Border>
         <Border Grid.Column="2" Style="{StaticResource BentoCardStyle}" Padding="0" ClipToBounds="True">
             <Grid>
-                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+                <ScrollViewer Grid.Row="0"
+                              MaxHeight="360"
+                              HorizontalScrollBarVisibility="Disabled"
+                              VerticalScrollBarVisibility="Auto">
+                    <Border Padding="18,14"
+                            BorderBrush="{DynamicResource Brush.Border}"
+                            BorderThickness="0,0,0,1">
+                        <StackPanel>
+                        <DockPanel LastChildFill="True">
+                            <StackPanel DockPanel.Dock="Right"
+                                        Orientation="Horizontal">
+                                <Button MinWidth="72"
+                                        Padding="10,5"
+                                        Command="{Binding ToggleTimelineStarCommand}"
+                                        CommandParameter="{Binding SelectedTimelineEntry}"
+                                        Content="收藏"
+                                        AutomationProperties.Name="切换当前 Feed 收藏" />
+                                <Button MinWidth="72"
+                                        Margin="8,0,0,0"
+                                        Padding="10,5"
+                                        Command="{Binding ToggleTimelineReadCommand}"
+                                        CommandParameter="{Binding SelectedTimelineEntry}"
+                                        Content="已读"
+                                        AutomationProperties.Name="切换当前 Feed 已读状态" />
+                            </StackPanel>
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource SectionTitleStyle}"
+                                           Text="私人阅读状态" />
+                                <TextBlock Margin="0,3,12,0"
+                                           Style="{StaticResource MetaTextStyle}"
+                                           Text="{Binding TimelineEditorStatus}"
+                                           TextWrapping="Wrap" />
+                            </StackPanel>
+                        </DockPanel>
+
+                        <TextBlock Margin="0,12,0,5"
+                                   FontWeight="SemiBold"
+                                   Text="私人备注" />
+                        <TextBox MinHeight="64"
+                                 MaxHeight="110"
+                                 Padding="9,7"
+                                 AcceptsReturn="True"
+                                 MaxLength="4000"
+                                 Text="{Binding SelectedTimelineNote, UpdateSourceTrigger=PropertyChanged}"
+                                 TextWrapping="Wrap"
+                                 VerticalScrollBarVisibility="Auto"
+                                 AutomationProperties.Name="Feed 私人备注" />
+                        <Button Margin="0,7,0,0"
+                                MinWidth="96"
+                                HorizontalAlignment="Right"
+                                Padding="12,5"
+                                Command="{Binding SaveTimelineNoteCommand}"
+                                Content="保存备注"
+                                AutomationProperties.Name="保存 Feed 私人备注" />
+
+                        <TextBlock Margin="0,12,0,5"
+                                   FontWeight="SemiBold"
+                                   Text="标签" />
+                        <DockPanel LastChildFill="True">
+                            <Button DockPanel.Dock="Right"
+                                    MinWidth="72"
+                                    Margin="8,0,0,0"
+                                    Padding="10,5"
+                                    Command="{Binding AddTimelineTagCommand}"
+                                    Content="添加"
+                                    AutomationProperties.Name="添加 Feed 标签" />
+                            <TextBox MaxLength="80"
+                                     Padding="9,6"
+                                     Text="{Binding TimelineTagInput, UpdateSourceTrigger=PropertyChanged}"
+                                     AutomationProperties.Name="新增 Feed 标签" />
+                        </DockPanel>
+                        <ItemsControl Margin="0,8,0,0"
+                                      ItemsSource="{Binding SelectedTimelineTags}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <WrapPanel />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Margin="0,0,8,6"
+                                            Padding="8,3"
+                                            Background="{DynamicResource Brush.SurfaceMuted}"
+                                            CornerRadius="4">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock VerticalAlignment="Center"
+                                                       Text="{Binding Name}" />
+                                            <Button Margin="6,0,0,0"
+                                                    Padding="3,0"
+                                                    BorderThickness="0"
+                                                    Background="Transparent"
+                                                    Command="{Binding DataContext.RemoveTimelineTagCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                    CommandParameter="{Binding}"
+                                                    Content="×"
+                                                    ToolTip="从当前条目移除标签"
+                                                    AutomationProperties.Name="移除 Feed 标签" />
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        </StackPanel>
+                    </Border>
+                </ScrollViewer>
+                <ScrollViewer Grid.Row="1"
+                              VerticalScrollBarVisibility="Auto"
                               HorizontalScrollBarVisibility="Disabled"
                               PanningMode="VerticalOnly">
                     <controls:RichArticleView Article="{Binding SelectedFeedArticle}" />
                 </ScrollViewer>
-                <Border Margin="20"
+                <Border Grid.RowSpan="2"
+                        Margin="20"
                         Padding="20"
                         Background="{DynamicResource Brush.SurfaceRaised}"
                         IsHitTestVisible="False"

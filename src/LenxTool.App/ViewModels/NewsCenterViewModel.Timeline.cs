@@ -9,10 +9,15 @@ public sealed partial class NewsCenterViewModel
 {
     private const int TimelinePageSize = 50;
     private const int MaximumTimelineKeywordLength = 200;
+    private const int MaximumTimelineNoteLength = 4000;
+    private const int MaximumTimelineTagLength = 80;
+    private const string FeedEntryFavoriteType = "feed_entry";
+    private const string DefaultTimelineTagColor = "#4B6B88";
     private readonly IFeedEntryRepository _feedEntryRepository;
     private readonly IFeedCatalogRepository _feedCatalogRepository;
     private readonly IFeedCatalogSyncService _feedCatalogSync;
     private readonly IEntryStateRepository _entryStateRepository;
+    private readonly IFavoriteRepository _favoriteRepository;
     private readonly SynchronizationContext? _timelineSynchronizationContext;
     private FeedCatalogSnapshot? _timelineCatalog;
     private FeedTimelineFilterOption? _selectedTimelineCategory;
@@ -24,20 +29,29 @@ public sealed partial class NewsCenterViewModel
     private DateTimeOffset? _catalogLastSynchronizedAt;
     private string _timelineKeyword = string.Empty;
     private string _timelineStatus = "正在读取本地 Feed 缓存…";
+    private string _selectedTimelineNote = string.Empty;
+    private string _timelineTagInput = string.Empty;
+    private string _timelineEditorStatus = "收藏、备注和标签仅保存在本机。";
+    private Task _selectedTimelineEditorLoad = Task.CompletedTask;
     private bool _hasMoreTimelineEntries;
     private bool _timelineDisposed;
     private int _timelineCatalogGeneration;
     private int _timelineQueryGeneration;
+    private int _timelineEditorGeneration;
     private int _timelineNextOffset;
 
     public ObservableCollection<FeedTimelineItem> TimelineEntries { get; } = [];
     public ObservableCollection<FeedTimelineFilterOption> TimelineCategories { get; } = [];
     public ObservableCollection<FeedTimelineFilterOption> TimelineFeeds { get; } = [];
+    public ObservableCollection<TagItem> SelectedTimelineTags { get; } = [];
     public AsyncRelayCommand ApplyTimelineFiltersCommand { get; private set; } = null!;
     public AsyncRelayCommand LoadMoreTimelineCommand { get; private set; } = null!;
     public AsyncRelayCommand ClearTimelineFiltersCommand { get; private set; } = null!;
     public AsyncRelayCommand<FeedTimelineItem> ToggleTimelineReadCommand { get; private set; } = null!;
     public AsyncRelayCommand<FeedTimelineItem> ToggleTimelineStarCommand { get; private set; } = null!;
+    public AsyncRelayCommand SaveTimelineNoteCommand { get; private set; } = null!;
+    public AsyncRelayCommand AddTimelineTagCommand { get; private set; } = null!;
+    public AsyncRelayCommand<TagItem> RemoveTimelineTagCommand { get; private set; } = null!;
 
     public FeedTimelineFilterOption? SelectedTimelineCategory
     {
@@ -70,6 +84,14 @@ public sealed partial class NewsCenterViewModel
             if (SetProperty(ref _selectedTimelineEntry, value))
             {
                 SelectedFeedArticle = value is null ? null : CreateReaderArticle(value);
+                SelectedTimelineNote = value?.Note ?? string.Empty;
+                TimelineTagInput = string.Empty;
+                SelectedTimelineTags.Clear();
+                int generation = Interlocked.Increment(ref _timelineEditorGeneration);
+                _selectedTimelineEditorLoad = LoadSelectedTimelineEditorAsync(value, generation);
+                OnPropertyChanged(nameof(SelectedTimelineEditorLoad));
+                SaveTimelineNoteCommand.NotifyCanExecuteChanged();
+                AddTimelineTagCommand.NotifyCanExecuteChanged();
             }
         }
     }
@@ -106,6 +128,45 @@ public sealed partial class NewsCenterViewModel
         private set => SetProperty(ref _timelineStatus, value);
     }
 
+    public string SelectedTimelineNote
+    {
+        get => _selectedTimelineNote;
+        set
+        {
+            string normalized = value ?? string.Empty;
+            if (normalized.Length > MaximumTimelineNoteLength)
+            {
+                normalized = normalized[..MaximumTimelineNoteLength];
+            }
+            SetProperty(ref _selectedTimelineNote, normalized);
+        }
+    }
+
+    public string TimelineTagInput
+    {
+        get => _timelineTagInput;
+        set
+        {
+            string normalized = value ?? string.Empty;
+            if (normalized.Length > MaximumTimelineTagLength)
+            {
+                normalized = normalized[..MaximumTimelineTagLength];
+            }
+            if (SetProperty(ref _timelineTagInput, normalized))
+            {
+                AddTimelineTagCommand.NotifyCanExecuteChanged();
+            }
+        }
+    }
+
+    public string TimelineEditorStatus
+    {
+        get => _timelineEditorStatus;
+        private set => SetProperty(ref _timelineEditorStatus, value);
+    }
+
+    public Task SelectedTimelineEditorLoad => _selectedTimelineEditorLoad;
+
     public bool HasMoreTimelineEntries
     {
         get => _hasMoreTimelineEntries;
@@ -133,6 +194,16 @@ public sealed partial class NewsCenterViewModel
         ClearTimelineFiltersCommand = new(ClearTimelineFiltersAsync);
         ToggleTimelineReadCommand = new(ToggleTimelineReadAsync, item => item is not null);
         ToggleTimelineStarCommand = new(ToggleTimelineStarAsync, item => item is not null);
+        SaveTimelineNoteCommand = new(
+            SaveTimelineNoteAsync,
+            () => SelectedTimelineEntry is not null);
+        AddTimelineTagCommand = new(
+            AddTimelineTagAsync,
+            () => SelectedTimelineEntry is not null
+                  && !string.IsNullOrWhiteSpace(TimelineTagInput));
+        RemoveTimelineTagCommand = new(
+            RemoveTimelineTagAsync,
+            tag => SelectedTimelineEntry is not null && tag is not null);
         _feedCatalogSync.StatusChanged += OnTimelineCatalogSyncStatusChanged;
     }
 
@@ -277,6 +348,12 @@ public sealed partial class NewsCenterViewModel
                 page.Items.Select(item => item.Id).ToArray(),
                 "default",
                 cancellationToken);
+        IReadOnlyDictionary<string, FavoriteItem> favorites = page.Items.Count == 0
+            ? new Dictionary<string, FavoriteItem>(StringComparer.Ordinal)
+            : await _favoriteRepository.GetForEntitiesAsync(
+                FeedEntryFavoriteType,
+                page.Items.Select(item => item.Id).ToArray(),
+                cancellationToken);
         if (_timelineDisposed
             || expectedGeneration != Volatile.Read(ref _timelineQueryGeneration)
             || (expectedVisibleCount is not null
@@ -293,7 +370,8 @@ public sealed partial class NewsCenterViewModel
             {
                 TimelineEntries.Add(CreateTimelineItem(
                     entry,
-                    states.GetValueOrDefault(entry.Id)));
+                    states.GetValueOrDefault(entry.Id),
+                    favorites.GetValueOrDefault(entry.Id)));
             }
 
             if (_lastTimelineRefreshAt is null || entry.FetchedAt > _lastTimelineRefreshAt)
@@ -324,29 +402,339 @@ public sealed partial class NewsCenterViewModel
         CancellationToken cancellationToken)
     {
         if (item is null) return;
-        EntryState state = await _entryStateRepository.PatchAsync(
-            item.Entry.Id,
-            "default",
-            new EntryStatePatch(IsStarred: !item.IsStarred),
-            cancellationToken);
-        ReplaceTimelineItem(item, state);
+        try
+        {
+            bool isStarred = !item.IsStarred;
+            bool favoriteChanged = false;
+            FavoriteItem? favorite = item.Favorite;
+            if (isStarred)
+            {
+                favorite = await _favoriteRepository.UpsertAsync(
+                    FeedEntryFavoriteType,
+                    item.Entry.Id,
+                    item.Note,
+                    cancellationToken);
+                favoriteChanged = true;
+            }
+            else
+            {
+                await _favoriteRepository.RemoveAsync(
+                    FeedEntryFavoriteType,
+                    item.Entry.Id,
+                    cancellationToken);
+                favoriteChanged = true;
+                favorite = null;
+            }
+
+            EntryState state;
+            try
+            {
+                state = await _entryStateRepository.PatchAsync(
+                    item.Entry.Id,
+                    "default",
+                    new EntryStatePatch(
+                        IsStarred: isStarred,
+                        Note: isStarred ? null : item.Note),
+                    cancellationToken);
+            }
+            catch
+            {
+                if (favoriteChanged)
+                {
+                    await RestoreTimelineFavoriteAsync(item);
+                }
+                throw;
+            }
+            ReplaceTimelineItem(item, state, favorite, replaceFavorite: true);
+            SetTimelineEditorStatusIfSelected(
+                item,
+                isStarred
+                    ? "已收藏到本机。"
+                    : "已取消本机收藏；私人备注仍保留。");
+        }
+        catch (Exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            SetTimelineEditorStatusIfSelected(
+                item,
+                "收藏状态保存失败，当前界面未更新。");
+        }
     }
 
-    private void ReplaceTimelineItem(FeedTimelineItem item, EntryState state)
+    private Task RestoreTimelineFavoriteAsync(FeedTimelineItem item) =>
+        item.Favorite is null
+            ? _favoriteRepository.RemoveAsync(
+                FeedEntryFavoriteType,
+                item.Entry.Id,
+                CancellationToken.None)
+            : RestoreExistingTimelineFavoriteAsync(item.Favorite);
+
+    private async Task RestoreExistingTimelineFavoriteAsync(FavoriteItem favorite)
     {
-        int index = TimelineEntries.IndexOf(item);
-        if (index < 0) return;
-        FeedTimelineItem updated = item with { State = state };
-        TimelineEntries[index] = updated;
-        if (ReferenceEquals(SelectedTimelineEntry, item))
+        await _favoriteRepository.UpsertAsync(
+            FeedEntryFavoriteType,
+            favorite.EntityId,
+            favorite.Note,
+            CancellationToken.None);
+    }
+
+    private async Task LoadSelectedTimelineEditorAsync(
+        FeedTimelineItem? item,
+        int expectedGeneration)
+    {
+        if (item is null)
         {
-            SelectedTimelineEntry = updated;
+            TimelineEditorStatus = "选择条目后可编辑本机收藏、备注和标签。";
+            return;
+        }
+
+        try
+        {
+            IReadOnlyList<TagItem> tags = await _favoriteRepository.GetTagsForEntityAsync(
+                FeedEntryFavoriteType,
+                item.Entry.Id,
+                CancellationToken.None);
+            if (_timelineDisposed
+                || expectedGeneration != Volatile.Read(ref _timelineEditorGeneration)
+                || !string.Equals(
+                    SelectedTimelineEntry?.Entry.Id,
+                    item.Entry.Id,
+                    StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            SelectedTimelineTags.Clear();
+            foreach (TagItem tag in tags)
+            {
+                SelectedTimelineTags.Add(tag);
+            }
+            TimelineEditorStatus = "收藏、备注和标签仅保存在本机。";
+        }
+        catch (Exception) when (!_timelineDisposed)
+        {
+            if (expectedGeneration == Volatile.Read(ref _timelineEditorGeneration))
+            {
+                TimelineEditorStatus = "标签读取失败；正文和已缓存状态仍可使用。";
+            }
+        }
+    }
+
+    private async Task SaveTimelineNoteAsync(CancellationToken cancellationToken)
+    {
+        FeedTimelineItem? item = SelectedTimelineEntry;
+        if (item is null) return;
+        string note = SelectedTimelineNote;
+        int editorGeneration = Volatile.Read(ref _timelineEditorGeneration);
+        try
+        {
+            bool favoriteChanged = false;
+            FavoriteItem? favorite = item.Favorite;
+            if (item.IsStarred)
+            {
+                favorite = await _favoriteRepository.UpsertAsync(
+                    FeedEntryFavoriteType,
+                    item.Entry.Id,
+                    note,
+                    cancellationToken);
+                favoriteChanged = true;
+            }
+            EntryState state;
+            try
+            {
+                state = await _entryStateRepository.PatchAsync(
+                    item.Entry.Id,
+                    "default",
+                    new EntryStatePatch(Note: note),
+                    cancellationToken);
+            }
+            catch
+            {
+                if (favoriteChanged)
+                {
+                    await RestoreTimelineFavoriteAsync(item);
+                }
+                throw;
+            }
+            ReplaceTimelineItem(
+                item,
+                state,
+                favorite,
+                replaceFavorite: item.IsStarred);
+            SetTimelineEditorStatusIfCurrent(
+                item,
+                editorGeneration,
+                "私人备注已保存到本机。");
+        }
+        catch (Exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            SetTimelineEditorStatusIfCurrent(
+                item,
+                editorGeneration,
+                "私人备注保存失败，原有内容未从界面移除。");
+        }
+    }
+
+    private async Task AddTimelineTagAsync(CancellationToken cancellationToken)
+    {
+        FeedTimelineItem? item = SelectedTimelineEntry;
+        string name = TimelineTagInput.Trim();
+        if (item is null || name.Length == 0) return;
+        int editorGeneration = Volatile.Read(ref _timelineEditorGeneration);
+        string[] existingTagIds = SelectedTimelineTags
+            .Select(value => value.Id)
+            .ToArray();
+        try
+        {
+            TagItem tag = await _favoriteRepository.UpsertTagAsync(
+                name,
+                DefaultTimelineTagColor,
+                cancellationToken);
+            string[] tagIds = existingTagIds
+                .Append(tag.Id)
+                .Distinct(StringComparer.Ordinal)
+                .ToArray();
+            await _favoriteRepository.SetTagsAsync(
+                FeedEntryFavoriteType,
+                item.Entry.Id,
+                tagIds,
+                cancellationToken);
+            if (!IsCurrentTimelineEditor(item, editorGeneration))
+            {
+                return;
+            }
+
+            TagItem? existing = SelectedTimelineTags.FirstOrDefault(value => value.Id == tag.Id);
+            if (existing is not null)
+            {
+                int index = SelectedTimelineTags.IndexOf(existing);
+                SelectedTimelineTags[index] = tag;
+            }
+            else
+            {
+                SelectedTimelineTags.Add(tag);
+            }
+            TimelineTagInput = string.Empty;
+            TimelineEditorStatus = $"已添加标签“{tag.Name}”。";
+        }
+        catch (Exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            SetTimelineEditorStatusIfCurrent(
+                item,
+                editorGeneration,
+                "标签保存失败，现有标签未从界面移除。");
+        }
+    }
+
+    private async Task RemoveTimelineTagAsync(
+        TagItem? tag,
+        CancellationToken cancellationToken)
+    {
+        FeedTimelineItem? item = SelectedTimelineEntry;
+        if (item is null || tag is null) return;
+        int editorGeneration = Volatile.Read(ref _timelineEditorGeneration);
+        try
+        {
+            string[] remaining = SelectedTimelineTags
+                .Where(value => value.Id != tag.Id)
+                .Select(value => value.Id)
+                .ToArray();
+            await _favoriteRepository.SetTagsAsync(
+                FeedEntryFavoriteType,
+                item.Entry.Id,
+                remaining,
+                cancellationToken);
+            if (!IsCurrentTimelineEditor(item, editorGeneration))
+            {
+                return;
+            }
+
+            SelectedTimelineTags.Remove(tag);
+            TimelineEditorStatus = $"已移除条目标签“{tag.Name}”。";
+        }
+        catch (Exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            SetTimelineEditorStatusIfCurrent(
+                item,
+                editorGeneration,
+                "标签移除失败，现有标签保持不变。");
+        }
+    }
+
+    private void ReplaceTimelineItem(
+        FeedTimelineItem item,
+        EntryState state,
+        FavoriteItem? favorite = null,
+        bool replaceFavorite = false)
+    {
+        int index = -1;
+        for (int position = 0; position < TimelineEntries.Count; position++)
+        {
+            if (string.Equals(
+                    TimelineEntries[position].Entry.Id,
+                    item.Entry.Id,
+                    StringComparison.Ordinal))
+            {
+                index = position;
+                break;
+            }
+        }
+        if (index < 0) return;
+        FeedTimelineItem current = TimelineEntries[index];
+        FeedTimelineItem updated = current with
+        {
+            State = state,
+            Favorite = replaceFavorite ? favorite : current.Favorite
+        };
+        TimelineEntries[index] = updated;
+        if (string.Equals(
+                SelectedTimelineEntry?.Entry.Id,
+                item.Entry.Id,
+                StringComparison.Ordinal))
+        {
+            _selectedTimelineEntry = updated;
+            OnPropertyChanged(nameof(SelectedTimelineEntry));
+            SelectedFeedArticle = CreateReaderArticle(updated);
+            SelectedTimelineNote = updated.Note;
+        }
+    }
+
+    private bool IsCurrentTimelineEditor(
+        FeedTimelineItem item,
+        int expectedGeneration) =>
+        expectedGeneration == Volatile.Read(ref _timelineEditorGeneration)
+        && string.Equals(
+            SelectedTimelineEntry?.Entry.Id,
+            item.Entry.Id,
+            StringComparison.Ordinal);
+
+    private void SetTimelineEditorStatusIfCurrent(
+        FeedTimelineItem item,
+        int expectedGeneration,
+        string status)
+    {
+        if (IsCurrentTimelineEditor(item, expectedGeneration))
+        {
+            TimelineEditorStatus = status;
+        }
+    }
+
+    private void SetTimelineEditorStatusIfSelected(
+        FeedTimelineItem item,
+        string status)
+    {
+        if (string.Equals(
+                SelectedTimelineEntry?.Entry.Id,
+                item.Entry.Id,
+                StringComparison.Ordinal))
+        {
+            TimelineEditorStatus = status;
         }
     }
 
     private FeedTimelineItem CreateTimelineItem(
         FeedEntry entry,
-        EntryState? state = null)
+        EntryState? state = null,
+        FavoriteItem? favorite = null)
     {
         FeedCatalogItem? feed = _timelineCatalog?.Feeds.FirstOrDefault(
             item => string.Equals(item.Id, entry.FeedId, StringComparison.Ordinal));
@@ -358,7 +746,8 @@ public sealed partial class NewsCenterViewModel
             entry,
             feed?.DisplayName ?? "已移除 Feed",
             category?.Name ?? "未分类",
-            state);
+            state,
+            favorite);
     }
 
     private NewsArticle CreateReaderArticle(FeedTimelineItem item)
@@ -489,12 +878,16 @@ public sealed partial class NewsCenterViewModel
         _timelineDisposed = true;
         Interlocked.Increment(ref _timelineCatalogGeneration);
         Interlocked.Increment(ref _timelineQueryGeneration);
+        Interlocked.Increment(ref _timelineEditorGeneration);
         _feedCatalogSync.StatusChanged -= OnTimelineCatalogSyncStatusChanged;
         ApplyTimelineFiltersCommand.Dispose();
         LoadMoreTimelineCommand.Dispose();
         ClearTimelineFiltersCommand.Dispose();
         ToggleTimelineReadCommand.Dispose();
         ToggleTimelineStarCommand.Dispose();
+        SaveTimelineNoteCommand.Dispose();
+        AddTimelineTagCommand.Dispose();
+        RemoveTimelineTagCommand.Dispose();
     }
 
     private static DateTimeOffset ToTimelineBoundary(DateTime value)

@@ -9,14 +9,14 @@
 | 测试组 | 结果 |
 |---|---:|
 | LenxTool.Core.Tests | 39 passed |
-| LenxTool.Infrastructure.Tests | 184 passed |
-| LenxTool.App.Tests | 87 passed |
+| LenxTool.Infrastructure.Tests | 185 passed |
+| LenxTool.App.Tests | 95 passed |
 | Cloudflare Worker Vitest | 39 passed |
 | Worker TypeScript strict typecheck | passed |
 | .NET build warnings | 0 |
 | NuGet vulnerable packages | 0 detected |
 
-本轮执行 `dotnet build LenxTools.slnx -c Release --no-restore` 与 `dotnet test LenxTools.slnx -c Release --no-build`，结果为 0 警告、0 错误；Core 39、Infrastructure 184、App 87，共 310/310 通过且无跳过。Worker 严格 typecheck 和官方 workerd/D1 Vitest 39/39 同轮通过（Wrangler 日志目录受当前沙箱权限限制，但不影响断言）。
+本轮执行 `dotnet build LenxTools.slnx -c Release --no-restore` 与 `dotnet test LenxTools.slnx -c Release --no-build`，结果为 0 警告、0 错误；Core 39、Infrastructure 185、App 95，共 319/319 通过且无跳过。Worker 严格 typecheck 和官方 workerd/D1 Vitest 39/39 保持通过（Wrangler 日志目录受当前沙箱权限限制，但不影响断言）。
 
 P0-08 覆盖 4 项 SQLite 集成场景并同步既有 schema 断言：新建库创建目录状态、分类、Feed、抓取状态、条目、索引和搜索映射；真实 schema v2 哨兵数据经 v3/v4 原位升级后仍可由现有仓储读取；迁移对象冲突时完整回滚且版本停留在 v3；相同外部 ID、URL 和内容哈希可存在于不同 Feed，同一 Feed 内重复外部 ID 被约束拒绝。既有包含未 checkpoint WAL 提交的一致性备份测试继续通过。
 
@@ -47,6 +47,8 @@ P0-19 新增 2 项 Infrastructure 和 4 项 App 测试：Feed 条目查询的 AC
 P0-20 / P1-01 新增 schema v6 与 5 项状态测试：`user_entry_states` 按 `(entry_id, local_profile)` 隔离，局部 patch 保留未修改的已读/收藏/进度/备注字段，非法进度和过长备注被拒绝；并发局部 patch 不丢独立字段，数据库重开后状态仍可读；旧 Feed 条目清理保护拥有私人状态的条目，schema v2/v4→v6 迁移和重复执行继续通过。Feed 时间线首屏/追加页批量读取状态，并通过异步命令切换已读/收藏、显示进度；状态不上传 Worker，也不改变共享目录版本。
 
 P1-02 新增 3 项 Infrastructure 测试：通用实体收藏备注可更新/批量读取/删除，标签名称 NFKC 规范化和颜色更新，实体标签事务替换、未知/超量标签拒绝，以及删除标签只清理关联而保留收藏备注。
+
+P1-03 时间线编辑切片新增 8 个 App 场景与 1 个 Infrastructure 场景：收藏/备注/标签通过私人仓储往返，备注不隐式收藏，跨 favorites 与 user_entry_states 写入失败会恢复原值，切换条目期间异步写入仍绑定原条目，XAML 覆盖备注和标签输入上限、保存/添加/移除命令、自动化名称和状态反馈；基础仓储覆盖多行备注。时间线批量读取收藏，标签按选中条目异步加载并用代次丢弃过期结果；写入不调用共享目录服务。
 
 桌面账号新增 8 项 Infrastructure 测试和 7 项 App 测试：覆盖登录、refresh token 恢复、`/v1/me`、并发 401 单次刷新、每请求最多重放一次、失效清理、离线退出、DPAPI 删除/写入失败脱敏、登录密码清空、过期与额度显示、admin/user 导航隔离、角色降级回退和 XAML 自动化名称/绑定。
 

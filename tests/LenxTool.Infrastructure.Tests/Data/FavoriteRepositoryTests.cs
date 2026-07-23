@@ -79,6 +79,28 @@ public sealed class FavoriteRepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task UpsertPreservesMultilinePrivateNote()
+    {
+        using SqliteDatabase database = await CreateDatabaseAsync();
+        var repository = new FavoriteRepository(database);
+        const string note = "第一段\r\n第二段\n第三段";
+
+        FavoriteItem favorite = await repository.UpsertAsync(
+            "feed_entry",
+            "entry-multiline",
+            note,
+            CancellationToken.None);
+
+        Assert.Equal(note, favorite.Note);
+        Assert.Equal(
+            note,
+            (await repository.GetAsync(
+                favorite.EntityType,
+                favorite.EntityId,
+                CancellationToken.None))?.Note);
+    }
+
+    [Fact]
     public async Task TagsNormalizeNamesAndDeletingTagKeepsFavoriteNote()
     {
         using SqliteDatabase database = await CreateDatabaseAsync();

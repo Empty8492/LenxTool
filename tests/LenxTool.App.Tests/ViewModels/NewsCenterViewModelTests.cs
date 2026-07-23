@@ -82,7 +82,8 @@ public sealed class NewsCenterViewModelTests
             new StubFeedEntryRepository([]),
             new StubFeedCatalogRepository(CreateCatalog()),
             new StubFeedCatalogSyncService(),
-            new StubEntryStateRepository());
+            new StubEntryStateRepository(),
+            new StubFavoriteRepository());
         await viewModel.InitializeAsync(CancellationToken.None);
 
         await viewModel.GenerateArticleReportCommand.ExecuteAsync();
@@ -179,7 +180,8 @@ public sealed class NewsCenterViewModelTests
             new StubFeedEntryRepository([]),
             new StubFeedCatalogRepository(CreateCatalog()),
             new StubFeedCatalogSyncService(),
-            new StubEntryStateRepository());
+            new StubEntryStateRepository(),
+            new StubFavoriteRepository());
         await viewModel.InitializeAsync(CancellationToken.None);
         Assert.Single(viewModel.SourceFilters, filter => filter.Platform == "GitHub")
             .IsSelected = false;
@@ -263,6 +265,206 @@ public sealed class NewsCenterViewModelTests
         Assert.True(updated.IsStarred);
         Assert.True(updated.IsRead);
         Assert.Equal(1, stateRepository.PatchCalls);
+    }
+
+    [Fact]
+    public async Task TimelineFavoriteNoteAndTagsPersistThroughPrivateRepositories()
+    {
+        FeedEntry entry = CreateFeedEntry(0);
+        var favorites = new StubFavoriteRepository();
+        TagItem existingTag = favorites.SeedTag("稍后阅读", "#4B6B88");
+        favorites.SeedFavorite(entry.Id, "初始备注", existingTag);
+        using NewsCenterViewModel viewModel = CreateViewModel(
+            CreateSnapshot(),
+            feedEntries: new([entry]),
+            favorites: favorites);
+
+        await viewModel.InitializeAsync(CancellationToken.None);
+        await viewModel.SelectedTimelineEditorLoad;
+
+        FeedTimelineItem initial = Assert.Single(viewModel.TimelineEntries);
+        Assert.True(initial.IsStarred);
+        Assert.Equal("初始备注", initial.Note);
+        Assert.Equal("初始备注", viewModel.SelectedTimelineNote);
+        Assert.Equal(existingTag, Assert.Single(viewModel.SelectedTimelineTags));
+
+        viewModel.SelectedTimelineNote = "更新后的私人备注";
+        await viewModel.SaveTimelineNoteCommand.ExecuteAsync();
+
+        FavoriteItem saved = favorites.GetFavorite(entry.Id)!;
+        Assert.NotNull(saved);
+        Assert.Equal("更新后的私人备注", saved.Note);
+        Assert.Equal("更新后的私人备注", Assert.Single(viewModel.TimelineEntries).Note);
+
+        viewModel.TimelineTagInput = "  本地模型  ";
+        await viewModel.AddTimelineTagCommand.ExecuteAsync();
+
+        Assert.Equal(string.Empty, viewModel.TimelineTagInput);
+        Assert.Contains(viewModel.SelectedTimelineTags, tag => tag.Name == "本地模型");
+        TagItem added = Assert.Single(viewModel.SelectedTimelineTags, tag => tag.Name == "本地模型");
+
+        await viewModel.RemoveTimelineTagCommand.ExecuteAsync(added);
+
+        Assert.DoesNotContain(viewModel.SelectedTimelineTags, tag => tag.Id == added.Id);
+        Assert.DoesNotContain(favorites.GetEntityTags(entry.Id), tag => tag.Id == added.Id);
+        Assert.True(favorites.Tags.ContainsKey(added.Id));
+    }
+
+    [Fact]
+    public async Task TimelineNoteFailureKeepsPersistedItemAndReportsFailure()
+    {
+        FeedEntry entry = CreateFeedEntry(0);
+        var favorites = new StubFavoriteRepository();
+        favorites.SeedFavorite(entry.Id, "原备注");
+        favorites.ThrowOnFavoriteUpsert = true;
+        using NewsCenterViewModel viewModel = CreateViewModel(
+            CreateSnapshot(),
+            feedEntries: new([entry]),
+            favorites: favorites);
+        await viewModel.InitializeAsync(CancellationToken.None);
+        viewModel.SelectedTimelineNote = "未保存的新备注";
+
+        await viewModel.SaveTimelineNoteCommand.ExecuteAsync();
+
+        Assert.Equal("原备注", Assert.Single(viewModel.TimelineEntries).Note);
+        Assert.Equal("原备注", favorites.GetFavorite(entry.Id)?.Note);
+        Assert.Contains("保存失败", viewModel.TimelineEditorStatus);
+    }
+
+    [Fact]
+    public async Task TimelineNoteDoesNotImplicitlyFavoriteEntry()
+    {
+        FeedEntry entry = CreateFeedEntry(0);
+        var states = new StubEntryStateRepository();
+        var favorites = new StubFavoriteRepository();
+        using NewsCenterViewModel viewModel = CreateViewModel(
+            CreateSnapshot(),
+            feedEntries: new([entry]),
+            entryStates: states,
+            favorites: favorites);
+        await viewModel.InitializeAsync(CancellationToken.None);
+        viewModel.SelectedTimelineNote = "只记备注，不收藏";
+
+        await viewModel.SaveTimelineNoteCommand.ExecuteAsync();
+
+        FeedTimelineItem saved = Assert.Single(viewModel.TimelineEntries);
+        Assert.False(saved.IsStarred);
+        Assert.Equal("只记备注，不收藏", saved.Note);
+        Assert.Equal("只记备注，不收藏", states.States[entry.Id].Note);
+        Assert.Null(favorites.GetFavorite(entry.Id));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task TimelineStarFailureRestoresOriginalFavorite(bool initiallyStarred)
+    {
+        FeedEntry entry = CreateFeedEntry(0);
+        var states = new StubEntryStateRepository
+        {
+            ThrowOnPatch = true
+        };
+        var favorites = new StubFavoriteRepository();
+        if (initiallyStarred)
+        {
+            favorites.SeedFavorite(entry.Id, "原备注");
+        }
+        using NewsCenterViewModel viewModel = CreateViewModel(
+            CreateSnapshot(),
+            feedEntries: new([entry]),
+            entryStates: states,
+            favorites: favorites);
+        await viewModel.InitializeAsync(CancellationToken.None);
+        FeedTimelineItem item = Assert.Single(viewModel.TimelineEntries);
+
+        await viewModel.ToggleTimelineStarCommand.ExecuteAsync(item);
+
+        Assert.Equal(initiallyStarred, Assert.Single(viewModel.TimelineEntries).IsStarred);
+        Assert.Equal(initiallyStarred, favorites.GetFavorite(entry.Id) is not null);
+        Assert.Contains("保存失败", viewModel.TimelineEditorStatus);
+    }
+
+    [Fact]
+    public async Task TimelineNoteFailureRestoresFavoriteWhenStateWriteFails()
+    {
+        FeedEntry entry = CreateFeedEntry(0);
+        var states = new StubEntryStateRepository
+        {
+            ThrowOnPatch = true
+        };
+        var favorites = new StubFavoriteRepository();
+        favorites.SeedFavorite(entry.Id, "原备注");
+        using NewsCenterViewModel viewModel = CreateViewModel(
+            CreateSnapshot(),
+            feedEntries: new([entry]),
+            entryStates: states,
+            favorites: favorites);
+        await viewModel.InitializeAsync(CancellationToken.None);
+        viewModel.SelectedTimelineNote = "新备注";
+
+        await viewModel.SaveTimelineNoteCommand.ExecuteAsync();
+
+        Assert.Equal("原备注", favorites.GetFavorite(entry.Id)?.Note);
+        Assert.Equal("原备注", Assert.Single(viewModel.TimelineEntries).Note);
+        Assert.Contains("保存失败", viewModel.TimelineEditorStatus);
+    }
+
+    [Fact]
+    public async Task TimelineEditorWritesStayBoundToEntryWhenSelectionChanges()
+    {
+        FeedEntry firstEntry = CreateFeedEntry(0);
+        FeedEntry secondEntry = CreateFeedEntry(1);
+        var states = new StubEntryStateRepository();
+        var favorites = new StubFavoriteRepository();
+        TagItem firstTag = favorites.SeedTag("第一条", "#4B6B88");
+        TagItem secondTag = favorites.SeedTag("第二条", "#4B6B88");
+        favorites.SeedFavorite(firstEntry.Id, "第一条备注", firstTag);
+        favorites.SeedFavorite(secondEntry.Id, "第二条备注", secondTag);
+        using NewsCenterViewModel viewModel = CreateViewModel(
+            CreateSnapshot(),
+            feedEntries: new([firstEntry, secondEntry]),
+            entryStates: states,
+            favorites: favorites);
+        await viewModel.InitializeAsync(CancellationToken.None);
+        await viewModel.SelectedTimelineEditorLoad;
+        FeedTimelineItem firstItem = Assert.Single(
+            viewModel.TimelineEntries,
+            item => item.Entry.Id == firstEntry.Id);
+        FeedTimelineItem secondItem = Assert.Single(
+            viewModel.TimelineEntries,
+            item => item.Entry.Id == secondEntry.Id);
+
+        TaskCompletionSource favoriteRelease = favorites.BlockNextFavoriteUpsert();
+        viewModel.SelectedTimelineNote = "第一条更新备注";
+        Task save = viewModel.SaveTimelineNoteCommand.ExecuteAsync();
+        await favorites.FavoriteUpsertStarted;
+        viewModel.SelectedTimelineEntry = secondItem;
+        await viewModel.SelectedTimelineEditorLoad;
+        favoriteRelease.SetResult();
+        await save;
+
+        Assert.Equal("第一条更新备注", favorites.GetFavorite(firstEntry.Id)?.Note);
+        Assert.Equal("第一条更新备注", states.States[firstEntry.Id].Note);
+        Assert.Equal(secondEntry.Id, viewModel.SelectedTimelineEntry?.Entry.Id);
+        Assert.Equal("第二条备注", viewModel.SelectedTimelineNote);
+
+        viewModel.SelectedTimelineEntry = firstItem;
+        await viewModel.SelectedTimelineEditorLoad;
+        TaskCompletionSource tagRelease = favorites.BlockNextTagUpsert();
+        viewModel.TimelineTagInput = "新增标签";
+        Task addTag = viewModel.AddTimelineTagCommand.ExecuteAsync();
+        await favorites.TagUpsertStarted;
+        viewModel.SelectedTimelineEntry = secondItem;
+        await viewModel.SelectedTimelineEditorLoad;
+        tagRelease.SetResult();
+        await addTag;
+
+        Assert.Equal(
+            ["第一条", "新增标签"],
+            favorites.GetEntityTags(firstEntry.Id).Select(tag => tag.Name).Order().ToArray());
+        Assert.Equal(
+            ["第二条"],
+            favorites.GetEntityTags(secondEntry.Id).Select(tag => tag.Name).ToArray());
     }
 
     [Fact]
@@ -412,7 +614,8 @@ public sealed class NewsCenterViewModelTests
         StubFeedEntryRepository? feedEntries = null,
         StubFeedCatalogSyncService? catalogSync = null,
         StubFeedCatalogRepository? catalogRepository = null,
-        StubEntryStateRepository? entryStates = null) =>
+        StubEntryStateRepository? entryStates = null,
+        StubFavoriteRepository? favorites = null) =>
         new(
             new StubNewsCenterService(snapshot),
             new StubAiReportService(null),
@@ -421,7 +624,8 @@ public sealed class NewsCenterViewModelTests
             feedEntries ?? new StubFeedEntryRepository([]),
             catalogRepository ?? new StubFeedCatalogRepository(CreateCatalog()),
             catalogSync ?? new StubFeedCatalogSyncService(),
-            entryStates ?? new StubEntryStateRepository());
+            entryStates ?? new StubEntryStateRepository(),
+            favorites ?? new StubFavoriteRepository());
 
     private static NewsCenterSnapshot CreateSnapshot(params NewsArticle[] articles) =>
         new(articles, [], true, DateTimeOffset.Now, null);
@@ -600,6 +804,7 @@ public sealed class NewsCenterViewModelTests
     {
         public Dictionary<string, EntryState> States { get; } = new(StringComparer.Ordinal);
         public int PatchCalls { get; private set; }
+        public bool ThrowOnPatch { get; init; }
 
         public Task<IReadOnlyDictionary<string, EntryState>> GetAsync(
             IReadOnlyCollection<string> entryIds,
@@ -621,6 +826,10 @@ public sealed class NewsCenterViewModelTests
             CancellationToken cancellationToken)
         {
             PatchCalls++;
+            if (ThrowOnPatch)
+            {
+                throw new InvalidOperationException("Simulated entry state write failure.");
+            }
             EntryState current = States.GetValueOrDefault(entryId)
                 ?? new(entryId, localProfile, false, false, 0, string.Empty, TimelineNow);
             EntryState updated = current with
@@ -633,6 +842,177 @@ public sealed class NewsCenterViewModelTests
             };
             States[entryId] = updated;
             return Task.FromResult(updated);
+        }
+    }
+
+    private sealed class StubFavoriteRepository : IFavoriteRepository
+    {
+        private const string EntityType = "feed_entry";
+        private readonly Dictionary<string, FavoriteItem> _favorites = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, HashSet<string>> _entityTags = new(StringComparer.Ordinal);
+        private TaskCompletionSource _favoriteUpsertStarted = CompletedSignal();
+        private TaskCompletionSource? _favoriteUpsertRelease;
+        private TaskCompletionSource _tagUpsertStarted = CompletedSignal();
+        private TaskCompletionSource? _tagUpsertRelease;
+
+        public Dictionary<string, TagItem> Tags { get; } = new(StringComparer.Ordinal);
+        public bool ThrowOnFavoriteUpsert { get; set; }
+        public Task FavoriteUpsertStarted => _favoriteUpsertStarted.Task;
+        public Task TagUpsertStarted => _tagUpsertStarted.Task;
+
+        public TaskCompletionSource BlockNextFavoriteUpsert()
+        {
+            _favoriteUpsertStarted = NewSignal();
+            _favoriteUpsertRelease = NewSignal();
+            return _favoriteUpsertRelease;
+        }
+
+        public TaskCompletionSource BlockNextTagUpsert()
+        {
+            _tagUpsertStarted = NewSignal();
+            _tagUpsertRelease = NewSignal();
+            return _tagUpsertRelease;
+        }
+
+        public FavoriteItem? GetFavorite(string entityId) =>
+            _favorites.GetValueOrDefault(entityId);
+
+        public TagItem[] GetEntityTags(string entityId) =>
+            _entityTags.GetValueOrDefault(entityId)?
+                .Select(id => Tags[id])
+                .OrderBy(tag => tag.Name, StringComparer.Ordinal)
+                .ToArray()
+            ?? [];
+
+        public TagItem SeedTag(string name, string color)
+        {
+            var tag = new TagItem($"tag-{Tags.Count + 1}", name, color, TimelineNow);
+            Tags[tag.Id] = tag;
+            return tag;
+        }
+
+        public void SeedFavorite(string entityId, string note, params TagItem[] tags)
+        {
+            _favorites[entityId] = new(
+                $"favorite-{entityId}",
+                EntityType,
+                entityId,
+                note,
+                TimelineNow);
+            _entityTags[entityId] = tags.Select(tag => tag.Id).ToHashSet(StringComparer.Ordinal);
+        }
+
+        public Task<int> GetCountAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(_favorites.Count);
+
+        public Task<FavoriteItem?> GetAsync(
+            string entityType,
+            string entityId,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(
+                entityType == EntityType ? _favorites.GetValueOrDefault(entityId) : null);
+
+        public async Task<FavoriteItem> UpsertAsync(
+            string entityType,
+            string entityId,
+            string note,
+            CancellationToken cancellationToken)
+        {
+            Assert.Equal(EntityType, entityType);
+            _favoriteUpsertStarted.TrySetResult();
+            if (_favoriteUpsertRelease is not null)
+            {
+                await _favoriteUpsertRelease.Task.WaitAsync(cancellationToken);
+                _favoriteUpsertRelease = null;
+            }
+            if (ThrowOnFavoriteUpsert)
+            {
+                throw new InvalidOperationException("Simulated favorite write failure.");
+            }
+            FavoriteItem favorite = _favorites.GetValueOrDefault(entityId) is { } current
+                ? current with { Note = note }
+                : new($"favorite-{entityId}", entityType, entityId, note, TimelineNow);
+            _favorites[entityId] = favorite;
+            return favorite;
+        }
+
+        public Task<bool> RemoveAsync(
+            string entityType,
+            string entityId,
+            CancellationToken cancellationToken)
+        {
+            Assert.Equal(EntityType, entityType);
+            return Task.FromResult(_favorites.Remove(entityId));
+        }
+
+        public Task<IReadOnlyDictionary<string, FavoriteItem>> GetForEntitiesAsync(
+            string entityType,
+            IReadOnlyCollection<string> entityIds,
+            CancellationToken cancellationToken)
+        {
+            Assert.Equal(EntityType, entityType);
+            IReadOnlyDictionary<string, FavoriteItem> result = entityIds
+                .Where(_favorites.ContainsKey)
+                .ToDictionary(id => id, id => _favorites[id], StringComparer.Ordinal);
+            return Task.FromResult(result);
+        }
+
+        public async Task<TagItem> UpsertTagAsync(
+            string name,
+            string color,
+            CancellationToken cancellationToken)
+        {
+            _tagUpsertStarted.TrySetResult();
+            if (_tagUpsertRelease is not null)
+            {
+                await _tagUpsertRelease.Task.WaitAsync(cancellationToken);
+                _tagUpsertRelease = null;
+            }
+            string normalized = name.Normalize().Trim();
+            TagItem? existing = Tags.Values.FirstOrDefault(
+                tag => string.Equals(tag.Name, normalized, StringComparison.OrdinalIgnoreCase));
+            TagItem tag = existing is null
+                ? SeedTag(normalized, color)
+                : existing with { Name = normalized, Color = color };
+            Tags[tag.Id] = tag;
+            return tag;
+        }
+
+        public Task<IReadOnlyList<TagItem>> GetTagsAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<TagItem>>(Tags.Values.ToArray());
+
+        public Task<IReadOnlyList<TagItem>> GetTagsForEntityAsync(
+            string entityType,
+            string entityId,
+            CancellationToken cancellationToken)
+        {
+            Assert.Equal(EntityType, entityType);
+            return Task.FromResult<IReadOnlyList<TagItem>>(GetEntityTags(entityId));
+        }
+
+        public Task SetTagsAsync(
+            string entityType,
+            string entityId,
+            IReadOnlyCollection<string> tagIds,
+            CancellationToken cancellationToken)
+        {
+            Assert.Equal(EntityType, entityType);
+            Assert.All(tagIds, id => Assert.True(Tags.ContainsKey(id)));
+            _entityTags[entityId] = tagIds.ToHashSet(StringComparer.Ordinal);
+            return Task.CompletedTask;
+        }
+
+        public Task<bool> DeleteTagAsync(string tagId, CancellationToken cancellationToken) =>
+            Task.FromResult(Tags.Remove(tagId));
+
+        private static TaskCompletionSource NewSignal() =>
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        private static TaskCompletionSource CompletedSignal()
+        {
+            TaskCompletionSource signal = NewSignal();
+            signal.SetResult();
+            return signal;
         }
     }
 

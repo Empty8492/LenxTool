@@ -210,6 +210,45 @@ public sealed class NewsCenterLayoutTests
                 && element.Attribute("Content")?.Value is "新增" or "编辑" or "删除" or "订阅管理");
     }
 
+    [Fact]
+    public void FeedReaderProvidesKeyboardAccessiblePrivateNoteAndTagEditor()
+    {
+        XElement timelineBrowser = LoadFixture("FeedTimelineBrowserView.xaml");
+
+        XElement note = Assert.Single(
+            timelineBrowser.Descendants(),
+            element => element.Name.LocalName == "TextBox"
+                && element.Attribute("AutomationProperties.Name")?.Value == "Feed 私人备注");
+        Assert.Contains("SelectedTimelineNote", note.Attribute("Text")?.Value);
+        Assert.Equal("4000", note.Attribute("MaxLength")?.Value);
+        Assert.Contains(
+            timelineBrowser.Descendants(),
+            element => element.Name.LocalName == "Button"
+                && element.Attribute("AutomationProperties.Name")?.Value == "保存 Feed 私人备注"
+                && element.Attribute("Command")?.Value == "{Binding SaveTimelineNoteCommand}");
+
+        XElement tagInput = Assert.Single(
+            timelineBrowser.Descendants(),
+            element => element.Name.LocalName == "TextBox"
+                && element.Attribute("AutomationProperties.Name")?.Value == "新增 Feed 标签");
+        Assert.Contains("TimelineTagInput", tagInput.Attribute("Text")?.Value);
+        Assert.Equal("80", tagInput.Attribute("MaxLength")?.Value);
+        Assert.Contains(
+            timelineBrowser.Descendants(),
+            element => element.Name.LocalName == "ItemsControl"
+                && element.Attribute("ItemsSource")?.Value == "{Binding SelectedTimelineTags}");
+        Assert.Contains(
+            timelineBrowser.Descendants(),
+            element => element.Name.LocalName == "Button"
+                && element.Attribute("Command")?.Value.Contains(
+                    "RemoveTimelineTagCommand",
+                    StringComparison.Ordinal) == true);
+        Assert.Contains(
+            timelineBrowser.Descendants(),
+            element => element.Name.LocalName == "TextBlock"
+                && element.Attribute("Text")?.Value == "{Binding TimelineEditorStatus}");
+    }
+
     private static XElement LoadNewsCenterTemplate()
     {
         string xamlPath = Path.Combine(AppContext.BaseDirectory, "Fixtures", "App.xaml");
