@@ -245,7 +245,12 @@ public sealed class HistoryViewModel : PageViewModel
             100,
             cancellationToken);
         SearchResults.Clear();
-        foreach (ContentSearchResult result in results) SearchResults.Add(result);
+        HashSet<string> identities = [];
+        foreach (ContentSearchResult result in results)
+        {
+            string identity = NormalizeSearchIdentity(result);
+            if (identities.Add(identity)) SearchResults.Add(result);
+        }
         SelectedSearchResult = SearchResults.FirstOrDefault();
         SearchStatus = SearchResults.Count == 0
             ? "没有找到相关内容；请尝试更短或不同的关键词。"
@@ -270,6 +275,18 @@ public sealed class HistoryViewModel : PageViewModel
     private void OpenSearchResult()
     {
         if (SelectedSearchResult?.Url is { } uri) _dialogs.OpenUri(uri);
+    }
+
+    private static string NormalizeSearchIdentity(ContentSearchResult result)
+    {
+        if (Uri.TryCreate(result.Url, UriKind.Absolute, out Uri? uri))
+        {
+            return uri.GetComponents(
+                UriComponents.SchemeAndServer | UriComponents.Path | UriComponents.Query,
+                UriFormat.UriEscaped).TrimEnd('/');
+        }
+
+        return $"{result.Title}\u001f{result.Source}";
     }
 
 }

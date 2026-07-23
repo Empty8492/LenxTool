@@ -9,14 +9,14 @@
 | 测试组 | 结果 |
 |---|---:|
 | LenxTool.Core.Tests | 39 passed |
-| LenxTool.Infrastructure.Tests | 175 passed |
-| LenxTool.App.Tests | 82 passed |
+| LenxTool.Infrastructure.Tests | 177 passed |
+| LenxTool.App.Tests | 86 passed |
 | Cloudflare Worker Vitest | 38 passed |
 | Worker TypeScript strict typecheck | passed |
 | .NET build warnings | 0 |
 | NuGet vulnerable packages | 0 detected |
 
-本轮执行 `dotnet test LenxTools.slnx -c Release --no-restore`（包含 Release 构建），结果为 0 警告、0 错误；Core 39、Infrastructure 175、App 82，共 296/296 通过且无跳过。Worker 严格 typecheck 和官方 workerd/D1 Vitest 38/38 同轮通过。
+本轮执行 `dotnet test LenxTools.slnx -c Release --no-restore`（包含 Release 构建），结果为 0 警告、0 错误；Core 39、Infrastructure 177、App 86，共 302/302 通过且无跳过。Worker 严格 typecheck 和官方 workerd/D1 Vitest 38/38 同轮通过。
 
 P0-08 覆盖 4 项 SQLite 集成场景并同步既有 schema 断言：新建库创建目录状态、分类、Feed、抓取状态、条目、索引和搜索映射；真实 schema v2 哨兵数据经 v3/v4 原位升级后仍可由现有仓储读取；迁移对象冲突时完整回滚且版本停留在 v3；相同外部 ID、URL 和内容哈希可存在于不同 Feed，同一 Feed 内重复外部 ID 被约束拒绝。既有包含未 checkpoint WAL 提交的一致性备份测试继续通过。
 
@@ -41,6 +41,8 @@ P0-16 新增 2 项 Core、10 项 Infrastructure、4 项 App 和 4 项 Worker 测
 P0-17 新增 8 项 App 测试。6 项 ViewModel 测试覆盖 ACTIVE 目录首屏只取 50 条并选中原生阅读模型、分类/Feed/本地日期/关键词组合筛选从 offset 0 重载、第二页稳定追加且 ID 不重复、断网/stale 状态显示最后抓取与目录同步时间、目录版本前进后筛选项与阅读模型同步刷新，以及 10k 假缓存仍只物化首屏并在 2 秒门限内完成。2 项 XAML 测试覆盖独立视图组件、`PagedListBox` Recycling 虚拟化、滚动加载命令、四类筛选自动化名称、原生阅读器绑定和时间线内无订阅编辑按钮；组合根测试同步确认带三项 Feed 依赖的 `NewsCenterViewModel` 可解析。
 
 P0-18 新增 1 项 Infrastructure 和 3 项 App 测试：抓取状态仓储一次查询返回全部 Feed（含停用项）并验证固定错误码不携带响应细节；ViewModel 覆盖管理员状态映射/HTTP 错误脱敏、强制重试结果和异常提示；XAML 覆盖健康 Tab、回收虚拟化、自动化名称、状态字段和安全重试绑定。
+
+P0-19 新增 2 项 Infrastructure 和 4 项 App 测试：Feed 条目查询的 ACTIVE 投影过滤、favorites 计数读取；首页 ViewModel 并行聚合真实 Feed/旧早报/热点/媒体任务/收藏，验证旧早报与 Feed 相同 URL/指纹去重、空库兼容种子、动态状态和 DI；首页 XAML 不再绑定固定更新时间，历史全文搜索过滤旧早报与 Feed 的重复 URL。真实旧 schema v2 数据仍由既有迁移测试覆盖，聚合只读本地缓存并支持离线启动。
 
 桌面账号新增 8 项 Infrastructure 测试和 7 项 App 测试：覆盖登录、refresh token 恢复、`/v1/me`、并发 401 单次刷新、每请求最多重放一次、失效清理、离线退出、DPAPI 删除/写入失败脱敏、登录密码清空、过期与额度显示、admin/user 导航隔离、角色降级回退和 XAML 自动化名称/绑定。
 

@@ -9,10 +9,10 @@ public sealed partial class FeedAdminViewModel
     {
         SelectedFeed = null;
         _applyingDiscovery = true;
-        FeedUrlInput = string.Empty;
+        FeedUrlInput = Feeds.Count == 0 ? FeedCompatibilitySeed.Url : string.Empty;
         _applyingDiscovery = false;
-        FeedDisplayNameInput = string.Empty;
-        FeedSiteUrlInput = string.Empty;
+        FeedDisplayNameInput = Feeds.Count == 0 ? FeedCompatibilitySeed.DisplayName : string.Empty;
+        FeedSiteUrlInput = Feeds.Count == 0 ? "https://daily.juya.uk/" : string.Empty;
         SelectedCategoryId = null;
         SelectedViewKind = ViewKindChoices[0];
         FeedRefreshIntervalMinutes = 60;

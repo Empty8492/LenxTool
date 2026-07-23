@@ -52,6 +52,8 @@ public partial class App : Application
             await feedRefresh.InitializeAsync(CancellationToken.None).ConfigureAwait(true);
             HistoryViewModel history = _host.Services.GetRequiredService<HistoryViewModel>();
             await history.InitializeAsync(CancellationToken.None).ConfigureAwait(true);
+            DashboardViewModel dashboard = _host.Services.GetRequiredService<DashboardViewModel>();
+            await dashboard.InitializeAsync(CancellationToken.None).ConfigureAwait(true);
 
             MainWindow window = _host.Services.GetRequiredService<MainWindow>();
             MainWindow = window;
@@ -93,6 +95,7 @@ public partial class App : Application
             new ExceptionDiagnosticLog(services.GetRequiredService<AppPaths>().LogsDirectory));
         services.AddSingleton<SqliteDatabase>();
         services.AddSingleton<INewsRepository, NewsRepository>();
+        services.AddSingleton<IFavoriteRepository, FavoriteRepository>();
         services.AddSingleton<INewsCenterService, NewsCenterService>();
         services.AddSingleton<IAiReportService, DeepSeekReportService>();
         services.AddSingleton<ISubtitleTranslator, DeepSeekSubtitleTranslator>();

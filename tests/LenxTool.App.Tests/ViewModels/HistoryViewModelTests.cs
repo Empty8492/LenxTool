@@ -38,6 +38,41 @@ public sealed class HistoryViewModelTests
     }
 
     [Fact]
+    public async Task SearchCommandDoesNotShowLegacyAndFeedCopiesOfOneUrl()
+    {
+        var legacy = new ContentSearchResult(
+            "legacy",
+            ContentSearchResultType.News,
+            "同一条早报",
+            "旧表记录",
+            "AI 早报",
+            "https://daily.juya.uk/article/1",
+            DateTimeOffset.UtcNow.AddMinutes(-2));
+        var feed = legacy with
+        {
+            EntityId = "feed-entry",
+            Type = ContentSearchResultType.FeedEntry,
+            Source = "Daily Feed",
+            Summary = "Feed 条目"
+        };
+        var viewModel = new HistoryViewModel(
+            new StubMediaJobRepository(),
+            new StubDatabaseMaintenanceService(),
+            new StubDialogs(),
+            new StubNewsRepository([legacy, feed]),
+            new StubMediaJobRepository(),
+            new StubSubtitleExportService())
+        {
+            SearchQuery = "早报"
+        };
+
+        await viewModel.SearchCommand.ExecuteAsync();
+
+        Assert.Single(viewModel.SearchResults);
+        Assert.Equal("legacy", viewModel.SearchResults[0].EntityId);
+    }
+
+    [Fact]
     public void SearchCommandRequiresNonWhitespaceQuery()
     {
         var viewModel = new HistoryViewModel(

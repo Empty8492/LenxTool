@@ -47,5 +47,7 @@ public sealed class DependencyInjectionTests
             provider.GetRequiredService<IFeedEntryRepository>());
         Assert.NotNull(provider.GetRequiredService<IFeedRefreshService>());
         Assert.NotNull(provider.GetRequiredService<NewsCenterViewModel>());
+        Assert.IsType<FavoriteRepository>(provider.GetRequiredService<IFavoriteRepository>());
+        Assert.NotNull(provider.GetRequiredService<DashboardViewModel>());
     }
 }

@@ -1,6 +1,6 @@
 # P0 详细计划：管理员订阅与普通用户只读目录
 
-状态：进行中，P0-01～P0-18 与检查点 P0-B/P0-C 已完成
+状态：进行中，P0-01～P0-19 与检查点 P0-B/P0-C 已完成
 最后核对：2026-07-23
 上位文档：[RSS 集成总路线图](RSS_MASTER_ROADMAP.md)
 参考项目：RSSNext/Folo（发现、OPML、订阅状态和内容视图的行为参考），LenxTool 当前 Worker/SQLite/资讯中心（实现基础）
@@ -427,13 +427,15 @@ P0 不包含全文抓取、图片离线缓存、AI 摘要/翻译、自动化规�
 
 **验收：**
 
-- [ ] 首页显示真实最新 Feed、热点、最近任务和收藏计数，无固定日期/标题。
-- [ ] `https://daily.juya.uk/rss.xml` 作为可管理的初始 Feed 或兼容种子存在。
-- [ ] schema v2 旧早报历史仍可搜索和阅读，不重复显示迁移后的同一条目。
+- [x] 首页显示真实最新 Feed、热点、最近任务和收藏计数，无固定日期/标题。
+- [x] `https://daily.juya.uk/rss.xml` 作为可管理的初始 Feed 或兼容种子存在。
+- [x] schema v2 旧早报历史仍可搜索和阅读，不重复显示迁移后的同一条目。
 
 **验证：** 空库、旧库升级、离线、真实数据 ViewModel 测试和 WPF 手测。
 
 **参考：** LenxTool 现有首页/每日早报；Folo 不提供这部分迁移方案。
+
+**完成记录（2026-07-23）：** `DashboardViewModel` 改为从本地 Feed 条目、ACTIVE 目录、旧 `news_articles`、热点、媒体任务和 `favorites` 表并行读取，不再包含固定日期、标题或任务演示数据；首页绑定真实缓存状态、趋势更新时间和收藏计数。Feed 查询新增 `ActiveOnly` 条件，空目录管理员新建 Feed 表单预填 `FeedCompatibilitySeed`（`https://daily.juya.uk/rss.xml`），作为可管理的兼容种子。首页聚合按规范 URL/内容指纹过滤旧早报与 Feed 重复条目；历史全文搜索也在 ViewModel 层合并相同 URL。空库、离线读取、旧条目去重、收藏计数、UI 绑定和 ACTIVE 过滤均有自动测试；本轮 .NET Core 39、Infrastructure 177、App 86，共 302/302 通过，Worker 38/38 通过。
 
 ### P0 最终检查点
 

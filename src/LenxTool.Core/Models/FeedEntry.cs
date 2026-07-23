@@ -43,7 +43,8 @@ public sealed record FeedEntryQuery(
     DateTimeOffset? PublishedBefore,
     FeedEntryReadFilter ReadFilter,
     int Offset,
-    int Limit);
+    int Limit,
+    bool ActiveOnly = false);
 
 public sealed record FeedEntryPage(
     IReadOnlyList<FeedEntry> Items,

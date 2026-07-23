@@ -163,6 +163,49 @@ public sealed class FeedEntryRepositoryTests : IDisposable
         Assert.Equal("订阅条目", result.TypeLabel);
     }
 
+    [Fact]
+    public async Task ActiveOnlyQueryExcludesDisabledFeedsAndCategories()
+    {
+        using SqliteDatabase database = await CreateDatabaseAsync();
+        var repository = new FeedEntryRepository(database);
+        FeedEntry active = Entry("active", "Active", "active-marker", Now.AddHours(-1), FeedId);
+        FeedEntry disabled = Entry("disabled", "Disabled", "disabled-marker", Now.AddHours(-2), SecondFeedId);
+        await repository.UpsertAsync(FeedId, [active], CancellationToken.None);
+        await repository.UpsertAsync(SecondFeedId, [disabled], CancellationToken.None);
+
+        await new FeedCatalogRepository(database).ReplaceAsync(new(
+            new(2, FeedCatalogScope.Active, Now, Now),
+            [
+                new(CategoryId, "Technology", "technology", 1, true, 2, Now.AddDays(-1), Now),
+                new(SecondCategoryId, "Science", "science", 2, false, 2, Now.AddDays(-1), Now)
+            ],
+            [
+                CatalogFeed(FeedId, CategoryId, 1),
+                CatalogFeed(SecondFeedId, SecondCategoryId, 2) with { IsEnabled = true }
+            ]), CancellationToken.None);
+
+        FeedEntryPage page = await repository.QueryAsync(
+            Query(activeOnly: true),
+            CancellationToken.None);
+
+        Assert.Equal(["active"], page.Items.Select(item => item.ExternalId));
+
+        await new FeedCatalogRepository(database).ReplaceAsync(new(
+            new(3, FeedCatalogScope.Active, Now, Now),
+            [
+                new(CategoryId, "Technology", "technology", 1, true, 3, Now.AddDays(-1), Now),
+                new(SecondCategoryId, "Science", "science", 2, true, 3, Now.AddDays(-1), Now)
+            ],
+            [
+                CatalogFeed(FeedId, CategoryId, 1),
+                CatalogFeed(SecondFeedId, SecondCategoryId, 2) with { IsEnabled = false }
+            ]), CancellationToken.None);
+
+        page = await repository.QueryAsync(Query(activeOnly: true), CancellationToken.None);
+
+        Assert.Equal(["active"], page.Items.Select(item => item.ExternalId));
+    }
+
     public void Dispose()
     {
         SqliteConnection.ClearAllPools();
@@ -227,7 +270,8 @@ public sealed class FeedEntryRepositoryTests : IDisposable
         DateTimeOffset? publishedBefore = null,
         FeedEntryReadFilter readFilter = FeedEntryReadFilter.All,
         int offset = 0,
-        int limit = 20) => new(
+        int limit = 20,
+        bool activeOnly = false) => new(
             searchText,
             feedId,
             categoryId,
@@ -235,5 +279,6 @@ public sealed class FeedEntryRepositoryTests : IDisposable
             publishedBefore,
             readFilter,
             offset,
-            limit);
+            limit,
+            activeOnly);
 }

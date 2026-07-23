@@ -91,6 +91,7 @@ public sealed class NewsSearchService(INewsRepository repository) : INewsSearchS
 - 深石墨侧边栏、暖白/深色内容区，布局在 100%～200% 缩放和 900×620 最小窗口下可用。
 - 全部功能图标为矢量 Path，键盘可达，焦点可见；`Ctrl+K` 打开全局命令面板。
 - 首页显示今日早报、热点、最近任务、收藏和快捷入口；深色与减少动画设置可持久化。
+- 首页数据来自本地 ACTIVE Feed 条目、旧早报兼容表、热点、媒体任务和 favorites 计数；空目录管理员新建 Feed 表单预填 `https://daily.juya.uk/rss.xml` 兼容种子。旧 schema v2 早报可继续搜索/阅读，首页与统一搜索不得重复显示相同规范 URL 的迁移条目。
 
 ### 资讯中心
 

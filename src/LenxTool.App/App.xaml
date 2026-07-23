@@ -25,6 +25,10 @@
                         <StackPanel>
                             <TextBlock Style="{StaticResource PageTitleStyle}" Text="{Binding Title}" />
                             <TextBlock Margin="0,7,0,0" Style="{StaticResource MetaTextStyle}" Text="{Binding Subtitle}" />
+                            <TextBlock Margin="0,4,0,0"
+                                       Style="{StaticResource MetaTextStyle}"
+                                       Text="{Binding DataStatus}"
+                                       TextWrapping="Wrap" />
                         </StackPanel>
 
                         <Grid Grid.Row="2">
@@ -38,7 +42,7 @@
                                     <DockPanel LastChildFill="False">
                                         <TextBlock Style="{StaticResource SectionTitleStyle}" Text="今日早报" />
                                         <Border DockPanel.Dock="Right" Padding="8,4" Background="{DynamicResource Brush.AccentSoft}" CornerRadius="12">
-                                            <TextBlock FontSize="11" Foreground="{DynamicResource Brush.Accent}" Text="已缓存" />
+                                            <TextBlock FontSize="11" Foreground="{DynamicResource Brush.Accent}" Text="{Binding NewsStatus}" />
                                         </Border>
                                     </DockPanel>
                                     <ItemsControl Margin="0,16,0,0" ItemsSource="{Binding News}">
@@ -66,7 +70,7 @@
                             <Border Grid.Column="2" Style="{StaticResource BentoCardStyle}" Background="{DynamicResource Brush.Sidebar}">
                                 <StackPanel>
                                     <TextBlock Style="{StaticResource SectionTitleStyle}" Foreground="{DynamicResource Brush.TextOnDark}" Text="热点脉搏" />
-                                    <TextBlock Margin="0,5,0,16" Foreground="{DynamicResource Brush.TextOnDarkMuted}" FontSize="12" Text="跨平台趋势 · 最近更新 08:32" />
+                                    <TextBlock Margin="0,5,0,16" Foreground="{DynamicResource Brush.TextOnDarkMuted}" FontSize="12" Text="{Binding TrendStatus}" />
                                     <ItemsControl ItemsSource="{Binding Trends}">
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate>
@@ -107,7 +111,12 @@
 
                             <Border Grid.Column="2" Style="{StaticResource BentoCardStyle}" Background="{DynamicResource Brush.SurfaceMuted}">
                                 <StackPanel>
-                                    <TextBlock Style="{StaticResource SectionTitleStyle}" Text="快捷开始" />
+                                    <DockPanel LastChildFill="False">
+                                        <TextBlock Style="{StaticResource SectionTitleStyle}" Text="快捷开始" />
+                                        <TextBlock DockPanel.Dock="Right"
+                                                   Style="{StaticResource MetaTextStyle}"
+                                                   Text="{Binding FavoriteSummary}" />
+                                    </DockPanel>
                                     <ItemsControl Margin="0,14,0,0" ItemsSource="{Binding QuickActions}">
                                         <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Columns="3" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
                                         <ItemsControl.ItemTemplate>
