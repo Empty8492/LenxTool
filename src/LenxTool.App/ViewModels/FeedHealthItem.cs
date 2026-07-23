@@ -35,7 +35,8 @@ public sealed record FeedHealthItem(
     {
         if (string.IsNullOrWhiteSpace(code)) return "无";
         if (code.StartsWith("http_", StringComparison.Ordinal)
-            && int.TryParse(code[5..], out int status))
+            && int.TryParse(code[5..], out int status)
+            && status is >= 100 and <= 599)
         {
             return $"HTTP {status}";
         }

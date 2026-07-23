@@ -43,6 +43,10 @@ public sealed partial class FeedAdminViewModel
             HealthStatus = $"已读取 {HealthItems.Count} 个本机 Feed 抓取状态。";
             OnPropertyChanged(nameof(HealthSummary));
         }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
         catch (Exception) when (IsAdmin)
         {
             HealthItems.Clear();
