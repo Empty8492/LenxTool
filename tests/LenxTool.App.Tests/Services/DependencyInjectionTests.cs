@@ -46,5 +46,6 @@ public sealed class DependencyInjectionTests
             provider.GetRequiredService<IFeedEntryWriter>(),
             provider.GetRequiredService<IFeedEntryRepository>());
         Assert.NotNull(provider.GetRequiredService<IFeedRefreshService>());
+        Assert.NotNull(provider.GetRequiredService<NewsCenterViewModel>());
     }
 }

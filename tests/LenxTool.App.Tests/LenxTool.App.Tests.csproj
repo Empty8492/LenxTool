@@ -32,6 +32,12 @@
     <None Include="..\..\src\LenxTool.App\Themes\Controls.xaml"
           Link="Fixtures\Controls.xaml"
           CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\src\LenxTool.App\Views\FeedTimelineFiltersView.xaml"
+          Link="Fixtures\FeedTimelineFiltersView.xaml"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\src\LenxTool.App\Views\FeedTimelineBrowserView.xaml"
+          Link="Fixtures\FeedTimelineBrowserView.xaml"
+          CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

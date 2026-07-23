@@ -8,7 +8,7 @@ using LenxTool.Core.Models;
 
 namespace LenxTool.App.ViewModels;
 
-public sealed class NewsCenterViewModel : PageViewModel, IDisposable
+public sealed partial class NewsCenterViewModel : PageViewModel, IDisposable
 {
     private readonly INewsCenterService _newsCenterService;
     private readonly IAiReportService _aiReportService;
@@ -27,13 +27,24 @@ public sealed class NewsCenterViewModel : PageViewModel, IDisposable
         INewsCenterService newsCenterService,
         IAiReportService aiReportService,
         INewsRepository repository,
-        IDesktopFileDialogService dialogs)
-        : base("资讯中心", "每日早报与热点趋势")
+        IDesktopFileDialogService dialogs,
+        IFeedEntryRepository feedEntryRepository,
+        IFeedCatalogRepository feedCatalogRepository,
+        IFeedCatalogSyncService feedCatalogSync)
+        : base("资讯中心", "Feed 时间线、每日早报与热点趋势")
     {
         _newsCenterService = newsCenterService;
         _aiReportService = aiReportService;
         _repository = repository;
         _dialogs = dialogs;
+        _feedEntryRepository = feedEntryRepository;
+        _feedCatalogRepository = feedCatalogRepository;
+        _feedCatalogSync = feedCatalogSync;
+        _timelineSynchronizationContext =
+            SynchronizationContext.Current is System.Windows.Threading.DispatcherSynchronizationContext dispatcherContext
+            && System.Windows.Application.Current is not null
+                ? dispatcherContext
+                : null;
         RefreshCommand = new AsyncRelayCommand(RefreshAsync);
         GenerateArticleReportCommand = new AsyncRelayCommand(
             GenerateArticleReportAsync,
@@ -45,6 +56,7 @@ public sealed class NewsCenterViewModel : PageViewModel, IDisposable
         SelectAllSourcesCommand = new RelayCommand(
             SelectAllSources,
             () => SourceFilters.Any(filter => !filter.IsSelected));
+        ConfigureTimeline();
     }
 
     public ObservableCollection<NewsArticle> Articles { get; } = [];
@@ -122,6 +134,7 @@ public sealed class NewsCenterViewModel : PageViewModel, IDisposable
         NewsCenterSnapshot snapshot = await _newsCenterService.LoadCachedAsync(cancellationToken);
         ApplySnapshot(snapshot);
         await LoadReportsAsync(cancellationToken);
+        await InitializeTimelineAsync(cancellationToken);
     }
 
     public void Dispose()
@@ -131,6 +144,7 @@ public sealed class NewsCenterViewModel : PageViewModel, IDisposable
         RefreshCommand.Dispose();
         GenerateArticleReportCommand.Dispose();
         GenerateDailyTrendReportCommand.Dispose();
+        DisposeTimeline();
     }
 
     private async Task RefreshAsync(CancellationToken cancellationToken)
@@ -138,6 +152,7 @@ public sealed class NewsCenterViewModel : PageViewModel, IDisposable
         Status = "正在并行更新早报与热点…";
         NewsCenterSnapshot snapshot = await _newsCenterService.RefreshAsync(cancellationToken);
         ApplySnapshot(snapshot);
+        await ReloadTimelineCatalogAsync(preserveSelection: true, cancellationToken);
     }
 
     private async Task GenerateArticleReportAsync(CancellationToken cancellationToken)

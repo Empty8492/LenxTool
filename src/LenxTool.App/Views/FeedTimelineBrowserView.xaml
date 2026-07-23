@@ -1,0 +1,159 @@
+<UserControl x:Class="LenxTool.App.Views.FeedTimelineBrowserView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:LenxTool.App.Controls">
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="330" />
+            <ColumnDefinition Width="14" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+        <Border Style="{StaticResource BentoCardStyle}" Padding="0" ClipToBounds="True">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="42" />
+                </Grid.RowDefinitions>
+                <controls:PagedListBox ItemsSource="{Binding TimelineEntries}"
+                                       SelectedItem="{Binding SelectedTimelineEntry}"
+                                       LoadMoreCommand="{Binding LoadMoreTimelineCommand}"
+                                       Background="Transparent"
+                                       BorderThickness="0"
+                                       ScrollViewer.CanContentScroll="True"
+                                       ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                       ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                       VirtualizingPanel.IsVirtualizing="True"
+                                       VirtualizingPanel.VirtualizationMode="Recycling"
+                                       AutomationProperties.Name="共享 Feed 时间线列表">
+                    <controls:PagedListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem">
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                            <Setter Property="Padding" Value="0" />
+                        </Style>
+                    </controls:PagedListBox.ItemContainerStyle>
+                    <controls:PagedListBox.ItemTemplate>
+                        <DataTemplate>
+                            <Grid Margin="16,13">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+                                <DockPanel LastChildFill="True">
+                                    <TextBlock DockPanel.Dock="Right"
+                                               Margin="8,0,0,0"
+                                               Style="{StaticResource MetaTextStyle}"
+                                               Text="{Binding DisplayTime, StringFormat={}{0:MM-dd HH:mm}}" />
+                                    <TextBlock FontSize="11"
+                                               FontWeight="SemiBold"
+                                               Foreground="{DynamicResource Brush.Accent}"
+                                               Text="{Binding FeedName}"
+                                               TextTrimming="CharacterEllipsis" />
+                                </DockPanel>
+                                <TextBlock Grid.Row="1"
+                                           Margin="0,6,0,0"
+                                           FontWeight="SemiBold"
+                                           Text="{Binding Entry.Title}"
+                                           TextTrimming="CharacterEllipsis" />
+                                <DockPanel Grid.Row="2" Margin="0,6,0,0">
+                                    <Border DockPanel.Dock="Left"
+                                            Margin="0,0,8,0"
+                                            Padding="6,2"
+                                            Background="{DynamicResource Brush.SurfaceMuted}"
+                                            CornerRadius="4">
+                                        <TextBlock FontSize="11"
+                                                   Foreground="{DynamicResource Brush.TextSecondary}"
+                                                   Text="{Binding CategoryName}" />
+                                    </Border>
+                                    <TextBlock Style="{StaticResource MetaTextStyle}"
+                                               Text="{Binding Summary}"
+                                               TextTrimming="CharacterEllipsis" />
+                                </DockPanel>
+                            </Grid>
+                        </DataTemplate>
+                    </controls:PagedListBox.ItemTemplate>
+                </controls:PagedListBox>
+                <Border Grid.Row="1"
+                        Padding="14,0"
+                        BorderBrush="{DynamicResource Brush.Border}"
+                        BorderThickness="0,1,0,0">
+                    <DockPanel>
+                        <Button DockPanel.Dock="Right"
+                                MinWidth="88"
+                                Margin="8,4,0,4"
+                                Padding="10,4"
+                                Command="{Binding LoadMoreTimelineCommand}"
+                                AutomationProperties.Name="继续加载 Feed 条目"
+                                Content="继续加载" />
+                        <TextBlock VerticalAlignment="Center"
+                                   Style="{StaticResource MetaTextStyle}"
+                                   Text="{Binding TimelineEntrySummary}" />
+                    </DockPanel>
+                </Border>
+                <Border Grid.RowSpan="2"
+                        Margin="18"
+                        Padding="20"
+                        Background="{DynamicResource Brush.SurfaceRaised}"
+                        IsHitTestVisible="False"
+                        CornerRadius="10">
+                    <Border.Style>
+                        <Style TargetType="Border">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding TimelineEntries.Count}" Value="0">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Border.Style>
+                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <TextBlock HorizontalAlignment="Center"
+                                   Style="{StaticResource SectionTitleStyle}"
+                                   Text="暂无匹配条目" />
+                        <TextBlock Margin="0,6,0,0"
+                                   HorizontalAlignment="Center"
+                                   Style="{StaticResource MetaTextStyle}"
+                                   Text="已登录时目录与 Feed 会在后台同步；断网时保留本地缓存。"
+                                   TextAlignment="Center"
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
+        <Border Grid.Column="2" Style="{StaticResource BentoCardStyle}" Padding="0" ClipToBounds="True">
+            <Grid>
+                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled"
+                              PanningMode="VerticalOnly">
+                    <controls:RichArticleView Article="{Binding SelectedFeedArticle}" />
+                </ScrollViewer>
+                <Border Margin="20"
+                        Padding="20"
+                        Background="{DynamicResource Brush.SurfaceRaised}"
+                        IsHitTestVisible="False"
+                        CornerRadius="10">
+                    <Border.Style>
+                        <Style TargetType="Border">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding SelectedTimelineEntry}" Value="{x:Null}">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Border.Style>
+                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <TextBlock HorizontalAlignment="Center"
+                                   Style="{StaticResource SectionTitleStyle}"
+                                   Text="选择一条 Feed 内容" />
+                        <TextBlock Margin="0,6,0,0"
+                                   HorizontalAlignment="Center"
+                                   Style="{StaticResource MetaTextStyle}"
+                                   Text="正文使用现有原生只读阅读器，不执行来源脚本。"
+                                   TextAlignment="Center" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

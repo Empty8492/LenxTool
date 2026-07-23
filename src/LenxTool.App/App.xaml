@@ -3,6 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:controls="clr-namespace:LenxTool.App.Controls"
              xmlns:vm="clr-namespace:LenxTool.App.ViewModels"
+             xmlns:views="clr-namespace:LenxTool.App.Views"
              ShutdownMode="OnMainWindowClose">
     <Application.Resources>
         <ResourceDictionary>
@@ -1208,6 +1209,9 @@
                                 </Setter>
                             </Style>
                         </TabControl.Resources>
+                        <TabItem Header="Feed 时间线">
+                            <views:FeedTimelineView />
+                        </TabItem>
                         <TabItem Header="每日早报">
                             <Border Margin="0,8,0,0" Style="{StaticResource BentoCardStyle}" Padding="0" ClipToBounds="True">
                                 <Grid>

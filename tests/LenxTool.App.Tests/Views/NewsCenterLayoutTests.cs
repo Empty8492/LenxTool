@@ -15,8 +15,12 @@ public sealed class NewsCenterLayoutTests
                 && element.Attribute("Content")?.Value == "刷新今日资讯");
         Assert.Equal("Center", refreshButton.Attribute("VerticalAlignment")?.Value);
 
-        XElement articleView = Assert.Single(
+        XElement dailyTab = Assert.Single(
             template.Descendants(),
+            element => element.Name.LocalName == "TabItem"
+                && element.Attribute("Header")?.Value == "每日早报");
+        XElement articleView = Assert.Single(
+            dailyTab.Descendants(),
             element => element.Name.LocalName == "RichArticleView");
         XElement articleGrid = Assert.IsType<XElement>(articleView.Parent);
         XElement[] articleRows = articleGrid
@@ -145,6 +149,67 @@ public sealed class NewsCenterLayoutTests
                     && setter.Attribute("TargetName")?.Value == "SelectedIndicator"));
     }
 
+    [Fact]
+    public void FeedTimelineUsesRecyclingVirtualizationAndScrollPaging()
+    {
+        XElement template = LoadNewsCenterTemplate();
+        XElement timelineTab = Assert.Single(
+            template.Descendants(),
+            element => element.Name.LocalName == "TabItem"
+                && element.Attribute("Header")?.Value == "Feed 时间线");
+        Assert.Contains(
+            timelineTab.Descendants(),
+            element => element.Name.LocalName == "FeedTimelineView");
+        XElement timelineBrowser = LoadFixture("FeedTimelineBrowserView.xaml");
+        XElement timeline = Assert.Single(
+            timelineBrowser.Descendants(),
+            element => element.Name.LocalName == "PagedListBox");
+
+        Assert.Equal("{Binding TimelineEntries}", timeline.Attribute("ItemsSource")?.Value);
+        Assert.Equal(
+            "{Binding LoadMoreTimelineCommand}",
+            timeline.Attribute("LoadMoreCommand")?.Value);
+        Assert.Equal("True", timeline.Attribute("VirtualizingPanel.IsVirtualizing")?.Value);
+        Assert.Equal("Recycling", timeline.Attribute("VirtualizingPanel.VirtualizationMode")?.Value);
+        Assert.Equal("True", timeline.Attribute("ScrollViewer.CanContentScroll")?.Value);
+    }
+
+    [Fact]
+    public void FeedTimelineProvidesReadOnlyFiltersAndNativeReader()
+    {
+        XElement template = LoadNewsCenterTemplate();
+        XElement timelineTab = Assert.Single(
+            template.Descendants(),
+            element => element.Name.LocalName == "TabItem"
+                && element.Attribute("Header")?.Value == "Feed 时间线");
+        Assert.Contains(
+            timelineTab.Descendants(),
+            element => element.Name.LocalName == "FeedTimelineView");
+        XElement timelineFilters = LoadFixture("FeedTimelineFiltersView.xaml");
+        XElement timelineBrowser = LoadFixture("FeedTimelineBrowserView.xaml");
+        string[] automationNames =
+        [
+            "Feed 分类筛选",
+            "Feed 来源筛选",
+            "Feed 日期筛选",
+            "Feed 关键词筛选"
+        ];
+
+        Assert.All(
+            automationNames,
+            name => Assert.Contains(
+                timelineFilters.Descendants(),
+                element => element.Attribute("AutomationProperties.Name")?.Value == name));
+        Assert.Contains(
+            timelineBrowser.Descendants(),
+            element => element.Name.LocalName == "RichArticleView"
+                && element.Attribute("Article")?.Value == "{Binding SelectedFeedArticle}");
+        Assert.DoesNotContain(
+            timelineFilters.Descendants().Concat(timelineBrowser.Descendants()),
+            element => element.Name.LocalName == "Button"
+                && element.Attribute("Content")?.Value is "新增" or "编辑" or "删除" or "订阅管理");
+    }
+
     private static XElement LoadNewsCenterTemplate()
     {
         string xamlPath = Path.Combine(AppContext.BaseDirectory, "Fixtures", "App.xaml");
@@ -155,5 +220,12 @@ public sealed class NewsCenterLayoutTests
                 && element.Attribute("DataType")?.Value.Contains(
                     "NewsCenterViewModel",
                     StringComparison.Ordinal) == true);
+    }
+
+    private static XElement LoadFixture(string fileName)
+    {
+        string xamlPath = Path.Combine(AppContext.BaseDirectory, "Fixtures", fileName);
+        return XDocument.Load(xamlPath).Root
+            ?? throw new InvalidDataException($"{fileName} 没有根元素。");
     }
 }
