@@ -118,6 +118,14 @@ public partial class App : Application
             services.GetRequiredService<FeedEntryRepository>());
         services.AddSingleton<IFeedEntryRepository>(static services =>
             services.GetRequiredService<FeedEntryRepository>());
+        services.AddSingleton<FeedFullTextRepository>();
+        services.AddSingleton<IFeedFullTextRepository>(static services =>
+            services.GetRequiredService<FeedFullTextRepository>());
+        services.AddSingleton(FeedFullTextQueueOptions.Default);
+        services.AddSingleton<FeedFullTextQueueService>();
+        services.AddSingleton<IFeedFullTextQueueService>(static services =>
+            services.GetRequiredService<FeedFullTextQueueService>());
+        services.AddHostedService<FeedFullTextBackgroundService>();
         services.AddSingleton(FeedCatalogSyncOptions.Default);
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton<IFeedCatalogSyncService, FeedCatalogSyncService>();
@@ -186,7 +194,10 @@ public partial class App : Application
         return new(
         [
             new("home", "首页", "今日概览与快捷开始", "M3,11 L12,3 21,11 21,21 14,21 14,15 10,15 10,21 3,21 Z", dashboard),
-            new("news", "资讯中心", "早报、热点、收藏与 AI 报告", "M4,4 L20,4 20,18 7,18 4,21 Z M8,8 L16,8 M8,12 L17,12 M8,16 L14,16", news),
+            new("news", "资讯列表", "浏览订阅内容与本地缓存", "M4,4 L20,4 20,18 7,18 4,21 Z M8,8 L16,8 M8,12 L17,12 M8,16 L14,16", news),
+            new("daily-briefing", "每日早报", "阅读今日与历史早报", "M6,3 L18,3 18,21 6,21 Z M9,7 L15,7 M9,11 L15,11 M9,15 L13,15", news),
+            new("trends", "热点趋势", "查看跨平台热点排行", "M4,18 L9,12 13,15 20,6 M15,6 L20,6 20,11", news),
+            new("ai-reports", "AI 报告", "查看本地生成的资讯报告", "M6,3 L16,3 20,7 20,21 6,21 Z M16,3 L16,8 20,8 M9,12 L17,12 M9,16 L15,16", news),
             new("media", "媒体工作台", "字幕、音频与批量任务", "M4,5 L20,5 20,17 4,17 Z M9,9 L15,12 9,15 Z M8,21 L16,21", media),
             new("tools", "文档与数据", "转换、JSON、编码与校验", "M6,3 L18,3 18,21 6,21 Z M9,8 L15,8 M9,12 L15,12 M9,16 L13,16", tools),
             new("history", "历史与数据", "任务、收藏、搜索与备份", "M12,4 A8,8 0 1 1 4.5,9 M4,4 L4,9 9,9 M12,8 L12,13 16,15", history),

@@ -47,9 +47,18 @@ public sealed class DependencyInjectionTests
         Assert.Same(
             provider.GetRequiredService<IFeedEntryWriter>(),
             provider.GetRequiredService<IFeedEntryRepository>());
+        Assert.IsType<FeedFullTextRepository>(
+            provider.GetRequiredService<IFeedFullTextRepository>());
+        Assert.IsType<FeedFullTextQueueService>(
+            provider.GetRequiredService<IFeedFullTextQueueService>());
         Assert.NotNull(provider.GetRequiredService<IFeedRefreshService>());
         Assert.NotNull(provider.GetRequiredService<NewsCenterViewModel>());
         Assert.IsType<FavoriteRepository>(provider.GetRequiredService<IFavoriteRepository>());
         Assert.NotNull(provider.GetRequiredService<DashboardViewModel>());
+
+        ShellViewModel shell = provider.GetRequiredService<ShellViewModel>();
+        Assert.Equal(
+            ["首页", "资讯列表", "每日早报", "热点趋势", "AI 报告"],
+            shell.NavigationItems.Take(5).Select(item => item.Label));
     }
 }
