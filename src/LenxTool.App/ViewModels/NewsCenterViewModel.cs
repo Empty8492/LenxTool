@@ -37,7 +37,8 @@ public sealed partial class NewsCenterViewModel
         IFeedCatalogRepository feedCatalogRepository,
         IFeedCatalogSyncService feedCatalogSync,
         IEntryStateRepository entryStateRepository,
-        IFavoriteRepository favoriteRepository)
+        IFavoriteRepository favoriteRepository,
+        IFeedFullTextQueueService feedFullTextQueueService)
         : base("资讯列表", "订阅资讯、每日早报、热点趋势与 AI 报告")
     {
         _newsCenterService = newsCenterService;
@@ -49,6 +50,7 @@ public sealed partial class NewsCenterViewModel
         _feedCatalogSync = feedCatalogSync;
         _entryStateRepository = entryStateRepository;
         _favoriteRepository = favoriteRepository;
+        _feedFullTextQueueService = feedFullTextQueueService;
         _timelineSynchronizationContext =
             SynchronizationContext.Current is System.Windows.Threading.DispatcherSynchronizationContext dispatcherContext
             && System.Windows.Application.Current is not null
@@ -66,6 +68,7 @@ public sealed partial class NewsCenterViewModel
             SelectAllSources,
             () => SourceFilters.Any(filter => !filter.IsSelected));
         ConfigureTimeline();
+        ConfigureFeedReader();
     }
 
     public ObservableCollection<NewsArticle> Articles { get; } = [];

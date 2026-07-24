@@ -34,6 +34,8 @@ public static partial class RichArticleFormatter
         var blocks = new List<RichArticleBlock>(article.Blocks.Count);
         foreach (ArticleContentBlock source in article.Blocks)
         {
+            string text = NormalizeReaderText(source.Text);
+            if (VideoEditionLinePattern().IsMatch(text)) continue;
             if (source.Kind == ArticleContentBlockKind.Image)
             {
                 string? imageUrl = string.IsNullOrWhiteSpace(source.ResourceUrl)
@@ -43,19 +45,19 @@ public static partial class RichArticleFormatter
                 {
                     blocks.Add(new(
                         RichArticleBlockKind.Image,
-                        [new(source.Text)],
+                        [new(text)],
                         imageUrl));
                 }
-                else if (!string.IsNullOrWhiteSpace(source.Text))
+                else if (!string.IsNullOrWhiteSpace(text))
                 {
                     blocks.Add(new(
                         RichArticleBlockKind.Body,
-                        [new(source.Text)]));
+                        [new(text)]));
                 }
                 continue;
             }
 
-            if (string.IsNullOrWhiteSpace(source.Text)) continue;
+            if (string.IsNullOrWhiteSpace(text)) continue;
             RichArticleBlockKind kind = source.Kind switch
             {
                 ArticleContentBlockKind.Heading when source.HeadingLevel is > 1 =>
@@ -65,13 +67,48 @@ public static partial class RichArticleFormatter
                 ArticleContentBlockKind.Quote => RichArticleBlockKind.Quote,
                 _ => RichArticleBlockKind.Body
             };
-            blocks.Add(new(kind, CreateExtractedInlines(source, article.FinalUrl)));
+            blocks.Add(new(kind, CreateExtractedInlines(text, source.Links, article.FinalUrl)));
         }
 
         string? heroImage = blocks
             .FirstOrDefault(block => block.Kind == RichArticleBlockKind.Image)
             ?.ImageUrl;
         return new(heroImage, blocks);
+    }
+
+    public static RichArticleDocument WithEnclosures(
+        RichArticleDocument document,
+        IReadOnlyList<FeedEnclosure> enclosures,
+        string? baseUrl)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+        ArgumentNullException.ThrowIfNull(enclosures);
+        var attachments = new List<RichArticleBlock>();
+        foreach (FeedEnclosure enclosure in enclosures)
+        {
+            string? url = ResolveUrl(enclosure.Url, baseUrl);
+            if (url is null) continue;
+            string label = NormalizeReaderText(enclosure.Title);
+            if (string.IsNullOrWhiteSpace(label))
+            {
+                label = string.IsNullOrWhiteSpace(enclosure.MediaType)
+                    ? "附件"
+                    : enclosure.MediaType;
+            }
+            attachments.Add(new(
+                RichArticleBlockKind.Bullet,
+                [new(label, url)]));
+        }
+
+        if (attachments.Count == 0) return document;
+        var blocks = new List<RichArticleBlock>(
+            document.Blocks.Count + attachments.Count + 1);
+        blocks.AddRange(document.Blocks);
+        blocks.Add(new(
+            RichArticleBlockKind.Subheading,
+            [new("附件")]));
+        blocks.AddRange(attachments);
+        return new(document.HeroImageUrl, blocks);
     }
 
     public static RichArticleDocument Parse(string? htmlOrText, string? baseUrl = null)
@@ -237,14 +274,17 @@ public static partial class RichArticleFormatter
 
     private static string? ResolveUrl(string value, string? baseUrl)
     {
-        if (Uri.TryCreate(value, UriKind.Absolute, out Uri? absolute) && absolute.Scheme is "http" or "https")
+        if (Uri.TryCreate(value, UriKind.Absolute, out Uri? absolute)
+            && absolute.Scheme is "http" or "https"
+            && string.IsNullOrEmpty(absolute.UserInfo))
         {
             return absolute.AbsoluteUri;
         }
 
         if (Uri.TryCreate(baseUrl, UriKind.Absolute, out Uri? baseUri)
             && Uri.TryCreate(baseUri, value, out Uri? relative)
-            && relative.Scheme is "http" or "https")
+            && relative.Scheme is "http" or "https"
+            && string.IsNullOrEmpty(relative.UserInfo))
         {
             return relative.AbsoluteUri;
         }
@@ -253,22 +293,23 @@ public static partial class RichArticleFormatter
     }
 
     private static List<RichArticleInline> CreateExtractedInlines(
-        ArticleContentBlock block,
+        string text,
+        IReadOnlyList<ArticleContentLink> links,
         string baseUrl)
     {
         var inlines = new List<RichArticleInline>();
         int position = 0;
-        foreach (ArticleContentLink link in block.Links)
+        foreach (ArticleContentLink link in links)
         {
             if (string.IsNullOrEmpty(link.Text)) continue;
-            int linkPosition = block.Text.IndexOf(
+            int linkPosition = text.IndexOf(
                 link.Text,
                 position,
                 StringComparison.Ordinal);
             if (linkPosition < 0) continue;
             if (linkPosition > position)
             {
-                inlines.Add(new(block.Text[position..linkPosition]));
+                inlines.Add(new(text[position..linkPosition]));
             }
 
             inlines.Add(new(
@@ -277,16 +318,21 @@ public static partial class RichArticleFormatter
             position = linkPosition + link.Text.Length;
         }
 
-        if (position < block.Text.Length)
+        if (position < text.Length)
         {
-            inlines.Add(new(block.Text[position..]));
+            inlines.Add(new(text[position..]));
         }
         if (inlines.Count == 0)
         {
-            inlines.Add(new(block.Text));
+            inlines.Add(new(text));
         }
         return inlines;
     }
+
+    private static string NormalizeReaderText(string? text) =>
+        SpeechAnnotationPattern()
+            .Replace(text ?? string.Empty, "${display}")
+            .Trim();
 
     [GeneratedRegex("<(?:script|style|iframe|object|embed)\\b[^>]*>.*?</(?:script|style|iframe|object|embed)>", RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.CultureInvariant)]
     private static partial Regex UnsafeElementPattern();

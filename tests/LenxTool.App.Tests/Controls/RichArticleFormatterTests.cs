@@ -105,12 +105,13 @@ public sealed class RichArticleFormatterTests
                     []),
                 new(
                     ArticleContentBlockKind.Paragraph,
-                    "Read the safe source and ignore the unsafe source.",
+                    "Read the safe source and ignore the unsafe source and credential source.",
                     null,
                     null,
                     [
                         new("https://source.example/story", "safe source"),
-                        new("javascript:alert(1)", "unsafe source")
+                        new("javascript:alert(1)", "unsafe source"),
+                        new("https://user:password@source.example/story", "credential source")
                     ]),
                 new(
                     ArticleContentBlockKind.Quote,
@@ -149,6 +150,9 @@ public sealed class RichArticleFormatterTests
                 Assert.Contains(
                     block.Inlines,
                     inline => inline is { Text: "unsafe source", Url: null });
+                Assert.Contains(
+                    block.Inlines,
+                    inline => inline is { Text: "credential source", Url: null });
             },
             block => Assert.Equal((RichArticleBlockKind.Quote, "Quoted text"), (block.Kind, block.Text)),
             block => Assert.Equal((RichArticleBlockKind.Bullet, "List item"), (block.Kind, block.Text)),
@@ -158,5 +162,66 @@ public sealed class RichArticleFormatterTests
                 Assert.Equal("Diagram", block.Text);
                 Assert.Equal("https://example.com/images/diagram.png", block.ImageUrl);
             });
+    }
+
+    [Fact]
+    public void ExtractedContentCleansReaderMarkersAndKeepsSafeEnclosuresInOrder()
+    {
+        ArticleContentResult article = new(
+            "https://example.com/original",
+            "https://example.com/posts/reader",
+            null,
+            null,
+            null,
+            [
+                new(
+                    ArticleContentBlockKind.Paragraph,
+                    "Qwen{3.8|三点八} released",
+                    null,
+                    null,
+                    []),
+                new(
+                    ArticleContentBlockKind.Paragraph,
+                    "视频版：YouTube",
+                    null,
+                    null,
+                    [])
+            ],
+            [],
+            "readability-v1");
+        FeedEnclosure[] enclosures =
+        [
+            new("/media/audio.mp3", "audio/mpeg", 100, "Audio"),
+            new("javascript:alert(1)", "text/html", null, "Unsafe"),
+            new("https://cdn.example/video.mp4", "video/mp4", 200, "Video")
+        ];
+
+        RichArticleDocument document = RichArticleFormatter.WithEnclosures(
+            RichArticleFormatter.FromExtractedContent(article),
+            enclosures,
+            article.FinalUrl);
+
+        Assert.Contains(document.Blocks, block => block.Text == "Qwen3.8 released");
+        Assert.DoesNotContain(document.Blocks, block => block.Text.StartsWith("视频版", StringComparison.Ordinal));
+        RichArticleBlock[] attachmentBlocks = document.Blocks
+            .SkipWhile(block => block.Text != "附件")
+            .ToArray();
+        Assert.Collection(
+            attachmentBlocks,
+            block => Assert.Equal((RichArticleBlockKind.Subheading, "附件"), (block.Kind, block.Text)),
+            block => Assert.Contains(
+                block.Inlines,
+                inline => inline is
+                {
+                    Text: "Audio",
+                    Url: "https://example.com/media/audio.mp3"
+                }),
+            block => Assert.Contains(
+                block.Inlines,
+                inline => inline is
+                {
+                    Text: "Video",
+                    Url: "https://cdn.example/video.mp4"
+                }));
     }
 }

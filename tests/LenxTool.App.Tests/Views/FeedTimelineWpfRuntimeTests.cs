@@ -367,7 +367,8 @@ public sealed class FeedTimelineWpfRuntimeTests
             null!,
             new StubFeedCatalogSyncService(),
             states,
-            favorites);
+            favorites,
+            new StubFeedFullTextQueueService());
 
     private static Window CreateWindow(FeedTimelineBrowserView view) =>
         new()
@@ -594,6 +595,17 @@ public sealed class FeedTimelineWpfRuntimeTests
         public Task<int> PruneAsync(
             IReadOnlyCollection<string> protectedContentHashes,
             CancellationToken cancellationToken) =>
+            Task.FromResult(0);
+    }
+
+    private sealed class StubFeedFullTextQueueService : IFeedFullTextQueueService
+    {
+        public Task<FeedFullTextContent?> FetchOnOpenAsync(
+            string entryId,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<FeedFullTextContent?>(null);
+
+        public Task<int> ProcessBackgroundBatchAsync(CancellationToken cancellationToken) =>
             Task.FromResult(0);
     }
 

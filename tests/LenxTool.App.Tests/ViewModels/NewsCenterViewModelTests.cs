@@ -108,7 +108,8 @@ public sealed class NewsCenterViewModelTests
             new StubFeedCatalogRepository(CreateCatalog()),
             new StubFeedCatalogSyncService(),
             new StubEntryStateRepository(),
-            new StubFavoriteRepository());
+            new StubFavoriteRepository(),
+            new StubFeedFullTextQueueService());
         await viewModel.InitializeAsync(CancellationToken.None);
 
         await viewModel.GenerateArticleReportCommand.ExecuteAsync();
@@ -206,7 +207,8 @@ public sealed class NewsCenterViewModelTests
             new StubFeedCatalogRepository(CreateCatalog()),
             new StubFeedCatalogSyncService(),
             new StubEntryStateRepository(),
-            new StubFavoriteRepository());
+            new StubFavoriteRepository(),
+            new StubFeedFullTextQueueService());
         await viewModel.InitializeAsync(CancellationToken.None);
         Assert.Single(viewModel.SourceFilters, filter => filter.Platform == "GitHub")
             .IsSelected = false;
@@ -257,6 +259,143 @@ public sealed class NewsCenterViewModelTests
         FeedEntryQuery query = Assert.Single(entries.Queries);
         Assert.Equal(0, query.Offset);
         Assert.Equal(50, query.Limit);
+    }
+
+    [Fact]
+    public async Task TimelineReaderPrefersExtractedContentAndCanSwitchBackToRss()
+    {
+        FeedEntry entry = CreateFeedEntry(0) with
+        {
+            Enclosures =
+            [
+                new(
+                    "https://cdn.example/audio.mp3",
+                    "audio/mpeg",
+                    128,
+                    "Audio")
+            ]
+        };
+        DateTimeOffset extractedAt = TimelineNow.AddMinutes(5);
+        var fullText = new StubFeedFullTextQueueService();
+        fullText.Contents[entry.Id] = new(
+            entry.Id,
+            new(
+                entry.NormalizedUrl!,
+                entry.NormalizedUrl!,
+                entry.Title,
+                entry.Author,
+                entry.PublishedAt,
+                [
+                    new(
+                        ArticleContentBlockKind.Heading,
+                        "Extracted heading",
+                        null,
+                        1,
+                        []),
+                    new(
+                        ArticleContentBlockKind.Paragraph,
+                        "Extracted body",
+                        null,
+                        null,
+                        [])
+                ],
+                [],
+                "readability-v1"),
+            "extracted-hash",
+            extractedAt);
+        using NewsCenterViewModel viewModel = CreateViewModel(
+            CreateSnapshot(),
+            feedEntries: new([entry]),
+            fullText: fullText);
+
+        await viewModel.InitializeAsync(CancellationToken.None);
+        await viewModel.SelectedFeedReaderLoad;
+
+        Assert.Equal(["RSS 正文", "提取全文"], viewModel.FeedReaderSourceOptions.Select(x => x.Label));
+        Assert.Equal(FeedReaderContentSource.Extracted, viewModel.SelectedFeedReaderSource.Source);
+        Assert.Equal("提取全文", viewModel.FeedReaderSourceLabel);
+        Assert.Equal(extractedAt, viewModel.FeedReaderExtractedAt);
+        Assert.Contains(
+            viewModel.SelectedFeedArticleDocument!.Blocks,
+            block => block.Text == "Extracted body");
+        Assert.Contains(
+            viewModel.SelectedFeedArticleDocument.Blocks,
+            block => block.Text == "Audio");
+
+        viewModel.SelectedFeedReaderSource = viewModel.FeedReaderSourceOptions[0];
+
+        Assert.Equal(FeedReaderContentSource.Rss, viewModel.SelectedFeedReaderSource.Source);
+        Assert.Equal("RSS 正文", viewModel.FeedReaderSourceLabel);
+        Assert.Null(viewModel.FeedReaderExtractedAt);
+        Assert.Contains(
+            viewModel.SelectedFeedArticleDocument!.Blocks,
+            block => block.Text == "Audio");
+        Assert.Equal(entry.SanitizedContent, viewModel.SelectedFeedArticle?.RichContent);
+    }
+
+    [Fact]
+    public async Task TimelineReaderCancelsPreviousFullTextLoadWhenSelectionChanges()
+    {
+        FeedEntry first = CreateFeedEntry(0);
+        FeedEntry second = CreateFeedEntry(1);
+        var fullText = new StubFeedFullTextQueueService
+        {
+            DelayedEntryId = first.Id
+        };
+        fullText.Contents[second.Id] = CreateFullTextContent(second, "Second extracted");
+        using NewsCenterViewModel viewModel = CreateViewModel(
+            CreateSnapshot(),
+            feedEntries: new([first, second]),
+            fullText: fullText);
+        await viewModel.InitializeAsync(CancellationToken.None);
+
+        viewModel.SelectedTimelineEntry = Assert.Single(
+            viewModel.TimelineEntries,
+            item => item.Entry.Id == second.Id);
+        await viewModel.SelectedFeedReaderLoad;
+        await fullText.DelayedRequestCancelled.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+        Assert.Equal(second.Id, viewModel.SelectedFeedArticle?.Id);
+        Assert.Contains(
+            viewModel.SelectedFeedArticleDocument!.Blocks,
+            block => block.Text == "Second extracted");
+    }
+
+    [Fact]
+    public async Task OpenSelectedFeedOriginalOnlyAcceptsEntryHttpLinks()
+    {
+        FeedEntry safe = CreateFeedEntry(0);
+        var dialogs = new StubDesktopFileDialogService();
+        using NewsCenterViewModel viewModel = CreateViewModel(
+            CreateSnapshot(),
+            dialogs,
+            new([safe]));
+        await viewModel.InitializeAsync(CancellationToken.None);
+
+        Assert.True(viewModel.OpenSelectedFeedOriginalCommand.CanExecute(null));
+        viewModel.OpenSelectedFeedOriginalCommand.Execute(null);
+        Assert.Equal(safe.NormalizedUrl, dialogs.OpenedUri);
+
+        FeedEntry unsafeEntry = CreateFeedEntry(1) with
+        {
+            NormalizedUrl = "javascript:alert(1)"
+        };
+        viewModel.SelectedTimelineEntry = new(
+            unsafeEntry,
+            "Daily Feed",
+            "Technology");
+
+        Assert.False(viewModel.OpenSelectedFeedOriginalCommand.CanExecute(null));
+
+        viewModel.SelectedTimelineEntry = new(
+            CreateFeedEntry(2) with
+            {
+                NormalizedUrl = "https://user:password@example.com/story"
+            },
+            "Daily Feed",
+            "Technology");
+
+        Assert.False(viewModel.OpenSelectedFeedOriginalCommand.CanExecute(null));
     }
 
     [Fact]
@@ -767,7 +906,8 @@ public sealed class NewsCenterViewModelTests
         StubFeedCatalogSyncService? catalogSync = null,
         StubFeedCatalogRepository? catalogRepository = null,
         StubEntryStateRepository? entryStates = null,
-        StubFavoriteRepository? favorites = null) =>
+        StubFavoriteRepository? favorites = null,
+        StubFeedFullTextQueueService? fullText = null) =>
         new(
             new StubNewsCenterService(snapshot),
             new StubAiReportService(null),
@@ -777,7 +917,8 @@ public sealed class NewsCenterViewModelTests
             catalogRepository ?? new StubFeedCatalogRepository(CreateCatalog()),
             catalogSync ?? new StubFeedCatalogSyncService(),
             entryStates ?? new StubEntryStateRepository(),
-            favorites ?? new StubFavoriteRepository());
+            favorites ?? new StubFavoriteRepository(),
+            fullText ?? new StubFeedFullTextQueueService());
 
     private static NewsCenterSnapshot CreateSnapshot(params NewsArticle[] articles) =>
         new(articles, [], true, DateTimeOffset.Now, null);
@@ -833,6 +974,58 @@ public sealed class NewsCenterViewModelTests
         [],
         index.ToString("x64", CultureInfo.InvariantCulture),
         TimelineNow);
+
+    private static FeedFullTextContent CreateFullTextContent(FeedEntry entry, string body) => new(
+        entry.Id,
+        new(
+            entry.NormalizedUrl!,
+            entry.NormalizedUrl!,
+            entry.Title,
+            entry.Author,
+            entry.PublishedAt,
+            [
+                new(
+                    ArticleContentBlockKind.Paragraph,
+                    body,
+                    null,
+                    null,
+                    [])
+            ],
+            [],
+            "readability-v1"),
+        $"{entry.Id}-extracted",
+        TimelineNow.AddMinutes(5));
+
+    private sealed class StubFeedFullTextQueueService : IFeedFullTextQueueService
+    {
+        public Dictionary<string, FeedFullTextContent?> Contents { get; } =
+            new(StringComparer.Ordinal);
+        public string? DelayedEntryId { get; init; }
+        public TaskCompletionSource DelayedRequestCancelled { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public async Task<FeedFullTextContent?> FetchOnOpenAsync(
+            string entryId,
+            CancellationToken cancellationToken)
+        {
+            if (string.Equals(entryId, DelayedEntryId, StringComparison.Ordinal))
+            {
+                try
+                {
+                    await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    DelayedRequestCancelled.TrySetResult();
+                    throw;
+                }
+            }
+            return Contents.GetValueOrDefault(entryId);
+        }
+
+        public Task<int> ProcessBackgroundBatchAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(0);
+    }
 
     private sealed class StubNewsCenterService(NewsCenterSnapshot snapshot) : INewsCenterService
     {

@@ -99,7 +99,7 @@ public sealed partial class NewsCenterViewModel
         {
             if (SetProperty(ref _selectedTimelineEntry, value))
             {
-                SelectedFeedArticle = value is null ? null : CreateReaderArticle(value);
+                SelectFeedReaderEntry(value);
                 UpdateTimelineSavedNote(value?.Note ?? string.Empty, replaceEditorText: true);
                 TimelineTagInput = string.Empty;
                 SelectedTimelineTags.Clear();
@@ -1098,6 +1098,7 @@ public sealed partial class NewsCenterViewModel
     private void DisposeTimeline()
     {
         _timelineDisposed = true;
+        DisposeFeedReader();
         _timelineProgressCancellation?.Cancel();
         _timelineProgressCancellation?.Dispose();
         _timelineProgressCancellation = null;
