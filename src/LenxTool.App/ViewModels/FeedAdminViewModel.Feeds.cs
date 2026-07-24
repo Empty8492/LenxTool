@@ -15,6 +15,7 @@ public sealed partial class FeedAdminViewModel
         FeedSiteUrlInput = Feeds.Count == 0 ? "https://daily.juya.uk/" : string.Empty;
         SelectedCategoryId = null;
         SelectedViewKind = ViewKindChoices[0];
+        SelectedFullTextPolicy = FullTextPolicyChoices[0];
         FeedRefreshIntervalMinutes = 60;
         FeedSortOrder = NextSortOrder(Feeds.Select(feed => feed.SortOrder));
         FeedIsEnabled = true;
@@ -72,6 +73,7 @@ public sealed partial class FeedAdminViewModel
             NullIfWhiteSpace(FeedSiteUrlInput),
             SelectedCategoryId,
             SelectedViewKind.Kind,
+            SelectedFullTextPolicy.Policy,
             FeedRefreshIntervalMinutes,
             FeedSortOrder,
             FeedIsEnabled);

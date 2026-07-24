@@ -15,6 +15,13 @@ public enum FeedViewKind
     Notification
 }
 
+public enum FeedFullTextPolicy
+{
+    None,
+    OnOpen,
+    Background
+}
+
 public sealed record FeedCatalogState(
     long Version,
     FeedCatalogScope Scope,
@@ -49,7 +56,8 @@ public sealed record FeedCatalogItem(
     bool IsEnabled,
     long Version,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    FeedFullTextPolicy FullTextPolicy = FeedFullTextPolicy.None);
 
 public sealed record FeedFetchState(
     string FeedId,

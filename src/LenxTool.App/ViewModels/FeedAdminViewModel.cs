@@ -11,6 +11,7 @@ namespace LenxTool.App.ViewModels;
 public sealed record FeedCategoryChoice(string? Id, string Name, bool IsEnabled);
 
 public sealed record FeedViewKindChoice(FeedViewKind Kind, string Label);
+public sealed record FeedFullTextPolicyChoice(FeedFullTextPolicy Policy, string Label);
 
 public sealed partial class FeedAdminViewModel : PageViewModel
 {
@@ -38,6 +39,7 @@ public sealed partial class FeedAdminViewModel : PageViewModel
     private string _feedSiteUrlInput = string.Empty;
     private string? _selectedCategoryId;
     private FeedViewKindChoice _selectedViewKind;
+    private FeedFullTextPolicyChoice _selectedFullTextPolicy;
     private int _feedRefreshIntervalMinutes = 60;
     private int _feedSortOrder = 100;
     private bool _feedIsEnabled = true;
@@ -86,6 +88,13 @@ public sealed partial class FeedAdminViewModel : PageViewModel
             new(FeedViewKind.Notification, "通知")
         ];
         _selectedViewKind = ViewKindChoices[0];
+        FullTextPolicyChoices =
+        [
+            new(FeedFullTextPolicy.None, "不抓取全文"),
+            new(FeedFullTextPolicy.OnOpen, "打开文章时抓取"),
+            new(FeedFullTextPolicy.Background, "后台自动抓取")
+        ];
+        _selectedFullTextPolicy = FullTextPolicyChoices[0];
 
         RefreshCommand = new(RefreshAsync, () => IsAdmin);
         BeginNewCategoryCommand = new(BeginNewCategory, () => CanManage);
@@ -130,6 +139,7 @@ public sealed partial class FeedAdminViewModel : PageViewModel
     public ObservableCollection<FeedCategoryChoice> CategoryChoices { get; }
     public ObservableCollection<OpmlImportItemViewModel> OpmlItems { get; }
     public IReadOnlyList<FeedViewKindChoice> ViewKindChoices { get; }
+    public IReadOnlyList<FeedFullTextPolicyChoice> FullTextPolicyChoices { get; }
     public AsyncRelayCommand RefreshCommand { get; }
     public RelayCommand BeginNewCategoryCommand { get; }
     public AsyncRelayCommand SaveCategoryCommand { get; }
@@ -276,6 +286,20 @@ public sealed partial class FeedAdminViewModel : PageViewModel
         set
         {
             if (SetProperty(ref _selectedViewKind, value ?? ViewKindChoices[0])) NotifyFeedCommands();
+        }
+    }
+
+    public FeedFullTextPolicyChoice SelectedFullTextPolicy
+    {
+        get => _selectedFullTextPolicy;
+        set
+        {
+            if (SetProperty(
+                ref _selectedFullTextPolicy,
+                value ?? FullTextPolicyChoices[0]))
+            {
+                NotifyFeedCommands();
+            }
         }
     }
 

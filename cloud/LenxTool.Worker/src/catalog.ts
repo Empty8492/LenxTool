@@ -35,6 +35,7 @@ export interface FeedRow {
   site_url: string | null;
   category_id: string | null;
   view_kind: ViewKind;
+  full_text_policy: FullTextPolicy;
   refresh_interval_minutes: number;
   sort_order: number;
   is_enabled: number;
@@ -79,10 +80,12 @@ interface CommitMutationSpec {
 }
 
 export type ViewKind = "ARTICLE" | "PICTURE" | "AUDIO" | "VIDEO" | "NOTIFICATION";
+export type FullTextPolicy = "NONE" | "ON_OPEN" | "BACKGROUND";
 
 const idempotencyKeyPattern = /^[A-Za-z0-9._:-]{16,128}$/u;
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 const viewKinds = new Set<ViewKind>(["ARTICLE", "PICTURE", "AUDIO", "VIDEO", "NOTIFICATION"]);
+const fullTextPolicies = new Set<FullTextPolicy>(["NONE", "ON_OPEN", "BACKGROUND"]);
 const encoder = new TextEncoder();
 const catalogResponseLimit = 10 * 1024 * 1024;
 
@@ -109,7 +112,7 @@ export async function handleCatalogReadRequest(
     (activeOnly ? " AND is_enabled=1" : "") +
     " ORDER BY sort_order,name COLLATE BINARY,id";
   const feedSql =
-    "SELECT f.id,f.original_url,f.normalized_url,f.display_name,f.site_url,f.category_id,f.view_kind," +
+    "SELECT f.id,f.original_url,f.normalized_url,f.display_name,f.site_url,f.category_id,f.view_kind,f.full_text_policy," +
     "f.refresh_interval_minutes,f.sort_order,f.is_enabled,f.version,f.created_at,f.updated_at " +
     "FROM managed_feeds f LEFT JOIN feed_categories c ON c.id=f.category_id AND c.deleted_at IS NULL " +
     "WHERE f.deleted_at IS NULL AND (f.category_id IS NULL OR c.id IS NOT NULL)" +
@@ -275,6 +278,7 @@ function toCatalogFeed(row: FeedRow) {
     siteUrl: row.site_url,
     categoryId: row.category_id,
     viewKind: row.view_kind,
+    fullTextPolicy: row.full_text_policy,
     refreshIntervalMinutes: row.refresh_interval_minutes,
     sortOrder: row.sort_order,
     isEnabled: row.is_enabled === 1,
@@ -441,7 +445,7 @@ async function createFeed(
   const prepared = await prepareMutation(request, db, auth, path, body);
   if (prepared instanceof Response) return prepared;
   assertOnlyFields(body, [
-    "originalUrl", "displayName", "siteUrl", "categoryId", "viewKind",
+    "originalUrl", "displayName", "siteUrl", "categoryId", "viewKind", "fullTextPolicy",
     "refreshIntervalMinutes", "sortOrder", "isEnabled"
   ]);
   const originalUrl = requireOriginalFeedUrl(body.originalUrl);
@@ -454,6 +458,7 @@ async function createFeed(
     ? null
     : requireUuid(body.categoryId, "分类 ID");
   const viewKind = requireViewKind(body.viewKind ?? "ARTICLE");
+  const fullTextPolicy = requireFullTextPolicy(body.fullTextPolicy ?? "NONE");
   const refreshIntervalMinutes = requireInteger(body.refreshIntervalMinutes ?? 60, 5, 1440, "刷新间隔");
   const sortOrder = requireInteger(body.sortOrder ?? 0, 0, 1_000_000, "Feed 排序");
   const isEnabled = requireBoolean(body.isEnabled ?? true, "Feed 启用状态");
@@ -479,6 +484,7 @@ async function createFeed(
     siteUrl,
     categoryId,
     viewKind,
+    fullTextPolicy,
     refreshIntervalMinutes,
     sortOrder,
     isEnabled,
@@ -498,12 +504,12 @@ async function createFeed(
     successTable: "managed_feeds",
     duplicateCode: "DUPLICATE_FEED",
     businessStatement: mutationId => db.prepare(
-      "INSERT INTO managed_feeds(id,original_url,normalized_url,display_name,site_url,category_id,view_kind," +
+      "INSERT INTO managed_feeds(id,original_url,normalized_url,display_name,site_url,category_id,view_kind,full_text_policy," +
       "refresh_interval_minutes,sort_order,is_enabled,version,created_at,updated_at) " +
-      "SELECT ?,?,?,?,?,?,?,?,?,?,?,?,? WHERE EXISTS " +
+      "SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,? WHERE EXISTS " +
       "(SELECT 1 FROM feed_catalog_state WHERE singleton_id=1 AND last_mutation_id=?)"
     ).bind(
-      id, originalUrl, normalizedUrl, displayName, siteUrl, categoryId, viewKind,
+      id, originalUrl, normalizedUrl, displayName, siteUrl, categoryId, viewKind, fullTextPolicy,
       refreshIntervalMinutes, sortOrder, isEnabled ? 1 : 0, prepared.newVersion, now, now, mutationId
     )
   });
@@ -520,7 +526,7 @@ async function patchFeed(
   const prepared = await prepareMutation(request, db, auth, path, body);
   if (prepared instanceof Response) return prepared;
   assertOnlyFields(body, [
-    "originalUrl", "displayName", "siteUrl", "categoryId", "viewKind",
+    "originalUrl", "displayName", "siteUrl", "categoryId", "viewKind", "fullTextPolicy",
     "refreshIntervalMinutes", "sortOrder", "isEnabled"
   ]);
   assertHasFields(body, "Feed 更新至少需要一个字段");
@@ -545,6 +551,9 @@ async function patchFeed(
       ? null
       : requireUuid(body.categoryId, "分类 ID");
   const viewKind = body.viewKind === undefined ? current.view_kind : requireViewKind(body.viewKind);
+  const fullTextPolicy = body.fullTextPolicy === undefined
+    ? current.full_text_policy
+    : requireFullTextPolicy(body.fullTextPolicy);
   const refreshIntervalMinutes = body.refreshIntervalMinutes === undefined
     ? current.refresh_interval_minutes
     : requireInteger(body.refreshIntervalMinutes, 5, 1440, "刷新间隔");
@@ -572,6 +581,7 @@ async function patchFeed(
     siteUrl,
     categoryId,
     viewKind,
+    fullTextPolicy,
     refreshIntervalMinutes,
     sortOrder,
     isEnabled,
@@ -591,12 +601,12 @@ async function patchFeed(
     successTable: "managed_feeds",
     duplicateCode: "DUPLICATE_FEED",
     businessStatement: mutationId => db.prepare(
-      "UPDATE managed_feeds SET original_url=?,normalized_url=?,display_name=?,site_url=?,category_id=?,view_kind=?," +
+      "UPDATE managed_feeds SET original_url=?,normalized_url=?,display_name=?,site_url=?,category_id=?,view_kind=?,full_text_policy=?," +
       "refresh_interval_minutes=?,sort_order=?,is_enabled=?,version=?,updated_at=? " +
       "WHERE id=? AND deleted_at IS NULL AND EXISTS " +
       "(SELECT 1 FROM feed_catalog_state WHERE singleton_id=1 AND last_mutation_id=?)"
     ).bind(
-      originalUrl, normalizedUrl, displayName, siteUrl, categoryId, viewKind,
+      originalUrl, normalizedUrl, displayName, siteUrl, categoryId, viewKind, fullTextPolicy,
       refreshIntervalMinutes, sortOrder, isEnabled ? 1 : 0, prepared.newVersion, now, feedId, mutationId
     )
   });
@@ -798,7 +808,7 @@ async function getCategory(db: D1Database, categoryId: string): Promise<Category
 
 async function getFeed(db: D1Database, feedId: string): Promise<FeedRow> {
   const row = await db.prepare(
-    "SELECT id,original_url,normalized_url,display_name,site_url,category_id,view_kind," +
+    "SELECT id,original_url,normalized_url,display_name,site_url,category_id,view_kind,full_text_policy," +
     "refresh_interval_minutes,sort_order,is_enabled,version,created_at,updated_at " +
     "FROM managed_feeds WHERE id=? AND deleted_at IS NULL"
   ).bind(feedId).first<FeedRow>();
@@ -909,6 +919,13 @@ export function requireViewKind(value: unknown): ViewKind {
     throw new CatalogApiError(400, "VALIDATION_ERROR", "Feed 视图类型无效");
   }
   return value as ViewKind;
+}
+
+export function requireFullTextPolicy(value: unknown): FullTextPolicy {
+  if (typeof value !== "string" || !fullTextPolicies.has(value as FullTextPolicy)) {
+    throw new CatalogApiError(400, "VALIDATION_ERROR", "Feed 全文抓取策略无效");
+  }
+  return value as FullTextPolicy;
 }
 
 export function assertOnlyFields(body: Record<string, unknown>, allowed: readonly string[]): void {

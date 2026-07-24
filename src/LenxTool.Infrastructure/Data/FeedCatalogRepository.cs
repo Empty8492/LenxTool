@@ -175,11 +175,11 @@ public sealed class FeedCatalogRepository(SqliteDatabase database) : IFeedCatalo
             INSERT INTO feed_catalog(
                 id, original_url, normalized_url, display_name, site_url, category_id,
                 view_kind, refresh_interval_minutes, sort_order, is_enabled, version,
-                created_at, updated_at)
+                created_at, updated_at, full_text_policy)
             VALUES(
                 $id, $originalUrl, $normalizedUrl, $displayName, $siteUrl, $categoryId,
                 $viewKind, $refreshIntervalMinutes, $sortOrder, $isEnabled, $version,
-                $createdAt, $updatedAt);
+                $createdAt, $updatedAt, $fullTextPolicy);
             """;
         command.Parameters.AddWithValue("$id", feed.Id);
         command.Parameters.AddWithValue("$originalUrl", feed.OriginalUrl);
@@ -194,6 +194,7 @@ public sealed class FeedCatalogRepository(SqliteDatabase database) : IFeedCatalo
         command.Parameters.AddWithValue("$version", feed.Version);
         command.Parameters.AddWithValue("$createdAt", FormatTimestamp(feed.CreatedAt));
         command.Parameters.AddWithValue("$updatedAt", FormatTimestamp(feed.UpdatedAt));
+        command.Parameters.AddWithValue("$fullTextPolicy", ToStorageValue(feed.FullTextPolicy));
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
 
@@ -323,7 +324,7 @@ public sealed class FeedCatalogRepository(SqliteDatabase database) : IFeedCatalo
         command.CommandText = """
             SELECT f.id, f.original_url, f.normalized_url, f.display_name, f.site_url,
                    f.category_id, f.view_kind, f.refresh_interval_minutes, f.sort_order,
-                   f.is_enabled, f.version, f.created_at, f.updated_at
+                   f.is_enabled, f.version, f.created_at, f.updated_at, f.full_text_policy
             FROM feed_catalog f
             LEFT JOIN feed_categories c ON c.id=f.category_id
             WHERE $includeDisabled=1
@@ -356,7 +357,8 @@ public sealed class FeedCatalogRepository(SqliteDatabase database) : IFeedCatalo
                 reader.GetBoolean(9),
                 reader.GetInt64(10),
                 ReadTimestamp(reader, 11),
-                ReadTimestamp(reader, 12)));
+                ReadTimestamp(reader, 12),
+                ParseFullTextPolicy(reader.GetString(13))));
         }
 
         return feeds;
@@ -412,6 +414,12 @@ public sealed class FeedCatalogRepository(SqliteDatabase database) : IFeedCatalo
                 "A replacement snapshot must include generated and last-synchronized timestamps.",
                 nameof(snapshot));
         }
+        if (snapshot.Feeds.Any(feed => !Enum.IsDefined(feed.FullTextPolicy)))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(snapshot),
+                "Feed full-text policy is invalid.");
+        }
     }
 
     private static void ValidateScope(FeedCatalogScope scope)
@@ -454,6 +462,22 @@ public sealed class FeedCatalogRepository(SqliteDatabase database) : IFeedCatalo
         "VIDEO" => FeedViewKind.Video,
         "NOTIFICATION" => FeedViewKind.Notification,
         _ => throw new InvalidDataException($"Unknown feed view kind '{value}'.")
+    };
+
+    private static string ToStorageValue(FeedFullTextPolicy policy) => policy switch
+    {
+        FeedFullTextPolicy.None => "NONE",
+        FeedFullTextPolicy.OnOpen => "ON_OPEN",
+        FeedFullTextPolicy.Background => "BACKGROUND",
+        _ => throw new ArgumentOutOfRangeException(nameof(policy))
+    };
+
+    private static FeedFullTextPolicy ParseFullTextPolicy(string value) => value switch
+    {
+        "NONE" => FeedFullTextPolicy.None,
+        "ON_OPEN" => FeedFullTextPolicy.OnOpen,
+        "BACKGROUND" => FeedFullTextPolicy.Background,
+        _ => throw new InvalidDataException($"Unknown feed full-text policy '{value}'.")
     };
 
     private static string FormatTimestamp(DateTimeOffset value) =>

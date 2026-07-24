@@ -183,6 +183,7 @@ public sealed class FeedCatalogAdminService(
         input.SiteUrl,
         input.CategoryId,
         ViewKind = input.ViewKind.ToString().ToUpperInvariant(),
+        FullTextPolicy = ToWireValue(input.FullTextPolicy),
         input.RefreshIntervalMinutes,
         input.SortOrder,
         input.IsEnabled
@@ -260,6 +261,7 @@ public sealed class FeedCatalogAdminService(
             ["displayName"] = input.DisplayName,
             ["siteUrl"] = input.SiteUrl,
             ["viewKind"] = input.ViewKind.ToString().ToUpperInvariant(),
+            ["fullTextPolicy"] = ToWireValue(input.FullTextPolicy),
             ["refreshIntervalMinutes"] = input.RefreshIntervalMinutes,
             ["sortOrder"] = input.SortOrder,
             ["isEnabled"] = input.IsEnabled
@@ -351,6 +353,8 @@ public sealed class FeedCatalogAdminService(
         if (input.CategoryId is not null) ValidateId(input.CategoryId, nameof(input.CategoryId));
         if (!Enum.IsDefined(input.ViewKind))
             throw new ArgumentOutOfRangeException(nameof(input), "ViewKind is invalid.");
+        if (!Enum.IsDefined(input.FullTextPolicy))
+            throw new ArgumentOutOfRangeException(nameof(input), "FullTextPolicy is invalid.");
         if (input.RefreshIntervalMinutes is < 5 or > 1440)
             throw new ArgumentOutOfRangeException(nameof(input), "RefreshIntervalMinutes is invalid.");
         ValidateSortOrder(input.SortOrder, nameof(input.SortOrder));
@@ -363,6 +367,14 @@ public sealed class FeedCatalogAdminService(
             parameterName);
         return id.ToString("D");
     }
+
+    private static string ToWireValue(FeedFullTextPolicy policy) => policy switch
+    {
+        FeedFullTextPolicy.None => "NONE",
+        FeedFullTextPolicy.OnOpen => "ON_OPEN",
+        FeedFullTextPolicy.Background => "BACKGROUND",
+        _ => throw new ArgumentOutOfRangeException(nameof(policy))
+    };
 
     private static void ValidateCatalogVersion(long version)
     {

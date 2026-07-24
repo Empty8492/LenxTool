@@ -13,4 +13,5 @@ public sealed record FeedCatalogItemInput(
     FeedViewKind ViewKind,
     int RefreshIntervalMinutes,
     int SortOrder,
-    bool IsEnabled);
+    bool IsEnabled,
+    FeedFullTextPolicy FullTextPolicy = FeedFullTextPolicy.None);

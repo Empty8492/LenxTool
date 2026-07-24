@@ -41,6 +41,7 @@ interface CatalogFeed {
   siteUrl: string | null;
   categoryId: string | null;
   viewKind: string;
+  fullTextPolicy: string;
   refreshIntervalMinutes: number;
   sortOrder: number;
   isEnabled: boolean;
@@ -304,6 +305,7 @@ function feedDto(
     siteUrl: `https://feed${slug}.example.com/`,
     categoryId,
     viewKind: "ARTICLE",
+    fullTextPolicy: "NONE",
     refreshIntervalMinutes: 60,
     sortOrder,
     isEnabled,

@@ -36,7 +36,8 @@ describe("feed catalog migrations", () => {
     expect(migrations.results.map(row => row.name)).toEqual([
       "0001_initial.sql",
       "0002_feed_catalog.sql",
-      "0003_catalog_mutations.sql"
+      "0003_catalog_mutations.sql",
+      "0004_feed_full_text_policy.sql"
     ]);
   });
 
@@ -211,7 +212,8 @@ describe("feed catalog migrations", () => {
     ]);
     expect(feedColumns).toEqual([
       "id", "original_url", "normalized_url", "display_name", "site_url", "category_id", "view_kind",
-      "refresh_interval_minutes", "sort_order", "is_enabled", "deleted_at", "version", "created_at", "updated_at"
+      "refresh_interval_minutes", "sort_order", "is_enabled", "deleted_at", "version", "created_at", "updated_at",
+      "full_text_policy"
     ]);
     expect(stateColumns).toEqual(["singleton_id", "catalog_version", "updated_at", "last_mutation_id"]);
     expect(idempotencyColumns).toEqual([

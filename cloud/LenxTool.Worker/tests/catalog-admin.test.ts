@@ -267,6 +267,7 @@ describe("Worker v1 administrator feed catalog routes", () => {
         siteUrl: "https://example.com/",
         categoryId: category.category.id,
         viewKind: "ARTICLE",
+        fullTextPolicy: "BACKGROUND",
         refreshIntervalMinutes: 60,
         sortOrder: 100,
         isEnabled: true
@@ -281,6 +282,7 @@ describe("Worker v1 administrator feed catalog routes", () => {
         normalizedUrl: "https://example.com/feed.xml?lang=zh&edition=full",
         categoryId: category.category.id,
         viewKind: "ARTICLE",
+        fullTextPolicy: "BACKGROUND",
         refreshIntervalMinutes: 60,
         version: 2
       }
@@ -293,7 +295,13 @@ describe("Worker v1 administrator feed catalog routes", () => {
       "feed-lifecycle-patch",
       {
         method: "PATCH",
-        body: { displayName: "Example Updated", categoryId: null, sortOrder: 200, isEnabled: false }
+        body: {
+          displayName: "Example Updated",
+          categoryId: null,
+          fullTextPolicy: "ON_OPEN",
+          sortOrder: 200,
+          isEnabled: false
+        }
       }
     );
     const patched = await patchResponse.json<FeedMutation>();
@@ -304,6 +312,7 @@ describe("Worker v1 administrator feed catalog routes", () => {
         id: created.feed.id,
         displayName: "Example Updated",
         categoryId: null,
+        fullTextPolicy: "ON_OPEN",
         sortOrder: 200,
         isEnabled: false,
         version: 3
@@ -324,12 +333,13 @@ describe("Worker v1 administrator feed catalog routes", () => {
       resourceType: "FEED"
     });
     const stored = await env.DB.prepare(
-      "SELECT normalized_url,display_name,category_id,is_enabled,version,deleted_at FROM managed_feeds WHERE id=?"
+      "SELECT normalized_url,display_name,category_id,full_text_policy,is_enabled,version,deleted_at FROM managed_feeds WHERE id=?"
     ).bind(created.feed.id).first<Record<string, unknown>>();
     expect(stored).toMatchObject({
       normalized_url: "https://example.com/feed.xml?lang=zh&edition=full",
       display_name: "Example Updated",
       category_id: null,
+      full_text_policy: "ON_OPEN",
       is_enabled: 0,
       version: 4,
       deleted_at: expect.any(String)
@@ -385,6 +395,22 @@ describe("Worker v1 administrator feed catalog routes", () => {
     });
     expect(unsafeFeed.status).toBe(400);
     await expect(errorBody(unsafeFeed)).resolves.toMatchObject({ code: "VALIDATION_ERROR" });
+
+    const unsafePolicy = await mutationRequest("/v1/admin/feeds", admin, 1, "conflict-feed-policy", {
+      method: "POST",
+      body: {
+        originalUrl: "https://example.com/policy.xml",
+        displayName: "Unsafe policy",
+        categoryId: category.category.id,
+        viewKind: "ARTICLE",
+        fullTextPolicy: "BYPASS_PAYWALL",
+        refreshIntervalMinutes: 60,
+        sortOrder: 0,
+        isEnabled: true
+      }
+    });
+    expect(unsafePolicy.status).toBe(400);
+    await expect(errorBody(unsafePolicy)).resolves.toMatchObject({ code: "VALIDATION_ERROR" });
 
     const feedResponse = await mutationRequest("/v1/admin/feeds", admin, 1, "conflict-feed-create", {
       method: "POST",

@@ -237,6 +237,8 @@ public sealed class FeedAdminViewModelTests
         context.ViewModel.BeginNewFeedCommand.Execute(null);
         context.ViewModel.FeedUrlInput = "https://new.example/";
         await context.ViewModel.DiscoverCommand.ExecuteAsync();
+        context.ViewModel.SelectedFullTextPolicy = context.ViewModel.FullTextPolicyChoices.Single(
+            choice => choice.Policy == FeedFullTextPolicy.Background);
 
         await context.ViewModel.SaveFeedCommand.ExecuteAsync();
 
@@ -244,6 +246,7 @@ public sealed class FeedAdminViewModelTests
         Assert.Equal("create", call.Operation);
         Assert.Equal(7, call.ExpectedVersion);
         Assert.Equal("https://new.example/feed.xml", call.Input!.OriginalUrl);
+        Assert.Equal(FeedFullTextPolicy.Background, call.Input.FullTextPolicy);
         Assert.Equal(8, context.ViewModel.CatalogVersion);
         Assert.Equal(2, context.ViewModel.Feeds.Count);
         Assert.Contains("已保存", context.ViewModel.Status, StringComparison.Ordinal);

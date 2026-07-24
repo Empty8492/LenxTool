@@ -419,6 +419,7 @@ public sealed class FeedCatalogSyncServiceTests
         siteUrl = "https://feeds.example/",
         categoryId = "20000000-0000-4000-8000-000000000001",
         viewKind = "ARTICLE",
+        fullTextPolicy = enabled ? "BACKGROUND" : "NONE",
         refreshIntervalMinutes = 60,
         sortOrder = enabled ? 10 : 20,
         isEnabled = enabled,
@@ -462,7 +463,8 @@ public sealed class FeedCatalogSyncServiceTests
                 true,
                 version,
                 Now.AddDays(-2),
-                Now.AddHours(-1))]);
+                Now.AddHours(-1),
+                FeedFullTextPolicy.Background)]);
 
     private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
     {

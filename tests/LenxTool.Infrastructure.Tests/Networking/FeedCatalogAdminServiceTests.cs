@@ -32,6 +32,9 @@ public sealed class FeedCatalogAdminServiceTests
                 "category-1",
                 operations[1].GetProperty("input").GetProperty("categoryRef").GetProperty("operationId").GetString());
             Assert.False(operations[1].GetProperty("input").TryGetProperty("categoryId", out _));
+            Assert.Equal(
+                "BACKGROUND",
+                operations[1].GetProperty("input").GetProperty("fullTextPolicy").GetString());
             return JsonResponse(HttpStatusCode.OK, """
                 {"catalogVersion":42,"results":[
                   {"operationId":"category-1","resourceType":"FEED_CATEGORY","resourceId":"10000000-0000-4000-8000-000000000002"},
@@ -56,7 +59,8 @@ public sealed class FeedCatalogAdminServiceTests
                         FeedViewKind.Article,
                         60,
                         100,
-                        true),
+                        true,
+                        FeedFullTextPolicy.Background),
                     CategoryOperationId: "category-1")
             ],
             41,

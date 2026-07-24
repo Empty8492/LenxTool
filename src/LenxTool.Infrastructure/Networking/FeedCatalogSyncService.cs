@@ -437,6 +437,13 @@ public sealed class FeedCatalogSyncService : IFeedCatalogSyncService, IDisposabl
                 "NOTIFICATION" => FeedViewKind.Notification,
                 _ => throw CreateInvalidCatalogException()
             };
+            FeedFullTextPolicy fullTextPolicy = feed.FullTextPolicy switch
+            {
+                null or "NONE" => FeedFullTextPolicy.None,
+                "ON_OPEN" => FeedFullTextPolicy.OnOpen,
+                "BACKGROUND" => FeedFullTextPolicy.Background,
+                _ => throw CreateInvalidCatalogException()
+            };
             feeds.Add(new(
                 feed.Id!,
                 feed.OriginalUrl!,
@@ -450,7 +457,8 @@ public sealed class FeedCatalogSyncService : IFeedCatalogSyncService, IDisposabl
                 feed.IsEnabled,
                 feed.Version,
                 feed.CreatedAt!.Value,
-                feed.UpdatedAt!.Value));
+                feed.UpdatedAt!.Value,
+                fullTextPolicy));
         }
 
         return new(
@@ -588,6 +596,7 @@ public sealed class FeedCatalogSyncService : IFeedCatalogSyncService, IDisposabl
         public string? SiteUrl { get; init; }
         public string? CategoryId { get; init; }
         public string? ViewKind { get; init; }
+        public string? FullTextPolicy { get; init; }
         public int RefreshIntervalMinutes { get; init; }
         public int SortOrder { get; init; }
         public bool IsEnabled { get; init; }
