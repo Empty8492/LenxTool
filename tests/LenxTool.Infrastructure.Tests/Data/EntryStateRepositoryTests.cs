@@ -139,6 +139,51 @@ public sealed class EntryStateRepositoryTests : IDisposable
         Assert.Equal("resume", state.Note);
     }
 
+    [Fact]
+    public async Task PrivateReadingStateDoesNotChangeSharedCatalogVersion()
+    {
+        using SqliteDatabase database = await CreateDatabaseAsync();
+        long versionBefore = await ReadCatalogVersionAsync(database);
+        var stateRepository = new EntryStateRepository(database);
+        var favoriteRepository = new FavoriteRepository(database);
+
+        await stateRepository.PatchAsync(
+            "entry-private",
+            "default",
+            new(IsRead: true, Progress: 62.5, Note: "本机阅读进度"),
+            CancellationToken.None);
+        FavoriteItem favorite = await favoriteRepository.UpsertAsync(
+            "feed_entry",
+            "entry-private",
+            "本机收藏备注",
+            CancellationToken.None);
+        TagItem tag = await favoriteRepository.UpsertTagAsync(
+            "稍后精读",
+            "blue",
+            CancellationToken.None);
+        await favoriteRepository.SetTagsAsync(
+            favorite.EntityType,
+            favorite.EntityId,
+            [tag.Id],
+            CancellationToken.None);
+
+        Assert.Equal(versionBefore, await ReadCatalogVersionAsync(database));
+    }
+
+    private static async Task<long> ReadCatalogVersionAsync(SqliteDatabase database)
+    {
+        await using SqliteConnection connection = await database
+            .OpenConnectionAsync(CancellationToken.None);
+        await using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT catalog_version
+            FROM feed_catalog_state
+            WHERE singleton_id=1;
+            """;
+        object? result = await command.ExecuteScalarAsync(CancellationToken.None);
+        return Assert.IsType<long>(result);
+    }
+
     private async Task<SqliteDatabase> CreateDatabaseAsync()
     {
         var database = new SqliteDatabase(

@@ -6,6 +6,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="LenxTool.Infrastructure.Tests" />
+    <InternalsVisibleTo Include="LenxTool.App.Tests" />
   </ItemGroup>
 
   <ItemGroup>

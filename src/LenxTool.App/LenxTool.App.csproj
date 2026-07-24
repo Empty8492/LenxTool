@@ -6,6 +6,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="LenxTool.App.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <EmbeddedResource Include="..\..\installer\update-public-key.pem"
                       Link="Resources\update-public-key.pem"
                       LogicalName="LenxTool.UpdatePublicKey" />

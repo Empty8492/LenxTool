@@ -1,6 +1,7 @@
 ﻿using System.IO;
 using System.Reflection;
 using System.Windows;
+using LenxTool.App.Controls;
 using LenxTool.App.Services;
 using LenxTool.App.ViewModels;
 using LenxTool.Core.Contracts;
@@ -38,6 +39,8 @@ public partial class App : Application
             ConfigureServices(builder.Services);
             _host = builder.Build();
             await _host.StartAsync().ConfigureAwait(true);
+            ArticleImageBlockFactory.Configure(
+                _host.Services.GetRequiredService<IArticleImageDownloader>());
 
             SqliteDatabase database = _host.Services.GetRequiredService<SqliteDatabase>();
             await database.InitializeAsync(CancellationToken.None).ConfigureAwait(true);
@@ -126,6 +129,7 @@ public partial class App : Application
         services.AddSingleton<IOpmlCodec, OpmlCodec>();
         services.AddSingleton<IOpmlFileService, OpmlFileService>();
         services.AddFeedDiscovery(CreateFeedDiscoveryOptions());
+        services.AddArticleImages(ArticleImageDownloadOptions.Default);
         services.AddFeedRefresh(FeedRefreshOptions.Default);
         services.AddSingleton<MediaJobRepository>();
         services.AddSingleton<IMediaJobRepository>(static services =>

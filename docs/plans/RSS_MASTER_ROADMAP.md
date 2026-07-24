@@ -1,7 +1,7 @@
 # 管理员策展 RSS 集成总路线图
 
-状态：已规划，尚未实现
-最后核对：2026-07-21
+状态：P0 已完成，P1 进行中（P1-01～P1-06 与 P1-A 已完成，下一项 P1-07）
+最后核对：2026-07-24
 参考基线：[RSSNext/Folo](https://github.com/RSSNext/Folo) `dev` 分支提交 [`773f1bfe`](https://github.com/RSSNext/Folo/commit/773f1bfe218ac349b9fb9b5cbd982c320f6b414f)
 
 ## 1. 目标与验收边界

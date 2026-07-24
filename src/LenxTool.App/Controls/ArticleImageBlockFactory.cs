@@ -1,24 +1,30 @@
 using System.IO;
-using System.Net;
-using System.Net.Http;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using LenxTool.Core.Contracts;
+using LenxTool.Core.Models;
 
 namespace LenxTool.App.Controls;
 
 internal static class ArticleImageBlockFactory
 {
-    private static readonly HttpClient HttpClient = CreateHttpClient();
-    private static readonly ArticleImageDownloader Downloader = new(HttpClient);
-    private static readonly SemaphoreSlim DownloadSlots = new(4, 4);
+    private static IArticleImageDownloader? _downloader;
+
+    internal static void Configure(IArticleImageDownloader downloader)
+    {
+        ArgumentNullException.ThrowIfNull(downloader);
+        Volatile.Write(ref _downloader, downloader);
+    }
 
     public static FrameworkElement Create(
+        string entryId,
         string imageUrl,
         string altText,
         string referrer,
+        ArticleImageDownloadBudget budget,
         CancellationToken cancellationToken)
     {
         var image = new Image
@@ -54,22 +60,50 @@ internal static class ArticleImageBlockFactory
         frame.SetResourceReference(Border.BackgroundProperty, "Brush.SurfaceRaised");
         frame.SetResourceReference(Border.BorderBrushProperty, "Brush.Border");
 
-        _ = LoadAsync(image, status, imageUrl, referrer, cancellationToken);
+        IArticleImageDownloader? downloader = Volatile.Read(ref _downloader);
+        if (downloader is null)
+        {
+            status.Text = "图片缓存服务尚未就绪，可通过“查看网页原文”打开。";
+            return frame;
+        }
+
+        _ = LoadAsync(
+            downloader,
+            image,
+            status,
+            entryId,
+            imageUrl,
+            referrer,
+            budget,
+            cancellationToken);
         return frame;
     }
 
     private static async Task LoadAsync(
+        IArticleImageDownloader downloader,
         Image image,
         TextBlock status,
+        string entryId,
         string imageUrl,
         string referrer,
+        ArticleImageDownloadBudget budget,
         CancellationToken cancellationToken)
     {
         try
         {
-            byte[] bytes = await DownloadAsync(imageUrl, referrer, cancellationToken);
+            ArticleImageContent? content = await downloader.GetAsync(
+                entryId,
+                imageUrl,
+                referrer,
+                budget,
+                cancellationToken);
+            if (content is null)
+            {
+                status.Text = "图片暂时无法加载，可通过“查看网页原文”打开。";
+                return;
+            }
             cancellationToken.ThrowIfCancellationRequested();
-            using var stream = new MemoryStream(bytes, writable: false);
+            using var stream = new MemoryStream(content.Bytes, writable: false);
             var bitmap = new BitmapImage();
             bitmap.BeginInit();
             bitmap.CacheOption = BitmapCacheOption.OnLoad;
@@ -89,37 +123,9 @@ internal static class ArticleImageBlockFactory
         {
             status.Text = "图片加载超时，可通过“查看网页原文”打开。";
         }
-        catch (Exception exception) when (
-            exception is HttpRequestException
-                or InvalidDataException
-                or NotSupportedException
-                or IOException
-                or FormatException
-                or InvalidOperationException)
+        catch (Exception)
         {
             status.Text = "图片暂时无法加载，可通过“查看网页原文”打开。";
         }
-    }
-
-    private static async Task<byte[]> DownloadAsync(
-        string imageUrl,
-        string referrer,
-        CancellationToken cancellationToken)
-    {
-        await DownloadSlots.WaitAsync(cancellationToken);
-        try
-        {
-            return await Downloader.DownloadAsync(imageUrl, referrer, cancellationToken);
-        }
-        finally
-        {
-            DownloadSlots.Release();
-        }
-    }
-
-    private static HttpClient CreateHttpClient()
-    {
-        var handler = new HttpClientHandler { AutomaticDecompression = DecompressionMethods.All };
-        return new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(20) };
     }
 }

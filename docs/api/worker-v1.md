@@ -1,7 +1,7 @@
 # Worker v1 账号与共享订阅目录 API 契约
 
-状态：已冻结，P0-02～P0-05 身份、目录 schema、管理员写入和只读目录已实现，待 P0-06 桌面接线
-最后核对：2026-07-22
+状态：已冻结，P0-02～P0-06 身份、目录 schema、管理员写入、只读目录和桌面接线均已实现
+最后核对：2026-07-24
 适用范围：LenxTool 桌面端与 `cloud/LenxTool.Worker` 之间的账号、会话和管理员策展目录接口
 
 本文是 P0 的契约真相源。实现顺序和验收见 [P0 详细计划](../plans/RSS_P0_ADMIN_CATALOG.md)，安全边界见 [威胁模型](../THREAT_MODEL.md)，云端只保存共享目录配置的决策见 [ADR-001](../decisions/ADR-001-admin-curated-rss.md)。

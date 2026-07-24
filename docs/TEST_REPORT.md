@@ -9,14 +9,14 @@
 | 测试组 | 结果 |
 |---|---:|
 | LenxTool.Core.Tests | 39 passed |
-| LenxTool.Infrastructure.Tests | 189 passed |
-| LenxTool.App.Tests | 101 passed |
+| LenxTool.Infrastructure.Tests | 201 passed |
+| LenxTool.App.Tests | 100 passed |
 | Cloudflare Worker Vitest | 39 passed |
 | Worker TypeScript strict typecheck | passed |
 | .NET build warnings | 0 |
 | NuGet vulnerable packages | 0 detected |
 
-本轮执行 `dotnet build LenxTools.slnx -c Release --no-restore` 与 `dotnet test LenxTools.slnx -c Release --no-build`，结果为 0 警告、0 错误；Core 39、Infrastructure 189、App 101，共 329/329 通过且无跳过。Worker 严格 typecheck 和官方 workerd/D1 Vitest 39/39 保持通过（Wrangler 日志目录受当前沙箱权限限制，但不影响断言）。
+本轮执行 `dotnet build LenxTools.slnx -c Release --no-restore` 与 `dotnet test LenxTools.slnx -c Release --no-restore`，结果为 0 警告、0 错误；Core 39、Infrastructure 201、App 100，共 340/340 通过且无跳过。Worker 严格 typecheck 和官方 workerd/D1 Vitest 39/39 保持通过（Wrangler 日志目录受当前沙箱权限限制，但不影响断言）。
 
 P0-08 覆盖 4 项 SQLite 集成场景并同步既有 schema 断言：新建库创建目录状态、分类、Feed、抓取状态、条目、索引和搜索映射；真实 schema v2 哨兵数据经 v3/v4 原位升级后仍可由现有仓储读取；迁移对象冲突时完整回滚且版本停留在 v3；相同外部 ID、URL 和内容哈希可存在于不同 Feed，同一 Feed 内重复外部 ID 被约束拒绝。既有包含未 checkpoint WAL 提交的一致性备份测试继续通过。
 
@@ -59,6 +59,10 @@ P1-03 历史页一致入口新增 1 个 App 场景：统一搜索选中 Feed 结
 P1-04 阅读进度切片新增 1 个 App ViewModel 场景并扩展 1 个 XAML 场景：连续滚动事件只在 500 ms 防抖后写入 0～100% 进度，最新值覆盖旧值；重新选择条目恢复正文位置，“从头阅读”会重置并持久化为 0；原生 `ScrollViewer` 使用非动画恢复并保护初始滚动事件，布局测试覆盖进度绑定、重置命令和 `ScrollChanged` 事件。
 
 P1-05 资源索引与缓存基础切片新增 4 个 Infrastructure 场景并提升 schema 断言：内容以 SHA-256 哈希命名，临时文件成功后转正并持久化来源/MIME/大小/时间；超出单资源上限不会留下索引或临时文件；按最近访问时间清理未保护内容哈希；篡改文件会被哈希校验发现并从索引移除。schema v7、迁移回滚路径和缓存目录/索引断言均通过。
+
+P1-A 新增 1 个隔离的真实 WPF 运行场景与 1 个 Infrastructure 隔离场景：STA 线程加载真实应用资源、`Window`、Feed 时间线、原生 `ScrollViewer` 和临时 schema v7 SQLite，长文从 55% 恢复、滚动到约 73% 防抖写入，关闭并重建 ViewModel/视图后再次恢复；备注输入框取得键盘焦点，备注与标签从同一临时库回读。私人已读/进度/备注/收藏/标签写入前后共享目录版本保持不变，180 天清理保护继续由条目仓储集成测试覆盖。
+
+P1-06 新增 11 个 Infrastructure 场景并扩展真实 WPF 运行场景：缓存命中不解析 DNS/请求网络，下载使用已验证固定地址并写入内容寻址缓存；私网重定向在第二次请求前阻断；错误 MIME、SVG 及伪装 PNG 不落盘；每篇资源/网络字节预算、全局并发和调用方取消生效，取消不进入失败缓存；离线失败后的重复读取不再次请求。WPF 使用真实 `EntryAssetStore` 解码显示离线 PNG，未命中显示稳定占位，重复创建同一条目仍只发生一次 DNS 尝试。Feed 发现与图片传输共用固定-IP handler 工厂，受影响网络测试同步通过。
 
 桌面账号新增 8 项 Infrastructure 测试和 7 项 App 测试：覆盖登录、refresh token 恢复、`/v1/me`、并发 401 单次刷新、每请求最多重放一次、失效清理、离线退出、DPAPI 删除/写入失败脱敏、登录密码清空、过期与额度显示、admin/user 导航隔离、角色降级回退和 XAML 自动化名称/绑定。
 

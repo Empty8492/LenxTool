@@ -10,6 +10,9 @@ namespace LenxTool.App.Controls;
 
 public sealed class RichArticleView : UserControl, IDisposable
 {
+    private const int MaximumImagesPerArticle = 24;
+    private const long MaximumImageNetworkBytesPerArticle = 48L * 1024 * 1024;
+
     public static readonly DependencyProperty ArticleProperty = DependencyProperty.Register(
         nameof(Article),
         typeof(NewsArticle),
@@ -74,6 +77,9 @@ public sealed class RichArticleView : UserControl, IDisposable
         RichArticleDocument content = RichArticleFormatter.Parse(
             string.IsNullOrWhiteSpace(article.RichContent) ? article.Content : article.RichContent,
             article.Url);
+        var imageBudget = new ArticleImageDownloadBudget(
+            MaximumImagesPerArticle,
+            MaximumImageNetworkBytesPerArticle);
         if (content.Blocks.Count == 0 || !content.Blocks.Any(block => block.Kind == RichArticleBlockKind.Heading))
         {
             _contentPanel.Children.Add(CreateTextBlock(
@@ -96,9 +102,11 @@ public sealed class RichArticleView : UserControl, IDisposable
             if (block.Kind == RichArticleBlockKind.Image && block.ImageUrl is not null)
             {
                 _contentPanel.Children.Add(ArticleImageBlockFactory.Create(
+                    article.Id,
                     block.ImageUrl,
                     block.Text,
                     article.Url,
+                    imageBudget,
                     _imageLoadCancellation.Token));
             }
             else
