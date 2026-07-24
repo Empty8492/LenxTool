@@ -25,6 +25,26 @@ public sealed class RichArticleFormatterTests
     }
 
     [Fact]
+    public void ParseOmitsVideoEditionPromotionLine()
+    {
+        const string html = """
+            <article>
+              <h1>AI 早报 2026-07-24</h1>
+              <p>视频版：<a href="https://bilibili.example/video">哔哩哔哩</a> | <a href="https://youtube.example/video">YouTube</a></p>
+              <h2>概览</h2>
+              <p>正常正文</p>
+            </article>
+            """;
+
+        RichArticleDocument document = RichArticleFormatter.Parse(html);
+
+        Assert.DoesNotContain(
+            document.Blocks,
+            block => block.Text.StartsWith("视频版", StringComparison.Ordinal));
+        Assert.Contains(document.Blocks, block => block.Text == "正常正文");
+    }
+
+    [Fact]
     public void ParsePreservesHtmlAndMarkdownImagesInDocumentOrder()
     {
         const string content = """

@@ -3,6 +3,7 @@ using System.Net;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
+using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -37,6 +38,7 @@ public sealed class FeedTimelineWpfRuntimeTests
             Window? reopenedWindow = null;
             Window? cachedImageWindow = null;
             Window? missingImageWindow = null;
+            Window? filtersWindow = null;
             NewsCenterViewModel? viewModel = null;
             NewsCenterViewModel? reopenedViewModel = null;
             try
@@ -120,6 +122,10 @@ public sealed class FeedTimelineWpfRuntimeTests
                     Content = cachedArticleView
                 };
                 cachedImageWindow.Show();
+                Assert.DoesNotContain(
+                    FindDescendants<TextBlock>(cachedArticleView)
+                        .SelectMany(textBlock => textBlock.Inlines.OfType<Run>()),
+                    run => run.Text.Contains("查看网页原文", StringComparison.Ordinal));
                 Image cachedImage = FindDescendant<Image>(
                     cachedArticleView,
                     element => AutomationProperties.GetName(element) == "离线缓存图片");
@@ -182,6 +188,36 @@ public sealed class FeedTimelineWpfRuntimeTests
                 missingImageWindow = null;
 
                 viewModel = CreateViewModel(states, favorites);
+                var filtersView = new FeedTimelineFiltersView
+                {
+                    DataContext = viewModel
+                };
+                filtersWindow = new Window
+                {
+                    Width = 1080,
+                    Height = 260,
+                    Left = -10000,
+                    Top = -10000,
+                    ShowInTaskbar = false,
+                    Content = filtersView
+                };
+                filtersWindow.Show();
+                ComboBox readFilter = FindDescendant<ComboBox>(
+                    filtersView,
+                    element => AutomationProperties.GetName(element)
+                        == "Feed 阅读状态筛选");
+                PumpUntil(
+                    () => FindDescendants<TextBlock>(readFilter)
+                        .Any(textBlock => textBlock.Text == "全部"),
+                    TimeSpan.FromSeconds(5));
+                Assert.DoesNotContain(
+                    FindDescendants<TextBlock>(readFilter),
+                    textBlock => textBlock.Text.Contains(
+                        nameof(FeedTimelineReadFilterOption),
+                        StringComparison.Ordinal));
+                filtersWindow.Close();
+                filtersWindow = null;
+
                 FeedTimelineItem item = new(
                     entry,
                     "Runtime Feed",
@@ -295,6 +331,7 @@ public sealed class FeedTimelineWpfRuntimeTests
             {
                 missingImageWindow?.Close();
                 cachedImageWindow?.Close();
+                filtersWindow?.Close();
                 reopenedWindow?.Close();
                 window?.Close();
                 reopenedViewModel?.Dispose();
@@ -412,6 +449,27 @@ public sealed class FeedTimelineWpfRuntimeTests
             }
         }
         throw new InvalidOperationException($"Could not find {typeof(T).Name} in the visual tree.");
+    }
+
+    private static List<T> FindDescendants<T>(DependencyObject root)
+        where T : DependencyObject
+    {
+        var matches = new List<T>();
+        CollectDescendants(root, matches);
+        return matches;
+    }
+
+    private static void CollectDescendants<T>(
+        DependencyObject root,
+        ICollection<T> matches)
+        where T : DependencyObject
+    {
+        for (int index = 0; index < VisualTreeHelper.GetChildrenCount(root); index++)
+        {
+            DependencyObject child = VisualTreeHelper.GetChild(root, index);
+            if (child is T match) matches.Add(match);
+            CollectDescendants(child, matches);
+        }
     }
 
     private static void PumpUntil(Func<bool> condition, TimeSpan timeout)

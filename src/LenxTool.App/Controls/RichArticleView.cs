@@ -93,8 +93,7 @@ public sealed class RichArticleView : UserControl, IDisposable
             TextWrapping = TextWrapping.Wrap
         };
         meta.SetResourceReference(TextBlock.ForegroundProperty, "Brush.TextSecondary");
-        meta.Inlines.Add(new Run($"{article.Source}  ·  {article.PublishedDate:yyyy-MM-dd}  ·  "));
-        AddLink(meta.Inlines, "查看网页原文 ↗", article.Url);
+        meta.Inlines.Add(new Run($"{article.Source}  ·  {article.PublishedDate:yyyy-MM-dd}"));
         _contentPanel.Children.Add(meta);
 
         foreach (RichArticleBlock block in content.Blocks)

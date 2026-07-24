@@ -43,6 +43,26 @@ public sealed class ShellViewModelTests
     }
 
     [Fact]
+    public void NavigateNotifiesSharedSectionPageOfTheSelectedTopLevelRoute()
+    {
+        TestSectionPageViewModel news = new();
+        ShellViewModel shell = new(
+        [
+            new("home", "首页", "今日概览", IconData, new TestPageViewModel("首页")),
+            new("news", "资讯列表", "浏览订阅内容", IconData, news),
+            new("daily-briefing", "每日早报", "查看每日概览", IconData, news),
+            new("trends", "热点趋势", "查看平台热榜", IconData, news),
+            new("ai-reports", "AI 报告", "查看本地报告", IconData, news)
+        ], new FakeAccountSessionService());
+
+        shell.NavigateCommand.Execute("daily-briefing");
+
+        Assert.Same(news, shell.CurrentPage);
+        Assert.Equal("daily-briefing", shell.SelectedPageId);
+        Assert.Equal("daily-briefing", news.LastRouteId);
+    }
+
+    [Fact]
     public void AdminNavigationTracksServerSessionRoleAndProtectsCurrentPage()
     {
         var account = new FakeAccountSessionService();
@@ -95,4 +115,17 @@ public sealed class ShellViewModelTests
     }
 
     private sealed class TestPageViewModel(string title) : PageViewModel(title, string.Empty);
+
+    private sealed class TestSectionPageViewModel
+        : PageViewModel, INavigationAware
+    {
+        public TestSectionPageViewModel()
+            : base("资讯列表", string.Empty)
+        {
+        }
+
+        public string? LastRouteId { get; private set; }
+
+        public void OnNavigated(string routeId) => LastRouteId = routeId;
+    }
 }

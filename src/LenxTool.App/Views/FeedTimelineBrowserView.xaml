@@ -24,7 +24,7 @@
                                        ScrollViewer.VerticalScrollBarVisibility="Auto"
                                        VirtualizingPanel.IsVirtualizing="True"
                                        VirtualizingPanel.VirtualizationMode="Recycling"
-                                       AutomationProperties.Name="共享 Feed 时间线列表">
+                                       AutomationProperties.Name="资讯列表">
                     <controls:PagedListBox.ItemContainerStyle>
                         <Style TargetType="ListBoxItem">
                             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
@@ -116,8 +116,9 @@
                     </DockPanel>
                 </Border>
                 <Border Grid.RowSpan="2"
-                        Margin="18"
+                        Margin="0"
                         Padding="20"
+                        Panel.ZIndex="10"
                         Background="{DynamicResource Brush.SurfaceRaised}"
                         IsHitTestVisible="False"
                         CornerRadius="10">
@@ -282,8 +283,9 @@
                     <controls:RichArticleView Article="{Binding SelectedFeedArticle}" />
                 </ScrollViewer>
                 <Border Grid.RowSpan="2"
-                        Margin="20"
+                        Margin="0"
                         Padding="20"
+                        Panel.ZIndex="10"
                         Background="{DynamicResource Brush.SurfaceRaised}"
                         IsHitTestVisible="False"
                         CornerRadius="10">

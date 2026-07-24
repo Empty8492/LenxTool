@@ -30,4 +30,21 @@ public partial class MainWindow : Window
             e.Handled = true;
         }
     }
+
+    private void MinimizeWindow(object sender, RoutedEventArgs e)
+    {
+        WindowState = System.Windows.WindowState.Minimized;
+    }
+
+    private void ToggleMaximizeWindow(object sender, RoutedEventArgs e)
+    {
+        WindowState = WindowState == System.Windows.WindowState.Maximized
+            ? System.Windows.WindowState.Normal
+            : System.Windows.WindowState.Maximized;
+    }
+
+    private void CloseWindow(object sender, RoutedEventArgs e)
+    {
+        Close();
+    }
 }

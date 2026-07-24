@@ -51,7 +51,7 @@ public sealed class NewsCenterLayoutTests
     }
 
     [Fact]
-    public void NewsPageUsesAnimatedOuterScrollerAndDeferredBackToTopAction()
+    public void NewsPageUsesRoutedSectionsAndDailyScrollBoost()
     {
         XElement template = LoadNewsCenterTemplate();
         XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
@@ -62,11 +62,28 @@ public sealed class NewsCenterLayoutTests
                 && element.Attribute(x + "Name")?.Value == "NewsPageScrollViewer");
         Assert.Equal("Visible", pageScroller.Attribute("VerticalScrollBarVisibility")?.Value);
         Assert.Equal("Disabled", pageScroller.Attribute("HorizontalScrollBarVisibility")?.Value);
+        Assert.Equal(
+            "{Binding WheelScrollMultiplier}",
+            pageScroller.Attribute("WheelScrollMultiplier")?.Value);
+        Assert.Equal(
+            "{Binding SelectedSectionIndex}",
+            pageScroller.Attribute("ScrollResetKey")?.Value);
         Assert.Contains(pageScroller.Descendants(), element => element.Name.LocalName == "TabControl");
         Assert.Contains(
             pageScroller.Descendants(),
             element => element.Name.LocalName == "TextBlock"
-                && element.Attribute("Text")?.Value == "{Binding Title}");
+                && element.Attribute("Text")?.Value == "{Binding ActiveSectionTitle}");
+
+        XElement sectionHost = Assert.Single(
+            pageScroller.Descendants(),
+            element => element.Name.LocalName == "TabControl");
+        Assert.Equal(
+            "{Binding SelectedSectionIndex, Mode=TwoWay}",
+            sectionHost.Attribute("SelectedIndex")?.Value);
+        Assert.Contains(
+            sectionHost.Descendants(),
+            element => element.Name.LocalName == "ContentPresenter"
+                && element.Attribute("ContentSource")?.Value == "SelectedContent");
 
         XElement backToTopButton = Assert.Single(
             template.Descendants(),
@@ -130,23 +147,19 @@ public sealed class NewsCenterLayoutTests
     }
 
     [Fact]
-    public void SelectedNewsTabUsesAnIntentionalBottomIndicator()
+    public void NewsSectionsDoNotRenderAnInternalTabStrip()
     {
         XElement template = LoadNewsCenterTemplate();
-        XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
 
-        XElement indicator = Assert.Single(
+        Assert.DoesNotContain(
+            template.Descendants(),
+            element => element.Attribute("Header")?.Value == "Feed 时间线");
+        Assert.DoesNotContain(
             template.Descendants(),
             element => element.Name.LocalName == "Border"
-                && element.Attribute(x + "Name")?.Value == "SelectedIndicator");
-        Assert.Equal("2", indicator.Attribute("Height")?.Value);
-        Assert.Contains(
-            template.Descendants(),
-            element => element.Name.LocalName == "Trigger"
-                && element.Attribute("Property")?.Value == "IsSelected"
-                && element.Descendants().Any(setter =>
-                    setter.Name.LocalName == "Setter"
-                    && setter.Attribute("TargetName")?.Value == "SelectedIndicator"));
+                && element.Attributes().Any(attribute =>
+                    attribute.Name.LocalName == "Name"
+                    && attribute.Value == "SelectedIndicator"));
     }
 
     [Fact]
@@ -156,7 +169,7 @@ public sealed class NewsCenterLayoutTests
         XElement timelineTab = Assert.Single(
             template.Descendants(),
             element => element.Name.LocalName == "TabItem"
-                && element.Attribute("Header")?.Value == "Feed 时间线");
+                && element.Attribute("Header")?.Value == "资讯列表");
         Assert.Contains(
             timelineTab.Descendants(),
             element => element.Name.LocalName == "FeedTimelineView");
@@ -181,7 +194,7 @@ public sealed class NewsCenterLayoutTests
         XElement timelineTab = Assert.Single(
             template.Descendants(),
             element => element.Name.LocalName == "TabItem"
-                && element.Attribute("Header")?.Value == "Feed 时间线");
+                && element.Attribute("Header")?.Value == "资讯列表");
         Assert.Contains(
             timelineTab.Descendants(),
             element => element.Name.LocalName == "FeedTimelineView");
@@ -211,6 +224,54 @@ public sealed class NewsCenterLayoutTests
             timelineFilters.Descendants().Concat(timelineBrowser.Descendants()),
             element => element.Name.LocalName == "Button"
                 && element.Attribute("Content")?.Value is "新增" or "编辑" or "删除" or "订阅管理");
+    }
+
+    [Fact]
+    public void FeedFiltersRenderLabelsAndEmptyStatesCoverStaleContent()
+    {
+        XElement controls = LoadFixture("Controls.xaml");
+        XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
+        XElement compactComboStyle = Assert.Single(
+            controls.Descendants(),
+            element => element.Name.LocalName == "Style"
+                && element.Attribute(x + "Key")?.Value == "CompactComboBoxStyle");
+        XElement selectionPresenter = Assert.Single(
+            compactComboStyle.Descendants(),
+            element => element.Name.LocalName == "ContentPresenter"
+                && element.Attribute("Content")?.Value
+                    == "{TemplateBinding SelectionBoxItem}");
+        Assert.Equal(
+            "{TemplateBinding ItemTemplateSelector}",
+            selectionPresenter.Attribute("ContentTemplateSelector")?.Value);
+        Assert.Equal(
+            "{TemplateBinding SelectionBoxItemStringFormat}",
+            selectionPresenter.Attribute("ContentStringFormat")?.Value);
+
+        XElement filters = LoadFixture("FeedTimelineFiltersView.xaml");
+        Assert.Contains(
+            filters.Descendants(),
+            element => element.Name.LocalName == "TextBlock"
+                && element.Attribute("Text")?.Value == "资讯列表");
+        Assert.All(
+            filters.Descendants()
+                .Where(element => element.Name.LocalName == "ComboBox"),
+            comboBox => Assert.Equal("Label", comboBox.Attribute("DisplayMemberPath")?.Value));
+
+        XElement browser = LoadFixture("FeedTimelineBrowserView.xaml");
+        XElement[] emptyStates = browser.Descendants()
+            .Where(element => element.Name.LocalName == "Border"
+                && element.Elements().Any(child =>
+                    child.Name.LocalName == "Border.Style"
+                    && child.Descendants().Any(descendant =>
+                        descendant.Name.LocalName == "DataTrigger"
+                        && descendant.Attribute("Value")?.Value is "0" or "{x:Null}")))
+            .ToArray();
+        Assert.Equal(2, emptyStates.Length);
+        Assert.All(emptyStates, emptyState =>
+        {
+            Assert.Equal("0", emptyState.Attribute("Margin")?.Value);
+            Assert.Equal("10", emptyState.Attribute("Panel.ZIndex")?.Value);
+        });
     }
 
     [Fact]

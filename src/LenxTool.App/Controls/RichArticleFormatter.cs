@@ -93,6 +93,12 @@ public static partial class RichArticleFormatter
                 line = line[2..];
             }
 
+            if (kind == RichArticleBlockKind.Body
+                && VideoEditionLinePattern().IsMatch(line))
+            {
+                continue;
+            }
+
             blocks.Add(new(kind, ParseInlines(line)));
         }
 
@@ -242,6 +248,9 @@ public static partial class RichArticleFormatter
 
     [GeneratedRegex("\\{(?<display>[^{}|]+)\\|(?:\"[^\"]*\"|[^{}]+)\\}", RegexOptions.CultureInvariant)]
     private static partial Regex SpeechAnnotationPattern();
+
+    [GeneratedRegex("^视频版\\s*[:：]", RegexOptions.CultureInvariant)]
+    private static partial Regex VideoEditionLinePattern();
 
     private sealed record RichArticleImage(string Url, string AltText);
 }

@@ -127,6 +127,117 @@ public sealed class DashboardViewModelTests
         Assert.Empty(viewModel.LegacyNews);
     }
 
+    [Fact]
+    public async Task InitializeBuildsHomepageBriefingFromLatestDailyOverview()
+    {
+        DateTimeOffset now = new(2026, 7, 24, 10, 0, 0, TimeSpan.Zero);
+        FeedEntry feedEntry = new(
+            "feed-entry",
+            "feed-id",
+            "external",
+            "https://daily.juya.uk/article/1",
+            "Feed title",
+            null,
+            now,
+            null,
+            "summary",
+            "content",
+            [],
+            [],
+            "feed-hash",
+            now);
+        NewsArticle briefing = new(
+            "briefing",
+            new(2026, 7, 24),
+            "AI 早报",
+            "2026-07-24",
+            "summary",
+            "content",
+            "https://daily.juya.uk/issues/2026-07-24/",
+            "briefing-hash",
+            now)
+        {
+            RichContent = """
+                <h1>AI 早报 2026-07-24</h1>
+                <h2>概览</h2>
+                <h3>要闻</h3>
+                <ul>
+                  <li>ChatGPT Voice 支持语音控制电脑</li>
+                  <li>Claude 更新语音模式</li>
+                  <li>这一条超过首页每栏展示上限</li>
+                </ul>
+                <h3>模型发布</h3>
+                <ul><li>FLUX 3 发布多模态模型</li></ul>
+                <h2>详情</h2>
+                <h3>不应进入首页概览</h3>
+                <ul><li>正文内容</li></ul>
+                """
+        };
+        var viewModel = new DashboardViewModel(
+            new StubFeedEntryRepository(feedEntry),
+            new StubFeedCatalogRepository(),
+            new StubNewsRepository([briefing], []),
+            new StubMediaJobRepository(),
+            new StubFavoriteRepository(0));
+
+        await viewModel.InitializeAsync(CancellationToken.None);
+
+        Assert.NotEmpty(viewModel.BriefingSections);
+        Assert.Equal("2026-07-24", viewModel.BriefingTitle);
+        Assert.Equal("AI 早报 · 07-24", viewModel.BriefingMeta);
+        Assert.Collection(
+            viewModel.BriefingSections,
+            section =>
+            {
+                Assert.Equal("要闻", section.Title);
+                Assert.Equal(
+                    [
+                        "ChatGPT Voice 支持语音控制电脑",
+                        "Claude 更新语音模式",
+                        "这一条超过首页每栏展示上限"
+                    ],
+                    section.Items);
+            },
+            section =>
+            {
+                Assert.Equal("模型发布", section.Title);
+                Assert.Equal(["FLUX 3 发布多模态模型"], section.Items);
+            });
+    }
+
+    [Fact]
+    public async Task InitializeShowsEmptyBriefingStateWhenNoDailyCacheExists()
+    {
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        FeedEntry feedEntry = new(
+            "feed-entry",
+            "feed-id",
+            "external",
+            "https://example.com/article",
+            "Feed title",
+            null,
+            now,
+            null,
+            "summary",
+            "content",
+            [],
+            [],
+            "feed-hash",
+            now);
+        var viewModel = new DashboardViewModel(
+            new StubFeedEntryRepository(feedEntry),
+            new StubFeedCatalogRepository(),
+            new StubNewsRepository([], []),
+            new StubMediaJobRepository(),
+            new StubFavoriteRepository(0));
+
+        await viewModel.InitializeAsync(CancellationToken.None);
+
+        Assert.Empty(viewModel.BriefingSections);
+        Assert.Equal("暂无每日早报", viewModel.BriefingTitle);
+        Assert.Contains("刷新", viewModel.BriefingEmptyText);
+    }
+
     private sealed class StubFeedEntryRepository(FeedEntry entry) : IFeedEntryRepository
     {
         public FeedEntryQuery? LastQuery { get; private set; }

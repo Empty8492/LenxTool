@@ -14,7 +14,7 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <StackPanel>
-                    <TextBlock Style="{StaticResource SectionTitleStyle}" Text="共享 Feed 时间线" />
+                    <TextBlock Style="{StaticResource SectionTitleStyle}" Text="资讯列表" />
                     <TextBlock Margin="0,4,0,0"
                                Style="{StaticResource MetaTextStyle}"
                                Text="{Binding TimelineStatus}"

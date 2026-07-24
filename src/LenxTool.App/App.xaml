@@ -39,38 +39,56 @@
                             </Grid.ColumnDefinitions>
                             <Border Style="{StaticResource BentoCardStyle}">
                                 <StackPanel>
-                                    <DockPanel LastChildFill="False">
-                                        <TextBlock Style="{StaticResource SectionTitleStyle}" Text="今日早报" />
-                                        <Border DockPanel.Dock="Right" Padding="8,4" Background="{DynamicResource Brush.AccentSoft}" CornerRadius="12">
-                                            <TextBlock FontSize="11" Foreground="{DynamicResource Brush.Accent}" Text="{Binding NewsStatus}" />
-                                        </Border>
-                                    </DockPanel>
-                                    <ItemsControl Margin="0,16,0,0" ItemsSource="{Binding News}">
+                                    <ItemsControl Margin="0,0,0,2" ItemsSource="{Binding BriefingSections}">
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate>
-                                                <Grid Margin="0,0,0,16">
-                                                    <Grid.ColumnDefinitions><ColumnDefinition Width="56" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
-                                                    <TextBlock Style="{StaticResource MetaTextStyle}" Text="{Binding Time}" />
-                                                    <StackPanel Grid.Column="1">
-                                                        <TextBlock FontSize="11" Foreground="{DynamicResource Brush.Accent}" Text="{Binding Source}" />
-                                                        <TextBlock Margin="0,3,0,0" FontSize="15" FontWeight="SemiBold" Text="{Binding Title}" />
-                                                        <TextBlock Margin="0,4,0,0" Style="{StaticResource MetaTextStyle}" Text="{Binding Summary}" />
-                                                    </StackPanel>
-                                                </Grid>
+                                                <StackPanel Margin="0,0,0,13">
+                                                    <TextBlock FontSize="14"
+                                                               FontWeight="SemiBold"
+                                                               Text="{Binding Title}" />
+                                                    <ItemsControl Margin="0,5,0,0" ItemsSource="{Binding Items}">
+                                                        <ItemsControl.ItemTemplate>
+                                                            <DataTemplate>
+                                                                <Grid Margin="0,0,0,5">
+                                                                    <Grid.ColumnDefinitions>
+                                                                        <ColumnDefinition Width="14" />
+                                                                        <ColumnDefinition Width="*" />
+                                                                    </Grid.ColumnDefinitions>
+                                                                    <TextBlock Foreground="{DynamicResource Brush.Accent}" Text="•" />
+                                                                    <TextBlock Grid.Column="1"
+                                                                               FontSize="13"
+                                                                               Foreground="{DynamicResource Brush.TextSecondary}"
+                                                                               Text="{Binding}"
+                                                                               TextTrimming="CharacterEllipsis"
+                                                                               ToolTip="{Binding}" />
+                                                                </Grid>
+                                                            </DataTemplate>
+                                                        </ItemsControl.ItemTemplate>
+                                                    </ItemsControl>
+                                                </StackPanel>
                                             </DataTemplate>
                                         </ItemsControl.ItemTemplate>
                                     </ItemsControl>
+                                    <TextBlock Margin="0,3,0,14"
+                                               Style="{StaticResource MetaTextStyle}"
+                                               Text="{Binding BriefingEmptyText}"
+                                               TextWrapping="Wrap" />
                                     <Button HorizontalAlignment="Left"
                                             Command="{Binding DataContext.NavigateCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                            CommandParameter="news"
-                                            Content="进入资讯中心" />
+                                            CommandParameter="daily-briefing"
+                                            Content="查看完整早报" />
                                 </StackPanel>
                             </Border>
 
-                            <Border Grid.Column="2" Style="{StaticResource BentoCardStyle}" Background="{DynamicResource Brush.Sidebar}">
+                            <Border Grid.Column="2"
+                                    Style="{StaticResource BentoCardStyle}"
+                                    Background="{DynamicResource Brush.SurfaceMuted}">
                                 <StackPanel>
-                                    <TextBlock Style="{StaticResource SectionTitleStyle}" Foreground="{DynamicResource Brush.TextOnDark}" Text="热点脉搏" />
-                                    <TextBlock Margin="0,5,0,16" Foreground="{DynamicResource Brush.TextOnDarkMuted}" FontSize="12" Text="{Binding TrendStatus}" />
+                                    <TextBlock Style="{StaticResource SectionTitleStyle}" Text="热点脉搏" />
+                                    <TextBlock Margin="0,5,0,16"
+                                               FontSize="12"
+                                               Foreground="{DynamicResource Brush.TextSecondary}"
+                                               Text="{Binding TrendStatus}" />
                                     <ItemsControl ItemsSource="{Binding Trends}">
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate>
@@ -78,10 +96,10 @@
                                                     <Grid.ColumnDefinitions><ColumnDefinition Width="30" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                                                     <TextBlock FontSize="18" FontWeight="SemiBold" Foreground="{DynamicResource Brush.Accent}" Text="{Binding Rank}" />
                                                     <StackPanel Grid.Column="1">
-                                                        <TextBlock Foreground="{DynamicResource Brush.TextOnDark}" Text="{Binding Title}" />
-                                                        <TextBlock Foreground="{DynamicResource Brush.TextOnDarkMuted}" FontSize="11" Text="{Binding Platform}" />
+                                                        <TextBlock Foreground="{DynamicResource Brush.TextPrimary}" Text="{Binding Title}" />
+                                                        <TextBlock Foreground="{DynamicResource Brush.TextSecondary}" FontSize="11" Text="{Binding Platform}" />
                                                     </StackPanel>
-                                                    <TextBlock Grid.Column="2" Foreground="{DynamicResource Brush.TextOnDarkMuted}" FontSize="11" Text="{Binding Heat}" />
+                                                    <TextBlock Grid.Column="2" Foreground="{DynamicResource Brush.TextSecondary}" FontSize="11" Text="{Binding Heat}" />
                                                 </Grid>
                                             </DataTemplate>
                                         </ItemsControl.ItemTemplate>
@@ -887,6 +905,14 @@
                                                     </StackPanel>
                                                 </Grid>
 
+                                                <TextBlock Margin="0,12,0,6"
+                                                           Style="{StaticResource MetaTextStyle}"
+                                                           Text="全文抓取策略" />
+                                                <ComboBox AutomationProperties.Name="Feed 全文抓取策略"
+                                                          ItemsSource="{Binding FullTextPolicyChoices}"
+                                                          DisplayMemberPath="Label"
+                                                          SelectedItem="{Binding SelectedFullTextPolicy}" />
+
                                                 <CheckBox Margin="0,14,0,0"
                                                           Foreground="{DynamicResource Brush.TextPrimary}"
                                                           IsChecked="{Binding FeedIsEnabled}"
@@ -1274,11 +1300,13 @@
                                                    VerticalScrollBarVisibility="Visible"
                                                    HorizontalScrollBarVisibility="Disabled"
                                                    PanningMode="VerticalOnly"
-                                                   IsDeferredScrollingEnabled="False">
+                                                   IsDeferredScrollingEnabled="False"
+                                                   WheelScrollMultiplier="{Binding WheelScrollMultiplier}"
+                                                   ScrollResetKey="{Binding SelectedSectionIndex}">
                 <Grid Margin="28,10,28,28">
                     <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="6" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
                     <DockPanel LastChildFill="False">
-                        <StackPanel><TextBlock Style="{StaticResource PageTitleStyle}" Text="{Binding Title}" /><TextBlock Margin="0,6,0,0" Style="{StaticResource MetaTextStyle}" Text="{Binding Status}" /></StackPanel>
+                        <StackPanel><TextBlock Style="{StaticResource PageTitleStyle}" Text="{Binding ActiveSectionTitle}" /><TextBlock Margin="0,6,0,0" Style="{StaticResource MetaTextStyle}" Text="{Binding Status}" /></StackPanel>
                         <Button DockPanel.Dock="Right"
                                 MinWidth="116"
                                 VerticalAlignment="Center"
@@ -1287,47 +1315,19 @@
                                 AutomationProperties.Name="刷新今日资讯"
                                 Content="刷新今日资讯" />
                     </DockPanel>
-                    <TabControl Grid.Row="2" MinHeight="620" Background="Transparent" BorderThickness="0">
-                        <TabControl.Resources>
-                            <Style TargetType="TabItem">
-                                <Setter Property="Margin" Value="0,0,6,0" />
-                                <Setter Property="Padding" Value="16,8" />
-                                <Setter Property="MinHeight" Value="36" />
-                                <Setter Property="Foreground" Value="{DynamicResource Brush.TextSecondary}" />
-                                <Setter Property="FontWeight" Value="SemiBold" />
-                                <Setter Property="Cursor" Value="Hand" />
-                                <Setter Property="Template">
-                                    <Setter.Value>
-                                        <ControlTemplate TargetType="TabItem">
-                                            <Border x:Name="Chrome" Padding="{TemplateBinding Padding}" Background="Transparent" BorderBrush="Transparent" BorderThickness="1" CornerRadius="8" SnapsToDevicePixels="True">
-                                                <Grid>
-                                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" ContentSource="Header" />
-                                                    <Border x:Name="SelectedIndicator"
-                                                            Width="24"
-                                                            Height="2"
-                                                            Margin="0,0,0,-5"
-                                                            HorizontalAlignment="Center"
-                                                            VerticalAlignment="Bottom"
-                                                            Background="{DynamicResource Brush.Accent}"
-                                                            CornerRadius="1"
-                                                            Opacity="0" />
-                                                </Grid>
-                                            </Border>
-                                            <ControlTemplate.Triggers>
-                                                <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Chrome" Property="Background" Value="{DynamicResource Brush.SurfaceMuted}" /></Trigger>
-                                                <Trigger Property="IsSelected" Value="True">
-                                                    <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
-                                                    <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource Brush.AccentSoft}" />
-                                                    <Setter TargetName="SelectedIndicator" Property="Opacity" Value="1" />
-                                                </Trigger>
-                                                <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Brush.Focus}" /></Trigger>
-                                            </ControlTemplate.Triggers>
-                                        </ControlTemplate>
-                                    </Setter.Value>
-                                </Setter>
-                            </Style>
-                        </TabControl.Resources>
-                        <TabItem Header="Feed 时间线">
+                    <TabControl Grid.Row="2"
+                                MinHeight="620"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                SelectedIndex="{Binding SelectedSectionIndex, Mode=TwoWay}">
+                        <TabControl.Template>
+                            <ControlTemplate TargetType="TabControl">
+                                <ContentPresenter x:Name="PART_SelectedContentHost"
+                                                  ContentSource="SelectedContent"
+                                                  SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}" />
+                            </ControlTemplate>
+                        </TabControl.Template>
+                        <TabItem Header="资讯列表">
                             <views:FeedTimelineView />
                         </TabItem>
                         <TabItem Header="每日早报">

@@ -22,6 +22,31 @@ public sealed class NewsCenterViewModelTests
         TimeSpan.Zero);
 
     [Fact]
+    public void TopLevelRoutesSelectSectionTitleAndDailyScrollSensitivity()
+    {
+        using NewsCenterViewModel viewModel = CreateViewModel(CreateSnapshot());
+
+        Assert.Equal("资讯列表", viewModel.ActiveSectionTitle);
+        Assert.Equal(0, viewModel.SelectedSectionIndex);
+        Assert.Equal(1d, viewModel.WheelScrollMultiplier);
+
+        viewModel.OnNavigated("daily-briefing");
+
+        Assert.Equal("每日早报", viewModel.ActiveSectionTitle);
+        Assert.Equal(1, viewModel.SelectedSectionIndex);
+        Assert.Equal(1.45d, viewModel.WheelScrollMultiplier);
+
+        viewModel.OnNavigated("trends");
+        Assert.Equal("热点趋势", viewModel.ActiveSectionTitle);
+        Assert.Equal(2, viewModel.SelectedSectionIndex);
+        Assert.Equal(1d, viewModel.WheelScrollMultiplier);
+
+        viewModel.OnNavigated("ai-reports");
+        Assert.Equal("AI 报告", viewModel.ActiveSectionTitle);
+        Assert.Equal(3, viewModel.SelectedSectionIndex);
+    }
+
+    [Fact]
     public async Task InitializeAsyncSelectsTodayByDefault()
     {
         DateOnly today = DateOnly.FromDateTime(DateTime.Today);

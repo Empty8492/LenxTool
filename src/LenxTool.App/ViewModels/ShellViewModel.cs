@@ -12,6 +12,11 @@ public abstract class PageViewModel(string title, string subtitle) : ObservableO
     public string Subtitle { get; } = subtitle;
 }
 
+public interface INavigationAware
+{
+    void OnNavigated(string routeId);
+}
+
 public sealed record PageNavigationItem(
     string Id,
     string Label,
@@ -116,6 +121,10 @@ public sealed class ShellViewModel : ObservableObject
         if (target is null) return;
 
         CurrentPage = target.ViewModel;
+        if (target.ViewModel is INavigationAware navigationAware)
+        {
+            navigationAware.OnNavigated(target.Id);
+        }
         SetProperty(ref _selectedPageId, target.Id, nameof(SelectedPageId));
         IsCommandPaletteOpen = false;
         CommandQuery = string.Empty;

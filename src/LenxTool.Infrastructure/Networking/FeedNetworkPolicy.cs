@@ -38,9 +38,10 @@ internal sealed class FeedNetworkPolicy
         ValidateUri(uri);
         string host = NormalizeHost(uri.IdnHost);
         IReadOnlyList<IPAddress> resolved;
-        if (IPAddress.TryParse(host, out IPAddress? literal))
+        bool isLiteralHost = IPAddress.TryParse(host, out IPAddress? literal);
+        if (isLiteralHost)
         {
-            resolved = [literal];
+            resolved = [literal!];
         }
         else
         {
@@ -71,7 +72,10 @@ internal sealed class FeedNetworkPolicy
         {
             AddressDisposition disposition = Classify(address);
             if (disposition == AddressDisposition.Forbidden
-                || (disposition == AddressDisposition.Private && !trustedPrivateHost))
+                || ((disposition == AddressDisposition.Private
+                        || (disposition == AddressDisposition.SyntheticProxy
+                            && (isLiteralHost || uri.Scheme != Uri.UriSchemeHttps)))
+                    && !trustedPrivateHost))
             {
                 throw UnsafeEndpoint();
             }
@@ -130,11 +134,17 @@ internal sealed class FeedNetworkPolicy
                 || (a == 192 && b == 0)
                 || (a == 192 && b == 2)
                 || (a == 192 && b == 88 && bytes[2] == 99)
-                || (a == 198 && b is 18 or 19)
                 || (a == 198 && b == 51 && bytes[2] == 100)
                 || (a == 203 && b == 0 && bytes[2] == 113))
             {
                 return AddressDisposition.Forbidden;
+            }
+            if (a == 198 && b is 18 or 19)
+            {
+                // Clash/sing-box Fake-IP DNS uses 198.18.0.0/15 for public host names.
+                // Keep direct literal access blocked while allowing TLS/SNI-bound
+                // public HTTPS hosts to traverse the local synthetic proxy mapping.
+                return AddressDisposition.SyntheticProxy;
             }
             return AddressDisposition.Public;
         }
@@ -207,6 +217,7 @@ internal sealed class FeedNetworkPolicy
     {
         Public,
         Private,
+        SyntheticProxy,
         Forbidden
     }
 }

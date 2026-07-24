@@ -8,8 +8,12 @@ using LenxTool.Core.Models;
 
 namespace LenxTool.App.ViewModels;
 
-public sealed partial class NewsCenterViewModel : PageViewModel, IDisposable
+public sealed partial class NewsCenterViewModel
+    : PageViewModel, INavigationAware, IDisposable
 {
+    private static readonly string[] SectionTitles =
+        ["资讯列表", "每日早报", "热点趋势", "AI 报告"];
+
     private readonly INewsCenterService _newsCenterService;
     private readonly IAiReportService _aiReportService;
     private readonly INewsRepository _repository;
@@ -22,6 +26,7 @@ public sealed partial class NewsCenterViewModel : PageViewModel, IDisposable
     private AppError? _reportError;
     private string _keyword = string.Empty;
     private bool _suppressSourceFilterChanges;
+    private int _selectedSectionIndex;
 
     public NewsCenterViewModel(
         INewsCenterService newsCenterService,
@@ -33,7 +38,7 @@ public sealed partial class NewsCenterViewModel : PageViewModel, IDisposable
         IFeedCatalogSyncService feedCatalogSync,
         IEntryStateRepository entryStateRepository,
         IFavoriteRepository favoriteRepository)
-        : base("资讯中心", "Feed 时间线、每日早报与热点趋势")
+        : base("资讯列表", "订阅资讯、每日早报、热点趋势与 AI 报告")
     {
         _newsCenterService = newsCenterService;
         _aiReportService = aiReportService;
@@ -74,8 +79,38 @@ public sealed partial class NewsCenterViewModel : PageViewModel, IDisposable
     public AsyncRelayCommand GenerateDailyTrendReportCommand { get; }
     public RelayCommand<TrendItem> OpenTrendCommand { get; }
     public RelayCommand SelectAllSourcesCommand { get; }
+    public int SelectedSectionIndex
+    {
+        get => _selectedSectionIndex;
+        set
+        {
+            if (value < 0 || value >= SectionTitles.Length
+                || !SetProperty(ref _selectedSectionIndex, value))
+            {
+                return;
+            }
+
+            OnPropertyChanged(nameof(ActiveSectionTitle));
+            OnPropertyChanged(nameof(WheelScrollMultiplier));
+        }
+    }
+
+    public string ActiveSectionTitle => SectionTitles[SelectedSectionIndex];
+    public double WheelScrollMultiplier => SelectedSectionIndex == 1 ? 1.45d : 1d;
     public string SelectedSourceSummary =>
         $"已显示 {SourceFilters.Count(filter => filter.IsSelected)}/{SourceFilters.Count} 个来源";
+
+    public void OnNavigated(string routeId)
+    {
+        int sectionIndex = routeId switch
+        {
+            "daily-briefing" => 1,
+            "trends" => 2,
+            "ai-reports" => 3,
+            _ => 0
+        };
+        SelectedSectionIndex = sectionIndex;
+    }
 
     public DateOnly? SelectedDate
     {

@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Globalization;
 using System.IO;
+using LenxTool.App.Controls;
 using LenxTool.Core.Contracts;
 using LenxTool.Core.Models;
 
@@ -14,6 +15,8 @@ public sealed record NewsPreview(
     string? Url = null,
     string? ContentHash = null);
 
+public sealed record BriefingSectionPreview(string Title, IReadOnlyList<string> Items);
+
 public sealed record TrendPreview(int Rank, string Platform, string Title, string Heat);
 
 public sealed record TaskPreview(string Name, string Status, double Progress, string Detail);
@@ -24,6 +27,8 @@ public sealed class DashboardViewModel : PageViewModel
 {
     public const string CompatibilityFeedUrl = FeedCompatibilitySeed.Url;
     private const int NewsLimit = 6;
+    private const int BriefingSectionLimit = 5;
+    private const int BriefingItemsPerSection = 3;
     private const int TrendLimit = 6;
     private const int TaskLimit = 4;
 
@@ -35,6 +40,9 @@ public sealed class DashboardViewModel : PageViewModel
     private string _dataStatus = "正在读取本地首页数据……";
     private string _newsStatus = "正在读取本地 Feed……";
     private string _trendStatus = "正在读取热点缓存……";
+    private string _briefingTitle = "正在读取每日早报……";
+    private string _briefingMeta = "本地缓存";
+    private string _briefingEmptyText = string.Empty;
     private int _favoriteCount;
 
     public DashboardViewModel(
@@ -54,6 +62,7 @@ public sealed class DashboardViewModel : PageViewModel
 
     public ObservableCollection<NewsPreview> News { get; } = [];
     public ObservableCollection<NewsPreview> LegacyNews { get; } = [];
+    public ObservableCollection<BriefingSectionPreview> BriefingSections { get; } = [];
     public ObservableCollection<TrendPreview> Trends { get; } = [];
     public ObservableCollection<TaskPreview> RecentTasks { get; } = [];
 
@@ -80,6 +89,24 @@ public sealed class DashboardViewModel : PageViewModel
     {
         get => _trendStatus;
         private set => SetProperty(ref _trendStatus, value);
+    }
+
+    public string BriefingTitle
+    {
+        get => _briefingTitle;
+        private set => SetProperty(ref _briefingTitle, value);
+    }
+
+    public string BriefingMeta
+    {
+        get => _briefingMeta;
+        private set => SetProperty(ref _briefingMeta, value);
+    }
+
+    public string BriefingEmptyText
+    {
+        get => _briefingEmptyText;
+        private set => SetProperty(ref _briefingEmptyText, value);
     }
 
     public int FavoriteCount
@@ -109,6 +136,7 @@ public sealed class DashboardViewModel : PageViewModel
         IReadOnlyList<TrendItem> trends = await trendsTask.ConfigureAwait(true);
         IReadOnlyList<MediaJob> jobs = await jobsTask.ConfigureAwait(true);
         FavoriteCount = await favoriteTask.ConfigureAwait(true);
+        UpdateBriefingOverview(legacy);
 
         string?[] feedIds = feedPage.Items.Select(item => item.FeedId).Distinct().ToArray();
         Dictionary<string, string> feedNames = (catalog?.Feeds ?? [])
@@ -177,6 +205,73 @@ public sealed class DashboardViewModel : PageViewModel
             ? "暂无本地热点缓存"
             : $"跨平台趋势 · 最近更新 {FormatTime(latestTrend.Value)}";
         DataStatus = $"本地数据 · Feed {feedPage.Items.Count} 条 · 热点 {Trends.Count} 条 · 任务 {RecentTasks.Count} 条 · {FavoriteSummary}";
+    }
+
+    private void UpdateBriefingOverview(IReadOnlyList<NewsArticle> articles)
+    {
+        BriefingSections.Clear();
+        NewsArticle? latest = articles
+            .OrderByDescending(article => article.PublishedDate)
+            .ThenByDescending(article => article.FetchedAt)
+            .FirstOrDefault();
+        if (latest is null)
+        {
+            BriefingTitle = "暂无每日早报";
+            BriefingMeta = "本地缓存";
+            BriefingEmptyText = "刷新每日早报后，这里会显示最新一期的概览。";
+            return;
+        }
+
+        BriefingTitle = latest.Title;
+        BriefingMeta = $"{latest.Source} · {latest.PublishedDate:MM-dd}";
+        string content = string.IsNullOrWhiteSpace(latest.RichContent)
+            ? latest.Content
+            : latest.RichContent;
+        RichArticleDocument document = RichArticleFormatter.Parse(content, latest.Url);
+        int overviewIndex = document.Blocks
+            .ToList()
+            .FindIndex(block =>
+                block.Kind == RichArticleBlockKind.Heading
+                && string.Equals(block.Text.Trim(), "概览", StringComparison.Ordinal));
+
+        List<string>? currentItems = null;
+        if (overviewIndex >= 0)
+        {
+            foreach (RichArticleBlock block in document.Blocks.Skip(overviewIndex + 1))
+            {
+                if (block.Kind == RichArticleBlockKind.Heading)
+                    break;
+
+                if (block.Kind == RichArticleBlockKind.Subheading)
+                {
+                    if (BriefingSections.Count >= BriefingSectionLimit)
+                        break;
+                    currentItems = [];
+                    BriefingSections.Add(new(block.Text, currentItems));
+                    continue;
+                }
+
+                if (block.Kind != RichArticleBlockKind.Bullet
+                    || currentItems is null
+                    || currentItems.Count >= BriefingItemsPerSection)
+                {
+                    continue;
+                }
+
+                currentItems.Add(block.Text);
+            }
+        }
+
+        if (BriefingSections.Count == 0 && !string.IsNullOrWhiteSpace(latest.Summary))
+        {
+            BriefingSections.Add(new(
+                "今日摘要",
+                [Truncate(latest.Summary.Trim(), 180)]));
+        }
+
+        BriefingEmptyText = BriefingSections.Count > 0
+            ? string.Empty
+            : "本期早报暂未提供结构化概览，可进入每日早报查看全文。";
     }
 
     private async Task<FeedEntryPage> LoadFeedEntriesAsync(CancellationToken cancellationToken)
@@ -289,6 +384,11 @@ public sealed class DashboardViewModel : PageViewModel
             ? uri.GetComponents(UriComponents.SchemeAndServer | UriComponents.Path | UriComponents.Query, UriFormat.UriEscaped)
                 .TrimEnd('/')
             : null;
+
+    private static string Truncate(string value, int maximumLength) =>
+        value.Length <= maximumLength
+            ? value
+            : value[..(maximumLength - 1)] + "…";
 
     private static string FormatJobStatus(MediaJobStatus status) => status switch
     {

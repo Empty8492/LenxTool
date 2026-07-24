@@ -10,6 +10,7 @@ namespace LenxTool.Infrastructure.Tests.Networking;
 public sealed class CachedArticleImageDownloaderTests
 {
     private static readonly IPAddress PublicAddress = IPAddress.Parse("93.184.216.34");
+    private static readonly IPAddress SyntheticProxyAddress = IPAddress.Parse("198.18.0.26");
     private static readonly byte[] PngBytes = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
 
     [Fact]
@@ -66,6 +67,57 @@ public sealed class CachedArticleImageDownloaderTests
         Assert.Equal(PngBytes, content.Bytes);
         Assert.Equal(1, store.PutCount);
         Assert.Equal("image/png", store.Asset?.MimeType);
+    }
+
+    [Fact]
+    public async Task PublicHttpsHostResolvedToSyntheticProxyAddressCanDownload()
+    {
+        var store = new FakeAssetStore();
+        var resolver = new FakeResolver((host, _) =>
+        {
+            Assert.Equal("assets.juya.uk", host);
+            return [SyntheticProxyAddress];
+        });
+        var transport = new FakeTransport((uri, addresses, _, _) =>
+        {
+            Assert.Equal(
+                "https://assets.juya.uk/imagehub/cover.png",
+                uri.AbsoluteUri);
+            Assert.Equal([SyntheticProxyAddress], addresses);
+            return Response(HttpStatusCode.OK, "image/png", PngBytes);
+        });
+        var downloader = CreateDownloader(store, resolver, transport);
+
+        ArticleImageContent? content = await downloader.GetAsync(
+            "daily-briefing",
+            "https://assets.juya.uk/imagehub/cover.png",
+            "https://daily.juya.uk/issues/2026-07-24/",
+            new ArticleImageDownloadBudget(10, 1024),
+            CancellationToken.None);
+
+        Assert.NotNull(content);
+        Assert.Equal(PngBytes, content.Bytes);
+        Assert.Equal(1, transport.CallCount);
+    }
+
+    [Fact]
+    public async Task DirectSyntheticProxyAddressRemainsBlocked()
+    {
+        var store = new FakeAssetStore();
+        var resolver = new FakeResolver((_, _) => [PublicAddress]);
+        var transport = new FakeTransport((_, _, _, _) =>
+            Response(HttpStatusCode.OK, "image/png", PngBytes));
+        var downloader = CreateDownloader(store, resolver, transport);
+
+        AppException error = await Assert.ThrowsAsync<AppException>(() => downloader.GetAsync(
+            "entry-1",
+            "https://198.18.0.26/private.png",
+            null,
+            new ArticleImageDownloadBudget(10, 1024),
+            CancellationToken.None));
+
+        Assert.Equal(AppErrorCode.AccessDenied, error.Error.Code);
+        Assert.Equal(0, transport.CallCount);
     }
 
     [Theory]
