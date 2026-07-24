@@ -10,7 +10,7 @@ public sealed partial class SqliteDatabase(
     AppPaths paths,
     ILogger<SqliteDatabase> logger) : IDisposable
 {
-    private const int CurrentSchemaVersion = 7;
+    private const int CurrentSchemaVersion = 8;
     private readonly SemaphoreSlim _initializationGate = new(1, 1);
     private bool _initialized;
     private bool _disposed;
@@ -212,6 +212,17 @@ public sealed partial class SqliteDatabase(
                 command.CommandText = "INSERT INTO schema_versions(version, applied_at, checksum) VALUES (7, $appliedAt, $checksum);";
                 command.Parameters.AddWithValue("$appliedAt", DateTimeOffset.UtcNow.ToString("O"));
                 command.Parameters.AddWithValue("$checksum", "lenx-schema-v7-entry-assets");
+                await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            if (version < 8)
+            {
+                command.CommandText = MigrationEightSql;
+                command.Parameters.Clear();
+                await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                command.CommandText = "INSERT INTO schema_versions(version, applied_at, checksum) VALUES (8, $appliedAt, $checksum);";
+                command.Parameters.AddWithValue("$appliedAt", DateTimeOffset.UtcNow.ToString("O"));
+                command.Parameters.AddWithValue("$checksum", "lenx-schema-v8-feed-full-text-queue");
                 await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
             }
         }
@@ -529,5 +540,50 @@ public sealed partial class SqliteDatabase(
             ON entry_assets(last_accessed_at ASC, content_hash);
         CREATE INDEX IF NOT EXISTS ix_entry_assets_hash
             ON entry_assets(content_hash);
+        """;
+
+    private const string MigrationEightSql = """
+        ALTER TABLE feed_catalog
+            ADD COLUMN full_text_policy TEXT NOT NULL DEFAULT 'NONE'
+            CHECK(full_text_policy IN ('NONE', 'ON_OPEN', 'BACKGROUND'));
+
+        ALTER TABLE feed_entries
+            ADD COLUMN has_full_content INTEGER NOT NULL DEFAULT 0
+            CHECK(has_full_content IN (0, 1));
+
+        CREATE TABLE IF NOT EXISTS feed_full_text_content(
+            entry_id TEXT PRIMARY KEY REFERENCES feed_entries(id) ON DELETE CASCADE,
+            article_json TEXT NOT NULL CHECK(json_valid(article_json)),
+            content_hash TEXT NOT NULL CHECK(length(content_hash) = 64),
+            extracted_at TEXT NOT NULL CHECK(length(extracted_at) BETWEEN 20 AND 40)
+        );
+
+        CREATE TABLE IF NOT EXISTS feed_full_text_jobs(
+            entry_id TEXT PRIMARY KEY REFERENCES feed_entries(id) ON DELETE CASCADE,
+            host TEXT NOT NULL CHECK(length(host) BETWEEN 1 AND 253),
+            status TEXT NOT NULL
+                CHECK(status IN ('PENDING', 'IN_PROGRESS', 'RETRY', 'SUCCEEDED', 'BLOCKED')),
+            attempt_count INTEGER NOT NULL DEFAULT 0 CHECK(attempt_count >= 0),
+            next_attempt_at TEXT CHECK(next_attempt_at IS NULL OR length(next_attempt_at) BETWEEN 20 AND 40),
+            lease_expires_at TEXT CHECK(lease_expires_at IS NULL OR length(lease_expires_at) BETWEEN 20 AND 40),
+            lease_id TEXT CHECK(lease_id IS NULL OR length(lease_id) = 36),
+            last_error_code TEXT CHECK(last_error_code IS NULL OR length(last_error_code) BETWEEN 1 AND 128),
+            updated_at TEXT NOT NULL CHECK(length(updated_at) BETWEEN 20 AND 40)
+        );
+
+        CREATE TABLE IF NOT EXISTS feed_full_text_host_state(
+            host TEXT PRIMARY KEY CHECK(length(host) BETWEEN 1 AND 253),
+            consecutive_failures INTEGER NOT NULL DEFAULT 0 CHECK(consecutive_failures >= 0),
+            next_attempt_at TEXT NOT NULL CHECK(length(next_attempt_at) BETWEEN 20 AND 40),
+            last_error_code TEXT NOT NULL CHECK(length(last_error_code) BETWEEN 1 AND 128),
+            updated_at TEXT NOT NULL CHECK(length(updated_at) BETWEEN 20 AND 40)
+        );
+
+        CREATE INDEX IF NOT EXISTS ix_feed_full_text_jobs_due
+            ON feed_full_text_jobs(status, next_attempt_at, lease_expires_at, entry_id);
+        CREATE INDEX IF NOT EXISTS ix_feed_full_text_jobs_host
+            ON feed_full_text_jobs(host, status, entry_id);
+        CREATE INDEX IF NOT EXISTS ix_feed_full_text_host_due
+            ON feed_full_text_host_state(next_attempt_at, host);
         """;
 }

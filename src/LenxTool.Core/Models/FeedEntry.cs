@@ -20,7 +20,8 @@ public sealed record FeedEntry(
     IReadOnlyList<string> Categories,
     IReadOnlyList<FeedEnclosure> Enclosures,
     string ContentHash,
-    DateTimeOffset FetchedAt);
+    DateTimeOffset FetchedAt,
+    bool HasFullContent = false);
 
 public sealed record ParsedFeedDocument(
     string Title,

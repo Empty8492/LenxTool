@@ -33,6 +33,7 @@ public sealed class FeedDocumentParserTests
         Assert.Contains("安全文本", first.SanitizedContent, StringComparison.Ordinal);
         Assert.DoesNotContain("<script", first.SanitizedContent, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("alert", first.SanitizedContent, StringComparison.OrdinalIgnoreCase);
+        Assert.True(first.HasFullContent);
         FeedEnclosure enclosure = Assert.Single(first.Enclosures);
         Assert.Equal("https://cdn.example.com/audio/42.mp3", enclosure.Url);
         Assert.Equal("audio/mpeg", enclosure.MediaType);
@@ -43,6 +44,7 @@ public sealed class FeedDocumentParserTests
         Assert.Contains("utm_source=rss", signed.NormalizedUrl, StringComparison.Ordinal);
         Assert.Contains("X-Amz-Signature=abc123", signed.NormalizedUrl, StringComparison.Ordinal);
         Assert.Null(signed.PublishedAt);
+        Assert.False(signed.HasFullContent);
     }
 
     [Fact]
@@ -64,6 +66,7 @@ public sealed class FeedDocumentParserTests
         Assert.Equal("https://example.org/posts/one?ref=home", first.NormalizedUrl);
         Assert.Equal("Short summary", first.Summary);
         Assert.Contains("Full content", first.SanitizedContent, StringComparison.Ordinal);
+        Assert.True(first.HasFullContent);
         Assert.DoesNotContain("<script", first.SanitizedContent, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("bad()", first.SanitizedContent, StringComparison.OrdinalIgnoreCase);
         FeedEnclosure enclosure = Assert.Single(first.Enclosures);

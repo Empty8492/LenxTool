@@ -110,8 +110,9 @@ internal sealed class FeedDocumentParser : IFeedParser
             256) ?? feedAuthor;
         DateTimeOffset? published = ParseDate(Value(item, "pubDate") ?? item.Element(DublinCoreNamespace + "date")?.Value);
         string summary = FeedTextSanitizer.Clean(Value(item, "description"), 32 * 1024);
+        string? fullContent = item.Element(ContentNamespace + "encoded")?.Value;
         string content = FeedTextSanitizer.Clean(
-            item.Element(ContentNamespace + "encoded")?.Value ?? Value(item, "description"),
+            fullContent ?? Value(item, "description"),
             _options.MaximumDocumentBytes);
         string? normalizedUrl = FeedUrlNormalizer.Normalize(Value(item, "link"), baseUri);
         IReadOnlyList<string> categories = ReadCategories(
@@ -131,7 +132,8 @@ internal sealed class FeedDocumentParser : IFeedParser
             content,
             categories,
             enclosures,
-            fetchedAt);
+            fetchedAt,
+            hasFullContent: !string.IsNullOrWhiteSpace(fullContent) && content.Length > 0);
     }
 
     private ParsedFeedDocument ParseAtom(
@@ -165,8 +167,9 @@ internal sealed class FeedDocumentParser : IFeedParser
         DateTimeOffset? published = ParseDate(entry.Element(AtomNamespace + "published")?.Value);
         DateTimeOffset? updated = ParseDate(entry.Element(AtomNamespace + "updated")?.Value);
         string summary = FeedTextSanitizer.Clean(entry.Element(AtomNamespace + "summary")?.Value, 32 * 1024);
+        string? fullContent = entry.Element(AtomNamespace + "content")?.Value;
         string content = FeedTextSanitizer.Clean(
-            entry.Element(AtomNamespace + "content")?.Value ?? entry.Element(AtomNamespace + "summary")?.Value,
+            fullContent ?? entry.Element(AtomNamespace + "summary")?.Value,
             _options.MaximumDocumentBytes);
         IReadOnlyList<string> categories = ReadCategories(
             entry.Elements(AtomNamespace + "category")
@@ -185,7 +188,8 @@ internal sealed class FeedDocumentParser : IFeedParser
             content,
             categories,
             enclosures,
-            fetchedAt);
+            fetchedAt,
+            hasFullContent: !string.IsNullOrWhiteSpace(fullContent) && content.Length > 0);
     }
 
     private static List<FeedEntry> ParseEntries(IEnumerable<FeedEntry> entries)
@@ -211,7 +215,8 @@ internal sealed class FeedDocumentParser : IFeedParser
         string content,
         IReadOnlyList<string> categories,
         IReadOnlyList<FeedEnclosure> enclosures,
-        DateTimeOffset fetchedAt)
+        DateTimeOffset fetchedAt,
+        bool hasFullContent)
     {
         string fallbackHash = CreateHash(
             feedId,
@@ -250,7 +255,8 @@ internal sealed class FeedDocumentParser : IFeedParser
             categories,
             enclosures,
             contentHash,
-            fetchedAt);
+            fetchedAt,
+            hasFullContent);
     }
 
     private static List<FeedEnclosure> ReadRssEnclosures(XElement item, Uri baseUri) =>

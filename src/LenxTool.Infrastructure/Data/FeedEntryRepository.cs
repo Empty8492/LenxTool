@@ -44,7 +44,7 @@ public sealed class FeedEntryRepository(SqliteDatabase database) : IFeedEntryRep
             SELECT
                 e.id, e.feed_id, e.external_id, e.normalized_url, e.title, e.author,
                 e.published_at, e.updated_at, e.summary, e.sanitized_content,
-                e.enclosure_json, e.content_hash, e.fetched_at
+                e.enclosure_json, e.content_hash, e.fetched_at, e.has_full_content
             FROM feed_entries e
             LEFT JOIN feed_catalog f ON f.id=e.feed_id
             LEFT JOIN feed_categories c ON c.id=f.category_id
@@ -169,10 +169,12 @@ public sealed class FeedEntryRepository(SqliteDatabase database) : IFeedEntryRep
         command.CommandText = """
             INSERT INTO feed_entries(
                 id, feed_id, external_id, normalized_url, title, author, published_at,
-                updated_at, summary, sanitized_content, enclosure_json, content_hash, fetched_at)
+                updated_at, summary, sanitized_content, enclosure_json, content_hash, fetched_at,
+                has_full_content)
             VALUES(
                 $id, $feedId, $externalId, $normalizedUrl, $title, $author, $publishedAt,
-                $updatedAt, $summary, $content, $enclosures, $contentHash, $fetchedAt)
+                $updatedAt, $summary, $content, $enclosures, $contentHash, $fetchedAt,
+                $hasFullContent)
             ON CONFLICT(feed_id, external_id) DO UPDATE SET
                 normalized_url=excluded.normalized_url,
                 title=excluded.title,
@@ -183,7 +185,8 @@ public sealed class FeedEntryRepository(SqliteDatabase database) : IFeedEntryRep
                 sanitized_content=excluded.sanitized_content,
                 enclosure_json=excluded.enclosure_json,
                 content_hash=excluded.content_hash,
-                fetched_at=excluded.fetched_at;
+                fetched_at=excluded.fetched_at,
+                has_full_content=excluded.has_full_content;
             """;
         command.Parameters.AddWithValue("$id", entry.Id);
         command.Parameters.AddWithValue("$feedId", entry.FeedId);
@@ -198,6 +201,7 @@ public sealed class FeedEntryRepository(SqliteDatabase database) : IFeedEntryRep
         command.Parameters.AddWithValue("$enclosures", JsonSerializer.Serialize(entry.Enclosures, JsonOptions));
         command.Parameters.AddWithValue("$contentHash", entry.ContentHash);
         command.Parameters.AddWithValue("$fetchedAt", FormatTimestamp(entry.FetchedAt));
+        command.Parameters.AddWithValue("$hasFullContent", entry.HasFullContent);
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
 
@@ -227,7 +231,8 @@ public sealed class FeedEntryRepository(SqliteDatabase database) : IFeedEntryRep
             [],
             enclosures,
             reader.GetString(11),
-            ReadTimestamp(reader, 12));
+            ReadTimestamp(reader, 12),
+            reader.GetBoolean(13));
     }
 
     private static void ValidateEntries(string feedId, IReadOnlyList<FeedEntry> entries)

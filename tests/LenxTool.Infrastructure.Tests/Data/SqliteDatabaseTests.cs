@@ -45,7 +45,8 @@ public sealed class SqliteDatabaseTests : IDisposable
             "app_settings", "schema_versions", "content_fts",
             "feed_catalog_state", "feed_categories", "feed_catalog",
             "feed_fetch_state", "feed_entries", "feed_entry_search_documents",
-            "user_entry_states", "entry_assets"
+            "user_entry_states", "entry_assets", "feed_full_text_content",
+            "feed_full_text_jobs", "feed_full_text_host_state"
         ];
         Assert.All(required, table => Assert.Contains(table, names));
 
@@ -67,6 +68,8 @@ public sealed class SqliteDatabaseTests : IDisposable
         Assert.Contains("ix_user_entry_states_profile_updated", indexes);
         Assert.Contains("ix_entry_assets_lru", indexes);
         Assert.Contains("ix_entry_assets_hash", indexes);
+        Assert.Contains("ix_feed_full_text_jobs_due", indexes);
+        Assert.Contains("ix_feed_full_text_host_due", indexes);
 
         await using SqliteCommand catalogStateCommand = connection.CreateCommand();
         catalogStateCommand.CommandText =
@@ -76,7 +79,7 @@ public sealed class SqliteDatabaseTests : IDisposable
 
         await using SqliteCommand versionCommand = connection.CreateCommand();
         versionCommand.CommandText = "SELECT COUNT(*) FROM schema_versions";
-        Assert.Equal(7L, (long)(await versionCommand.ExecuteScalarAsync(
+        Assert.Equal(8L, (long)(await versionCommand.ExecuteScalarAsync(
             CancellationToken.None))!);
     }
 
@@ -102,8 +105,76 @@ public sealed class SqliteDatabaseTests : IDisposable
         await using SqliteConnection connection = await upgraded.OpenConnectionAsync(CancellationToken.None);
         await using SqliteCommand version = connection.CreateCommand();
         version.CommandText = "SELECT MAX(version) FROM schema_versions;";
-        Assert.Equal(7L, (long)(await version.ExecuteScalarAsync(CancellationToken.None))!);
+        Assert.Equal(8L, (long)(await version.ExecuteScalarAsync(CancellationToken.None))!);
         Assert.Single(Directory.GetFiles(CreatePaths().BackupDirectory, "lenx-pre-migration-*.db"));
+    }
+
+    [Fact]
+    public async Task SchemaVersionSevenUpgradeAddsDefaultFullTextPolicyAndPreservesEntries()
+    {
+        using (SqliteDatabase versionSeven = CreateDatabase())
+        {
+            await versionSeven.InitializeAsync(CancellationToken.None);
+            await using SqliteConnection connection = await versionSeven.OpenConnectionAsync(CancellationToken.None);
+            await using SqliteCommand command = connection.CreateCommand();
+            command.CommandText = """
+                DROP TABLE feed_full_text_content;
+                DROP TABLE feed_full_text_jobs;
+                DROP TABLE feed_full_text_host_state;
+                ALTER TABLE feed_catalog DROP COLUMN full_text_policy;
+                ALTER TABLE feed_entries DROP COLUMN has_full_content;
+                DELETE FROM schema_versions WHERE version=8;
+                INSERT INTO feed_catalog(
+                    id, original_url, normalized_url, display_name, view_kind,
+                    refresh_interval_minutes, sort_order, is_enabled, version, created_at, updated_at)
+                VALUES(
+                    '10000000-0000-4000-8000-000000000001',
+                    'https://legacy.example/feed.xml',
+                    'https://legacy.example/feed.xml',
+                    'Legacy Feed',
+                    'ARTICLE',
+                    60,
+                    1,
+                    1,
+                    7,
+                    '2026-07-24T00:00:00Z',
+                    '2026-07-24T00:00:00Z');
+                INSERT INTO feed_entries(
+                    id, feed_id, external_id, normalized_url, title, summary,
+                    sanitized_content, enclosure_json, content_hash, fetched_at)
+                VALUES(
+                    'legacy-full-text-entry',
+                    '10000000-0000-4000-8000-000000000001',
+                    'legacy-full-text-entry',
+                    'https://legacy.example/article',
+                    'Legacy article',
+                    'Summary',
+                    'Summary',
+                    '[]',
+                    'legacy-full-text-hash',
+                    '2026-07-24T00:00:00Z');
+                """;
+            await command.ExecuteNonQueryAsync(CancellationToken.None);
+        }
+
+        using SqliteDatabase upgraded = CreateDatabase();
+        await upgraded.InitializeAsync(CancellationToken.None);
+        await using SqliteConnection verification = await upgraded.OpenConnectionAsync(CancellationToken.None);
+        await using SqliteCommand check = verification.CreateCommand();
+        check.CommandText = """
+            SELECT full_text_policy
+            FROM feed_catalog
+            WHERE id='10000000-0000-4000-8000-000000000001';
+            """;
+        Assert.Equal("NONE", (string?)await check.ExecuteScalarAsync(CancellationToken.None));
+        check.CommandText = """
+            SELECT has_full_content
+            FROM feed_entries
+            WHERE id='legacy-full-text-entry';
+            """;
+        Assert.Equal(0L, (long)(await check.ExecuteScalarAsync(CancellationToken.None))!);
+        check.CommandText = "SELECT MAX(version) FROM schema_versions;";
+        Assert.Equal(8L, (long)(await check.ExecuteScalarAsync(CancellationToken.None))!);
     }
 
     [Fact]
@@ -170,7 +241,12 @@ public sealed class SqliteDatabaseTests : IDisposable
                 DROP TRIGGER feed_entries_fts_insert;
                 DROP TRIGGER feed_entries_fts_update;
                 DROP TRIGGER feed_entries_fts_delete;
-                DELETE FROM schema_versions WHERE version IN (5, 6, 7);
+                DROP TABLE feed_full_text_content;
+                DROP TABLE feed_full_text_jobs;
+                DROP TABLE feed_full_text_host_state;
+                ALTER TABLE feed_catalog DROP COLUMN full_text_policy;
+                ALTER TABLE feed_entries DROP COLUMN has_full_content;
+                DELETE FROM schema_versions WHERE version IN (5, 6, 7, 8);
                 DELETE FROM content_fts WHERE entity_type='feed_entry';
                 INSERT INTO feed_entries(
                     id, feed_id, external_id, title, summary, sanitized_content,
@@ -196,7 +272,7 @@ public sealed class SqliteDatabaseTests : IDisposable
         check.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE type='trigger' AND name LIKE 'feed_entries_fts_%';";
         Assert.Equal(3L, (long)(await check.ExecuteScalarAsync(CancellationToken.None))!);
         check.CommandText = "SELECT MAX(version) FROM schema_versions;";
-        Assert.Equal(7L, (long)(await check.ExecuteScalarAsync(CancellationToken.None))!);
+        Assert.Equal(8L, (long)(await check.ExecuteScalarAsync(CancellationToken.None))!);
     }
 
     [Fact]
@@ -210,7 +286,7 @@ public sealed class SqliteDatabaseTests : IDisposable
             command.CommandText = """
                 DROP TRIGGER feed_entries_fts_update;
                 DROP TRIGGER feed_entries_fts_delete;
-                DELETE FROM schema_versions WHERE version IN (5, 6, 7);
+                DELETE FROM schema_versions WHERE version IN (5, 6, 7, 8);
                 DELETE FROM content_fts WHERE entity_type='feed_entry';
                 INSERT INTO feed_entries(
                     id, feed_id, external_id, title, summary, sanitized_content,
