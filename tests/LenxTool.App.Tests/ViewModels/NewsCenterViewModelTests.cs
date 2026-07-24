@@ -109,7 +109,8 @@ public sealed class NewsCenterViewModelTests
             new StubFeedCatalogSyncService(),
             new StubEntryStateRepository(),
             new StubFavoriteRepository(),
-            new StubFeedFullTextQueueService());
+            new StubFeedFullTextQueueService(),
+            new StubFeedAiSummaryService());
         await viewModel.InitializeAsync(CancellationToken.None);
 
         await viewModel.GenerateArticleReportCommand.ExecuteAsync();
@@ -208,7 +209,8 @@ public sealed class NewsCenterViewModelTests
             new StubFeedCatalogSyncService(),
             new StubEntryStateRepository(),
             new StubFavoriteRepository(),
-            new StubFeedFullTextQueueService());
+            new StubFeedFullTextQueueService(),
+            new StubFeedAiSummaryService());
         await viewModel.InitializeAsync(CancellationToken.None);
         Assert.Single(viewModel.SourceFilters, filter => filter.Platform == "GitHub")
             .IsSelected = false;
@@ -359,6 +361,87 @@ public sealed class NewsCenterViewModelTests
         Assert.Contains(
             viewModel.SelectedFeedArticleDocument!.Blocks,
             block => block.Text == "Second extracted");
+    }
+
+    [Fact]
+    public async Task GenerateSelectedFeedSummaryUsesCurrentExtractedContent()
+    {
+        FeedEntry entry = CreateFeedEntry(0);
+        string extractedHash = new('e', 64);
+        var fullText = new StubFeedFullTextQueueService();
+        fullText.Contents[entry.Id] = CreateFullTextContent(entry, "提取后的完整正文") with
+        {
+            ContentHash = extractedHash
+        };
+        var summaries = new StubFeedAiSummaryService();
+        using NewsCenterViewModel viewModel = CreateViewModel(
+            CreateSnapshot(),
+            feedEntries: new([entry]),
+            fullText: fullText,
+            summaries: summaries);
+        await viewModel.InitializeAsync(CancellationToken.None);
+        await viewModel.SelectedFeedReaderLoad;
+
+        await viewModel.GenerateFeedSummaryCommand.ExecuteAsync();
+
+        FeedAiSummaryInput input = Assert.Single(summaries.SingleInputs);
+        Assert.Equal(entry.Id, input.EntryId);
+        Assert.Equal(extractedHash, input.ContentHash);
+        Assert.Contains("提取后的完整正文", input.Content, StringComparison.Ordinal);
+        Assert.Equal("测试摘要", viewModel.SelectedFeedSummary?.Content);
+        Assert.Contains("15 tokens", viewModel.FeedSummaryMeta, StringComparison.Ordinal);
+        Assert.Contains("已生成", viewModel.FeedSummaryStatus, StringComparison.Ordinal);
+
+        viewModel.SelectedFeedReaderSource = viewModel.FeedReaderSourceOptions[0];
+
+        Assert.Null(viewModel.SelectedFeedSummary);
+        Assert.Contains("RSS 正文", viewModel.FeedSummaryStatus, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task GenerateVisibleFeedSummariesUsesBoundedFirstPageAndShowsSelectedResult()
+    {
+        var entries = new StubFeedEntryRepository(
+            Enumerable.Range(0, 50).Select(CreateFeedEntry).ToArray());
+        var summaries = new StubFeedAiSummaryService();
+        using NewsCenterViewModel viewModel = CreateViewModel(
+            CreateSnapshot(),
+            feedEntries: entries,
+            summaries: summaries);
+        await viewModel.InitializeAsync(CancellationToken.None);
+
+        await viewModel.GenerateVisibleFeedSummariesCommand.ExecuteAsync();
+
+        Assert.Equal(20, Assert.Single(summaries.BatchInputs).Count);
+        Assert.Equal("测试摘要", viewModel.SelectedFeedSummary?.Content);
+        Assert.Contains("20/20", viewModel.FeedBatchSummaryStatus, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ChangingSelectionCancelsRunningFeedSummary()
+    {
+        FeedEntry first = CreateFeedEntry(0);
+        FeedEntry second = CreateFeedEntry(1);
+        var summaries = new StubFeedAiSummaryService
+        {
+            DelayedEntryId = first.Id
+        };
+        using NewsCenterViewModel viewModel = CreateViewModel(
+            CreateSnapshot(),
+            feedEntries: new([first, second]),
+            summaries: summaries);
+        await viewModel.InitializeAsync(CancellationToken.None);
+
+        Task generation = viewModel.GenerateFeedSummaryCommand.ExecuteAsync();
+        await summaries.RequestStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        viewModel.SelectedTimelineEntry = Assert.Single(
+            viewModel.TimelineEntries,
+            item => item.Entry.Id == second.Id);
+        await generation;
+        await summaries.RequestCancelled.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+        Assert.Equal(second.Id, viewModel.SelectedTimelineEntry?.Entry.Id);
+        Assert.Null(viewModel.SelectedFeedSummary);
     }
 
     [Fact]
@@ -907,7 +990,8 @@ public sealed class NewsCenterViewModelTests
         StubFeedCatalogRepository? catalogRepository = null,
         StubEntryStateRepository? entryStates = null,
         StubFavoriteRepository? favorites = null,
-        StubFeedFullTextQueueService? fullText = null) =>
+        StubFeedFullTextQueueService? fullText = null,
+        StubFeedAiSummaryService? summaries = null) =>
         new(
             new StubNewsCenterService(snapshot),
             new StubAiReportService(null),
@@ -918,7 +1002,8 @@ public sealed class NewsCenterViewModelTests
             catalogSync ?? new StubFeedCatalogSyncService(),
             entryStates ?? new StubEntryStateRepository(),
             favorites ?? new StubFavoriteRepository(),
-            fullText ?? new StubFeedFullTextQueueService());
+            fullText ?? new StubFeedFullTextQueueService(),
+            summaries ?? new StubFeedAiSummaryService());
 
     private static NewsCenterSnapshot CreateSnapshot(params NewsArticle[] articles) =>
         new(articles, [], true, DateTimeOffset.Now, null);
@@ -1025,6 +1110,71 @@ public sealed class NewsCenterViewModelTests
 
         public Task<int> ProcessBackgroundBatchAsync(CancellationToken cancellationToken) =>
             Task.FromResult(0);
+    }
+
+    private sealed class StubFeedAiSummaryService : IFeedAiSummaryService
+    {
+        public List<FeedAiSummaryInput> SingleInputs { get; } = [];
+        public List<IReadOnlyList<FeedAiSummaryInput>> BatchInputs { get; } = [];
+        public string? DelayedEntryId { get; init; }
+        public TaskCompletionSource RequestStarted { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource RequestCancelled { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public async Task<FeedAiResult> SummarizeAsync(
+            FeedAiSummaryInput input,
+            CancellationToken cancellationToken)
+        {
+            SingleInputs.Add(input);
+            if (string.Equals(input.EntryId, DelayedEntryId, StringComparison.Ordinal))
+            {
+                RequestStarted.TrySetResult();
+                try
+                {
+                    await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    RequestCancelled.TrySetResult();
+                    throw;
+                }
+            }
+            return CreateResult(input);
+        }
+
+        public Task<IReadOnlyList<FeedAiSummaryBatchItem>> SummarizeBatchAsync(
+            IReadOnlyList<FeedAiSummaryInput> inputs,
+            CancellationToken cancellationToken)
+        {
+            BatchInputs.Add(inputs);
+            return Task.FromResult<IReadOnlyList<FeedAiSummaryBatchItem>>(
+                inputs.Select(input => new FeedAiSummaryBatchItem(
+                    input.EntryId,
+                    CreateResult(input),
+                    null)).ToArray());
+        }
+
+        private static FeedAiResult CreateResult(FeedAiSummaryInput input) =>
+            new(
+                $"summary-{input.EntryId}",
+                new(
+                    input.EntryId,
+                    input.ContentHash,
+                    FeedAiTaskType.Summary,
+                    "und",
+                    FeedAiSummaryOptions.Default.Model,
+                    FeedAiSummaryOptions.Default.PromptVersion),
+                input.Title,
+                "测试摘要",
+                1,
+                10,
+                5,
+                15,
+                100,
+                null,
+                TimelineNow,
+                TimelineNow);
     }
 
     private sealed class StubNewsCenterService(NewsCenterSnapshot snapshot) : INewsCenterService

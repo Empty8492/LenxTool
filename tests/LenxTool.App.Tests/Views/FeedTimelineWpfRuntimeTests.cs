@@ -368,7 +368,8 @@ public sealed class FeedTimelineWpfRuntimeTests
             new StubFeedCatalogSyncService(),
             states,
             favorites,
-            new StubFeedFullTextQueueService());
+            new StubFeedFullTextQueueService(),
+            null!);
 
     private static Window CreateWindow(FeedTimelineBrowserView view) =>
         new()

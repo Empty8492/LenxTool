@@ -151,6 +151,7 @@
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
                 <ScrollViewer Grid.Row="0"
@@ -288,6 +289,8 @@
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="14" />
                             <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="8" />
+                            <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <TextBlock VerticalAlignment="Center"
                                    FontWeight="SemiBold"
@@ -297,13 +300,25 @@
                                   DisplayMemberPath="Label"
                                   SelectedItem="{Binding SelectedFeedReaderSource}"
                                   AutomationProperties.Name="正文来源" />
-                        <TextBlock Grid.Column="4"
-                                   VerticalAlignment="Center"
-                                   Style="{StaticResource MetaTextStyle}"
-                                   Text="{Binding FeedReaderStatus}"
-                                   TextTrimming="CharacterEllipsis"
-                                   ToolTip="{Binding FeedReaderStatus}" />
+                        <StackPanel Grid.Column="4"
+                                    VerticalAlignment="Center">
+                            <TextBlock Style="{StaticResource MetaTextStyle}"
+                                       Text="{Binding FeedReaderStatus}"
+                                       TextTrimming="CharacterEllipsis"
+                                       ToolTip="{Binding FeedReaderStatus}" />
+                            <TextBlock Margin="0,2,0,0"
+                                       Style="{StaticResource MetaTextStyle}"
+                                       Text="{Binding FeedSummaryStatus}"
+                                       TextTrimming="CharacterEllipsis"
+                                       ToolTip="{Binding FeedSummaryStatus}" />
+                        </StackPanel>
                         <Button Grid.Column="6"
+                                MinWidth="88"
+                                Padding="12,5"
+                                Command="{Binding GenerateFeedSummaryCommand}"
+                                Content="生成摘要"
+                                AutomationProperties.Name="生成当前 Feed 摘要" />
+                        <Button Grid.Column="8"
                                 MinWidth="120"
                                 Padding="12,5"
                                 Command="{Binding OpenSelectedFeedOriginalCommand}"
@@ -311,8 +326,44 @@
                                 AutomationProperties.Name="在浏览器打开原文" />
                     </Grid>
                 </Border>
+                <Border Grid.Row="2"
+                        MaxHeight="220"
+                        Margin="18,12,18,0"
+                        Padding="14,12"
+                        Background="{DynamicResource Brush.SurfaceMuted}"
+                        CornerRadius="8">
+                    <Border.Style>
+                        <Style TargetType="Border">
+                            <Setter Property="Visibility" Value="Visible" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding SelectedFeedSummary}" Value="{x:Null}">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Border.Style>
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="8" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <DockPanel>
+                            <TextBlock DockPanel.Dock="Right"
+                                       Style="{StaticResource MetaTextStyle}"
+                                       Text="{Binding FeedSummaryMeta}" />
+                            <TextBlock FontWeight="SemiBold" Text="AI 摘要" />
+                        </DockPanel>
+                        <ScrollViewer Grid.Row="2"
+                                      VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollBarVisibility="Disabled">
+                            <TextBlock Text="{Binding SelectedFeedSummary.Content}"
+                                       TextWrapping="Wrap" />
+                        </ScrollViewer>
+                    </Grid>
+                </Border>
                 <ScrollViewer x:Name="ArticleScrollViewer"
-                              Grid.Row="2"
+                              Grid.Row="3"
                               VerticalScrollBarVisibility="Auto"
                               HorizontalScrollBarVisibility="Disabled"
                               PanningMode="VerticalOnly"
@@ -322,7 +373,7 @@
                                               ContentSourceLabel="{Binding FeedReaderSourceLabel}"
                                               ExtractedAt="{Binding FeedReaderExtractedAt}" />
                 </ScrollViewer>
-                <Border Grid.RowSpan="3"
+                <Border Grid.RowSpan="4"
                         Margin="0"
                         Padding="20"
                         Panel.ZIndex="10"

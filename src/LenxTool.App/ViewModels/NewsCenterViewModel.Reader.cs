@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using LenxTool.App.Controls;
 using LenxTool.App.Mvvm;
 using LenxTool.Core.Contracts;
+using LenxTool.Core.Errors;
 using LenxTool.Core.Models;
 
 namespace LenxTool.App.ViewModels;
@@ -24,12 +25,19 @@ public sealed partial class NewsCenterViewModel
         new(FeedReaderContentSource.Extracted, "提取全文");
 
     private readonly IFeedFullTextQueueService _feedFullTextQueueService;
+    private readonly IFeedAiSummaryService _feedAiSummaryService;
+    private readonly Dictionary<string, FeedAiResult> _feedSummariesByEntryId =
+        new(StringComparer.Ordinal);
     private CancellationTokenSource? _feedReaderCancellation;
     private FeedFullTextContent? _selectedExtractedContent;
     private FeedReaderSourceOption _selectedFeedReaderSource = RssReaderSource;
     private RichArticleDocument? _selectedFeedArticleDocument;
+    private FeedAiResult? _selectedFeedSummary;
+    private AppError? _feedSummaryError;
     private DateTimeOffset? _feedReaderExtractedAt;
     private string _feedReaderStatus = "选择资讯后可查看正文来源。";
+    private string _feedSummaryStatus = "选择资讯后可生成摘要。";
+    private string _feedBatchSummaryStatus = "可摘要当前已加载列表的前 20 条资讯。";
     private Task _selectedFeedReaderLoad = Task.CompletedTask;
     private int _feedReaderGeneration;
 
@@ -45,6 +53,7 @@ public sealed partial class NewsCenterViewModel
                 ?? RssReaderSource;
             if (!SetProperty(ref _selectedFeedReaderSource, selected)) return;
             ApplySelectedFeedReaderSource();
+            ApplyStoredFeedSummary();
             OnPropertyChanged(nameof(FeedReaderSourceLabel));
         }
     }
@@ -63,6 +72,30 @@ public sealed partial class NewsCenterViewModel
 
     public string FeedReaderSourceLabel => SelectedFeedReaderSource.Label;
 
+    public FeedAiResult? SelectedFeedSummary
+    {
+        get => _selectedFeedSummary;
+        private set
+        {
+            if (SetProperty(ref _selectedFeedSummary, value))
+            {
+                OnPropertyChanged(nameof(FeedSummaryMeta));
+            }
+        }
+    }
+
+    public string FeedSummaryMeta =>
+        SelectedFeedSummary is null
+            ? string.Empty
+            : $"{SelectedFeedSummary.CacheKey.Model} · {SelectedFeedSummary.TotalTokens} tokens · " +
+              $"{SelectedFeedSummary.UpdatedAt.ToLocalTime():MM-dd HH:mm}";
+
+    public AppError? FeedSummaryError
+    {
+        get => _feedSummaryError;
+        private set => SetProperty(ref _feedSummaryError, value);
+    }
+
     public string FeedReaderStatus
     {
         get => _feedReaderStatus;
@@ -71,7 +104,21 @@ public sealed partial class NewsCenterViewModel
 
     public Task SelectedFeedReaderLoad => _selectedFeedReaderLoad;
 
+    public string FeedSummaryStatus
+    {
+        get => _feedSummaryStatus;
+        private set => SetProperty(ref _feedSummaryStatus, value);
+    }
+
+    public string FeedBatchSummaryStatus
+    {
+        get => _feedBatchSummaryStatus;
+        private set => SetProperty(ref _feedBatchSummaryStatus, value);
+    }
+
     public RelayCommand OpenSelectedFeedOriginalCommand { get; private set; } = null!;
+    public AsyncRelayCommand GenerateFeedSummaryCommand { get; private set; } = null!;
+    public AsyncRelayCommand GenerateVisibleFeedSummariesCommand { get; private set; } = null!;
 
     private void ConfigureFeedReader()
     {
@@ -79,10 +126,17 @@ public sealed partial class NewsCenterViewModel
         OpenSelectedFeedOriginalCommand = new(
             OpenSelectedFeedOriginal,
             CanOpenSelectedFeedOriginal);
+        GenerateFeedSummaryCommand = new(
+            GenerateSelectedFeedSummaryAsync,
+            () => SelectedTimelineEntry is not null);
+        GenerateVisibleFeedSummariesCommand = new(
+            GenerateVisibleFeedSummariesAsync,
+            () => TimelineEntries.Count > 0);
     }
 
     private void SelectFeedReaderEntry(FeedTimelineItem? item)
     {
+        GenerateFeedSummaryCommand.Cancel();
         _feedReaderCancellation?.Cancel();
         _feedReaderCancellation?.Dispose();
         _feedReaderCancellation = null;
@@ -97,17 +151,22 @@ public sealed partial class NewsCenterViewModel
         SelectedFeedArticle = item is null ? null : CreateReaderArticle(item);
         SelectedFeedArticleDocument = item is null ? null : CreateRssReaderDocument(item);
         FeedReaderExtractedAt = null;
+        FeedSummaryError = null;
+        SelectedFeedSummary = null;
         OpenSelectedFeedOriginalCommand.NotifyCanExecuteChanged();
+        GenerateFeedSummaryCommand.NotifyCanExecuteChanged();
 
         if (item is null)
         {
             FeedReaderStatus = "选择资讯后可查看正文来源。";
+            FeedSummaryStatus = "选择资讯后可生成摘要。";
             _selectedFeedReaderLoad = Task.CompletedTask;
             OnPropertyChanged(nameof(SelectedFeedReaderLoad));
             return;
         }
 
         FeedReaderStatus = "正在检查可用的提取全文…";
+        ApplyStoredFeedSummary();
         var cancellation = new CancellationTokenSource();
         _feedReaderCancellation = cancellation;
         _selectedFeedReaderLoad = LoadSelectedFeedFullTextAsync(
@@ -173,6 +232,133 @@ public sealed partial class NewsCenterViewModel
         FeedReaderExtractedAt = null;
     }
 
+    private async Task GenerateSelectedFeedSummaryAsync(CancellationToken cancellationToken)
+    {
+        FeedAiSummaryInput? input = CreateCurrentFeedSummaryInput();
+        FeedTimelineItem? selected = SelectedTimelineEntry;
+        if (input is null || selected is null) return;
+        int expectedGeneration = Volatile.Read(ref _feedReaderGeneration);
+        FeedSummaryError = null;
+        FeedSummaryStatus = $"正在基于{SelectedFeedReaderSource.Label}生成摘要…";
+        try
+        {
+            FeedAiResult result = await _feedAiSummaryService
+                .SummarizeAsync(input, cancellationToken);
+            if (!IsCurrentFeedReaderEntry(selected, expectedGeneration)
+                || !string.Equals(
+                    CreateCurrentFeedSummaryInput()?.ContentHash,
+                    input.ContentHash,
+                    StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            _feedSummariesByEntryId[result.CacheKey.EntryId] = result;
+            SelectedFeedSummary = result;
+            FeedSummaryStatus = $"摘要已生成 · {result.TotalTokens} tokens";
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            if (IsCurrentFeedReaderEntry(selected, expectedGeneration))
+            {
+                FeedSummaryStatus = "摘要生成已取消。";
+            }
+        }
+        catch (AppException exception)
+        {
+            if (IsCurrentFeedReaderEntry(selected, expectedGeneration))
+            {
+                FeedSummaryError = exception.Error;
+                FeedSummaryStatus =
+                    $"{exception.Error.UserMessage} {exception.Error.Suggestion}";
+            }
+        }
+    }
+
+    private async Task GenerateVisibleFeedSummariesAsync(CancellationToken cancellationToken)
+    {
+        int timelineGeneration = Volatile.Read(ref _timelineQueryGeneration);
+        FeedAiSummaryInput[] inputs = TimelineEntries
+            .Take(20)
+            .Select(item => CreateRssFeedSummaryInput(item.Entry))
+            .ToArray();
+        if (inputs.Length == 0) return;
+
+        FeedBatchSummaryStatus = $"正在摘要前 {inputs.Length} 条资讯…";
+        IReadOnlyList<FeedAiSummaryBatchItem> results = await _feedAiSummaryService
+            .SummarizeBatchAsync(inputs, cancellationToken);
+        if (timelineGeneration != Volatile.Read(ref _timelineQueryGeneration)) return;
+
+        int completed = 0;
+        int failed = 0;
+        foreach (FeedAiSummaryBatchItem item in results)
+        {
+            if (item.Result is { } result)
+            {
+                _feedSummariesByEntryId[result.CacheKey.EntryId] = result;
+                completed++;
+            }
+            else if (item.Error is not null)
+            {
+                failed++;
+            }
+        }
+        ApplyStoredFeedSummary();
+        FeedBatchSummaryStatus = failed == 0
+            ? $"当前页摘要已完成 {completed}/{inputs.Length}。"
+            : $"当前页摘要完成 {completed}/{inputs.Length}，失败 {failed} 条；可稍后重试。";
+    }
+
+    private FeedAiSummaryInput? CreateCurrentFeedSummaryInput()
+    {
+        if (SelectedTimelineEntry is not { } selected) return null;
+        if (SelectedFeedReaderSource.Source == FeedReaderContentSource.Extracted
+            && _selectedExtractedContent is { } extracted)
+        {
+            string content = string.Join(
+                Environment.NewLine,
+                extracted.Article.Blocks
+                    .Where(block => !string.IsNullOrWhiteSpace(block.Text))
+                    .Select(block => block.Text));
+            return new(
+                selected.Entry.Id,
+                extracted.ContentHash,
+                selected.Entry.Title,
+                content);
+        }
+        return CreateRssFeedSummaryInput(selected.Entry);
+    }
+
+    private static FeedAiSummaryInput CreateRssFeedSummaryInput(FeedEntry entry)
+    {
+        string content = string.IsNullOrWhiteSpace(entry.SanitizedContent)
+            ? entry.Summary
+            : entry.SanitizedContent;
+        return new(entry.Id, entry.ContentHash, entry.Title, content);
+    }
+
+    private void ApplyStoredFeedSummary()
+    {
+        FeedAiSummaryInput? input = CreateCurrentFeedSummaryInput();
+        if (input is not null
+            && _feedSummariesByEntryId.TryGetValue(input.EntryId, out FeedAiResult? result)
+            && string.Equals(
+                result.CacheKey.ContentHash,
+                input.ContentHash,
+                StringComparison.Ordinal))
+        {
+            SelectedFeedSummary = result;
+            FeedSummaryStatus = $"已加载{SelectedFeedReaderSource.Label}摘要。";
+            return;
+        }
+
+        SelectedFeedSummary = null;
+        FeedSummaryError = null;
+        FeedSummaryStatus = SelectedTimelineEntry is null
+            ? "选择资讯后可生成摘要。"
+            : $"可基于{SelectedFeedReaderSource.Label}生成摘要。";
+    }
+
     private static RichArticleDocument? CreateRssReaderDocument(FeedTimelineItem item)
     {
         if (item.Entry.Enclosures.Count == 0) return null;
@@ -218,6 +404,8 @@ public sealed partial class NewsCenterViewModel
     private void DisposeFeedReader()
     {
         Interlocked.Increment(ref _feedReaderGeneration);
+        GenerateFeedSummaryCommand.Dispose();
+        GenerateVisibleFeedSummariesCommand.Dispose();
         _feedReaderCancellation?.Cancel();
         _feedReaderCancellation?.Dispose();
         _feedReaderCancellation = null;

@@ -236,6 +236,22 @@ public sealed class NewsCenterLayoutTests
                 && element.Attribute("AutomationProperties.Name")?.Value == "在浏览器打开原文"
                 && element.Attribute("Command")?.Value
                     == "{Binding OpenSelectedFeedOriginalCommand}");
+        Assert.Contains(
+            timelineBrowser.Descendants(),
+            element => element.Name.LocalName == "Button"
+                && element.Attribute("AutomationProperties.Name")?.Value == "生成当前 Feed 摘要"
+                && element.Attribute("Command")?.Value
+                    == "{Binding GenerateFeedSummaryCommand}");
+        Assert.Contains(
+            timelineFilters.Descendants(),
+            element => element.Name.LocalName == "Button"
+                && element.Attribute("AutomationProperties.Name")?.Value == "摘要当前页 Feed"
+                && element.Attribute("Command")?.Value
+                    == "{Binding GenerateVisibleFeedSummariesCommand}");
+        Assert.Contains(
+            timelineBrowser.Descendants(),
+            element => element.Name.LocalName == "TextBlock"
+                && element.Attribute("Text")?.Value == "{Binding SelectedFeedSummary.Content}");
         Assert.DoesNotContain(
             timelineFilters.Descendants().Concat(timelineBrowser.Descendants()),
             element => element.Name.LocalName == "Button"
@@ -276,6 +292,7 @@ public sealed class NewsCenterLayoutTests
         XElement browser = LoadFixture("FeedTimelineBrowserView.xaml");
         XElement[] emptyStates = browser.Descendants()
             .Where(element => element.Name.LocalName == "Border"
+                && element.Attribute("Panel.ZIndex")?.Value == "10"
                 && element.Elements().Any(child =>
                     child.Name.LocalName == "Border.Style"
                     && child.Descendants().Any(descendant =>

@@ -388,6 +388,7 @@ public sealed partial class NewsCenterViewModel
     {
         int generation = Interlocked.Increment(ref _timelineQueryGeneration);
         LoadMoreTimelineCommand.Cancel();
+        GenerateVisibleFeedSummariesCommand.Cancel();
         TimelineStatus = "正在筛选本地 Feed 缓存…";
         FeedEntryPage page = await _feedEntryRepository
             .QueryAsync(CreateTimelineQuery(0), cancellationToken);
@@ -522,6 +523,7 @@ public sealed partial class NewsCenterViewModel
 
         HasMoreTimelineEntries = page.HasMore;
         UpdateTimelineStatus(_feedCatalogSync.Current);
+        GenerateVisibleFeedSummariesCommand.NotifyCanExecuteChanged();
     }
 
     private async Task ToggleTimelineReadAsync(
