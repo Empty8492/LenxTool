@@ -19,6 +19,24 @@ public sealed class RichArticleView : UserControl, IDisposable
         typeof(RichArticleView),
         new PropertyMetadata(null, OnArticleChanged));
 
+    public static readonly DependencyProperty DocumentProperty = DependencyProperty.Register(
+        nameof(Document),
+        typeof(RichArticleDocument),
+        typeof(RichArticleView),
+        new PropertyMetadata(null, OnArticleChanged));
+
+    public static readonly DependencyProperty ContentSourceLabelProperty = DependencyProperty.Register(
+        nameof(ContentSourceLabel),
+        typeof(string),
+        typeof(RichArticleView),
+        new PropertyMetadata(string.Empty, OnArticleChanged));
+
+    public static readonly DependencyProperty ExtractedAtProperty = DependencyProperty.Register(
+        nameof(ExtractedAt),
+        typeof(DateTimeOffset?),
+        typeof(RichArticleView),
+        new PropertyMetadata(null, OnArticleChanged));
+
     private readonly StackPanel _contentPanel;
     private CancellationTokenSource? _imageLoadCancellation;
 
@@ -49,6 +67,24 @@ public sealed class RichArticleView : UserControl, IDisposable
         set => SetValue(ArticleProperty, value);
     }
 
+    public RichArticleDocument? Document
+    {
+        get => (RichArticleDocument?)GetValue(DocumentProperty);
+        set => SetValue(DocumentProperty, value);
+    }
+
+    public string ContentSourceLabel
+    {
+        get => (string)GetValue(ContentSourceLabelProperty);
+        set => SetValue(ContentSourceLabelProperty, value);
+    }
+
+    public DateTimeOffset? ExtractedAt
+    {
+        get => (DateTimeOffset?)GetValue(ExtractedAtProperty);
+        set => SetValue(ExtractedAtProperty, value);
+    }
+
     public void Dispose()
     {
         CancelImageLoads();
@@ -74,7 +110,7 @@ public sealed class RichArticleView : UserControl, IDisposable
             return;
         }
 
-        RichArticleDocument content = RichArticleFormatter.Parse(
+        RichArticleDocument content = Document ?? RichArticleFormatter.Parse(
             string.IsNullOrWhiteSpace(article.RichContent) ? article.Content : article.RichContent,
             article.Url);
         var imageBudget = new ArticleImageDownloadBudget(
@@ -94,6 +130,15 @@ public sealed class RichArticleView : UserControl, IDisposable
         };
         meta.SetResourceReference(TextBlock.ForegroundProperty, "Brush.TextSecondary");
         meta.Inlines.Add(new Run($"{article.Source}  ·  {article.PublishedDate:yyyy-MM-dd}"));
+        if (!string.IsNullOrWhiteSpace(ContentSourceLabel))
+        {
+            meta.Inlines.Add(new Run($"  ·  内容来源：{ContentSourceLabel}"));
+        }
+        if (ExtractedAt is { } extractedAt)
+        {
+            meta.Inlines.Add(new Run(
+                $"  ·  提取于 {extractedAt.ToLocalTime():yyyy-MM-dd HH:mm}"));
+        }
         _contentPanel.Children.Add(meta);
 
         foreach (RichArticleBlock block in content.Blocks)
@@ -147,6 +192,14 @@ public sealed class RichArticleView : UserControl, IDisposable
                 textBlock.Margin = new Thickness(20, 5, 0, 5);
                 textBlock.Inlines.Add(new Run("• "));
                 break;
+            case RichArticleBlockKind.Quote:
+                textBlock.Margin = new Thickness(18, 8, 8, 12);
+                textBlock.FontStyle = FontStyles.Italic;
+                textBlock.SetResourceReference(
+                    TextBlock.ForegroundProperty,
+                    "Brush.TextSecondary");
+                textBlock.Inlines.Add(new Run("“"));
+                break;
             default:
                 textBlock.Margin = new Thickness(0, 5, 0, 10);
                 break;
@@ -163,7 +216,9 @@ public sealed class RichArticleView : UserControl, IDisposable
 
     private static void AddLink(InlineCollection inlines, string text, string url)
     {
-        if (!Uri.TryCreate(url, UriKind.Absolute, out Uri? uri) || uri.Scheme is not ("http" or "https"))
+        if (!Uri.TryCreate(url, UriKind.Absolute, out Uri? uri)
+            || uri.Scheme is not ("http" or "https")
+            || !string.IsNullOrEmpty(uri.UserInfo))
         {
             inlines.Add(new Run(text));
             return;

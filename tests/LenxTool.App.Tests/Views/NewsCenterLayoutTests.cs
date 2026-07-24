@@ -219,7 +219,23 @@ public sealed class NewsCenterLayoutTests
         Assert.Contains(
             timelineBrowser.Descendants(),
             element => element.Name.LocalName == "RichArticleView"
-                && element.Attribute("Article")?.Value == "{Binding SelectedFeedArticle}");
+                && element.Attribute("Article")?.Value == "{Binding SelectedFeedArticle}"
+                && element.Attribute("Document")?.Value == "{Binding SelectedFeedArticleDocument}"
+                && element.Attribute("ContentSourceLabel")?.Value == "{Binding FeedReaderSourceLabel}"
+                && element.Attribute("ExtractedAt")?.Value == "{Binding FeedReaderExtractedAt}");
+        Assert.Contains(
+            timelineBrowser.Descendants(),
+            element => element.Name.LocalName == "ComboBox"
+                && element.Attribute("AutomationProperties.Name")?.Value == "正文来源"
+                && element.Attribute("ItemsSource")?.Value == "{Binding FeedReaderSourceOptions}"
+                && element.Attribute("SelectedItem")?.Value
+                    == "{Binding SelectedFeedReaderSource}");
+        Assert.Contains(
+            timelineBrowser.Descendants(),
+            element => element.Name.LocalName == "Button"
+                && element.Attribute("AutomationProperties.Name")?.Value == "在浏览器打开原文"
+                && element.Attribute("Command")?.Value
+                    == "{Binding OpenSelectedFeedOriginalCommand}");
         Assert.DoesNotContain(
             timelineFilters.Descendants().Concat(timelineBrowser.Descendants()),
             element => element.Name.LocalName == "Button"

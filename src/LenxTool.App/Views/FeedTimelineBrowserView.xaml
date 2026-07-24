@@ -150,6 +150,7 @@
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
                 <ScrollViewer Grid.Row="0"
@@ -274,15 +275,54 @@
                         </StackPanel>
                     </Border>
                 </ScrollViewer>
+                <Border Grid.Row="1"
+                        Padding="18,10"
+                        BorderBrush="{DynamicResource Brush.Border}"
+                        BorderThickness="0,0,0,1">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="10" />
+                            <ColumnDefinition Width="144" />
+                            <ColumnDefinition Width="14" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="14" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock VerticalAlignment="Center"
+                                   FontWeight="SemiBold"
+                                   Text="正文来源" />
+                        <ComboBox Grid.Column="2"
+                                  ItemsSource="{Binding FeedReaderSourceOptions}"
+                                  DisplayMemberPath="Label"
+                                  SelectedItem="{Binding SelectedFeedReaderSource}"
+                                  AutomationProperties.Name="正文来源" />
+                        <TextBlock Grid.Column="4"
+                                   VerticalAlignment="Center"
+                                   Style="{StaticResource MetaTextStyle}"
+                                   Text="{Binding FeedReaderStatus}"
+                                   TextTrimming="CharacterEllipsis"
+                                   ToolTip="{Binding FeedReaderStatus}" />
+                        <Button Grid.Column="6"
+                                MinWidth="120"
+                                Padding="12,5"
+                                Command="{Binding OpenSelectedFeedOriginalCommand}"
+                                Content="在浏览器打开原文"
+                                AutomationProperties.Name="在浏览器打开原文" />
+                    </Grid>
+                </Border>
                 <ScrollViewer x:Name="ArticleScrollViewer"
-                              Grid.Row="1"
+                              Grid.Row="2"
                               VerticalScrollBarVisibility="Auto"
                               HorizontalScrollBarVisibility="Disabled"
                               PanningMode="VerticalOnly"
                               ScrollChanged="ArticleScrollViewer_OnScrollChanged">
-                    <controls:RichArticleView Article="{Binding SelectedFeedArticle}" />
+                    <controls:RichArticleView Article="{Binding SelectedFeedArticle}"
+                                              Document="{Binding SelectedFeedArticleDocument}"
+                                              ContentSourceLabel="{Binding FeedReaderSourceLabel}"
+                                              ExtractedAt="{Binding FeedReaderExtractedAt}" />
                 </ScrollViewer>
-                <Border Grid.RowSpan="2"
+                <Border Grid.RowSpan="3"
                         Margin="0"
                         Padding="20"
                         Panel.ZIndex="10"
