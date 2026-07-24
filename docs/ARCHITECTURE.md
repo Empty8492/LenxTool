@@ -138,4 +138,6 @@ UI 错误卡根据能力显示重试、复制脱敏详情、打开设置、切�
 
 P1-A 已完成：私人状态写入与共享目录版本隔离，180 天清理保护有状态条目，时间线与历史页提供已读、收藏、标签、备注和阅读进度；隔离的真实 WPF 运行测试覆盖长文滚动、键盘焦点、进度写入和重建视图后的 SQLite 恢复。P1-06 已将阅读器图片统一接入 `IArticleImageDownloader`：先读取 `IEntryAssetStore`，未命中时逐跳复用 `FeedNetworkPolicy` 和共享固定-IP 连接工厂，限制 HTTPS/端口、DNS 结果、重定向、并发、单资源、每篇资源数与网络字节；只接受魔数与 MIME 一致的 PNG/JPEG/GIF/BMP/WebP，SVG 和伪装内容不会进入缓存。失败 URL 在短期内返回稳定占位，调用方取消不进入失败缓存。
 
+P1-07 以 Core `IArticleContentExtractor` 建立全文边界：调用方只提交 URL，取得最终 URL、元数据、类型化正文块、警告和提取版本。Infrastructure 下载阶段逐跳复用 `FeedNetworkPolicy`/固定-IP handler，并独立限制总超时、重定向、下载/解压大小、HTML MIME 和同主机并发；编码阶段按 BOM、HTTP charset、HTML meta 和有警告的兼容回退处理。`HtmlAgilityPack` 仅接收已经下载到内存的 HTML，不能访问网络，DOM 深度/节点、正文候选/规模限制和白名单净化由 LenxTool 控制；Core 契约不含第三方类型，P1-08 队列和未来替换实现不需要改变调用方。
+
 P0 终验（2026-07-24）沿用上述边界并完成闭环证据：管理员登录后的目录写入、只读快照和审计在真实 workerd/D1 中串行验证；本地抓取/缓存层验证 OPML 安全处理、断网保留、单源故障隔离、schema v2→v7 原位迁移及 10k 条目分页虚拟化。终验不引入新的云端正文存储或客户端授权旁路。

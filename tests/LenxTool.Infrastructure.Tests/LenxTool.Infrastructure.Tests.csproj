@@ -25,6 +25,7 @@
 
   <ItemGroup>
     <None Update="Fixtures\Feeds\**\*" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Fixtures\Articles\**\*" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

@@ -130,6 +130,7 @@ public partial class App : Application
         services.AddSingleton<IOpmlFileService, OpmlFileService>();
         services.AddFeedDiscovery(CreateFeedDiscoveryOptions());
         services.AddArticleImages(ArticleImageDownloadOptions.Default);
+        services.AddArticleContentExtraction(ArticleContentExtractionOptions.Default);
         services.AddFeedRefresh(FeedRefreshOptions.Default);
         services.AddSingleton<MediaJobRepository>();
         services.AddSingleton<IMediaJobRepository>(static services =>

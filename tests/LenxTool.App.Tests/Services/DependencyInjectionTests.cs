@@ -41,6 +41,7 @@ public sealed class DependencyInjectionTests
         Assert.NotNull(provider.GetRequiredService<IFeedDiscoveryService>());
         Assert.NotNull(provider.GetRequiredService<IFeedParser>());
         Assert.NotNull(provider.GetRequiredService<IArticleImageDownloader>());
+        Assert.NotNull(provider.GetRequiredService<IArticleContentExtractor>());
         Assert.IsType<FeedFetchStateRepository>(provider.GetRequiredService<IFeedFetchStateRepository>());
         Assert.IsType<FeedEntryRepository>(provider.GetRequiredService<IFeedEntryWriter>());
         Assert.Same(

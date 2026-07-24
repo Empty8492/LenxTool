@@ -9,14 +9,14 @@
 | 测试组 | 结果 |
 |---|---:|
 | LenxTool.Core.Tests | 39 passed |
-| LenxTool.Infrastructure.Tests | 201 passed |
+| LenxTool.Infrastructure.Tests | 226 passed |
 | LenxTool.App.Tests | 100 passed |
 | Cloudflare Worker Vitest | 39 passed |
 | Worker TypeScript strict typecheck | passed |
 | .NET build warnings | 0 |
 | NuGet vulnerable packages | 0 detected |
 
-本轮执行 `dotnet build LenxTools.slnx -c Release --no-restore` 与 `dotnet test LenxTools.slnx -c Release --no-restore`，结果为 0 警告、0 错误；Core 39、Infrastructure 201、App 100，共 340/340 通过且无跳过。Worker 严格 typecheck 和官方 workerd/D1 Vitest 39/39 保持通过（Wrangler 日志目录受当前沙箱权限限制，但不影响断言）。
+本轮执行 `dotnet build LenxTools.slnx -c Release --no-restore` 与 `dotnet test LenxTools.slnx -c Release --no-build --no-restore`，结果为 0 警告、0 错误；Core 39、Infrastructure 226、App 100，共 365/365 通过且无跳过。Worker 严格 typecheck 和官方 workerd/D1 Vitest 39/39 保持通过（Wrangler 日志目录受当前沙箱权限限制，但不影响断言）。
 
 P0-08 覆盖 4 项 SQLite 集成场景并同步既有 schema 断言：新建库创建目录状态、分类、Feed、抓取状态、条目、索引和搜索映射；真实 schema v2 哨兵数据经 v3/v4 原位升级后仍可由现有仓储读取；迁移对象冲突时完整回滚且版本停留在 v3；相同外部 ID、URL 和内容哈希可存在于不同 Feed，同一 Feed 内重复外部 ID 被约束拒绝。既有包含未 checkpoint WAL 提交的一致性备份测试继续通过。
 
@@ -63,6 +63,8 @@ P1-05 资源索引与缓存基础切片新增 4 个 Infrastructure 场景并提�
 P1-A 新增 1 个隔离的真实 WPF 运行场景与 1 个 Infrastructure 隔离场景：STA 线程加载真实应用资源、`Window`、Feed 时间线、原生 `ScrollViewer` 和临时 schema v7 SQLite，长文从 55% 恢复、滚动到约 73% 防抖写入，关闭并重建 ViewModel/视图后再次恢复；备注输入框取得键盘焦点，备注与标签从同一临时库回读。私人已读/进度/备注/收藏/标签写入前后共享目录版本保持不变，180 天清理保护继续由条目仓储集成测试覆盖。
 
 P1-06 新增 11 个 Infrastructure 场景并扩展真实 WPF 运行场景：缓存命中不解析 DNS/请求网络，下载使用已验证固定地址并写入内容寻址缓存；私网重定向在第二次请求前阻断；错误 MIME、SVG 及伪装 PNG 不落盘；每篇资源/网络字节预算、全局并发和调用方取消生效，取消不进入失败缓存；离线失败后的重复读取不再次请求。WPF 使用真实 `EntryAssetStore` 解码显示离线 PNG，未命中显示稳定占位，重复创建同一条目仍只发生一次 DNS 尝试。Feed 发现与图片传输共用固定-IP handler 工厂，受影响网络测试同步通过。
+
+P1-07 新增 25 个 Infrastructure 场景：12 组独立文章 fixture 覆盖 `article`/`main`/内容容器、中文、列表、引用、相对链接、延迟图片、噪声布局、畸形 HTML、元数据和提示注入文本；其余场景覆盖 GB18030、脚本/样式/表单/iframe/危险协议净化、空正文警告、DOM 深度、正文/块上限、最终 URL、固定 DNS 地址、私网 DNS/重定向阻断、响应大小、调用方取消、总超时和同主机并发 1。Core 契约不暴露解析器类型，组合根测试确认 `IArticleContentExtractor` 可解析。`dotnet list LenxTools.slnx package --vulnerable --include-transitive` 对包括 `HtmlAgilityPack 1.12.4` 在内的全部项目报告 0 个已知易受攻击包。
 
 桌面账号新增 8 项 Infrastructure 测试和 7 项 App 测试：覆盖登录、refresh token 恢复、`/v1/me`、并发 401 单次刷新、每请求最多重放一次、失效清理、离线退出、DPAPI 删除/写入失败脱敏、登录密码清空、过期与额度显示、admin/user 导航隔离、角色降级回退和 XAML 自动化名称/绑定。
 
