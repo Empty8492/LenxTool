@@ -1,23 +1,18 @@
 using System.Net;
 using System.Net.Http.Headers;
-using System.Net.Sockets;
 
 namespace LenxTool.Infrastructure.Networking;
 
-internal interface IFeedHostResolver
+internal interface IArticleImageTransport
 {
-    Task<IReadOnlyList<IPAddress>> ResolveAsync(string host, CancellationToken cancellationToken);
-}
-
-internal interface IFeedDiscoveryTransport
-{
-    Task<FeedDiscoveryHttpResponse> SendAsync(
+    Task<ArticleImageHttpResponse> SendAsync(
         Uri uri,
         IReadOnlyList<IPAddress> addresses,
+        Uri? referrer,
         CancellationToken cancellationToken);
 }
 
-internal sealed class FeedDiscoveryHttpResponse(
+internal sealed class ArticleImageHttpResponse(
     HttpResponseMessage message,
     IDisposable? owner = null) : IDisposable
 {
@@ -30,34 +25,30 @@ internal sealed class FeedDiscoveryHttpResponse(
     }
 }
 
-internal sealed class SystemFeedHostResolver : IFeedHostResolver
+internal sealed class PinnedArticleImageTransport(
+    FeedDiscoveryOptions feedOptions) : IArticleImageTransport
 {
-    public async Task<IReadOnlyList<IPAddress>> ResolveAsync(
-        string host,
-        CancellationToken cancellationToken) =>
-        await Dns.GetHostAddressesAsync(host, AddressFamily.Unspecified, cancellationToken)
-            .ConfigureAwait(false);
-}
-
-internal sealed class PinnedFeedDiscoveryTransport(FeedDiscoveryOptions options) : IFeedDiscoveryTransport
-{
-    public async Task<FeedDiscoveryHttpResponse> SendAsync(
+    public async Task<ArticleImageHttpResponse> SendAsync(
         Uri uri,
         IReadOnlyList<IPAddress> addresses,
+        Uri? referrer,
         CancellationToken cancellationToken)
     {
         SocketsHttpHandler handler = PinnedHttpHandlerFactory.Create(
             uri,
             addresses,
-            options.ConnectTimeout,
-            DecompressionMethods.None);
-        var client = new HttpClient(handler, disposeHandler: true) { Timeout = Timeout.InfiniteTimeSpan };
+            feedOptions.ConnectTimeout,
+            DecompressionMethods.All);
+        var client = new HttpClient(handler, disposeHandler: true)
+        {
+            Timeout = Timeout.InfiniteTimeSpan
+        };
         try
         {
             using var request = new HttpRequestMessage(HttpMethod.Get, uri);
             request.Headers.UserAgent.Add(new ProductInfoHeaderValue("LenxTool", "0.1"));
-            request.Headers.Accept.ParseAdd(
-                "application/rss+xml, application/atom+xml, application/xml, text/xml, text/html, application/xhtml+xml");
+            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("image/*"));
+            request.Headers.Referrer = referrer;
             HttpResponseMessage response = await client.SendAsync(
                 request,
                 HttpCompletionOption.ResponseHeadersRead,
