@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text.RegularExpressions;
+using LenxTool.Core.Models;
 
 namespace LenxTool.App.Controls;
 
@@ -8,6 +9,7 @@ public enum RichArticleBlockKind
     Heading,
     Subheading,
     Body,
+    Quote,
     Bullet,
     Image
 }
@@ -26,6 +28,52 @@ public sealed record RichArticleDocument(string? HeroImageUrl, IReadOnlyList<Ric
 
 public static partial class RichArticleFormatter
 {
+    public static RichArticleDocument FromExtractedContent(ArticleContentResult article)
+    {
+        ArgumentNullException.ThrowIfNull(article);
+        var blocks = new List<RichArticleBlock>(article.Blocks.Count);
+        foreach (ArticleContentBlock source in article.Blocks)
+        {
+            if (source.Kind == ArticleContentBlockKind.Image)
+            {
+                string? imageUrl = string.IsNullOrWhiteSpace(source.ResourceUrl)
+                    ? null
+                    : ResolveUrl(source.ResourceUrl, article.FinalUrl);
+                if (imageUrl is not null)
+                {
+                    blocks.Add(new(
+                        RichArticleBlockKind.Image,
+                        [new(source.Text)],
+                        imageUrl));
+                }
+                else if (!string.IsNullOrWhiteSpace(source.Text))
+                {
+                    blocks.Add(new(
+                        RichArticleBlockKind.Body,
+                        [new(source.Text)]));
+                }
+                continue;
+            }
+
+            if (string.IsNullOrWhiteSpace(source.Text)) continue;
+            RichArticleBlockKind kind = source.Kind switch
+            {
+                ArticleContentBlockKind.Heading when source.HeadingLevel is > 1 =>
+                    RichArticleBlockKind.Subheading,
+                ArticleContentBlockKind.Heading => RichArticleBlockKind.Heading,
+                ArticleContentBlockKind.ListItem => RichArticleBlockKind.Bullet,
+                ArticleContentBlockKind.Quote => RichArticleBlockKind.Quote,
+                _ => RichArticleBlockKind.Body
+            };
+            blocks.Add(new(kind, CreateExtractedInlines(source, article.FinalUrl)));
+        }
+
+        string? heroImage = blocks
+            .FirstOrDefault(block => block.Kind == RichArticleBlockKind.Image)
+            ?.ImageUrl;
+        return new(heroImage, blocks);
+    }
+
     public static RichArticleDocument Parse(string? htmlOrText, string? baseUrl = null)
     {
         string input = htmlOrText ?? string.Empty;
@@ -202,6 +250,42 @@ public static partial class RichArticleFormatter
         }
 
         return null;
+    }
+
+    private static List<RichArticleInline> CreateExtractedInlines(
+        ArticleContentBlock block,
+        string baseUrl)
+    {
+        var inlines = new List<RichArticleInline>();
+        int position = 0;
+        foreach (ArticleContentLink link in block.Links)
+        {
+            if (string.IsNullOrEmpty(link.Text)) continue;
+            int linkPosition = block.Text.IndexOf(
+                link.Text,
+                position,
+                StringComparison.Ordinal);
+            if (linkPosition < 0) continue;
+            if (linkPosition > position)
+            {
+                inlines.Add(new(block.Text[position..linkPosition]));
+            }
+
+            inlines.Add(new(
+                link.Text,
+                ResolveUrl(link.Url, baseUrl)));
+            position = linkPosition + link.Text.Length;
+        }
+
+        if (position < block.Text.Length)
+        {
+            inlines.Add(new(block.Text[position..]));
+        }
+        if (inlines.Count == 0)
+        {
+            inlines.Add(new(block.Text));
+        }
+        return inlines;
     }
 
     [GeneratedRegex("<(?:script|style|iframe|object|embed)\\b[^>]*>.*?</(?:script|style|iframe|object|embed)>", RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.CultureInvariant)]

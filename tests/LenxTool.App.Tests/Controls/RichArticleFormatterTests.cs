@@ -1,4 +1,5 @@
 using LenxTool.App.Controls;
+using LenxTool.Core.Models;
 
 namespace LenxTool.App.Tests.Controls;
 
@@ -83,6 +84,79 @@ public sealed class RichArticleFormatterTests
                 Assert.Equal(RichArticleBlockKind.Image, block.Kind);
                 Assert.Equal("相对路径图", block.Text);
                 Assert.Equal("https://daily.example/images/relative.png", block.ImageUrl);
+            });
+    }
+
+    [Fact]
+    public void FromExtractedContentPreservesStructuredOrderAndSafeLinks()
+    {
+        ArticleContentResult article = new(
+            "https://example.com/original",
+            "https://example.com/posts/reader",
+            "Reader title",
+            "Author",
+            new DateTimeOffset(2026, 7, 25, 8, 30, 0, TimeSpan.Zero),
+            [
+                new(
+                    ArticleContentBlockKind.Heading,
+                    "Overview",
+                    null,
+                    1,
+                    []),
+                new(
+                    ArticleContentBlockKind.Paragraph,
+                    "Read the safe source and ignore the unsafe source.",
+                    null,
+                    null,
+                    [
+                        new("https://source.example/story", "safe source"),
+                        new("javascript:alert(1)", "unsafe source")
+                    ]),
+                new(
+                    ArticleContentBlockKind.Quote,
+                    "Quoted text",
+                    null,
+                    null,
+                    []),
+                new(
+                    ArticleContentBlockKind.ListItem,
+                    "List item",
+                    null,
+                    null,
+                    []),
+                new(
+                    ArticleContentBlockKind.Image,
+                    "Diagram",
+                    "/images/diagram.png",
+                    null,
+                    [])
+            ],
+            [],
+            "readability-v1");
+
+        RichArticleDocument document = RichArticleFormatter.FromExtractedContent(article);
+
+        Assert.Equal("https://example.com/images/diagram.png", document.HeroImageUrl);
+        Assert.Collection(
+            document.Blocks,
+            block => Assert.Equal((RichArticleBlockKind.Heading, "Overview"), (block.Kind, block.Text)),
+            block =>
+            {
+                Assert.Equal(RichArticleBlockKind.Body, block.Kind);
+                Assert.Contains(
+                    block.Inlines,
+                    inline => inline is { Text: "safe source", Url: "https://source.example/story" });
+                Assert.Contains(
+                    block.Inlines,
+                    inline => inline is { Text: "unsafe source", Url: null });
+            },
+            block => Assert.Equal((RichArticleBlockKind.Quote, "Quoted text"), (block.Kind, block.Text)),
+            block => Assert.Equal((RichArticleBlockKind.Bullet, "List item"), (block.Kind, block.Text)),
+            block =>
+            {
+                Assert.Equal(RichArticleBlockKind.Image, block.Kind);
+                Assert.Equal("Diagram", block.Text);
+                Assert.Equal("https://example.com/images/diagram.png", block.ImageUrl);
             });
     }
 }
