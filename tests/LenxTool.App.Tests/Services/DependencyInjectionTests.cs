@@ -49,6 +49,8 @@ public sealed class DependencyInjectionTests
             provider.GetRequiredService<IFeedEntryRepository>());
         Assert.IsType<FeedFullTextRepository>(
             provider.GetRequiredService<IFeedFullTextRepository>());
+        Assert.IsType<FeedAiResultRepository>(
+            provider.GetRequiredService<IFeedAiResultRepository>());
         Assert.IsType<FeedFullTextQueueService>(
             provider.GetRequiredService<IFeedFullTextQueueService>());
         Assert.NotNull(provider.GetRequiredService<IFeedRefreshService>());

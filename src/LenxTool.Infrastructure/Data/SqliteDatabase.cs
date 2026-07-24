@@ -10,7 +10,7 @@ public sealed partial class SqliteDatabase(
     AppPaths paths,
     ILogger<SqliteDatabase> logger) : IDisposable
 {
-    private const int CurrentSchemaVersion = 8;
+    private const int CurrentSchemaVersion = 9;
     private readonly SemaphoreSlim _initializationGate = new(1, 1);
     private bool _initialized;
     private bool _disposed;
@@ -223,6 +223,17 @@ public sealed partial class SqliteDatabase(
                 command.CommandText = "INSERT INTO schema_versions(version, applied_at, checksum) VALUES (8, $appliedAt, $checksum);";
                 command.Parameters.AddWithValue("$appliedAt", DateTimeOffset.UtcNow.ToString("O"));
                 command.Parameters.AddWithValue("$checksum", "lenx-schema-v8-feed-full-text-queue");
+                await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            if (version < 9)
+            {
+                command.CommandText = MigrationNineSql;
+                command.Parameters.Clear();
+                await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                command.CommandText = "INSERT INTO schema_versions(version, applied_at, checksum) VALUES (9, $appliedAt, $checksum);";
+                command.Parameters.AddWithValue("$appliedAt", DateTimeOffset.UtcNow.ToString("O"));
+                command.Parameters.AddWithValue("$checksum", "lenx-schema-v9-feed-ai-cache");
                 await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
             }
         }
@@ -585,5 +596,44 @@ public sealed partial class SqliteDatabase(
             ON feed_full_text_jobs(host, status, entry_id);
         CREATE INDEX IF NOT EXISTS ix_feed_full_text_host_due
             ON feed_full_text_host_state(next_attempt_at, host);
+        """;
+
+    private const string MigrationNineSql = """
+        ALTER TABLE ai_reports
+            ADD COLUMN content_hash TEXT
+            CHECK(content_hash IS NULL OR length(content_hash) = 64);
+        ALTER TABLE ai_reports
+            ADD COLUMN target_language TEXT
+            CHECK(target_language IS NULL OR length(target_language) BETWEEN 1 AND 32);
+        ALTER TABLE ai_reports
+            ADD COLUMN prompt_version TEXT
+            CHECK(prompt_version IS NULL OR length(prompt_version) BETWEEN 1 AND 128);
+        ALTER TABLE ai_reports
+            ADD COLUMN prompt_tokens INTEGER NOT NULL DEFAULT 0
+            CHECK(prompt_tokens >= 0);
+        ALTER TABLE ai_reports
+            ADD COLUMN completion_tokens INTEGER NOT NULL DEFAULT 0
+            CHECK(completion_tokens >= 0);
+        ALTER TABLE ai_reports
+            ADD COLUMN duration_ms INTEGER NOT NULL DEFAULT 0
+            CHECK(duration_ms >= 0);
+        ALTER TABLE ai_reports
+            ADD COLUMN error_code TEXT
+            CHECK(error_code IS NULL OR length(error_code) BETWEEN 1 AND 128);
+        ALTER TABLE ai_reports
+            ADD COLUMN updated_at TEXT
+            CHECK(updated_at IS NULL OR length(updated_at) BETWEEN 20 AND 40);
+
+        CREATE UNIQUE INDEX IF NOT EXISTS ux_ai_reports_feed_cache_key
+            ON ai_reports(
+                entity_id, content_hash, report_type, target_language, model, prompt_version)
+            WHERE entity_type='feed_entry'
+              AND entity_id IS NOT NULL
+              AND content_hash IS NOT NULL
+              AND target_language IS NOT NULL
+              AND prompt_version IS NOT NULL;
+        CREATE INDEX IF NOT EXISTS ix_ai_reports_feed_history
+            ON ai_reports(
+                entity_type, entity_id, report_type, target_language, created_at DESC);
         """;
 }
