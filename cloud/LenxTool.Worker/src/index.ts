@@ -1,5 +1,6 @@
 import { CatalogApiError, handleCatalogAdminRequest, handleCatalogReadRequest } from "./catalog";
 import { handleCatalogBatchRequest } from "./catalog-batch";
+import { handleAutomationRuleRequest } from "./automation-rules";
 
 export interface Env {
   DB: D1Database;
@@ -51,6 +52,13 @@ export default {
         role: auth.user.role,
         requestId: auth.requestId
       };
+      const automationResponse = await handleAutomationRuleRequest(
+        request,
+        env.DB,
+        catalogAuth,
+        url
+      );
+      if (automationResponse) return automationResponse;
       const catalogReadResponse = await handleCatalogReadRequest(request, env.DB, catalogAuth, url);
       if (catalogReadResponse) return catalogReadResponse;
       const catalogBatchResponse = await handleCatalogBatchRequest(request, env.DB, catalogAuth, url);

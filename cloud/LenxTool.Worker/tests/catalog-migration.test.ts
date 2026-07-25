@@ -38,7 +38,8 @@ describe("feed catalog migrations", () => {
       "0002_feed_catalog.sql",
       "0003_catalog_mutations.sql",
       "0004_feed_full_text_policy.sql",
-      "0005_feed_ai_policy.sql"
+      "0005_feed_ai_policy.sql",
+      "0006_automation_rules.sql"
     ]);
   });
 
@@ -207,6 +208,9 @@ describe("feed catalog migrations", () => {
     const idempotencyColumns = await tableColumns("catalog_idempotency");
     const guardColumns = await tableColumns("catalog_mutation_guards");
     const auditColumns = await tableColumns("audit_events");
+    const automationStateColumns = await tableColumns("automation_rule_state");
+    const automationRuleColumns = await tableColumns("automation_rules");
+    const automationVersionColumns = await tableColumns("automation_rule_versions");
 
     expect(categoryColumns).toEqual([
       "id", "name", "name_norm", "sort_order", "is_enabled", "deleted_at", "version", "created_at", "updated_at",
@@ -226,8 +230,26 @@ describe("feed catalog migrations", () => {
     ]);
     expect(guardColumns).toEqual(["mutation_id", "valid"]);
     expect(auditColumns).toContain("catalog_version");
+    expect(automationStateColumns).toEqual([
+      "singleton_id", "rule_set_version", "updated_at", "last_mutation_id"
+    ]);
+    expect(automationRuleColumns).toEqual([
+      "id", "current_version", "name", "priority", "conflict_order", "is_enabled", "match_mode",
+      "conditions_json", "actions_json", "created_by", "updated_by", "created_at", "updated_at",
+      "last_mutation_id"
+    ]);
+    expect(automationVersionColumns).toEqual([
+      "rule_id", "version", "snapshot_json", "published_by", "published_at"
+    ]);
 
-    const allColumns = [...categoryColumns, ...feedColumns, ...stateColumns].join(" ");
+    const allColumns = [
+      ...categoryColumns,
+      ...feedColumns,
+      ...stateColumns,
+      ...automationStateColumns,
+      ...automationRuleColumns,
+      ...automationVersionColumns
+    ].join(" ");
     expect(allColumns).not.toMatch(
       /article|body|content|summary_text|translation_text|result_text|prompt|path|file|user_state|secret|credential/iu
     );
