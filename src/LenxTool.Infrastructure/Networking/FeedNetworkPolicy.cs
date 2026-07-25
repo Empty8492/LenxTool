@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
+using LenxTool.Core.Feeds;
 using LenxTool.Core.Errors;
 
 namespace LenxTool.Infrastructure.Networking;
@@ -70,10 +71,11 @@ internal sealed class FeedNetworkPolicy
         bool trustedPrivateHost = _trustedPrivateHosts.Contains(host);
         foreach (IPAddress address in addresses)
         {
-            AddressDisposition disposition = Classify(address);
-            if (disposition == AddressDisposition.Forbidden
-                || ((disposition == AddressDisposition.Private
-                        || (disposition == AddressDisposition.SyntheticProxy
+            NetworkAddressDisposition disposition =
+                NetworkTargetClassifier.Classify(address);
+            if (disposition == NetworkAddressDisposition.Forbidden
+                || ((disposition == NetworkAddressDisposition.Private
+                        || (disposition == NetworkAddressDisposition.SyntheticProxy
                             && (isLiteralHost || uri.Scheme != Uri.UriSchemeHttps)))
                     && !trustedPrivateHost))
             {
@@ -108,83 +110,10 @@ internal sealed class FeedNetworkPolicy
             throw InvalidUrl("Feed 地址默认只允许 HTTPS。");
         }
 
-        if (!_trustedPrivateHosts.Contains(host) && IsReservedHostName(host))
+        if (!_trustedPrivateHosts.Contains(host)
+            && NetworkTargetClassifier.IsReservedHostName(host))
             throw UnsafeEndpoint();
     }
-
-    private static AddressDisposition Classify(IPAddress address)
-    {
-        if (address.IsIPv4MappedToIPv6) return Classify(address.MapToIPv4());
-        if (address.AddressFamily == AddressFamily.InterNetwork)
-        {
-            byte[] bytes = address.GetAddressBytes();
-            byte a = bytes[0];
-            byte b = bytes[1];
-            if (a == 10
-                || (a == 172 && b is >= 16 and <= 31)
-                || (a == 192 && b == 168)
-                || (a == 100 && b is >= 64 and <= 127))
-            {
-                return AddressDisposition.Private;
-            }
-            if (a == 0
-                || a == 127
-                || a >= 224
-                || (a == 169 && b == 254)
-                || (a == 192 && b == 0)
-                || (a == 192 && b == 2)
-                || (a == 192 && b == 88 && bytes[2] == 99)
-                || (a == 198 && b == 51 && bytes[2] == 100)
-                || (a == 203 && b == 0 && bytes[2] == 113))
-            {
-                return AddressDisposition.Forbidden;
-            }
-            if (a == 198 && b is 18 or 19)
-            {
-                // Clash/sing-box Fake-IP DNS uses 198.18.0.0/15 for public host names.
-                // Keep direct literal access blocked while allowing TLS/SNI-bound
-                // public HTTPS hosts to traverse the local synthetic proxy mapping.
-                return AddressDisposition.SyntheticProxy;
-            }
-            return AddressDisposition.Public;
-        }
-
-        if (address.AddressFamily != AddressFamily.InterNetworkV6
-            || address.Equals(IPAddress.IPv6Any)
-            || address.Equals(IPAddress.IPv6Loopback)
-            || address.IsIPv6LinkLocal
-            || address.IsIPv6Multicast
-            || address.IsIPv6SiteLocal)
-        {
-            return AddressDisposition.Forbidden;
-        }
-
-        byte[] ipv6 = address.GetAddressBytes();
-        if (ipv6[..12].All(value => value == 0))
-            return AddressDisposition.Forbidden;
-        if (ipv6[0] == 0x00 && ipv6[1] == 0x64 && ipv6[2] == 0xFF && ipv6[3] == 0x9B)
-        {
-            if (ipv6[4] == 0x00 && ipv6[5] == 0x01)
-                return AddressDisposition.Forbidden;
-            if (ipv6[4..12].All(value => value == 0))
-                return Classify(new IPAddress(ipv6[12..16]));
-        }
-        if ((ipv6[0] & 0xFE) == 0xFC) return AddressDisposition.Private;
-        if (ipv6[0] == 0x20 && ipv6[1] == 0x01 && ipv6[2] == 0x0D && ipv6[3] == 0xB8)
-            return AddressDisposition.Forbidden;
-        if ((ipv6[0] == 0x20 && ipv6[1] == 0x01 && (ipv6[2] & 0xFE) == 0)
-            || (ipv6[0] == 0x20 && ipv6[1] == 0x02))
-            return AddressDisposition.Forbidden;
-        return AddressDisposition.Public;
-    }
-
-    private static bool IsReservedHostName(string host) =>
-        host == "localhost"
-        || host.EndsWith(".localhost", StringComparison.Ordinal)
-        || host.EndsWith(".local", StringComparison.Ordinal)
-        || host.EndsWith(".internal", StringComparison.Ordinal)
-        || host == "home.arpa"
-        || host.EndsWith(".home.arpa", StringComparison.Ordinal);
 
     private static HashSet<string> NormalizeHosts(IEnumerable<string> hosts) =>
         hosts.Where(host => !string.IsNullOrWhiteSpace(host))
@@ -213,11 +142,4 @@ internal sealed class FeedNetworkPolicy
         "请改用公网 HTTPS 地址；内网 Feed 只能由部署方按主机显式信任。",
         Provider: "Feed 发现"));
 
-    private enum AddressDisposition
-    {
-        Public,
-        Private,
-        SyntheticProxy,
-        Forbidden
-    }
 }
