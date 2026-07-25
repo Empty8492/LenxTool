@@ -108,6 +108,8 @@ P0 最终检查点第一片新增 `p0-final-acceptance.test.ts`：真实 bootstr
 
 P0 最终检查点第二片复核完整回归：OPML 中文/UTF-16、嵌套分组、畸形 XML/XXE/2 MiB 限制和导出原子替换；Feed 刷新断网、坏源跨源隔离及缓存保留；`SchemaVersionTwoUpgradePreservesExistingDataAndAddsFeedSchema` 的 v2 原位升级；`TenThousandCachedEntriesOnlyMaterializeTheFirstPage` 的 10k 首屏性能。对应 .NET 310/310、Worker 39/39、Worker typecheck 和 Release build 0 警告/0 错误均通过。
 
+P1-14 Core 受限规则片新增 16 项测试：规则字段、操作符、动作和匹配模式均为封闭枚举，未知值、非法字段/操作符组合、缺失或超量条件/动作、重复单例动作和重复动作顺序会在发布前拒绝；名称、文本、标签、集合数量与正则均覆盖精确上限及越界/控制字符。Feed/分类 ID、带时区发布时间、布尔值和翻译语言会规范化，输入集合后续变更不影响只读快照；通知、隐藏、已读、摘要、媒体投递等无参数动作拒绝 URL、SQL、命令或任意载荷。正则使用带 100 ms 上限的非回溯引擎，传统灾难性模式可在线性引擎处理，反向引用与畸形/超长模式拒绝。完整 .NET 459/459 及 Release build 0 警告/0 错误通过；Worker 规则存储/API/角色测试留待下一片。
+
 ## 本次已验证的异常路径
 
 - 完全离线的资讯缓存回退设计与网络错误映射。

@@ -215,12 +215,13 @@ npm.cmd test -- --run
 - P1-11 单条与批量摘要已完成：Feed RSS/提取全文以有界、不可信 JSON DATA 进入 DeepSeek，正文内提示词与伪造 DATA 边界不能变成 system/tool 指令；单条先查六项本地缓存键，同键并发只请求一次。批量最多 20 条、并发最多 2，支持取消、429/Token/耗时/错误指标和逐条失败；阅读器可生成当前来源摘要或摘要当前页前 20 条，切换来源/条目不会显示过期结果。管理员生成策略仍按计划在 P1-13 接入。
 - P1-12 条目翻译与双语阅读已完成：复用字幕翻译器的安全纯文本、序号校验和可恢复批次，每批立即写入按内容哈希/目标语言/模型/提示版本隔离的本地缓存；失败或取消后原文始终可读并可续传。阅读器支持 RSS/提取全文、四种目标语言及原文/译文/双语模式；链接只沿用原文安全目标，模型 HTML 不执行。管理员自动翻译策略仍按计划在 P1-13 接入。
 - P1-13 管理员 AI 策略与本地自动处理已完成：目录版本携带全局、分类、Feed 三层手动摘要/自动摘要/自动翻译开关、目标语言、每日条目上限和并发上限；桌面离线持久化并按 Feed→分类→全局解析，旧目录安全回退为手动允许、自动关闭。订阅管理页可编辑分类/Feed 覆盖并显示预计用量与并发。schema v11 持久化自动任务、租约和每日不同条目计数；Feed 刷新成功后本机幂等入队，后台在 AI 调用前重新读取策略，停用、内容变化与语言变化立即跳过或废弃旧任务，重启可恢复。摘要和翻译继续优先使用自备 DeepSeek Key，否则走登录账号共享额度与 Worker 原子门控；缓存命中不重复请求，AI 结果不上传 D1。
+- P1-14 Core 规则契约与发布前验证器已完成：规则只暴露 Feed/分类/标题/作者/正文/语言/发布时间/音视频存在性九类字段、六类操作符和七类受限动作；显式保存版本、优先级、冲突顺序、启用状态、匹配模式和动作顺序。字段/操作符采用白名单组合，文本、集合和排序均有上限；正则使用 100 ms 超时的非回溯引擎并拒绝反向引用等不兼容结构，无参数动作拒绝 URL、命令或其他载荷。Worker 权威 schema/API 与角色发布边界仍是 P1-14 下一片。
 - P0 最终验收第一片已完成：`p0-final-acceptance.test.ts` 在真实 workerd/D1 中走临时 bootstrap/login，覆盖管理员发布与停用、目录刷新、普通用户同步/阅读、六类管理员写端点 403 隔离和审计字段脱敏。
 - P0 最终验收第二片已完成：完整 .NET 310/310、Worker 39/39、typecheck 和 Release 0 警告/0 错误复核了 OPML 导入/导出、断网缓存、坏源隔离、schema v2 原位升级和 10k 条目首屏性能；五份终验文档已同步，P0 已关闭。
 
 ### 10.2 下一里程碑
 
-Gate 0 字幕闭环和 P0“管理员策展 RSS”已经完成。P1-01～P1-13、P1-A、P1-B 与 P1-C 已完成。下一切片进入 P1-14 的受限规则模型与验证器。
+Gate 0 字幕闭环和 P0“管理员策展 RSS”已经完成。P1-01～P1-13、P1-A、P1-B 与 P1-C 已完成；P1-14 的 Core 受限规则模型与验证器也已完成。下一切片进入 P1-14 Worker 权威 schema/API。
 
 字幕闭环完成后的产品主路线已确定为“管理员策展 RSS”：管理员维护共享 RSS/Atom 目录，普通用户只能同步和阅读，不得修改共享订阅、分类、抓取策略或自动化规则。为保持现有“云端不存新闻正文”边界，首版采用 Worker/D1 保存权威目录、各桌面客户端本地抓取和 SQLite 缓存的模式。
 
@@ -228,7 +229,7 @@ Gate 0 字幕闭环和 P0“管理员策展 RSS”已经完成。P1-01～P1-13�
 
 1. Gate 0 字幕闭环已完成；验收记录见 [`plans/EXISTING_BACKLOG_ALIGNMENT.md`](plans/EXISTING_BACKLOG_ALIGNMENT.md)。
 2. P0-01～P0-20、P0-B/P0-C 及最终检查点已完成；P0 关闭记录见 [`plans/RSS_P0_ADMIN_CATALOG.md`](plans/RSS_P0_ADMIN_CATALOG.md)，现在才进入 P1。
-3. P1-01～P1-13、P1-A、P1-B 与 P1-C 已完成；继续 P1-14 受限规则模型与验证器，具体见 [`plans/RSS_P1_READING_INTELLIGENCE.md`](plans/RSS_P1_READING_INTELLIGENCE.md)。
+3. P1-01～P1-13、P1-A、P1-B 与 P1-C 已完成；P1-14 Core 规则模型/验证器已完成，继续 Worker schema/API 与角色发布边界，具体见 [`plans/RSS_P1_READING_INTELLIGENCE.md`](plans/RSS_P1_READING_INTELLIGENCE.md)。
 4. 实现多内容视图、外部导出适配器、本地定时摘要和通知；具体见 [`plans/RSS_P2_VIEWS_INTEGRATIONS.md`](plans/RSS_P2_VIEWS_INTEGRATIONS.md)。
 
 总路线、参考项目和许可证边界见 [`plans/RSS_MASTER_ROADMAP.md`](plans/RSS_MASTER_ROADMAP.md)，架构决策见 [`decisions/ADR-001-admin-curated-rss.md`](decisions/ADR-001-admin-curated-rss.md) 与 [`decisions/ADR-002-article-content-extraction.md`](decisions/ADR-002-article-content-extraction.md)。P0-01～P0-20、P0-B/P0-C、P1-01～P1-13 与 P1-A/P1-B/P1-C 可作为已实现基础；P1-14 之后的通用自动化规则、媒体投递和外部导出仍不能作为已交付功能宣传。
