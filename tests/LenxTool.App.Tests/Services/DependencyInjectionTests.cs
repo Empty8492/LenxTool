@@ -26,6 +26,9 @@ public sealed class DependencyInjectionTests
         Assert.IsType<DeepSeekSubtitleTranslator>(translator);
         var account = provider.GetRequiredService<WorkerAccountSessionService>();
         Assert.Same(account, provider.GetRequiredService<IAccountSessionService>());
+        Assert.Same(account, provider.GetRequiredService<IWorkerAiProxyClient>());
+        Assert.IsType<DeepSeekChatTransport>(
+            provider.GetRequiredService<IDeepSeekChatTransport>());
         Assert.IsType<FeedCatalogRepository>(provider.GetRequiredService<IFeedCatalogRepository>());
         Assert.IsType<FeedCatalogSyncService>(provider.GetRequiredService<IFeedCatalogSyncService>());
         Assert.IsType<FeedCatalogAdminService>(provider.GetRequiredService<IFeedCatalogAdminService>());

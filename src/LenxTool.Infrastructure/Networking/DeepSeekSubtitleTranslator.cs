@@ -1,7 +1,5 @@
 using System.Globalization;
 using System.Net;
-using System.Net.Http.Headers;
-using System.Net.Http.Json;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using LenxTool.Core.Contracts;
@@ -12,11 +10,9 @@ using LenxTool.Infrastructure.Security;
 namespace LenxTool.Infrastructure.Networking;
 
 public sealed class DeepSeekSubtitleTranslator(
-    IHttpClientFactory httpClientFactory,
-    ISecretStore secretStore) : ISubtitleTranslator
+    IDeepSeekChatTransport chatTransport) : ISubtitleTranslator
 {
     // Source: https://api-docs.deepseek.com/api/create-chat-completion/
-    private static readonly Uri Endpoint = new("https://api.deepseek.com/chat/completions");
     private const int MaximumBatchCharacters = 12_000;
     private const int MaximumResponseBytes = 2_000_000;
     private const int MaximumRequestAttempts = 3;
@@ -28,20 +24,6 @@ public sealed class DeepSeekSubtitleTranslator(
     {
         ArgumentNullException.ThrowIfNull(request);
         SubtitleTranslationCheckpoint checkpoint = request.ResumeFrom;
-        string? apiKey = await secretStore.GetAsync("deepseek_api_key", cancellationToken)
-            .ConfigureAwait(false);
-        if (string.IsNullOrWhiteSpace(apiKey))
-        {
-            throw Failure(
-                new(
-                    AppErrorCode.CredentialsInvalid,
-                    "尚未配置 DeepSeek Key",
-                    "字幕翻译需要自备 DeepSeek API Key。",
-                    "请在设置中填写 DeepSeek Key 并加密保存。",
-                    Provider: "DeepSeek"),
-                checkpoint);
-        }
-
         int index = checkpoint.NextSegmentIndex;
         while (index < request.Inputs.Count)
         {
@@ -54,7 +36,6 @@ public sealed class DeepSeekSubtitleTranslator(
                     request,
                     batch,
                     index,
-                    apiKey,
                     cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException exception) when (cancellationToken.IsCancellationRequested)
@@ -78,6 +59,14 @@ public sealed class DeepSeekSubtitleTranslator(
             {
                 throw Failure(AppErrorFactory.FromNetwork("DeepSeek"), checkpoint, exception);
             }
+            catch (SubtitleTranslationException)
+            {
+                throw;
+            }
+            catch (AppException exception)
+            {
+                throw Failure(exception.Error, checkpoint, exception);
+            }
 
             index = result.ResumeFrom.NextSegmentIndex;
             checkpoint = result.ResumeFrom;
@@ -89,7 +78,6 @@ public sealed class DeepSeekSubtitleTranslator(
         SubtitleTranslationRequest request,
         List<SubtitleTranslationInput> batch,
         int startIndex,
-        string apiKey,
         CancellationToken cancellationToken)
     {
         string sourceJson = JsonSerializer.Serialize(batch);
@@ -116,17 +104,13 @@ public sealed class DeepSeekSubtitleTranslator(
             }
         };
 
-        using HttpClient client = httpClientFactory.CreateClient("LenxTool.DeepSeek");
         for (int attempt = 1; attempt <= MaximumRequestAttempts; attempt++)
         {
             try
             {
-                using HttpRequestMessage message = new(HttpMethod.Post, Endpoint);
-                message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
-                message.Content = JsonContent.Create(payload);
-                using HttpResponseMessage response = await client.SendAsync(
-                    message,
-                    HttpCompletionOption.ResponseHeadersRead,
+                using HttpResponseMessage response = await chatTransport.SendAsync(
+                    payload,
+                    static () => { },
                     cancellationToken).ConfigureAwait(false);
                 if (response.StatusCode == HttpStatusCode.TooManyRequests &&
                     TryGetAutomaticRetryDelay(response, attempt, out TimeSpan retryDelay))

@@ -1,7 +1,5 @@
 using System.Globalization;
 using System.Net;
-using System.Net.Http.Headers;
-using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Encodings.Web;
@@ -17,15 +15,13 @@ namespace LenxTool.Infrastructure.Networking;
 public sealed class DeepSeekFeedAiSummaryService : IFeedAiSummaryService, IDisposable
 {
     // Source: https://api-docs.deepseek.com/api/create-chat-completion/
-    private static readonly Uri Endpoint = new("https://api.deepseek.com/chat/completions");
     private static readonly JsonSerializerOptions SourceJsonOptions = new()
     {
         Encoder = JavaScriptEncoder.Create(UnicodeRanges.All)
     };
     private const string SummaryTargetLanguage = "und";
 
-    private readonly IHttpClientFactory _httpClientFactory;
-    private readonly ISecretStore _secretStore;
+    private readonly IDeepSeekChatTransport _chatTransport;
     private readonly IFeedAiResultRepository _repository;
     private readonly TimeProvider _timeProvider;
     private readonly FeedAiSummaryOptions _options;
@@ -34,19 +30,16 @@ public sealed class DeepSeekFeedAiSummaryService : IFeedAiSummaryService, IDispo
     private bool _disposed;
 
     public DeepSeekFeedAiSummaryService(
-        IHttpClientFactory httpClientFactory,
-        ISecretStore secretStore,
+        IDeepSeekChatTransport chatTransport,
         IFeedAiResultRepository repository,
         TimeProvider timeProvider,
         FeedAiSummaryOptions options)
     {
-        ArgumentNullException.ThrowIfNull(httpClientFactory);
-        ArgumentNullException.ThrowIfNull(secretStore);
+        ArgumentNullException.ThrowIfNull(chatTransport);
         ArgumentNullException.ThrowIfNull(repository);
         ArgumentNullException.ThrowIfNull(timeProvider);
         ValidateOptions(options);
-        _httpClientFactory = httpClientFactory;
-        _secretStore = secretStore;
+        _chatTransport = chatTransport;
         _repository = repository;
         _timeProvider = timeProvider;
         _options = options;
@@ -227,18 +220,6 @@ public sealed class DeepSeekFeedAiSummaryService : IFeedAiSummaryService, IDispo
         Action requestStarted,
         CancellationToken cancellationToken)
     {
-        string? apiKey = await _secretStore.GetAsync("deepseek_api_key", cancellationToken)
-            .ConfigureAwait(false);
-        if (string.IsNullOrWhiteSpace(apiKey))
-        {
-            throw new AppException(new(
-                AppErrorCode.CredentialsInvalid,
-                "尚未配置 DeepSeek Key",
-                "Feed 摘要需要自备 DeepSeek API Key。",
-                "请在设置中填写 DeepSeek Key 并加密保存。",
-                Provider: "DeepSeek"));
-        }
-
         string boundedContent = input.Content.Length <= _options.MaximumSourceCharacters
             ? input.Content
             : input.Content[.._options.MaximumSourceCharacters];
@@ -273,14 +254,9 @@ public sealed class DeepSeekFeedAiSummaryService : IFeedAiSummaryService, IDispo
             }
         };
 
-        using HttpRequestMessage request = new(HttpMethod.Post, Endpoint);
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
-        request.Content = JsonContent.Create(payload);
-        using HttpClient client = _httpClientFactory.CreateClient("LenxTool.DeepSeek");
-        requestStarted();
-        using HttpResponseMessage response = await client.SendAsync(
-            request,
-            HttpCompletionOption.ResponseHeadersRead,
+        using HttpResponseMessage response = await _chatTransport.SendAsync(
+            payload,
+            requestStarted,
             cancellationToken).ConfigureAwait(false);
         string? requestId = Header(response, "x-request-id");
         if (response.Content.Headers.ContentLength is > 0

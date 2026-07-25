@@ -9,7 +9,10 @@ using LenxTool.Core.Errors;
 
 namespace LenxTool.Infrastructure.Networking;
 
-public sealed class WorkerAccountSessionService : IAccountSessionService, IDisposable
+public sealed class WorkerAccountSessionService :
+    IAccountSessionService,
+    IWorkerAiProxyClient,
+    IDisposable
 {
     private const string RefreshTokenSecretName = "account_refresh_token";
     private const int MaximumResponseBytes = 64 * 1024;
@@ -155,6 +158,49 @@ public sealed class WorkerAccountSessionService : IAccountSessionService, IDispo
         return SendAuthorizedAsync(
             token => CreateAuthorizedRequest(HttpMethod.Get, pathAndQuery, token.AccessToken),
             cancellationToken);
+    }
+
+    Task<HttpResponseMessage> IWorkerAiProxyClient.SendSharedAiAsync(
+        object payload,
+        CancellationToken cancellationToken)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        ArgumentNullException.ThrowIfNull(payload);
+        return SendAuthorizedAsync(
+            token => CreateAuthorizedJsonRequest(
+                HttpMethod.Post,
+                "/v1/proxy/ai",
+                token.AccessToken,
+                payload),
+            cancellationToken);
+    }
+
+    void IWorkerAiProxyClient.RecordSuccessfulSharedAiRequest()
+    {
+        AccountSessionSnapshot? updated = null;
+        lock (_stateGate)
+        {
+            AccountSessionSnapshot current = _current;
+            if (!current.IsAuthenticated
+                || current.IsAdmin
+                || current.Quota is not { } quota
+                || quota.Date != DateOnly.FromDateTime(DateTime.UtcNow)
+                || quota.Ai.Remaining <= 0)
+            {
+                return;
+            }
+
+            AccountQuotaCounter ai = quota.Ai;
+            var nextAi = ai with
+            {
+                Used = Math.Min(ai.Limit, ai.Used + 1),
+                Remaining = Math.Max(0, ai.Remaining - 1)
+            };
+            updated = current with { Quota = quota with { Ai = nextAi } };
+            _current = updated;
+        }
+
+        SessionChanged?.Invoke(this, new(updated));
     }
 
     internal Task<HttpResponseMessage> SendCatalogMutationAsync(

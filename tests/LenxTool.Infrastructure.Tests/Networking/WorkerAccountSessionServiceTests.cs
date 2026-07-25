@@ -201,6 +201,36 @@ public sealed class WorkerAccountSessionServiceTests
         Assert.Equal(0, handler.RequestCount);
     }
 
+    [Fact]
+    public async Task SharedAiProxyUsesAuthorizedRouteAndUpdatesLocalQuotaAfterSuccess()
+    {
+        var secrets = new FakeSecretStore();
+        var handler = new StubHandler(async (request, cancellationToken) =>
+        {
+            if (request.RequestUri?.AbsolutePath == "/v1/auth/login")
+                return JsonResponse(HttpStatusCode.OK, LoginJson("access-one", "refresh-one", "USER"));
+
+            Assert.Equal("/v1/proxy/ai", request.RequestUri?.AbsolutePath);
+            Assert.Equal("access-one", request.Headers.Authorization?.Parameter);
+            using JsonDocument body = JsonDocument.Parse(
+                await request.Content!.ReadAsStringAsync(cancellationToken));
+            Assert.Equal("deepseek-v4-flash", body.RootElement.GetProperty("model").GetString());
+            return JsonResponse(HttpStatusCode.OK, """{"choices":[{"message":{"content":"ok"}}]}""");
+        });
+        var service = CreateService(handler, secrets);
+        await service.LoginAsync("reader", "password", CancellationToken.None);
+        var proxy = (IWorkerAiProxyClient)service;
+
+        using HttpResponseMessage response = await proxy.SendSharedAiAsync(
+            new { model = "deepseek-v4-flash" },
+            CancellationToken.None);
+        proxy.RecordSuccessfulSharedAiRequest();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(13, service.Current.Quota?.Ai.Used);
+        Assert.Equal(87, service.Current.Quota?.Ai.Remaining);
+    }
+
     private static WorkerAccountSessionService CreateService(HttpMessageHandler handler, ISecretStore secrets) =>
         new(new StubHttpClientFactory(handler), secrets, new WorkerAccountOptions(new Uri("https://worker.test")));
 
@@ -225,7 +255,7 @@ public sealed class WorkerAccountSessionServiceTests
 
     private static object Quota() => new
     {
-        date = "2026-07-22",
+        date = DateTime.UtcNow.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
         ai = new { limit = 100, used = 12, reserved = 0, remaining = 88 },
         speechSeconds = new { limit = 3600, used = 45, reserved = 0, remaining = 3555 }
     };

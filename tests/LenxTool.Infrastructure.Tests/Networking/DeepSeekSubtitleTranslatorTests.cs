@@ -226,7 +226,10 @@ public sealed class DeepSeekSubtitleTranslatorTests
     }
 
     private static DeepSeekSubtitleTranslator Create(HttpMessageHandler handler) =>
-        new(new StubHttpClientFactory(handler), new StubSecretStore());
+        new(new DeepSeekChatTransport(
+            new StubHttpClientFactory(handler),
+            new StubSecretStore(),
+            new SignedOutWorkerAiProxyClient()));
 
     private static SubtitleTranslationRequest Request(
         int batchSize,

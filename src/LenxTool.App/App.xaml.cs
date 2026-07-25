@@ -109,8 +109,11 @@ public partial class App : Application
         services.AddSingleton<ISecretStore, DpapiSecretStore>();
         services.AddSingleton(CreateWorkerAccountOptions());
         services.AddSingleton<WorkerAccountSessionService>();
+        services.AddSingleton<IWorkerAiProxyClient>(static services =>
+            services.GetRequiredService<WorkerAccountSessionService>());
         services.AddSingleton<IAccountSessionService>(static services =>
             services.GetRequiredService<WorkerAccountSessionService>());
+        services.AddSingleton<IDeepSeekChatTransport, DeepSeekChatTransport>();
         services.AddSingleton<IFeedCatalogRepository, FeedCatalogRepository>();
         services.AddSingleton<IFeedFetchStateRepository, FeedFetchStateRepository>();
         services.AddSingleton<FeedEntryRepository>();

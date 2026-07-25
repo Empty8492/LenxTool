@@ -240,8 +240,10 @@ public sealed class DeepSeekFeedAiSummaryServiceTests
         FeedAiSummaryOptions options,
         StubSecretStore? secretStore = null) =>
         new(
-            new StubHttpClientFactory(handler),
-            secretStore ?? new StubSecretStore("test-deepseek-key"),
+            new DeepSeekChatTransport(
+                new StubHttpClientFactory(handler),
+                secretStore ?? new StubSecretStore("test-deepseek-key"),
+                new SignedOutWorkerAiProxyClient()),
             repository,
             timeProvider,
             options);
