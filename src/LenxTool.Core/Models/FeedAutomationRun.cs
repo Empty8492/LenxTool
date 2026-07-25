@@ -22,6 +22,13 @@ public enum FeedAutomationLocalActionResult
     EntryMissing
 }
 
+public enum FeedAutomationAiActionResult
+{
+    Completed,
+    EntryMissing,
+    FeedUnavailable
+}
+
 public sealed record FeedAutomationRuleRun(
     string EntryId,
     string RuleId,

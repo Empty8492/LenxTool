@@ -1,6 +1,6 @@
 # 测试报告
 
-测试日期：.NET / Worker 2026-07-25（Asia/Shanghai）
+测试日期：.NET 2026-07-26 / Worker 2026-07-25（Asia/Shanghai）
 版本：0.1.0  
 配置：Release / win-x64 / .NET SDK 10.0.302
 
@@ -8,15 +8,15 @@
 
 | 测试组 | 结果 |
 |---|---:|
-| LenxTool.Core.Tests | 42 passed |
-| LenxTool.Infrastructure.Tests | 269 passed |
-| LenxTool.App.Tests | 132 passed |
-| Cloudflare Worker Vitest | 44 passed |
+| LenxTool.Core.Tests | 65 passed |
+| LenxTool.Infrastructure.Tests | 303 passed |
+| LenxTool.App.Tests | 154 passed |
+| Cloudflare Worker Vitest | 50 passed |
 | Worker TypeScript strict typecheck | passed |
 | .NET build warnings | 0 |
 | NuGet vulnerable packages | 0 detected |
 
-本轮执行三个 .NET 测试项目及隔离输出的单节点 Release 构建，结果为 0 警告、0 错误；Core 42、Infrastructure 269、App 132，共 443/443 通过且无跳过。运行中的 Lenx Tools 占用默认 Debug 输出时，App 测试使用框架依赖模式的隔离 `OutDir`，测试程序集和依赖仍由当前源码重新编译。Worker 严格 typecheck 和官方 workerd/D1 Vitest 44/44 沿用本日最近一次通过结果；本片未修改 Worker。
+本轮执行三个 .NET 测试项目及单节点 Release 构建；Core 65、Infrastructure 303、App 154，共 522/522 通过且无跳过。AI 摘要/翻译规则动作新增 8 项行为场景，覆盖动作类型白名单、禁用自动开关下的规则授权、目标语言、每日限额、条目/Feed 终态、非法载荷前置拒绝、重试边界与取消释放。Worker 严格 typecheck 和官方 workerd/D1 Vitest 50/50 沿用本日最近一次通过结果；本片未修改 Worker。
 
 P0-08 覆盖 4 项 SQLite 集成场景并同步既有 schema 断言：新建库创建目录状态、分类、Feed、抓取状态、条目、索引和搜索映射；真实 schema v2 哨兵数据经 v3/v4 原位升级后仍可由现有仓储读取；迁移对象冲突时完整回滚且版本停留在 v3；相同外部 ID、URL 和内容哈希可存在于不同 Feed，同一 Feed 内重复外部 ID 被约束拒绝。既有包含未 checkpoint WAL 提交的一致性备份测试继续通过。
 

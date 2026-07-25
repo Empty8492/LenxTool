@@ -155,6 +155,14 @@ public partial class App : Application
             static services =>
                 services.GetRequiredService<FeedAutomationActionProcessor>());
         services.AddHostedService<FeedAutomationActionBackgroundService>();
+        services.AddSingleton<
+            IFeedAutomationAiActionService,
+            FeedAutomationAiActionService>();
+        services.AddSingleton<FeedAutomationAiActionProcessor>();
+        services.AddSingleton<IFeedAutomationAiActionProcessor>(
+            static services =>
+                services.GetRequiredService<FeedAutomationAiActionProcessor>());
+        services.AddHostedService<FeedAutomationAiActionBackgroundService>();
         services.AddSingleton(FeedAiAutomationOptions.Default);
         services.AddSingleton<FeedAiAutomationQueueService>();
         services.AddSingleton<IFeedAiAutomationQueueService>(static services =>

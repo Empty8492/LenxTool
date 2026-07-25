@@ -1,6 +1,5 @@
 using System.Collections.Concurrent;
 using System.IO;
-using LenxTool.App.Controls;
 using LenxTool.Core.Contracts;
 using LenxTool.Core.Errors;
 using LenxTool.Core.Feeds;
@@ -278,45 +277,13 @@ public sealed class FeedAiAutomationQueueService :
             return;
         }
 
-        string sourceContent = string.IsNullOrWhiteSpace(entry.SanitizedContent)
-            ? entry.Summary
-            : entry.SanitizedContent;
-        RichArticleDocument document = RichArticleFormatter.Parse(
-            sourceContent,
-            entry.NormalizedUrl);
-        RichArticleTranslationSource source = RichArticleFormatter.CreateTranslationSource(
-            document,
-            entry.Title);
-
-        if (job.TaskType == FeedAiAutomationTaskType.Summary)
-        {
-            string summarySource = string.Join(
-                Environment.NewLine,
-                source.Blocks
-                    .Where(block => block.Kind != FeedAiTranslationBlockKind.Title)
-                    .Select(block => block.Text)
-                    .Where(text => !string.IsNullOrWhiteSpace(text)));
-            if (string.IsNullOrWhiteSpace(summarySource))
-            {
-                summarySource = string.IsNullOrWhiteSpace(entry.Summary)
-                    ? entry.Title
-                    : entry.Summary;
-            }
-            await _summaryService.SummarizeAsync(
-                new(entry.Id, entry.ContentHash, entry.Title, summarySource),
-                cancellationToken).ConfigureAwait(false);
-        }
-        else
-        {
-            await _translationService.TranslateAsync(
-                new(
-                    entry.Id,
-                    entry.ContentHash,
-                    entry.Title,
-                    job.TargetLanguage,
-                    source.Blocks),
-                cancellationToken).ConfigureAwait(false);
-        }
+        await FeedAiTaskExecution.ExecuteAsync(
+            entry,
+            job.TaskType,
+            job.TargetLanguage,
+            _summaryService,
+            _translationService,
+            cancellationToken).ConfigureAwait(false);
 
         await TryCompleteAsync(
             job,
