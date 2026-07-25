@@ -17,6 +17,7 @@ internal sealed class FeedRefreshService : IFeedRefreshService, IDisposable
     private readonly FeedRefreshOptions _options;
     private readonly TimeProvider _timeProvider;
     private readonly IFeedAiAutomationQueueService? _aiAutomationQueue;
+    private readonly IFeedAutomationPlanningService? _automationPlanning;
     private readonly FeedNetworkPolicy _networkPolicy;
     private readonly SemaphoreSlim _concurrency;
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _feedGates = new(StringComparer.Ordinal);
@@ -34,7 +35,8 @@ internal sealed class FeedRefreshService : IFeedRefreshService, IDisposable
         FeedDiscoveryOptions networkOptions,
         FeedRefreshOptions options,
         TimeProvider timeProvider,
-        IFeedAiAutomationQueueService? aiAutomationQueue = null)
+        IFeedAiAutomationQueueService? aiAutomationQueue = null,
+        IFeedAutomationPlanningService? automationPlanning = null)
     {
         _repository = repository;
         _entryWriter = entryWriter;
@@ -44,6 +46,7 @@ internal sealed class FeedRefreshService : IFeedRefreshService, IDisposable
         _options = ValidateOptions(options);
         _timeProvider = timeProvider;
         _aiAutomationQueue = aiAutomationQueue;
+        _automationPlanning = automationPlanning;
         _networkPolicy = new(resolver, networkOptions);
         _concurrency = new(options.MaximumConcurrency, options.MaximumConcurrency);
     }
@@ -273,6 +276,25 @@ internal sealed class FeedRefreshService : IFeedRefreshService, IDisposable
             FeedFetchState success = SuccessfulState(target, response, now);
             bool persisted = await _repository.SaveStateAsync(success, persistenceCancellationToken)
                 .ConfigureAwait(false);
+            if (persisted && _automationPlanning is not null)
+            {
+                try
+                {
+                    await _automationPlanning.StageAsync(
+                        target.Feed,
+                        parsed.Entries,
+                        persistenceCancellationToken).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (
+                    persistenceCancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch
+                {
+                    // The refresh remains successful if optional rule planning fails.
+                }
+            }
             if (persisted && _aiAutomationQueue is not null)
             {
                 try

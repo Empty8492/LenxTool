@@ -73,6 +73,12 @@ public sealed record FeedAutomationStageResult(
     int RuleRunsCreated,
     int ActionRunsCreated);
 
+public sealed record FeedAutomationPlanningResult(
+    long RuleSetVersion,
+    int EntriesEvaluated,
+    int RuleRunsCreated,
+    int ActionRunsCreated);
+
 public sealed record FeedAutomationActionProcessorOptions(
     int BatchSize,
     int MaximumConcurrency,

@@ -63,7 +63,12 @@ public sealed class FeedRefreshServiceTests
             return Task.FromResult(new FeedRefreshHttpResponse(new HttpResponseMessage(HttpStatusCode.NotModified)));
         });
         var writer = new FakeFeedEntryWriter();
-        using FeedRefreshService service = CreateService(repository, transport, entryWriter: writer);
+        var planning = new FakeFeedAutomationPlanningService();
+        using FeedRefreshService service = CreateService(
+            repository,
+            transport,
+            entryWriter: writer,
+            automationPlanning: planning);
 
         FeedRefreshResult result = await service.RefreshAsync(FeedId, force: false, CancellationToken.None);
 
@@ -73,6 +78,7 @@ public sealed class FeedRefreshServiceTests
         Assert.Equal(Now, repository.Saved?.LastSuccessAt);
         Assert.Equal("\"old\"", repository.Saved?.ETag);
         Assert.Equal(0, writer.Calls);
+        Assert.Equal(0, planning.StageCalls);
     }
 
     [Fact]
@@ -156,6 +162,63 @@ public sealed class FeedRefreshServiceTests
 
         Assert.Equal(FeedRefreshOutcome.Updated, result.Outcome);
         Assert.Equal(1, automation.EnqueueCalls);
+        Assert.Equal(Now, repository.Saved?.LastSuccessAt);
+    }
+
+    [Fact]
+    public async Task SuccessfulRefreshStagesPersistedEntriesForRules()
+    {
+        var repository = new FakeFeedFetchStateRepository(Target());
+        var planning = new FakeFeedAutomationPlanningService();
+        var transport = new FakeRefreshTransport((_, _, _, _) =>
+            Task.FromResult(
+                Response(
+                    HttpStatusCode.OK,
+                    Rss("rule-planned"))));
+        using FeedRefreshService service = CreateService(
+            repository,
+            transport,
+            automationPlanning: planning);
+
+        FeedRefreshResult result = await service.RefreshAsync(
+            FeedId,
+            force: true,
+            CancellationToken.None);
+
+        Assert.Equal(FeedRefreshOutcome.Updated, result.Outcome);
+        Assert.Equal(1, planning.StageCalls);
+        Assert.Equal(FeedId, planning.LastFeed?.Id);
+        Assert.Equal(
+            "rule-planned",
+            Assert.Single(planning.LastEntries).ExternalId);
+        Assert.Equal(Now, repository.Saved?.LastSuccessAt);
+    }
+
+    [Fact]
+    public async Task RulePlanningFailureDoesNotChangeSuccessfulRefreshOutcome()
+    {
+        var repository = new FakeFeedFetchStateRepository(Target());
+        var planning = new FakeFeedAutomationPlanningService
+        {
+            Failure = new IOException("rule cache unavailable")
+        };
+        var transport = new FakeRefreshTransport((_, _, _, _) =>
+            Task.FromResult(
+                Response(
+                    HttpStatusCode.OK,
+                    Rss("still-successful"))));
+        using FeedRefreshService service = CreateService(
+            repository,
+            transport,
+            automationPlanning: planning);
+
+        FeedRefreshResult result = await service.RefreshAsync(
+            FeedId,
+            force: true,
+            CancellationToken.None);
+
+        Assert.Equal(FeedRefreshOutcome.Updated, result.Outcome);
+        Assert.Equal(1, planning.StageCalls);
         Assert.Equal(Now, repository.Saved?.LastSuccessAt);
     }
 
@@ -509,7 +572,8 @@ public sealed class FeedRefreshServiceTests
         FeedDiscoveryOptions? networkOptions = null,
         IFeedHostResolver? resolver = null,
         IFeedEntryWriter? entryWriter = null,
-        IFeedAiAutomationQueueService? aiAutomationQueue = null) => new(
+        IFeedAiAutomationQueueService? aiAutomationQueue = null,
+        IFeedAutomationPlanningService? automationPlanning = null) => new(
             repository,
             entryWriter ?? new FakeFeedEntryWriter(),
             new FeedDocumentParser(),
@@ -518,7 +582,8 @@ public sealed class FeedRefreshServiceTests
             networkOptions ?? FeedDiscoveryOptions.Default,
             options ?? FeedRefreshOptions.Default,
             new FixedTimeProvider(Now),
-            aiAutomationQueue);
+            aiAutomationQueue,
+            automationPlanning);
 
     private static FeedRefreshTarget Target(
         FeedFetchState? state = null,
@@ -614,6 +679,34 @@ public sealed class FeedRefreshServiceTests
 
         public Task<int> ProcessBackgroundBatchAsync(CancellationToken cancellationToken) =>
             Task.FromResult(0);
+    }
+
+    private sealed class FakeFeedAutomationPlanningService
+        : IFeedAutomationPlanningService
+    {
+        public int StageCalls { get; private set; }
+        public FeedCatalogItem? LastFeed { get; private set; }
+        public IReadOnlyList<FeedEntry> LastEntries { get; private set; } = [];
+        public Exception? Failure { get; init; }
+
+        public Task<FeedAutomationPlanningResult> StageAsync(
+            FeedCatalogItem feed,
+            IReadOnlyList<FeedEntry> entries,
+            CancellationToken cancellationToken)
+        {
+            StageCalls++;
+            LastFeed = feed;
+            LastEntries = entries;
+            return Failure is null
+                ? Task.FromResult(
+                    new FeedAutomationPlanningResult(
+                        1,
+                        entries.Count,
+                        entries.Count,
+                        entries.Count))
+                : Task.FromException<FeedAutomationPlanningResult>(
+                    Failure);
+        }
     }
 
     private sealed class FakeRefreshTransport(
