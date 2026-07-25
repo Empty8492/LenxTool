@@ -6,6 +6,7 @@ public interface IFeedAutomationActionQueueRepository
 {
     Task<IReadOnlyList<FeedAutomationActionLease>> ClaimDueAsync(
         DateTimeOffset now,
+        IReadOnlyCollection<FeedAutomationActionType> actionTypes,
         int maximumCount,
         TimeSpan leaseDuration,
         CancellationToken cancellationToken);

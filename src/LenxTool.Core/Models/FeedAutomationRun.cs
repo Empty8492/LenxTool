@@ -72,3 +72,24 @@ public sealed record FeedAutomationRunSnapshot(
 public sealed record FeedAutomationStageResult(
     int RuleRunsCreated,
     int ActionRunsCreated);
+
+public sealed record FeedAutomationActionProcessorOptions(
+    int BatchSize,
+    int MaximumConcurrency,
+    int MaximumAttempts,
+    TimeSpan LeaseDuration,
+    TimeSpan InitialDelay,
+    TimeSpan PollInterval,
+    TimeSpan BaseRetryDelay,
+    TimeSpan MaximumRetryDelay)
+{
+    public static FeedAutomationActionProcessorOptions Default { get; } = new(
+        20,
+        4,
+        5,
+        TimeSpan.FromMinutes(10),
+        TimeSpan.FromSeconds(5),
+        TimeSpan.FromSeconds(10),
+        TimeSpan.FromMinutes(1),
+        TimeSpan.FromHours(1));
+}

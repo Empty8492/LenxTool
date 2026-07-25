@@ -10,10 +10,13 @@ public sealed class FeedAutomationActionQueueRepository(SqliteDatabase database)
 {
     public async Task<IReadOnlyList<FeedAutomationActionLease>> ClaimDueAsync(
         DateTimeOffset now,
+        IReadOnlyCollection<FeedAutomationActionType> actionTypes,
         int maximumCount,
         TimeSpan leaseDuration,
         CancellationToken cancellationToken)
     {
+        FeedAutomationActionType[] selectedTypes =
+            ValidateActionTypes(actionTypes);
         if (maximumCount is < 1 or > 200)
         {
             throw new ArgumentOutOfRangeException(nameof(maximumCount));
@@ -31,12 +34,22 @@ public sealed class FeedAutomationActionQueueRepository(SqliteDatabase database)
         await using SqliteCommand command = connection.CreateCommand();
         command.Transaction = transaction;
         string timestamp = Format(now);
-        command.CommandText = """
+        var actionTypeParameters = new List<string>(selectedTypes.Length);
+        for (int index = 0; index < selectedTypes.Length; index++)
+        {
+            string parameter = $"$actionType{index}";
+            actionTypeParameters.Add(parameter);
+            command.Parameters.AddWithValue(
+                parameter,
+                ToDatabase(selectedTypes[index]));
+        }
+        command.CommandText = $"""
             SELECT idempotency_key, entry_id, rule_id, rule_version,
                    rule_priority, rule_conflict_order, action_type, action_order,
                    action_value, attempt_count
             FROM feed_automation_action_runs
             WHERE disposition='PLANNED'
+              AND action_type IN ({string.Join(", ", actionTypeParameters)})
               AND ((status IN ('PENDING', 'RETRY') AND next_attempt_at<=$now)
                 OR (status='RUNNING' AND lease_expires_at<=$now))
             ORDER BY rule_priority DESC, rule_conflict_order,
@@ -263,6 +276,35 @@ public sealed class FeedAutomationActionQueueRepository(SqliteDatabase database)
         && value.All(character =>
             character is >= '0' and <= '9'
             or >= 'a' and <= 'f');
+
+    private static FeedAutomationActionType[] ValidateActionTypes(
+        IReadOnlyCollection<FeedAutomationActionType> actionTypes)
+    {
+        ArgumentNullException.ThrowIfNull(actionTypes);
+        FeedAutomationActionType[] selected = actionTypes
+            .Distinct()
+            .ToArray();
+        if (selected.Length is 0
+            || selected.Length > Enum.GetValues<FeedAutomationActionType>().Length
+            || selected.Any(type => !Enum.IsDefined(type)))
+        {
+            throw new ArgumentOutOfRangeException(nameof(actionTypes));
+        }
+        return selected;
+    }
+
+    private static string ToDatabase(FeedAutomationActionType type) =>
+        type switch
+        {
+            FeedAutomationActionType.AddTag => "ADD_TAG",
+            FeedAutomationActionType.Hide => "HIDE",
+            FeedAutomationActionType.MarkRead => "MARK_READ",
+            FeedAutomationActionType.GenerateSummary => "GENERATE_SUMMARY",
+            FeedAutomationActionType.Translate => "TRANSLATE",
+            FeedAutomationActionType.SendToMedia => "SEND_TO_MEDIA",
+            FeedAutomationActionType.Notify => "NOTIFY",
+            _ => throw new ArgumentOutOfRangeException(nameof(type))
+        };
 
     private static FeedAutomationActionType ParseActionType(string value) =>
         value switch

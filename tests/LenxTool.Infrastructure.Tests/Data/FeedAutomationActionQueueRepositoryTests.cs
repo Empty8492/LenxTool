@@ -10,6 +10,8 @@ public sealed class FeedAutomationActionQueueRepositoryTests : IDisposable
 {
     private static readonly DateTimeOffset Now =
         new(2026, 7, 25, 10, 0, 0, TimeSpan.Zero);
+    private static readonly FeedAutomationActionType[] AllActionTypes =
+        Enum.GetValues<FeedAutomationActionType>();
     private const string EntryId = "entry-action-queue";
     private const string WinnerRuleId = "30000000-0000-4000-8000-000000000091";
     private const string LaterRuleId = "30000000-0000-4000-8000-000000000092";
@@ -27,6 +29,7 @@ public sealed class FeedAutomationActionQueueRepositoryTests : IDisposable
 
         IReadOnlyList<FeedAutomationActionLease> first = await queue.ClaimDueAsync(
             Now,
+            AllActionTypes,
             2,
             TimeSpan.FromMinutes(5),
             CancellationToken.None);
@@ -53,6 +56,7 @@ public sealed class FeedAutomationActionQueueRepositoryTests : IDisposable
         FeedAutomationActionLease remaining = Assert.Single(
             await queue.ClaimDueAsync(
                 Now.AddMinutes(1),
+                AllActionTypes,
                 10,
                 TimeSpan.FromMinutes(5),
                 CancellationToken.None));
@@ -65,6 +69,7 @@ public sealed class FeedAutomationActionQueueRepositoryTests : IDisposable
             CancellationToken.None);
         Assert.Empty(await queue.ClaimDueAsync(
             Now.AddDays(1),
+            AllActionTypes,
             10,
             TimeSpan.FromMinutes(5),
             CancellationToken.None));
@@ -79,6 +84,7 @@ public sealed class FeedAutomationActionQueueRepositoryTests : IDisposable
             var queue = new FeedAutomationActionQueueRepository(database);
             FeedAutomationActionLease claimed = Assert.Single(await queue.ClaimDueAsync(
                 Now,
+                AllActionTypes,
                 1,
                 TimeSpan.FromMinutes(5),
                 CancellationToken.None));
@@ -94,12 +100,14 @@ public sealed class FeedAutomationActionQueueRepositoryTests : IDisposable
         var reopenedQueue = new FeedAutomationActionQueueRepository(reopened);
         Assert.Empty(await reopenedQueue.ClaimDueAsync(
             Now.AddMinutes(9),
+            AllActionTypes,
             1,
             TimeSpan.FromMinutes(5),
             CancellationToken.None));
         FeedAutomationActionLease retried = Assert.Single(
             await reopenedQueue.ClaimDueAsync(
                 Now.AddMinutes(10),
+                AllActionTypes,
                 1,
                 TimeSpan.FromMinutes(5),
                 CancellationToken.None));
@@ -121,6 +129,7 @@ public sealed class FeedAutomationActionQueueRepositoryTests : IDisposable
         Assert.Null(action.LastErrorCode);
         Assert.Empty(await reopenedQueue.ClaimDueAsync(
             Now.AddDays(1),
+            AllActionTypes,
             1,
             TimeSpan.FromMinutes(5),
             CancellationToken.None));
@@ -134,11 +143,13 @@ public sealed class FeedAutomationActionQueueRepositoryTests : IDisposable
         var queue = new FeedAutomationActionQueueRepository(database);
         FeedAutomationActionLease expired = Assert.Single(await queue.ClaimDueAsync(
             Now,
+            AllActionTypes,
             1,
             TimeSpan.FromMinutes(5),
             CancellationToken.None));
         FeedAutomationActionLease current = Assert.Single(await queue.ClaimDueAsync(
             Now.AddMinutes(6),
+            AllActionTypes,
             1,
             TimeSpan.FromMinutes(5),
             CancellationToken.None));
@@ -174,6 +185,7 @@ public sealed class FeedAutomationActionQueueRepositoryTests : IDisposable
         var queue = new FeedAutomationActionQueueRepository(database);
         FeedAutomationActionLease first = Assert.Single(await queue.ClaimDueAsync(
             Now,
+            AllActionTypes,
             1,
             TimeSpan.FromMinutes(5),
             CancellationToken.None));
@@ -184,6 +196,7 @@ public sealed class FeedAutomationActionQueueRepositoryTests : IDisposable
             CancellationToken.None);
         FeedAutomationActionLease second = Assert.Single(await queue.ClaimDueAsync(
             Now.AddMinutes(1),
+            AllActionTypes,
             1,
             TimeSpan.FromMinutes(5),
             CancellationToken.None));
@@ -203,17 +216,69 @@ public sealed class FeedAutomationActionQueueRepositoryTests : IDisposable
         IReadOnlyList<FeedAutomationActionLease>[] claims = await Task.WhenAll(
             firstQueue.ClaimDueAsync(
                 Now,
+                AllActionTypes,
                 1,
                 TimeSpan.FromMinutes(5),
                 CancellationToken.None),
             secondQueue.ClaimDueAsync(
                 Now,
+                AllActionTypes,
                 1,
                 TimeSpan.FromMinutes(5),
                 CancellationToken.None));
 
         FeedAutomationActionLease lease = Assert.Single(claims.SelectMany(items => items));
         Assert.Equal(1, lease.AttemptCount);
+    }
+
+    [Fact]
+    public async Task ClaimFiltersTypesWithoutLeasingOtherActions()
+    {
+        using SqliteDatabase database = await CreateDatabaseAsync();
+        await StageAsync(database, Plan());
+        var queue = new FeedAutomationActionQueueRepository(database);
+
+        FeedAutomationActionLease local = Assert.Single(await queue.ClaimDueAsync(
+            Now,
+            [
+                FeedAutomationActionType.AddTag,
+                FeedAutomationActionType.Hide,
+                FeedAutomationActionType.MarkRead
+            ],
+            10,
+            TimeSpan.FromMinutes(5),
+            CancellationToken.None));
+        Assert.Equal(FeedAutomationActionType.AddTag, local.Type);
+
+        FeedAutomationActionLease remote = Assert.Single(await queue.ClaimDueAsync(
+            Now,
+            [FeedAutomationActionType.Translate],
+            10,
+            TimeSpan.FromMinutes(5),
+            CancellationToken.None));
+        Assert.Equal(FeedAutomationActionType.Translate, remote.Type);
+    }
+
+    [Fact]
+    public async Task ClaimRejectsEmptyAndUnknownActionTypeFilters()
+    {
+        using SqliteDatabase database = await CreateDatabaseAsync();
+        var queue = new FeedAutomationActionQueueRepository(database);
+
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
+            () => queue.ClaimDueAsync(
+                Now,
+                [],
+                1,
+                TimeSpan.FromMinutes(5),
+                CancellationToken.None));
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
+            () => queue.ClaimDueAsync(
+                Now,
+                [(FeedAutomationActionType)999],
+                1,
+                TimeSpan.FromMinutes(5),
+                CancellationToken.None));
     }
 
     public void Dispose()

@@ -137,6 +137,12 @@ public partial class App : Application
         services.AddSingleton<
             IFeedAutomationLocalActionService,
             FeedAutomationLocalActionService>();
+        services.AddSingleton(FeedAutomationActionProcessorOptions.Default);
+        services.AddSingleton<FeedAutomationActionProcessor>();
+        services.AddSingleton<IFeedAutomationActionProcessor>(
+            static services =>
+                services.GetRequiredService<FeedAutomationActionProcessor>());
+        services.AddHostedService<FeedAutomationActionBackgroundService>();
         services.AddSingleton(FeedAiAutomationOptions.Default);
         services.AddSingleton<FeedAiAutomationQueueService>();
         services.AddSingleton<IFeedAiAutomationQueueService>(static services =>
