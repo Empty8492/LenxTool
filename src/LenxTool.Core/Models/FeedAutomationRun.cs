@@ -10,6 +10,12 @@ public enum FeedAutomationActionRunStatus
     Suppressed
 }
 
+public enum FeedAutomationActionRunOutcome
+{
+    Succeeded,
+    Failed
+}
+
 public sealed record FeedAutomationRuleRun(
     string EntryId,
     string RuleId,
@@ -36,8 +42,22 @@ public sealed record FeedAutomationActionRun(
     FeedAutomationActionRunStatus Status,
     int AttemptCount,
     DateTimeOffset? NextAttemptAt,
+    string? LastErrorCode,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt);
+
+public sealed record FeedAutomationActionLease(
+    string IdempotencyKey,
+    string EntryId,
+    string RuleId,
+    int RuleVersion,
+    int RulePriority,
+    int RuleConflictOrder,
+    FeedAutomationActionType Type,
+    int ActionOrder,
+    string? Value,
+    int AttemptCount,
+    string LeaseToken);
 
 public sealed record FeedAutomationRunSnapshot(
     IReadOnlyList<FeedAutomationRuleRun> RuleRuns,

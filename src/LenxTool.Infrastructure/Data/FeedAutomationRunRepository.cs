@@ -176,7 +176,8 @@ public sealed class FeedAutomationRunRepository(SqliteDatabase database)
                    rule_priority, rule_conflict_order, action_type, action_order,
                    action_value, disposition, suppression_reason,
                    winning_rule_id, winning_rule_version, winning_action_order,
-                   status, attempt_count, next_attempt_at, created_at, updated_at
+                   status, attempt_count, next_attempt_at, last_error_code,
+                   created_at, updated_at
             FROM feed_automation_action_runs
             WHERE entry_id=$entryId
             ORDER BY created_at, rule_priority DESC, rule_conflict_order,
@@ -207,8 +208,9 @@ public sealed class FeedAutomationRunRepository(SqliteDatabase database)
                     ParseStatus(reader.GetString(14)),
                     reader.GetInt32(15),
                     GetNullableTimestamp(reader, 16),
-                    ParseTimestamp(reader.GetString(17)),
-                    ParseTimestamp(reader.GetString(18))));
+                    GetNullableString(reader, 17),
+                    ParseTimestamp(reader.GetString(18)),
+                    ParseTimestamp(reader.GetString(19))));
             }
         }
 

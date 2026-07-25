@@ -267,7 +267,7 @@ public sealed class FeedAutomationRunRepositoryTests : IDisposable
 
     public void Dispose()
     {
-        SqliteConnection.ClearAllPools();
+        ClearTestPool();
         if (Directory.Exists(_testRoot)) Directory.Delete(_testRoot, recursive: true);
     }
 
@@ -278,6 +278,22 @@ public sealed class FeedAutomationRunRepositoryTests : IDisposable
             NullLogger<SqliteDatabase>.Instance);
         await database.InitializeAsync(CancellationToken.None);
         return database;
+    }
+
+    private void ClearTestPool()
+    {
+        AppPaths paths = new(_testRoot);
+        var builder = new SqliteConnectionStringBuilder
+        {
+            DataSource = paths.DatabasePath,
+            Mode = SqliteOpenMode.ReadWriteCreate,
+            Cache = SqliteCacheMode.Shared,
+            Pooling = true,
+            ForeignKeys = true,
+            DefaultTimeout = 5
+        };
+        using var connection = new SqliteConnection(builder.ToString());
+        SqliteConnection.ClearPool(connection);
     }
 
     private static FeedAutomationPlan Plan() =>

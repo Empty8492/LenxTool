@@ -62,6 +62,8 @@ public sealed class DependencyInjectionTests
             provider.GetRequiredService<IFeedAiAutomationJobRepository>());
         Assert.IsType<FeedAutomationRunRepository>(
             provider.GetRequiredService<IFeedAutomationRunRepository>());
+        Assert.IsType<FeedAutomationActionQueueRepository>(
+            provider.GetRequiredService<IFeedAutomationActionQueueRepository>());
         Assert.IsType<FeedAiAutomationQueueService>(
             provider.GetRequiredService<IFeedAiAutomationQueueService>());
         Assert.IsType<FeedFullTextQueueService>(
