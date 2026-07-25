@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Globalization;
+using LenxTool.App.Controls;
 using LenxTool.App.ViewModels;
 using LenxTool.App.Services;
 using LenxTool.Core.Contracts;
@@ -110,7 +111,8 @@ public sealed class NewsCenterViewModelTests
             new StubEntryStateRepository(),
             new StubFavoriteRepository(),
             new StubFeedFullTextQueueService(),
-            new StubFeedAiSummaryService());
+            new StubFeedAiSummaryService(),
+            new StubFeedAiTranslationService());
         await viewModel.InitializeAsync(CancellationToken.None);
 
         await viewModel.GenerateArticleReportCommand.ExecuteAsync();
@@ -210,7 +212,8 @@ public sealed class NewsCenterViewModelTests
             new StubEntryStateRepository(),
             new StubFavoriteRepository(),
             new StubFeedFullTextQueueService(),
-            new StubFeedAiSummaryService());
+            new StubFeedAiSummaryService(),
+            new StubFeedAiTranslationService());
         await viewModel.InitializeAsync(CancellationToken.None);
         Assert.Single(viewModel.SourceFilters, filter => filter.Platform == "GitHub")
             .IsSelected = false;
@@ -442,6 +445,136 @@ public sealed class NewsCenterViewModelTests
 
         Assert.Equal(second.Id, viewModel.SelectedTimelineEntry?.Entry.Id);
         Assert.Null(viewModel.SelectedFeedSummary);
+    }
+
+    [Fact]
+    public async Task GenerateSelectedFeedTranslationUsesCurrentSourceAndSwitchesReadingModes()
+    {
+        FeedEntry entry = CreateFeedEntry(0);
+        string extractedHash = new('e', 64);
+        var fullText = new StubFeedFullTextQueueService();
+        fullText.Contents[entry.Id] = CreateFullTextContent(entry, "Extracted body") with
+        {
+            ContentHash = extractedHash
+        };
+        var translations = new StubFeedAiTranslationService();
+        using NewsCenterViewModel viewModel = CreateViewModel(
+            CreateSnapshot(),
+            feedEntries: new([entry]),
+            fullText: fullText,
+            translations: translations);
+        await viewModel.InitializeAsync(CancellationToken.None);
+        await viewModel.SelectedFeedReaderLoad;
+
+        await viewModel.GenerateFeedTranslationCommand.ExecuteAsync();
+
+        FeedAiTranslationInput input = Assert.Single(translations.Inputs);
+        Assert.Equal((entry.Id, extractedHash, "简体中文"),
+            (input.EntryId, input.ContentHash, input.TargetLanguage));
+        Assert.Equal(FeedAiTranslationBlockKind.Title, input.Blocks[0].Kind);
+        Assert.Contains(input.Blocks, block => block.Text == "Extracted body");
+        Assert.Equal(
+            ["原文", "译文", "双语"],
+            viewModel.FeedReaderLanguageOptions.Select(option => option.Label));
+        Assert.Equal(
+            FeedReaderLanguageMode.Translation,
+            viewModel.SelectedFeedReaderLanguage.Mode);
+        Assert.Contains(
+            viewModel.SelectedFeedArticleDocument!.Blocks,
+            block => block.Text == "译：Extracted body");
+        Assert.Contains("简体中文", viewModel.FeedTranslationMeta, StringComparison.Ordinal);
+
+        viewModel.SelectedFeedReaderLanguage = Assert.Single(
+            viewModel.FeedReaderLanguageOptions,
+            option => option.Mode == FeedReaderLanguageMode.Bilingual);
+
+        Assert.Contains(
+            viewModel.SelectedFeedArticleDocument!.Blocks,
+            block => block.Text == "Extracted body");
+        Assert.Contains(
+            viewModel.SelectedFeedArticleDocument.Blocks,
+            block => block.Kind == RichArticleBlockKind.Translation
+                && block.Text == "译：Extracted body");
+
+        viewModel.SelectedFeedTranslationTargetLanguage = "English";
+
+        Assert.Equal(
+            FeedReaderLanguageMode.Original,
+            viewModel.SelectedFeedReaderLanguage.Mode);
+        Assert.Null(viewModel.SelectedFeedTranslation);
+        Assert.Contains(
+            viewModel.SelectedFeedArticleDocument!.Blocks,
+            block => block.Text == "Extracted body");
+        Assert.DoesNotContain(
+            viewModel.SelectedFeedArticleDocument.Blocks,
+            block => block.Text == "译：Extracted body");
+    }
+
+    [Fact]
+    public async Task FeedTranslationFailureKeepsOriginalReadable()
+    {
+        FeedEntry entry = CreateFeedEntry(0);
+        var translations = new StubFeedAiTranslationService
+        {
+            Error = new(
+                AppErrorCode.ProviderUnavailable,
+                "翻译暂不可用",
+                "无法生成译文。",
+                "请稍后重试。",
+                Provider: "DeepSeek",
+                IsRetryable: true)
+        };
+        using NewsCenterViewModel viewModel = CreateViewModel(
+            CreateSnapshot(),
+            feedEntries: new([entry]),
+            translations: translations);
+        await viewModel.InitializeAsync(CancellationToken.None);
+        string originalText = viewModel.SelectedFeedArticleDocument?.Blocks
+            .FirstOrDefault(block => block.Kind != RichArticleBlockKind.Image)?.Text
+            ?? viewModel.SelectedFeedArticle!.RichContent;
+
+        await viewModel.GenerateFeedTranslationCommand.ExecuteAsync();
+
+        Assert.Equal(
+            FeedReaderLanguageMode.Original,
+            viewModel.SelectedFeedReaderLanguage.Mode);
+        Assert.Null(viewModel.SelectedFeedTranslation);
+        Assert.Equal(AppErrorCode.ProviderUnavailable, viewModel.FeedTranslationError?.Code);
+        Assert.Contains("无法生成译文", viewModel.FeedTranslationStatus, StringComparison.Ordinal);
+        Assert.Contains(
+            originalText,
+            viewModel.SelectedFeedArticleDocument?.Blocks.Select(block => block.Text)
+                ?? [viewModel.SelectedFeedArticle!.RichContent]);
+    }
+
+    [Fact]
+    public async Task ChangingSelectionCancelsRunningFeedTranslation()
+    {
+        FeedEntry first = CreateFeedEntry(0);
+        FeedEntry second = CreateFeedEntry(1);
+        var translations = new StubFeedAiTranslationService
+        {
+            DelayedEntryId = first.Id
+        };
+        using NewsCenterViewModel viewModel = CreateViewModel(
+            CreateSnapshot(),
+            feedEntries: new([first, second]),
+            translations: translations);
+        await viewModel.InitializeAsync(CancellationToken.None);
+
+        Task generation = viewModel.GenerateFeedTranslationCommand.ExecuteAsync();
+        await translations.RequestStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        viewModel.SelectedTimelineEntry = Assert.Single(
+            viewModel.TimelineEntries,
+            item => item.Entry.Id == second.Id);
+        await generation;
+        await translations.RequestCancelled.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+        Assert.Equal(second.Id, viewModel.SelectedTimelineEntry?.Entry.Id);
+        Assert.Null(viewModel.SelectedFeedTranslation);
+        Assert.Equal(
+            FeedReaderLanguageMode.Original,
+            viewModel.SelectedFeedReaderLanguage.Mode);
     }
 
     [Fact]
@@ -991,7 +1124,8 @@ public sealed class NewsCenterViewModelTests
         StubEntryStateRepository? entryStates = null,
         StubFavoriteRepository? favorites = null,
         StubFeedFullTextQueueService? fullText = null,
-        StubFeedAiSummaryService? summaries = null) =>
+        StubFeedAiSummaryService? summaries = null,
+        StubFeedAiTranslationService? translations = null) =>
         new(
             new StubNewsCenterService(snapshot),
             new StubAiReportService(null),
@@ -1003,7 +1137,8 @@ public sealed class NewsCenterViewModelTests
             entryStates ?? new StubEntryStateRepository(),
             favorites ?? new StubFavoriteRepository(),
             fullText ?? new StubFeedFullTextQueueService(),
-            summaries ?? new StubFeedAiSummaryService());
+            summaries ?? new StubFeedAiSummaryService(),
+            translations ?? new StubFeedAiTranslationService());
 
     private static NewsCenterSnapshot CreateSnapshot(params NewsArticle[] articles) =>
         new(articles, [], true, DateTimeOffset.Now, null);
@@ -1175,6 +1310,71 @@ public sealed class NewsCenterViewModelTests
                 null,
                 TimelineNow,
                 TimelineNow);
+    }
+
+    private sealed class StubFeedAiTranslationService : IFeedAiTranslationService
+    {
+        public List<FeedAiTranslationInput> Inputs { get; } = [];
+        public string? DelayedEntryId { get; init; }
+        public AppError? Error { get; init; }
+        public TaskCompletionSource RequestStarted { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource RequestCancelled { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public async Task<FeedAiTranslationResult> TranslateAsync(
+            FeedAiTranslationInput input,
+            CancellationToken cancellationToken)
+        {
+            Inputs.Add(input);
+            if (string.Equals(input.EntryId, DelayedEntryId, StringComparison.Ordinal))
+            {
+                RequestStarted.TrySetResult();
+                try
+                {
+                    await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    RequestCancelled.TrySetResult();
+                    throw;
+                }
+            }
+            if (Error is not null) throw new AppException(Error);
+
+            DateTimeOffset now = TimelineNow;
+            var cache = new FeedAiResult(
+                $"translation-{input.EntryId}",
+                new(
+                    input.EntryId,
+                    input.ContentHash,
+                    FeedAiTaskType.Translation,
+                    input.TargetLanguage,
+                    FeedAiTranslationOptions.Default.Model,
+                    FeedAiTranslationOptions.Default.PromptVersion),
+                input.Title,
+                "{}",
+                1,
+                10,
+                5,
+                15,
+                100,
+                null,
+                now,
+                now);
+            return new(
+                cache,
+                input.Blocks
+                    .Select(block => new FeedAiTranslatedBlock(
+                        block.Sequence,
+                        block.Kind,
+                        block.Text,
+                        $"译：{block.Text}",
+                        block.ResourceUrl,
+                        block.HeadingLevel,
+                        block.Links))
+                    .ToArray());
+        }
     }
 
     private sealed class StubNewsCenterService(NewsCenterSnapshot snapshot) : INewsCenterService

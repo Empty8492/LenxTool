@@ -11,6 +11,7 @@ public enum RichArticleBlockKind
     Body,
     Quote,
     Bullet,
+    Translation,
     Image
 }
 
@@ -26,8 +27,124 @@ public sealed record RichArticleBlock(
 
 public sealed record RichArticleDocument(string? HeroImageUrl, IReadOnlyList<RichArticleBlock> Blocks);
 
+public sealed record RichArticleTranslationSource(
+    RichArticleDocument Document,
+    IReadOnlyList<FeedAiTranslationBlock> Blocks);
+
 public static partial class RichArticleFormatter
 {
+    public static RichArticleTranslationSource CreateTranslationSource(
+        RichArticleDocument document,
+        string title)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+        ArgumentException.ThrowIfNullOrWhiteSpace(title);
+        string normalizedTitle = NormalizeReaderText(title);
+        if (normalizedTitle.Length == 0)
+            throw new ArgumentException("翻译标题不能为空。", nameof(title));
+
+        var sourceBlocks = new List<RichArticleBlock>(document.Blocks.Count + 1);
+        bool containsTitle = document.Blocks.Any(block =>
+            block.Kind == RichArticleBlockKind.Heading
+            && string.Equals(block.Text, normalizedTitle, StringComparison.Ordinal));
+        if (!containsTitle)
+        {
+            sourceBlocks.Add(new(
+                RichArticleBlockKind.Heading,
+                [new(normalizedTitle)]));
+        }
+        sourceBlocks.AddRange(document.Blocks);
+
+        RichArticleBlock[] boundedSourceBlocks = sourceBlocks
+            .SelectMany(SplitForTranslation)
+            .ToArray();
+        var translationBlocks = new List<FeedAiTranslationBlock>(boundedSourceBlocks.Length);
+        for (int index = 0; index < boundedSourceBlocks.Length; index++)
+        {
+            RichArticleBlock block = boundedSourceBlocks[index];
+            if (block.Kind == RichArticleBlockKind.Image
+                || string.IsNullOrWhiteSpace(block.Text))
+            {
+                continue;
+            }
+
+            ArticleContentLink[] links = block.Inlines
+                .Select(inline => (
+                    Inline: inline,
+                    Url: inline.Url is null ? null : ResolveUrl(inline.Url, null)))
+                .Where(item => item.Url is not null && !string.IsNullOrWhiteSpace(item.Inline.Text))
+                .Select(item => new ArticleContentLink(item.Url!, item.Inline.Text))
+                .ToArray();
+            bool isTitle = block.Kind == RichArticleBlockKind.Heading
+                && string.Equals(block.Text, normalizedTitle, StringComparison.Ordinal);
+            FeedAiTranslationBlockKind kind =
+                isTitle
+                    ? FeedAiTranslationBlockKind.Title
+                    : block.Kind switch
+                    {
+                        RichArticleBlockKind.Heading or RichArticleBlockKind.Subheading =>
+                            FeedAiTranslationBlockKind.Heading,
+                        RichArticleBlockKind.Bullet => FeedAiTranslationBlockKind.ListItem,
+                        RichArticleBlockKind.Quote => FeedAiTranslationBlockKind.Quote,
+                        _ => FeedAiTranslationBlockKind.Paragraph
+                    };
+            translationBlocks.Add(new(
+                index,
+                kind,
+                block.Text,
+                null,
+                block.Kind switch
+                {
+                    RichArticleBlockKind.Heading => 1,
+                    RichArticleBlockKind.Subheading => 2,
+                    _ => null
+                },
+                Array.AsReadOnly(links)));
+        }
+
+        return new(
+            new(document.HeroImageUrl, Array.AsReadOnly(boundedSourceBlocks)),
+            Array.AsReadOnly(translationBlocks.ToArray()));
+    }
+
+    public static RichArticleDocument ApplyTranslation(
+        RichArticleTranslationSource source,
+        FeedAiTranslationResult result,
+        bool bilingual)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(result);
+        Dictionary<int, FeedAiTranslatedBlock> translatedBySequence = result.Blocks
+            .ToDictionary(block => block.Sequence);
+        var blocks = new List<RichArticleBlock>(
+            bilingual ? source.Document.Blocks.Count * 2 : source.Document.Blocks.Count);
+        for (int index = 0; index < source.Document.Blocks.Count; index++)
+        {
+            RichArticleBlock original = source.Document.Blocks[index];
+            if (original.Kind == RichArticleBlockKind.Image)
+            {
+                blocks.Add(original);
+                continue;
+            }
+            if (!translatedBySequence.TryGetValue(index, out FeedAiTranslatedBlock? translated)
+                || !string.Equals(
+                    translated.OriginalText,
+                    original.Text,
+                    StringComparison.Ordinal))
+            {
+                blocks.Add(original);
+                continue;
+            }
+
+            if (bilingual) blocks.Add(original);
+            blocks.Add(new(
+                bilingual ? RichArticleBlockKind.Translation : original.Kind,
+                CreateTranslatedInlines(translated.TranslatedText, original.Inlines)));
+        }
+
+        return new(source.Document.HeroImageUrl, Array.AsReadOnly(blocks.ToArray()));
+    }
+
     public static RichArticleDocument FromExtractedContent(ArticleContentResult article)
     {
         ArgumentNullException.ThrowIfNull(article);
@@ -262,6 +379,83 @@ public static partial class RichArticleFormatter
 
         if (position < text.Length) result.Add(new(text[position..]));
         if (result.Count == 0) result.Add(new(text));
+        return result;
+    }
+
+    private static List<RichArticleInline> CreateTranslatedInlines(
+        string translatedText,
+        IReadOnlyList<RichArticleInline> originalInlines)
+    {
+        var inlines = new List<RichArticleInline> { new(translatedText) };
+        RichArticleInline[] links = originalInlines
+            .Select(inline => (
+                Inline: inline,
+                Url: inline.Url is null ? null : ResolveUrl(inline.Url, null)))
+            .Where(item => item.Url is not null && !string.IsNullOrWhiteSpace(item.Inline.Text))
+            .Select(item => new RichArticleInline(item.Inline.Text, item.Url))
+            .ToArray();
+        if (links.Length == 0) return inlines;
+
+        inlines.Add(new("\n原文链接："));
+        for (int index = 0; index < links.Length; index++)
+        {
+            if (index > 0) inlines.Add(new(" · "));
+            inlines.Add(links[index]);
+        }
+        return inlines;
+    }
+
+    private static IReadOnlyList<RichArticleBlock> SplitForTranslation(
+        RichArticleBlock block)
+    {
+        int maximumCharacters = FeedAiTranslationOptions.Default.MaximumBlockCharacters;
+        if (block.Kind == RichArticleBlockKind.Image
+            || block.Text.Length <= maximumCharacters)
+        {
+            return [block];
+        }
+
+        var result = new List<RichArticleBlock>();
+        var chunk = new List<RichArticleInline>();
+        int chunkCharacters = 0;
+        foreach (RichArticleInline inline in block.Inlines)
+        {
+            string? safeUrl = inline.Url is null ? null : ResolveUrl(inline.Url, null);
+            int position = 0;
+            while (position < inline.Text.Length)
+            {
+                int available = maximumCharacters - chunkCharacters;
+                int take = Math.Min(available, inline.Text.Length - position);
+                if (take > 0
+                    && position + take < inline.Text.Length
+                    && char.IsHighSurrogate(inline.Text[position + take - 1])
+                    && char.IsLowSurrogate(inline.Text[position + take]))
+                {
+                    take--;
+                }
+                if (take == 0)
+                {
+                    result.Add(new(block.Kind, Array.AsReadOnly(chunk.ToArray())));
+                    chunk.Clear();
+                    chunkCharacters = 0;
+                    continue;
+                }
+
+                chunk.Add(new(inline.Text.Substring(position, take), safeUrl));
+                position += take;
+                chunkCharacters += take;
+                if (chunkCharacters == maximumCharacters)
+                {
+                    result.Add(new(block.Kind, Array.AsReadOnly(chunk.ToArray())));
+                    chunk.Clear();
+                    chunkCharacters = 0;
+                }
+            }
+        }
+        if (chunk.Count > 0)
+        {
+            result.Add(new(block.Kind, Array.AsReadOnly(chunk.ToArray())));
+        }
         return result;
     }
 

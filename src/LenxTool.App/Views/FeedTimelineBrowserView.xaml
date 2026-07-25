@@ -280,51 +280,85 @@
                         Padding="18,10"
                         BorderBrush="{DynamicResource Brush.Border}"
                         BorderThickness="0,0,0,1">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="10" />
-                            <ColumnDefinition Width="144" />
-                            <ColumnDefinition Width="14" />
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="14" />
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="8" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <TextBlock VerticalAlignment="Center"
-                                   FontWeight="SemiBold"
-                                   Text="正文来源" />
-                        <ComboBox Grid.Column="2"
-                                  ItemsSource="{Binding FeedReaderSourceOptions}"
-                                  DisplayMemberPath="Label"
-                                  SelectedItem="{Binding SelectedFeedReaderSource}"
-                                  AutomationProperties.Name="正文来源" />
-                        <StackPanel Grid.Column="4"
-                                    VerticalAlignment="Center">
-                            <TextBlock Style="{StaticResource MetaTextStyle}"
-                                       Text="{Binding FeedReaderStatus}"
-                                       TextTrimming="CharacterEllipsis"
-                                       ToolTip="{Binding FeedReaderStatus}" />
-                            <TextBlock Margin="0,2,0,0"
+                    <StackPanel>
+                        <WrapPanel>
+                            <TextBlock Margin="0,0,8,0"
+                                       VerticalAlignment="Center"
+                                       FontWeight="SemiBold"
+                                       Text="正文来源" />
+                            <ComboBox Width="126"
+                                      Margin="0,0,14,0"
+                                      ItemsSource="{Binding FeedReaderSourceOptions}"
+                                      DisplayMemberPath="Label"
+                                      SelectedItem="{Binding SelectedFeedReaderSource}"
+                                      AutomationProperties.Name="正文来源" />
+                            <TextBlock Margin="0,0,8,0"
+                                       VerticalAlignment="Center"
+                                       FontWeight="SemiBold"
+                                       Text="阅读模式" />
+                            <ComboBox Width="92"
+                                      Margin="0,0,14,0"
+                                      ItemsSource="{Binding FeedReaderLanguageOptions}"
+                                      DisplayMemberPath="Label"
+                                      SelectedItem="{Binding SelectedFeedReaderLanguage}"
+                                      AutomationProperties.Name="Feed 阅读模式" />
+                            <TextBlock Margin="0,0,8,0"
+                                       VerticalAlignment="Center"
+                                       FontWeight="SemiBold"
+                                       Text="译为" />
+                            <ComboBox Width="104"
+                                      Margin="0,0,14,0"
+                                      ItemsSource="{Binding FeedTranslationTargetLanguages}"
+                                      SelectedItem="{Binding SelectedFeedTranslationTargetLanguage}"
+                                      AutomationProperties.Name="Feed 译文目标语言" />
+                            <Button MinWidth="104"
+                                    Margin="0,0,8,0"
+                                    Padding="12,5"
+                                    Command="{Binding GenerateFeedTranslationCommand}"
+                                    Content="生成/加载译文"
+                                    AutomationProperties.Name="生成当前 Feed 译文" />
+                            <Button MinWidth="88"
+                                    Margin="0,0,8,0"
+                                    Padding="12,5"
+                                    Command="{Binding GenerateFeedSummaryCommand}"
+                                    Content="生成摘要"
+                                    AutomationProperties.Name="生成当前 Feed 摘要" />
+                            <Button MinWidth="120"
+                                    Padding="12,5"
+                                    Command="{Binding OpenSelectedFeedOriginalCommand}"
+                                    Content="在浏览器打开原文"
+                                    AutomationProperties.Name="在浏览器打开原文" />
+                        </WrapPanel>
+                        <Grid Margin="0,7,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel VerticalAlignment="Center">
+                                <TextBlock Style="{StaticResource MetaTextStyle}"
+                                           Text="{Binding FeedReaderStatus}"
+                                           TextTrimming="CharacterEllipsis"
+                                           ToolTip="{Binding FeedReaderStatus}" />
+                                <TextBlock Margin="0,2,0,0"
+                                           Style="{StaticResource MetaTextStyle}"
+                                           Text="{Binding FeedTranslationStatus}"
+                                           TextTrimming="CharacterEllipsis"
+                                           ToolTip="{Binding FeedTranslationStatus}" />
+                                <TextBlock Margin="0,2,0,0"
+                                           Style="{StaticResource MetaTextStyle}"
+                                           Text="{Binding FeedSummaryStatus}"
+                                           TextTrimming="CharacterEllipsis"
+                                           ToolTip="{Binding FeedSummaryStatus}" />
+                            </StackPanel>
+                            <TextBlock Grid.Column="1"
+                                       Margin="12,0,0,0"
+                                       VerticalAlignment="Center"
                                        Style="{StaticResource MetaTextStyle}"
-                                       Text="{Binding FeedSummaryStatus}"
-                                       TextTrimming="CharacterEllipsis"
-                                       ToolTip="{Binding FeedSummaryStatus}" />
-                        </StackPanel>
-                        <Button Grid.Column="6"
-                                MinWidth="88"
-                                Padding="12,5"
-                                Command="{Binding GenerateFeedSummaryCommand}"
-                                Content="生成摘要"
-                                AutomationProperties.Name="生成当前 Feed 摘要" />
-                        <Button Grid.Column="8"
-                                MinWidth="120"
-                                Padding="12,5"
-                                Command="{Binding OpenSelectedFeedOriginalCommand}"
-                                Content="在浏览器打开原文"
-                                AutomationProperties.Name="在浏览器打开原文" />
-                    </Grid>
+                                       Text="{Binding FeedTranslationMeta}"
+                                       TextAlignment="Right"
+                                       TextWrapping="Wrap" />
+                        </Grid>
+                    </StackPanel>
                 </Border>
                 <Border Grid.Row="2"
                         MaxHeight="220"

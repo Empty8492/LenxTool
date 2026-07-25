@@ -17,31 +17,60 @@ public sealed record FeedReaderSourceOption(
     FeedReaderContentSource Source,
     string Label);
 
+public enum FeedReaderLanguageMode
+{
+    Original,
+    Translation,
+    Bilingual
+}
+
+public sealed record FeedReaderLanguageOption(
+    FeedReaderLanguageMode Mode,
+    string Label);
+
 public sealed partial class NewsCenterViewModel
 {
     private static readonly FeedReaderSourceOption RssReaderSource =
         new(FeedReaderContentSource.Rss, "RSS 正文");
     private static readonly FeedReaderSourceOption ExtractedReaderSource =
         new(FeedReaderContentSource.Extracted, "提取全文");
+    private static readonly FeedReaderLanguageOption OriginalReaderLanguage =
+        new(FeedReaderLanguageMode.Original, "原文");
+    private static readonly FeedReaderLanguageOption TranslationReaderLanguage =
+        new(FeedReaderLanguageMode.Translation, "译文");
+    private static readonly FeedReaderLanguageOption BilingualReaderLanguage =
+        new(FeedReaderLanguageMode.Bilingual, "双语");
 
     private readonly IFeedFullTextQueueService _feedFullTextQueueService;
     private readonly IFeedAiSummaryService _feedAiSummaryService;
+    private readonly IFeedAiTranslationService _feedAiTranslationService;
     private readonly Dictionary<string, FeedAiResult> _feedSummariesByEntryId =
         new(StringComparer.Ordinal);
     private CancellationTokenSource? _feedReaderCancellation;
     private FeedFullTextContent? _selectedExtractedContent;
     private FeedReaderSourceOption _selectedFeedReaderSource = RssReaderSource;
+    private FeedReaderLanguageOption _selectedFeedReaderLanguage = OriginalReaderLanguage;
+    private RichArticleDocument? _selectedFeedSourceDocument;
+    private RichArticleTranslationSource? _selectedFeedTranslationSource;
     private RichArticleDocument? _selectedFeedArticleDocument;
     private FeedAiResult? _selectedFeedSummary;
+    private FeedAiTranslationResult? _selectedFeedTranslation;
     private AppError? _feedSummaryError;
+    private AppError? _feedTranslationError;
     private DateTimeOffset? _feedReaderExtractedAt;
     private string _feedReaderStatus = "选择资讯后可查看正文来源。";
     private string _feedSummaryStatus = "选择资讯后可生成摘要。";
     private string _feedBatchSummaryStatus = "可摘要当前已加载列表的前 20 条资讯。";
+    private string _feedTranslationStatus = "选择资讯后可生成本地缓存译文。";
+    private string _selectedFeedTranslationTargetLanguage = "简体中文";
     private Task _selectedFeedReaderLoad = Task.CompletedTask;
     private int _feedReaderGeneration;
+    private int _feedTranslationGeneration;
 
     public ObservableCollection<FeedReaderSourceOption> FeedReaderSourceOptions { get; } = [];
+    public ObservableCollection<FeedReaderLanguageOption> FeedReaderLanguageOptions { get; } = [];
+    public ObservableCollection<string> FeedTranslationTargetLanguages { get; } =
+        ["简体中文", "English", "日本語", "한국어"];
 
     public FeedReaderSourceOption SelectedFeedReaderSource
     {
@@ -52,9 +81,43 @@ public sealed partial class NewsCenterViewModel
                     option => option.Source == value?.Source)
                 ?? RssReaderSource;
             if (!SetProperty(ref _selectedFeedReaderSource, selected)) return;
+            GenerateFeedTranslationCommand.Cancel();
+            ResetSelectedFeedTranslation(
+                $"可将{selected.Label}翻译为{SelectedFeedTranslationTargetLanguage}。");
             ApplySelectedFeedReaderSource();
             ApplyStoredFeedSummary();
             OnPropertyChanged(nameof(FeedReaderSourceLabel));
+        }
+    }
+
+    public FeedReaderLanguageOption SelectedFeedReaderLanguage
+    {
+        get => _selectedFeedReaderLanguage;
+        set
+        {
+            FeedReaderLanguageOption selected = FeedReaderLanguageOptions.FirstOrDefault(
+                    option => option.Mode == value?.Mode)
+                ?? OriginalReaderLanguage;
+            if (!SetProperty(ref _selectedFeedReaderLanguage, selected)) return;
+            ApplySelectedFeedReaderLanguage();
+            OnPropertyChanged(nameof(FeedReaderSourceLabel));
+        }
+    }
+
+    public string SelectedFeedTranslationTargetLanguage
+    {
+        get => _selectedFeedTranslationTargetLanguage;
+        set
+        {
+            string selected = FeedTranslationTargetLanguages.FirstOrDefault(
+                    language => string.Equals(language, value, StringComparison.Ordinal))
+                ?? "简体中文";
+            if (!SetProperty(ref _selectedFeedTranslationTargetLanguage, selected)) return;
+            GenerateFeedTranslationCommand.Cancel();
+            ResetSelectedFeedTranslation(
+                SelectedTimelineEntry is null
+                    ? "选择资讯后可生成本地缓存译文。"
+                    : $"可将{SelectedFeedReaderSource.Label}翻译为{selected}。");
         }
     }
 
@@ -70,7 +133,10 @@ public sealed partial class NewsCenterViewModel
         private set => SetProperty(ref _feedReaderExtractedAt, value);
     }
 
-    public string FeedReaderSourceLabel => SelectedFeedReaderSource.Label;
+    public string FeedReaderSourceLabel =>
+        SelectedFeedReaderLanguage.Mode == FeedReaderLanguageMode.Original
+            ? SelectedFeedReaderSource.Label
+            : $"{SelectedFeedReaderSource.Label} · {SelectedFeedReaderLanguage.Label}";
 
     public FeedAiResult? SelectedFeedSummary
     {
@@ -96,6 +162,31 @@ public sealed partial class NewsCenterViewModel
         private set => SetProperty(ref _feedSummaryError, value);
     }
 
+    public FeedAiTranslationResult? SelectedFeedTranslation
+    {
+        get => _selectedFeedTranslation;
+        private set
+        {
+            if (SetProperty(ref _selectedFeedTranslation, value))
+            {
+                OnPropertyChanged(nameof(FeedTranslationMeta));
+            }
+        }
+    }
+
+    public string FeedTranslationMeta =>
+        SelectedFeedTranslation is null
+            ? string.Empty
+            : $"{SelectedFeedTranslation.CacheRecord.CacheKey.TargetLanguage} · " +
+              $"{SelectedFeedTranslation.CacheRecord.CacheKey.Model} · " +
+              $"{SelectedFeedTranslation.CacheRecord.TotalTokens} tokens";
+
+    public AppError? FeedTranslationError
+    {
+        get => _feedTranslationError;
+        private set => SetProperty(ref _feedTranslationError, value);
+    }
+
     public string FeedReaderStatus
     {
         get => _feedReaderStatus;
@@ -116,13 +207,21 @@ public sealed partial class NewsCenterViewModel
         private set => SetProperty(ref _feedBatchSummaryStatus, value);
     }
 
+    public string FeedTranslationStatus
+    {
+        get => _feedTranslationStatus;
+        private set => SetProperty(ref _feedTranslationStatus, value);
+    }
+
     public RelayCommand OpenSelectedFeedOriginalCommand { get; private set; } = null!;
     public AsyncRelayCommand GenerateFeedSummaryCommand { get; private set; } = null!;
     public AsyncRelayCommand GenerateVisibleFeedSummariesCommand { get; private set; } = null!;
+    public AsyncRelayCommand GenerateFeedTranslationCommand { get; private set; } = null!;
 
     private void ConfigureFeedReader()
     {
         FeedReaderSourceOptions.Add(RssReaderSource);
+        FeedReaderLanguageOptions.Add(OriginalReaderLanguage);
         OpenSelectedFeedOriginalCommand = new(
             OpenSelectedFeedOriginal,
             CanOpenSelectedFeedOriginal);
@@ -132,29 +231,40 @@ public sealed partial class NewsCenterViewModel
         GenerateVisibleFeedSummariesCommand = new(
             GenerateVisibleFeedSummariesAsync,
             () => TimelineEntries.Count > 0);
+        GenerateFeedTranslationCommand = new(
+            GenerateSelectedFeedTranslationAsync,
+            () => SelectedTimelineEntry is not null);
     }
 
     private void SelectFeedReaderEntry(FeedTimelineItem? item)
     {
         GenerateFeedSummaryCommand.Cancel();
+        GenerateFeedTranslationCommand.Cancel();
         _feedReaderCancellation?.Cancel();
         _feedReaderCancellation?.Dispose();
         _feedReaderCancellation = null;
         int generation = Interlocked.Increment(ref _feedReaderGeneration);
 
         _selectedExtractedContent = null;
+        _selectedFeedSourceDocument = null;
         FeedReaderSourceOptions.Clear();
         FeedReaderSourceOptions.Add(RssReaderSource);
         _selectedFeedReaderSource = RssReaderSource;
         OnPropertyChanged(nameof(SelectedFeedReaderSource));
         OnPropertyChanged(nameof(FeedReaderSourceLabel));
         SelectedFeedArticle = item is null ? null : CreateReaderArticle(item);
-        SelectedFeedArticleDocument = item is null ? null : CreateRssReaderDocument(item);
+        _selectedFeedSourceDocument = item is null ? null : CreateRssReaderDocument(item);
+        SelectedFeedArticleDocument = _selectedFeedSourceDocument;
         FeedReaderExtractedAt = null;
         FeedSummaryError = null;
         SelectedFeedSummary = null;
+        ResetSelectedFeedTranslation(
+            item is null
+                ? "选择资讯后可生成本地缓存译文。"
+                : $"可将 RSS 正文翻译为{SelectedFeedTranslationTargetLanguage}。");
         OpenSelectedFeedOriginalCommand.NotifyCanExecuteChanged();
         GenerateFeedSummaryCommand.NotifyCanExecuteChanged();
+        GenerateFeedTranslationCommand.NotifyCanExecuteChanged();
 
         if (item is null)
         {
@@ -218,18 +328,36 @@ public sealed partial class NewsCenterViewModel
             && _selectedExtractedContent is { } extracted
             && SelectedTimelineEntry is { } selected)
         {
-            SelectedFeedArticleDocument = RichArticleFormatter.WithEnclosures(
+            _selectedFeedSourceDocument = RichArticleFormatter.WithEnclosures(
                 RichArticleFormatter.FromExtractedContent(extracted.Article),
                 selected.Entry.Enclosures,
                 selected.Entry.NormalizedUrl);
             FeedReaderExtractedAt = extracted.ExtractedAt;
+        }
+        else
+        {
+            _selectedFeedSourceDocument = SelectedTimelineEntry is { } item
+                ? CreateRssReaderDocument(item)
+                : null;
+            FeedReaderExtractedAt = null;
+        }
+        ApplySelectedFeedReaderLanguage();
+    }
+
+    private void ApplySelectedFeedReaderLanguage()
+    {
+        if (SelectedFeedReaderLanguage.Mode == FeedReaderLanguageMode.Original
+            || SelectedFeedTranslation is null
+            || _selectedFeedTranslationSource is null)
+        {
+            SelectedFeedArticleDocument = _selectedFeedSourceDocument;
             return;
         }
 
-        SelectedFeedArticleDocument = SelectedTimelineEntry is { } item
-            ? CreateRssReaderDocument(item)
-            : null;
-        FeedReaderExtractedAt = null;
+        SelectedFeedArticleDocument = RichArticleFormatter.ApplyTranslation(
+            _selectedFeedTranslationSource,
+            SelectedFeedTranslation,
+            SelectedFeedReaderLanguage.Mode == FeedReaderLanguageMode.Bilingual);
     }
 
     private async Task GenerateSelectedFeedSummaryAsync(CancellationToken cancellationToken)
@@ -309,6 +437,57 @@ public sealed partial class NewsCenterViewModel
             : $"当前页摘要完成 {completed}/{inputs.Length}，失败 {failed} 条；可稍后重试。";
     }
 
+    private async Task GenerateSelectedFeedTranslationAsync(
+        CancellationToken cancellationToken)
+    {
+        FeedTranslationRequestContext? context = CreateCurrentFeedTranslationContext();
+        FeedTimelineItem? selected = SelectedTimelineEntry;
+        if (context is null || selected is null) return;
+        int expectedReaderGeneration = Volatile.Read(ref _feedReaderGeneration);
+        int expectedTranslationGeneration = Volatile.Read(ref _feedTranslationGeneration);
+        FeedTranslationError = null;
+        FeedTranslationStatus =
+            $"正在将{SelectedFeedReaderSource.Label}翻译为{context.Input.TargetLanguage}…";
+        try
+        {
+            FeedAiTranslationResult result = await _feedAiTranslationService
+                .TranslateAsync(context.Input, cancellationToken);
+            if (!IsCurrentFeedReaderEntry(selected, expectedReaderGeneration)
+                || expectedTranslationGeneration != Volatile.Read(ref _feedTranslationGeneration))
+            {
+                return;
+            }
+
+            _selectedFeedTranslationSource = context.Source;
+            SelectedFeedTranslation = result;
+            EnsureFeedReaderLanguageOptions();
+            SelectedFeedReaderLanguage = TranslationReaderLanguage;
+            FeedTranslationStatus =
+                $"译文已就绪 · {result.CacheRecord.TotalTokens} tokens · 已保存到本机";
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            if (IsCurrentFeedReaderEntry(selected, expectedReaderGeneration)
+                && expectedTranslationGeneration ==
+                    Volatile.Read(ref _feedTranslationGeneration))
+            {
+                FeedTranslationStatus = "翻译已取消；已完成批次可在下次继续。";
+            }
+        }
+        catch (AppException exception)
+        {
+            if (IsCurrentFeedReaderEntry(selected, expectedReaderGeneration)
+                && expectedTranslationGeneration ==
+                    Volatile.Read(ref _feedTranslationGeneration))
+            {
+                FeedTranslationError = exception.Error;
+                FeedTranslationStatus =
+                    $"{exception.Error.UserMessage} {exception.Error.Suggestion}";
+                ApplySelectedFeedReaderLanguage();
+            }
+        }
+    }
+
     private FeedAiSummaryInput? CreateCurrentFeedSummaryInput()
     {
         if (SelectedTimelineEntry is not { } selected) return null;
@@ -371,6 +550,64 @@ public sealed partial class NewsCenterViewModel
             item.Entry.NormalizedUrl);
     }
 
+    private FeedTranslationRequestContext? CreateCurrentFeedTranslationContext()
+    {
+        if (SelectedTimelineEntry is not { } selected
+            || SelectedFeedArticle is null)
+        {
+            return null;
+        }
+
+        RichArticleDocument document = _selectedFeedSourceDocument
+            ?? RichArticleFormatter.Parse(
+                string.IsNullOrWhiteSpace(SelectedFeedArticle.RichContent)
+                    ? SelectedFeedArticle.Content
+                    : SelectedFeedArticle.RichContent,
+                SelectedFeedArticle.Url);
+        RichArticleTranslationSource source = RichArticleFormatter.CreateTranslationSource(
+            document,
+            selected.Entry.Title);
+        string contentHash =
+            SelectedFeedReaderSource.Source == FeedReaderContentSource.Extracted
+            && _selectedExtractedContent is { } extracted
+                ? extracted.ContentHash
+                : selected.Entry.ContentHash;
+        return new(
+            source,
+            new(
+                selected.Entry.Id,
+                contentHash,
+                selected.Entry.Title,
+                SelectedFeedTranslationTargetLanguage,
+                source.Blocks));
+    }
+
+    private void EnsureFeedReaderLanguageOptions()
+    {
+        if (!FeedReaderLanguageOptions.Contains(TranslationReaderLanguage))
+            FeedReaderLanguageOptions.Add(TranslationReaderLanguage);
+        if (!FeedReaderLanguageOptions.Contains(BilingualReaderLanguage))
+            FeedReaderLanguageOptions.Add(BilingualReaderLanguage);
+    }
+
+    private void ResetSelectedFeedTranslation(string status)
+    {
+        Interlocked.Increment(ref _feedTranslationGeneration);
+        _selectedFeedTranslationSource = null;
+        SelectedFeedTranslation = null;
+        FeedTranslationError = null;
+        FeedReaderLanguageOptions.Clear();
+        FeedReaderLanguageOptions.Add(OriginalReaderLanguage);
+        if (!Equals(_selectedFeedReaderLanguage, OriginalReaderLanguage))
+        {
+            _selectedFeedReaderLanguage = OriginalReaderLanguage;
+            OnPropertyChanged(nameof(SelectedFeedReaderLanguage));
+            OnPropertyChanged(nameof(FeedReaderSourceLabel));
+        }
+        FeedTranslationStatus = status;
+        ApplySelectedFeedReaderLanguage();
+    }
+
     private bool CanOpenSelectedFeedOriginal() =>
         TryGetSelectedFeedOriginalUri(out _);
 
@@ -406,8 +643,13 @@ public sealed partial class NewsCenterViewModel
         Interlocked.Increment(ref _feedReaderGeneration);
         GenerateFeedSummaryCommand.Dispose();
         GenerateVisibleFeedSummariesCommand.Dispose();
+        GenerateFeedTranslationCommand.Dispose();
         _feedReaderCancellation?.Cancel();
         _feedReaderCancellation?.Dispose();
         _feedReaderCancellation = null;
     }
+
+    private sealed record FeedTranslationRequestContext(
+        RichArticleTranslationSource Source,
+        FeedAiTranslationInput Input);
 }

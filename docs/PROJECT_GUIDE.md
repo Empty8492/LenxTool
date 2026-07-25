@@ -213,12 +213,13 @@ npm.cmd test -- --run
 - P1-09 阅读器增强与 P1-B 检查点已完成：资讯阅读器标识 RSS/提取全文与提取时间，缓存或按策略提取成功后默认显示结构化全文并可切回 RSS；快速切换取消旧请求并拒绝迟到结果。标题、段落、引用、列表、图片和链接保持顺序，危险协议或带凭据 URL 降级为纯文本；原网页仅通过受控命令交给系统浏览器。
 - P1-10 Feed AI 本地缓存已完成：schema v9 在现有 `ai_reports` 上建立由条目 ID、内容哈希、任务、目标语言、模型和提示版本组成的唯一缓存键；正文变化保留旧历史但精确查询不会命中过期结果。新仓储记录请求数、输入/输出/总 Token、耗时、错误码与更新时间并继续接入本地 FTS，表结构不保存 API Key、Secret 或 Credential。
 - P1-11 单条与批量摘要已完成：Feed RSS/提取全文以有界、不可信 JSON DATA 进入 DeepSeek，正文内提示词与伪造 DATA 边界不能变成 system/tool 指令；单条先查六项本地缓存键，同键并发只请求一次。批量最多 20 条、并发最多 2，支持取消、429/Token/耗时/错误指标和逐条失败；阅读器可生成当前来源摘要或摘要当前页前 20 条，切换来源/条目不会显示过期结果。管理员生成策略仍按计划在 P1-13 接入。
+- P1-12 条目翻译与双语阅读已完成：复用字幕翻译器的安全纯文本、序号校验和可恢复批次，每批立即写入按内容哈希/目标语言/模型/提示版本隔离的本地缓存；失败或取消后原文始终可读并可续传。阅读器支持 RSS/提取全文、四种目标语言及原文/译文/双语模式；链接只沿用原文安全目标，模型 HTML 不执行。管理员自动翻译策略仍按计划在 P1-13 接入。
 - P0 最终验收第一片已完成：`p0-final-acceptance.test.ts` 在真实 workerd/D1 中走临时 bootstrap/login，覆盖管理员发布与停用、目录刷新、普通用户同步/阅读、六类管理员写端点 403 隔离和审计字段脱敏。
 - P0 最终验收第二片已完成：完整 .NET 310/310、Worker 39/39、typecheck 和 Release 0 警告/0 错误复核了 OPML 导入/导出、断网缓存、坏源隔离、schema v2 原位升级和 10k 条目首屏性能；五份终验文档已同步，P0 已关闭。
 
 ### 10.2 下一里程碑
 
-Gate 0 字幕闭环和 P0“管理员策展 RSS”已经完成。P1-01～P1-10、P1-A 与 P1-B，以及 P1-11 的本地摘要生成与 UI 已完成私人阅读状态、收藏/标签/备注、组合筛选、历史一致入口、真实 WPF 阅读进度恢复、离线资源、安全图片、受控全文提取、按 Feed 全文队列、阅读器来源切换、Feed AI 本地缓存和可取消摘要。恢复开发后的下一项是 P1-12：条目翻译与双语阅读；管理员手动生成策略和额度门控仍由 P1-13 完成。
+Gate 0 字幕闭环和 P0“管理员策展 RSS”已经完成。P1-01～P1-12、P1-A 与 P1-B 已完成私人阅读状态、收藏/标签/备注、组合筛选、历史一致入口、真实 WPF 阅读进度恢复、离线资源、安全图片、受控全文提取、按 Feed 全文队列、阅读器来源切换、Feed AI 本地缓存、可取消摘要，以及可恢复翻译与原文/译文/双语阅读。恢复开发后的下一项是 P1-13：管理员 AI 策略与额度门控。
 
 字幕闭环完成后的产品主路线已确定为“管理员策展 RSS”：管理员维护共享 RSS/Atom 目录，普通用户只能同步和阅读，不得修改共享订阅、分类、抓取策略或自动化规则。为保持现有“云端不存新闻正文”边界，首版采用 Worker/D1 保存权威目录、各桌面客户端本地抓取和 SQLite 缓存的模式。
 
@@ -226,17 +227,17 @@ Gate 0 字幕闭环和 P0“管理员策展 RSS”已经完成。P1-01～P1-10�
 
 1. Gate 0 字幕闭环已完成；验收记录见 [`plans/EXISTING_BACKLOG_ALIGNMENT.md`](plans/EXISTING_BACKLOG_ALIGNMENT.md)。
 2. P0-01～P0-20、P0-B/P0-C 及最终检查点已完成；P0 关闭记录见 [`plans/RSS_P0_ADMIN_CATALOG.md`](plans/RSS_P0_ADMIN_CATALOG.md)，现在才进入 P1。
-3. P1-01～P1-10、P1-A 与 P1-B，以及 P1-11 本地摘要生成与 UI 已完成；恢复开发后从 P1-12 条目翻译与双语阅读继续，P1-11 的管理员策略验收随 P1-13 完成，具体见 [`plans/RSS_P1_READING_INTELLIGENCE.md`](plans/RSS_P1_READING_INTELLIGENCE.md)。
+3. P1-01～P1-12、P1-A 与 P1-B 已完成；恢复开发后从 P1-13 管理员 AI 策略继续，摘要/翻译的策略与额度验收在该项闭环，具体见 [`plans/RSS_P1_READING_INTELLIGENCE.md`](plans/RSS_P1_READING_INTELLIGENCE.md)。
 4. 实现多内容视图、外部导出适配器、本地定时摘要和通知；具体见 [`plans/RSS_P2_VIEWS_INTEGRATIONS.md`](plans/RSS_P2_VIEWS_INTEGRATIONS.md)。
 
-总路线、参考项目和许可证边界见 [`plans/RSS_MASTER_ROADMAP.md`](plans/RSS_MASTER_ROADMAP.md)，架构决策见 [`decisions/ADR-001-admin-curated-rss.md`](decisions/ADR-001-admin-curated-rss.md) 与 [`decisions/ADR-002-article-content-extraction.md`](decisions/ADR-002-article-content-extraction.md)。P0-01～P0-20、P0-B/P0-C、P1-01～P1-10、P1-11 本地摘要生成与 P1-A/P1-B 可作为已实现基础；P1-12 及之后的翻译、AI 管理策略、自动化、媒体投递和统一搜索能力仍不能作为已交付功能宣传。
+总路线、参考项目和许可证边界见 [`plans/RSS_MASTER_ROADMAP.md`](plans/RSS_MASTER_ROADMAP.md)，架构决策见 [`decisions/ADR-001-admin-curated-rss.md`](decisions/ADR-001-admin-curated-rss.md) 与 [`decisions/ADR-002-article-content-extraction.md`](decisions/ADR-002-article-content-extraction.md)。P0-01～P0-20、P0-B/P0-C、P1-01～P1-12 与 P1-A/P1-B 可作为已实现基础；P1-13 及之后的 AI 管理策略、自动化、媒体投递和统一搜索能力仍不能作为已交付功能宣传。
 
 ### 10.3 其他尚未完成的产品功能
 
 本地产品缺口：
 
 - 首页已接入本地 Feed、旧早报、热点、媒体任务和收藏计数；资讯收藏、标签、备注的完整编辑入口仍待完成。
-- Feed AI 本地缓存、单条/批量摘要和阅读器摘要交互已建立；条目翻译与双语阅读从 P1-12 开始，管理员策略与额度门控在 P1-13。
+- Feed AI 本地缓存、单条/批量摘要、可恢复条目翻译，以及原文/译文/双语阅读已建立；管理员策略与额度门控在 P1-13。
 - JSON 双栏结构 Diff 界面；目前只有 Core 层 Diff 算法。
 
 云端与管理缺口：

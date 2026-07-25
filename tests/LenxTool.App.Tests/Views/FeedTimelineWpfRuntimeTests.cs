@@ -239,6 +239,20 @@ public sealed class FeedTimelineWpfRuntimeTests
                 window.Show();
                 window.Activate();
 
+                ComboBox languageMode = FindDescendant<ComboBox>(
+                    view,
+                    element => AutomationProperties.GetName(element) == "Feed 阅读模式");
+                ComboBox targetLanguage = FindDescendant<ComboBox>(
+                    view,
+                    element => AutomationProperties.GetName(element) == "Feed 译文目标语言");
+                Button translateButton = FindDescendant<Button>(
+                    view,
+                    element => AutomationProperties.GetName(element) == "生成当前 Feed 译文");
+                Assert.Equal("原文", Assert.IsType<FeedReaderLanguageOption>(
+                    languageMode.SelectedItem).Label);
+                Assert.Equal("简体中文", targetLanguage.SelectedItem);
+                Assert.True(translateButton.IsEnabled);
+
                 var scrollViewer = Assert.IsType<ScrollViewer>(
                     view.FindName("ArticleScrollViewer"));
                 PumpUntil(
@@ -369,6 +383,7 @@ public sealed class FeedTimelineWpfRuntimeTests
             states,
             favorites,
             new StubFeedFullTextQueueService(),
+            null!,
             null!);
 
     private static Window CreateWindow(FeedTimelineBrowserView view) =>

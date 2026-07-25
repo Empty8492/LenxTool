@@ -200,6 +200,21 @@ public sealed class RichArticleView : UserControl, IDisposable
                     "Brush.TextSecondary");
                 textBlock.Inlines.Add(new Run("“"));
                 break;
+            case RichArticleBlockKind.Translation:
+                textBlock.Margin = new Thickness(14, 2, 0, 12);
+                textBlock.Padding = new Thickness(10, 7, 10, 7);
+                textBlock.FontSize = 14;
+                textBlock.SetResourceReference(
+                    TextBlock.BackgroundProperty,
+                    "Brush.SurfaceMuted");
+                textBlock.SetResourceReference(
+                    TextBlock.ForegroundProperty,
+                    "Brush.TextSecondary");
+                textBlock.Inlines.Add(new Run("译文  ")
+                {
+                    FontWeight = FontWeights.SemiBold
+                });
+                break;
             default:
                 textBlock.Margin = new Thickness(0, 5, 0, 10);
                 break;

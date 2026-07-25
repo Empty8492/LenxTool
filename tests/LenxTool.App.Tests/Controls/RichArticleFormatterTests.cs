@@ -224,4 +224,186 @@ public sealed class RichArticleFormatterTests
                     Url: "https://cdn.example/video.mp4"
                 }));
     }
+
+    [Fact]
+    public void TranslationSourceAddsTitleAndSnapshotsTextBlocksWithoutImages()
+    {
+        var source = new RichArticleDocument(
+            "https://example.com/cover.png",
+            [
+                new(
+                    RichArticleBlockKind.Body,
+                    [
+                        new RichArticleInline("Read "),
+                        new RichArticleInline("safe source", "https://example.com/story")
+                    ]),
+                new(
+                    RichArticleBlockKind.Image,
+                    [new RichArticleInline("Diagram")],
+                    "https://example.com/diagram.png"),
+                new(
+                    RichArticleBlockKind.Quote,
+                    [new RichArticleInline("Quoted text")])
+            ]);
+
+        RichArticleTranslationSource translationSource =
+            RichArticleFormatter.CreateTranslationSource(source, "Article title");
+
+        Assert.Equal(
+            ["Article title", "Read safe source", "Diagram", "Quoted text"],
+            translationSource.Document.Blocks.Select(block => block.Text));
+        Assert.Collection(
+            translationSource.Blocks,
+            block =>
+            {
+                Assert.Equal((0, FeedAiTranslationBlockKind.Title, "Article title"),
+                    (block.Sequence, block.Kind, block.Text));
+                Assert.Empty(block.Links);
+            },
+            block =>
+            {
+                Assert.Equal((1, FeedAiTranslationBlockKind.Paragraph, "Read safe source"),
+                    (block.Sequence, block.Kind, block.Text));
+                ArticleContentLink link = Assert.Single(block.Links);
+                Assert.Equal(("safe source", "https://example.com/story"), (link.Text, link.Url));
+            },
+            block =>
+            {
+                Assert.Equal((3, FeedAiTranslationBlockKind.Quote, "Quoted text"),
+                    (block.Sequence, block.Kind, block.Text));
+                Assert.Empty(block.Links);
+            });
+    }
+
+    [Fact]
+    public void ApplyTranslationPreservesImageOrderAndUsesOnlyOriginalLinkTargets()
+    {
+        var source = new RichArticleDocument(
+            "https://example.com/cover.png",
+            [
+                new(
+                    RichArticleBlockKind.Body,
+                    [
+                        new RichArticleInline("Read "),
+                        new RichArticleInline("safe source", "https://example.com/story")
+                    ]),
+                new(
+                    RichArticleBlockKind.Image,
+                    [new RichArticleInline("Diagram")],
+                    "https://example.com/diagram.png")
+            ]);
+        RichArticleTranslationSource translationSource =
+            RichArticleFormatter.CreateTranslationSource(source, "Article title");
+        DateTimeOffset now = new(2026, 7, 25, 4, 0, 0, TimeSpan.Zero);
+        var key = new FeedAiCacheKey(
+            "entry-1",
+            new string('a', 64),
+            FeedAiTaskType.Translation,
+            "简体中文",
+            FeedAiTranslationOptions.Default.Model,
+            FeedAiTranslationOptions.Default.PromptVersion);
+        var cache = new FeedAiResult(
+            "translation-1",
+            key,
+            "Article title",
+            "{}",
+            1,
+            10,
+            5,
+            15,
+            100,
+            null,
+            now,
+            now);
+        var result = new FeedAiTranslationResult(
+            cache,
+            [
+                new(
+                    0,
+                    FeedAiTranslationBlockKind.Title,
+                    "Article title",
+                    "文章标题",
+                    null,
+                    1,
+                    []),
+                new(
+                    1,
+                    FeedAiTranslationBlockKind.Paragraph,
+                    "Read safe source",
+                    "<script>模型文本</script> [恶意](javascript:alert(1))",
+                    null,
+                    null,
+                    [new("https://example.com/story", "safe source")])
+            ]);
+
+        RichArticleDocument translated = RichArticleFormatter.ApplyTranslation(
+            translationSource,
+            result,
+            bilingual: false);
+        RichArticleDocument bilingual = RichArticleFormatter.ApplyTranslation(
+            translationSource,
+            result,
+            bilingual: true);
+
+        Assert.Equal(
+            ["文章标题", "<script>模型文本</script> [恶意](javascript:alert(1))\n原文链接：safe source", "Diagram"],
+            translated.Blocks.Select(block => block.Text));
+        RichArticleInline translatedLink = Assert.Single(
+            translated.Blocks[1].Inlines,
+            inline => inline.Url is not null);
+        Assert.Equal(("safe source", "https://example.com/story"),
+            (translatedLink.Text, translatedLink.Url));
+        Assert.DoesNotContain(
+            translated.Blocks.SelectMany(block => block.Inlines),
+            inline => inline.Url?.StartsWith("javascript:", StringComparison.OrdinalIgnoreCase) == true);
+
+        Assert.Equal(
+            [
+                RichArticleBlockKind.Heading,
+                RichArticleBlockKind.Translation,
+                RichArticleBlockKind.Body,
+                RichArticleBlockKind.Translation,
+                RichArticleBlockKind.Image
+            ],
+            bilingual.Blocks.Select(block => block.Kind));
+        Assert.Single(bilingual.Blocks, block => block.Kind == RichArticleBlockKind.Image);
+    }
+
+    [Fact]
+    public void TranslationSourceSplitsLongParagraphWithoutLosingTextOrLinkTarget()
+    {
+        string prefix = new('a', FeedAiTranslationOptions.Default.MaximumBlockCharacters - 20);
+        string linkedText = new('b', 80);
+        string suffix = new('c', 120);
+        var document = new RichArticleDocument(
+            null,
+            [
+                new(
+                    RichArticleBlockKind.Body,
+                    [
+                        new RichArticleInline(prefix),
+                        new RichArticleInline(linkedText, "https://example.com/long-story"),
+                        new RichArticleInline(suffix)
+                    ])
+            ]);
+
+        RichArticleTranslationSource source =
+            RichArticleFormatter.CreateTranslationSource(document, "Long article");
+
+        FeedAiTranslationBlock[] bodyBlocks = source.Blocks
+            .Where(block => block.Kind == FeedAiTranslationBlockKind.Paragraph)
+            .ToArray();
+        Assert.True(bodyBlocks.Length > 1);
+        Assert.All(
+            bodyBlocks,
+            block => Assert.InRange(
+                block.Text.Length,
+                1,
+                FeedAiTranslationOptions.Default.MaximumBlockCharacters));
+        Assert.Equal(prefix + linkedText + suffix, string.Concat(bodyBlocks.Select(block => block.Text)));
+        Assert.Contains(
+            bodyBlocks.SelectMany(block => block.Links),
+            link => link.Url == "https://example.com/long-story"
+                && linkedText.Contains(link.Text, StringComparison.Ordinal));
+    }
 }

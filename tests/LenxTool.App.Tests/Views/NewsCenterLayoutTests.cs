@@ -243,6 +243,32 @@ public sealed class NewsCenterLayoutTests
                 && element.Attribute("Command")?.Value
                     == "{Binding GenerateFeedSummaryCommand}");
         Assert.Contains(
+            timelineBrowser.Descendants(),
+            element => element.Name.LocalName == "ComboBox"
+                && element.Attribute("AutomationProperties.Name")?.Value == "Feed 阅读模式"
+                && element.Attribute("ItemsSource")?.Value
+                    == "{Binding FeedReaderLanguageOptions}"
+                && element.Attribute("SelectedItem")?.Value
+                    == "{Binding SelectedFeedReaderLanguage}");
+        Assert.Contains(
+            timelineBrowser.Descendants(),
+            element => element.Name.LocalName == "ComboBox"
+                && element.Attribute("AutomationProperties.Name")?.Value == "Feed 译文目标语言"
+                && element.Attribute("ItemsSource")?.Value
+                    == "{Binding FeedTranslationTargetLanguages}"
+                && element.Attribute("SelectedItem")?.Value
+                    == "{Binding SelectedFeedTranslationTargetLanguage}");
+        Assert.Contains(
+            timelineBrowser.Descendants(),
+            element => element.Name.LocalName == "Button"
+                && element.Attribute("AutomationProperties.Name")?.Value == "生成当前 Feed 译文"
+                && element.Attribute("Command")?.Value
+                    == "{Binding GenerateFeedTranslationCommand}");
+        Assert.Contains(
+            timelineBrowser.Descendants(),
+            element => element.Name.LocalName == "TextBlock"
+                && element.Attribute("Text")?.Value == "{Binding FeedTranslationStatus}");
+        Assert.Contains(
             timelineFilters.Descendants(),
             element => element.Name.LocalName == "Button"
                 && element.Attribute("AutomationProperties.Name")?.Value == "摘要当前页 Feed"

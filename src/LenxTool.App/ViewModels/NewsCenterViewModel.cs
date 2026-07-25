@@ -39,7 +39,8 @@ public sealed partial class NewsCenterViewModel
         IEntryStateRepository entryStateRepository,
         IFavoriteRepository favoriteRepository,
         IFeedFullTextQueueService feedFullTextQueueService,
-        IFeedAiSummaryService feedAiSummaryService)
+        IFeedAiSummaryService feedAiSummaryService,
+        IFeedAiTranslationService feedAiTranslationService)
         : base("资讯列表", "订阅资讯、每日早报、热点趋势与 AI 报告")
     {
         _newsCenterService = newsCenterService;
@@ -53,6 +54,7 @@ public sealed partial class NewsCenterViewModel
         _favoriteRepository = favoriteRepository;
         _feedFullTextQueueService = feedFullTextQueueService;
         _feedAiSummaryService = feedAiSummaryService;
+        _feedAiTranslationService = feedAiTranslationService;
         _timelineSynchronizationContext =
             SynchronizationContext.Current is System.Windows.Threading.DispatcherSynchronizationContext dispatcherContext
             && System.Windows.Application.Current is not null
