@@ -95,6 +95,7 @@ public sealed partial class FeedAdminViewModel
         CategoryChoices.Add(new(null, "未分类", true));
         foreach (FeedCategory category in snapshot.Categories)
             CategoryChoices.Add(new(category.Id, category.Name, category.IsEnabled));
+        SetAiPolicyDefaults(snapshot.AiPolicyDefaults);
 
         SetProperty(ref _catalogVersion, snapshot.State.Version, nameof(CatalogVersion));
         if (_opmlPreviewCatalogVersion is not null && _opmlPreviewCatalogVersion != snapshot.State.Version)
@@ -125,6 +126,7 @@ public sealed partial class FeedAdminViewModel
         FeedRefreshIntervalMinutes = feed.RefreshIntervalMinutes;
         FeedSortOrder = feed.SortOrder;
         FeedIsEnabled = feed.IsEnabled;
+        ApplyFeedAiPolicy(feed.AiPolicy);
         PendingDeleteFeedId = null;
         _verifiedFeedUrl = feed.OriginalUrl;
         DiscoveryTitle = feed.DisplayName;
@@ -146,7 +148,8 @@ public sealed partial class FeedAdminViewModel
 
     private bool CanSaveCategory() => CanManage
         && IsValidText(CategoryNameInput, 80)
-        && CategorySortOrder is >= 0 and <= MaximumSortOrder;
+        && CategorySortOrder is >= 0 and <= MaximumSortOrder
+        && IsValidAiPolicy(CreateCategoryAiPolicy());
 
     private bool CanDiscover() => IsAdmin && !string.IsNullOrWhiteSpace(FeedUrlInput);
 
@@ -158,7 +161,8 @@ public sealed partial class FeedAdminViewModel
         && (string.IsNullOrWhiteSpace(FeedSiteUrlInput) || IsValidHttpsUrl(FeedSiteUrlInput))
         && (SelectedCategoryId is null || Guid.TryParseExact(SelectedCategoryId, "D", out _))
         && FeedRefreshIntervalMinutes is >= 5 and <= 1440
-        && FeedSortOrder is >= 0 and <= MaximumSortOrder;
+        && FeedSortOrder is >= 0 and <= MaximumSortOrder
+        && IsValidAiPolicy(CreateFeedAiPolicy());
 
     private bool CanMoveCategory(FeedCategory? category, int direction)
     {
@@ -191,6 +195,7 @@ public sealed partial class FeedAdminViewModel
         Categories.Clear();
         Feeds.Clear();
         CategoryChoices.Clear();
+        SetAiPolicyDefaults(null);
         ClearHealth();
         SelectedCategory = null;
         SelectedFeed = null;
@@ -248,7 +253,8 @@ public sealed partial class FeedAdminViewModel
             feed.FullTextPolicy,
             feed.RefreshIntervalMinutes,
             sortOrder ?? feed.SortOrder,
-            isEnabled ?? feed.IsEnabled);
+            isEnabled ?? feed.IsEnabled,
+            feed.AiPolicy);
 
     private static FeedCatalogItemInput CreateFeedInput(
         string originalUrl,
@@ -259,7 +265,8 @@ public sealed partial class FeedAdminViewModel
         FeedFullTextPolicy fullTextPolicy,
         int refreshIntervalMinutes,
         int sortOrder,
-        bool isEnabled) => new(
+        bool isEnabled,
+        FeedAiPolicy? aiPolicy) => new(
             originalUrl,
             displayName,
             siteUrl,
@@ -268,7 +275,8 @@ public sealed partial class FeedAdminViewModel
             refreshIntervalMinutes,
             sortOrder,
             isEnabled,
-            fullTextPolicy);
+            fullTextPolicy,
+            aiPolicy);
 
     private static bool IsCatalogVersionConflict(AppException exception) =>
         exception.Error.Code == AppErrorCode.Conflict

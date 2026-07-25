@@ -9,14 +9,14 @@
 | 测试组 | 结果 |
 |---|---:|
 | LenxTool.Core.Tests | 42 passed |
-| LenxTool.Infrastructure.Tests | 257 passed |
-| LenxTool.App.Tests | 125 passed |
+| LenxTool.Infrastructure.Tests | 258 passed |
+| LenxTool.App.Tests | 127 passed |
 | Cloudflare Worker Vitest | 44 passed |
 | Worker TypeScript strict typecheck | passed |
 | .NET build warnings | 0 |
 | NuGet vulnerable packages | 0 detected |
 
-本轮执行三个 .NET 测试项目及隔离输出的 Release 构建，结果为 0 警告、0 错误；Core 42、Infrastructure 257、App 125，共 424/424 通过且无跳过。运行中的 Lenx Tools 占用默认 Debug 输出时，App 测试使用框架依赖模式的隔离 `OutDir`，测试程序集和依赖仍由当前源码重新编译。Worker 严格 typecheck 和官方 workerd/D1 Vitest 44/44 通过。
+本轮执行三个 .NET 测试项目及隔离输出的单节点 Release 构建，结果为 0 警告、0 错误；Core 42、Infrastructure 258、App 127，共 427/427 通过且无跳过。运行中的 Lenx Tools 占用默认 Debug 输出时，App 测试使用框架依赖模式的隔离 `OutDir`，测试程序集和依赖仍由当前源码重新编译。Worker 严格 typecheck 和官方 workerd/D1 Vitest 44/44 通过。
 
 P0-08 覆盖 4 项 SQLite 集成场景并同步既有 schema 断言：新建库创建目录状态、分类、Feed、抓取状态、条目、索引和搜索映射；真实 schema v2 哨兵数据经 v3/v4 原位升级后仍可由现有仓储读取；迁移对象冲突时完整回滚且版本停留在 v3；相同外部 ID、URL 和内容哈希可存在于不同 Feed，同一 Feed 内重复外部 ID 被约束拒绝。既有包含未 checkpoint WAL 提交的一致性备份测试继续通过。
 

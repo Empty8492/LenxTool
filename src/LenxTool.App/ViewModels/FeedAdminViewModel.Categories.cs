@@ -26,13 +26,18 @@ public sealed partial class FeedAdminViewModel
         CategoryNameInput = string.Empty;
         CategorySortOrder = NextSortOrder(Categories.Select(category => category.SortOrder));
         CategoryIsEnabled = true;
+        ResetCategoryAiPolicy();
         PendingDeleteCategoryId = null;
         Status = "正在新增分类；保存时会校验目录版本。";
     }
 
     private Task SaveCategoryAsync(CancellationToken cancellationToken)
     {
-        var input = new FeedCategoryInput(CategoryNameInput.Trim(), CategorySortOrder, CategoryIsEnabled);
+        var input = new FeedCategoryInput(
+            CategoryNameInput.Trim(),
+            CategorySortOrder,
+            CategoryIsEnabled,
+            CreateCategoryAiPolicy());
         return ExecuteMutationAsync(
             (version, token) => SelectedCategory is null
                 ? _adminService.CreateCategoryAsync(input, version, token)
@@ -47,7 +52,11 @@ public sealed partial class FeedAdminViewModel
             : ExecuteMutationAsync(
                 (version, token) => _adminService.UpdateCategoryAsync(
                     category.Id,
-                    new(category.Name, category.SortOrder, !category.IsEnabled),
+                    new(
+                        category.Name,
+                        category.SortOrder,
+                        !category.IsEnabled,
+                        category.AiPolicy),
                     version,
                     token),
                 category.IsEnabled ? "分类已停用。" : "分类已启用。",
@@ -62,7 +71,7 @@ public sealed partial class FeedAdminViewModel
         return ExecuteMutationAsync(
             (version, token) => _adminService.UpdateCategoryAsync(
                 category!.Id,
-                new(category.Name, sortOrder, category.IsEnabled),
+                new(category.Name, sortOrder, category.IsEnabled, category.AiPolicy),
                 version,
                 token),
             "分类排序已更新。",

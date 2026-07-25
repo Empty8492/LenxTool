@@ -134,6 +134,86 @@ public sealed class FeedAdminViewModelTests
     }
 
     [Fact]
+    public async Task CategoryEditorLoadsAndWritesAiPolicyOverrides()
+    {
+        FeedAiPolicy storedPolicy = FeedAiPolicy.Inherited with
+        {
+            ManualSummary = FeedAiPolicySwitch.Disabled,
+            AutoSummary = FeedAiPolicySwitch.Enabled,
+            DailyEntryLimit = 12
+        };
+        FeedCatalogSnapshot snapshot = Snapshot(7) with
+        {
+            Categories = [Snapshot(7).Categories[0] with { AiPolicy = storedPolicy }]
+        };
+        var context = CreateViewModel(snapshot, AccountRole.Admin);
+        context.Sync.OnSync = () => context.Repository.Snapshot = Snapshot(8);
+        await context.ViewModel.InitializeAsync(CancellationToken.None);
+
+        context.ViewModel.SelectedCategory = context.ViewModel.Categories[0];
+
+        Assert.Equal(FeedAiPolicySwitch.Disabled, context.ViewModel.CategoryManualSummaryPolicy);
+        Assert.Equal(FeedAiPolicySwitch.Enabled, context.ViewModel.CategoryAutoSummaryPolicy);
+        Assert.Equal(12, context.ViewModel.CategoryAiDailyEntryLimit);
+        Assert.Contains("12", context.ViewModel.CategoryAiUsageEstimate, StringComparison.Ordinal);
+        Assert.Contains("并发 1", context.ViewModel.CategoryAiUsageEstimate, StringComparison.Ordinal);
+
+        context.ViewModel.CategoryAutoTranslationPolicy = FeedAiPolicySwitch.Enabled;
+        context.ViewModel.CategoryTranslationTargetLanguage = "ja";
+        context.ViewModel.CategoryAiMaxConcurrency = 2;
+        await context.ViewModel.SaveCategoryCommand.ExecuteAsync();
+
+        FeedAiPolicy saved = Assert.IsType<FeedAiPolicy>(
+            Assert.Single(context.Admin.CategoryCalls).Input?.AiPolicy);
+        Assert.Equal(FeedAiPolicySwitch.Disabled, saved.ManualSummary);
+        Assert.Equal(FeedAiPolicySwitch.Enabled, saved.AutoSummary);
+        Assert.Equal(FeedAiPolicySwitch.Enabled, saved.AutoTranslation);
+        Assert.Equal("ja", saved.TranslationTargetLanguage);
+        Assert.Equal(12, saved.DailyEntryLimit);
+        Assert.Equal(2, saved.MaxConcurrency);
+    }
+
+    [Fact]
+    public async Task FeedEditorLoadsAndWritesAiPolicyOverrides()
+    {
+        FeedAiPolicy storedPolicy = FeedAiPolicy.Inherited with
+        {
+            AutoTranslation = FeedAiPolicySwitch.Enabled,
+            TranslationTargetLanguage = "ko",
+            MaxConcurrency = 3
+        };
+        FeedCatalogSnapshot snapshot = Snapshot(7) with
+        {
+            Feeds = [Snapshot(7).Feeds[0] with { AiPolicy = storedPolicy }]
+        };
+        var context = CreateViewModel(snapshot, AccountRole.Admin);
+        context.Sync.OnSync = () => context.Repository.Snapshot = Snapshot(8);
+        await context.ViewModel.InitializeAsync(CancellationToken.None);
+
+        context.ViewModel.SelectedFeed = context.ViewModel.Feeds[0];
+
+        Assert.Equal(FeedAiPolicySwitch.Enabled, context.ViewModel.FeedAutoTranslationPolicy);
+        Assert.Equal("ko", context.ViewModel.FeedTranslationTargetLanguage);
+        Assert.Equal(3, context.ViewModel.FeedAiMaxConcurrency);
+        Assert.Contains("20", context.ViewModel.FeedAiUsageEstimate, StringComparison.Ordinal);
+        Assert.Contains("并发 3", context.ViewModel.FeedAiUsageEstimate, StringComparison.Ordinal);
+
+        context.ViewModel.FeedManualSummaryPolicy = FeedAiPolicySwitch.Disabled;
+        context.ViewModel.FeedAutoSummaryPolicy = FeedAiPolicySwitch.Enabled;
+        context.ViewModel.FeedAiDailyEntryLimit = 8;
+        await context.ViewModel.SaveFeedCommand.ExecuteAsync();
+
+        FeedAiPolicy saved = Assert.IsType<FeedAiPolicy>(
+            Assert.Single(context.Admin.FeedCalls).Input?.AiPolicy);
+        Assert.Equal(FeedAiPolicySwitch.Disabled, saved.ManualSummary);
+        Assert.Equal(FeedAiPolicySwitch.Enabled, saved.AutoSummary);
+        Assert.Equal(FeedAiPolicySwitch.Enabled, saved.AutoTranslation);
+        Assert.Equal("ko", saved.TranslationTargetLanguage);
+        Assert.Equal(8, saved.DailyEntryLimit);
+        Assert.Equal(3, saved.MaxConcurrency);
+    }
+
+    [Fact]
     public async Task AdminInitializationLoadsFetchHealthWithRedactedErrorLabels()
     {
         var context = CreateViewModel(Snapshot(7), AccountRole.Admin);
@@ -332,7 +412,14 @@ public sealed class FeedAdminViewModelTests
         {
             Feeds =
             [
-                Feed("10000000-0000-4000-8000-000000000020", "第一源", 100),
+                Feed("10000000-0000-4000-8000-000000000020", "第一源", 100) with
+                {
+                    AiPolicy = FeedAiPolicy.Inherited with
+                    {
+                        ManualSummary = FeedAiPolicySwitch.Disabled,
+                        DailyEntryLimit = 6
+                    }
+                },
                 Feed("10000000-0000-4000-8000-000000000021", "第二源", 200)
             ]
         };
@@ -366,11 +453,13 @@ public sealed class FeedAdminViewModelTests
             {
                 Assert.Equal("update", call.Operation);
                 Assert.False(call.Input!.IsEnabled);
+                Assert.Equal(initial.Feeds[0].AiPolicy, call.Input.AiPolicy);
             },
             call =>
             {
                 Assert.Equal("update", call.Operation);
                 Assert.True(call.Input!.SortOrder > 200);
+                Assert.Equal(initial.Feeds[0].AiPolicy, call.Input.AiPolicy);
             },
             call => Assert.Equal("delete", call.Operation));
         Assert.Null(context.ViewModel.SelectedFeed);

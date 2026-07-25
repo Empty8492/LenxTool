@@ -688,6 +688,85 @@
                                                       Foreground="{DynamicResource Brush.TextPrimary}"
                                                       IsChecked="{Binding CategoryIsEnabled}"
                                                       Content="允许普通用户同步此分类" />
+
+                                            <Border Margin="0,18,0,0"
+                                                    Padding="14"
+                                                    Background="{DynamicResource Brush.SurfaceMuted}"
+                                                    CornerRadius="8">
+                                                <StackPanel>
+                                                    <TextBlock FontWeight="SemiBold" Text="AI 处理策略" />
+                                                    <TextBlock Margin="0,4,0,12"
+                                                               Style="{StaticResource MetaTextStyle}"
+                                                               Text="留空或选择继承时使用全局默认；自动处理默认关闭。"
+                                                               TextWrapping="Wrap" />
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="10" />
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="10" />
+                                                            <ColumnDefinition Width="*" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <StackPanel>
+                                                            <TextBlock Margin="0,0,0,6" Style="{StaticResource MetaTextStyle}" Text="手动摘要" />
+                                                            <ComboBox AutomationProperties.Name="分类手动摘要策略"
+                                                                      ItemsSource="{Binding AiPolicySwitchChoices}"
+                                                                      DisplayMemberPath="Label"
+                                                                      SelectedValuePath="Policy"
+                                                                      SelectedValue="{Binding CategoryManualSummaryPolicy}" />
+                                                        </StackPanel>
+                                                        <StackPanel Grid.Column="2">
+                                                            <TextBlock Margin="0,0,0,6" Style="{StaticResource MetaTextStyle}" Text="自动摘要" />
+                                                            <ComboBox AutomationProperties.Name="分类自动摘要策略"
+                                                                      ItemsSource="{Binding AiPolicySwitchChoices}"
+                                                                      DisplayMemberPath="Label"
+                                                                      SelectedValuePath="Policy"
+                                                                      SelectedValue="{Binding CategoryAutoSummaryPolicy}" />
+                                                        </StackPanel>
+                                                        <StackPanel Grid.Column="4">
+                                                            <TextBlock Margin="0,0,0,6" Style="{StaticResource MetaTextStyle}" Text="自动翻译" />
+                                                            <ComboBox AutomationProperties.Name="分类自动翻译策略"
+                                                                      ItemsSource="{Binding AiPolicySwitchChoices}"
+                                                                      DisplayMemberPath="Label"
+                                                                      SelectedValuePath="Policy"
+                                                                      SelectedValue="{Binding CategoryAutoTranslationPolicy}" />
+                                                        </StackPanel>
+                                                    </Grid>
+                                                    <Grid Margin="0,12,0,0">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="10" />
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="10" />
+                                                            <ColumnDefinition Width="*" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <StackPanel>
+                                                            <TextBlock Margin="0,0,0,6" Style="{StaticResource MetaTextStyle}" Text="翻译语言" />
+                                                            <ComboBox AutomationProperties.Name="分类翻译目标语言"
+                                                                      ItemsSource="{Binding AiLanguageChoices}"
+                                                                      DisplayMemberPath="Label"
+                                                                      SelectedValuePath="Language"
+                                                                      SelectedValue="{Binding CategoryTranslationTargetLanguage}" />
+                                                        </StackPanel>
+                                                        <StackPanel Grid.Column="2">
+                                                            <TextBlock Margin="0,0,0,6" Style="{StaticResource MetaTextStyle}" Text="每日条目（1～1000）" />
+                                                            <TextBox AutomationProperties.Name="分类每日 AI 条目上限"
+                                                                     Text="{Binding CategoryAiDailyEntryLimit, UpdateSourceTrigger=PropertyChanged}" />
+                                                        </StackPanel>
+                                                        <StackPanel Grid.Column="4">
+                                                            <TextBlock Margin="0,0,0,6" Style="{StaticResource MetaTextStyle}" Text="并发（1～4）" />
+                                                            <TextBox AutomationProperties.Name="分类 AI 并发上限"
+                                                                     Text="{Binding CategoryAiMaxConcurrency, UpdateSourceTrigger=PropertyChanged}" />
+                                                            </StackPanel>
+                                                        </Grid>
+                                                    <TextBlock Margin="0,12,0,0"
+                                                               AutomationProperties.Name="分类 AI 用量预估"
+                                                               Foreground="{DynamicResource Brush.Accent}"
+                                                               FontWeight="SemiBold"
+                                                               Text="{Binding CategoryAiUsageEstimate}"
+                                                               TextWrapping="Wrap" />
+                                                </StackPanel>
+                                            </Border>
                                             <Button Margin="0,18,0,0"
                                                     HorizontalAlignment="Left"
                                                     Style="{StaticResource AccentButtonStyle}"
@@ -912,6 +991,85 @@
                                                           ItemsSource="{Binding FullTextPolicyChoices}"
                                                           DisplayMemberPath="Label"
                                                           SelectedItem="{Binding SelectedFullTextPolicy}" />
+
+                                                <Border Margin="0,18,0,0"
+                                                        Padding="14"
+                                                        Background="{DynamicResource Brush.SurfaceMuted}"
+                                                        CornerRadius="8">
+                                                    <StackPanel>
+                                                        <TextBlock FontWeight="SemiBold" Text="AI 处理策略" />
+                                                        <TextBlock Margin="0,4,0,12"
+                                                                   Style="{StaticResource MetaTextStyle}"
+                                                                   Text="Feed 覆盖优先于分类；留空或继承时继续使用上级设置。"
+                                                                   TextWrapping="Wrap" />
+                                                        <Grid>
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="*" />
+                                                                <ColumnDefinition Width="10" />
+                                                                <ColumnDefinition Width="*" />
+                                                                <ColumnDefinition Width="10" />
+                                                                <ColumnDefinition Width="*" />
+                                                            </Grid.ColumnDefinitions>
+                                                            <StackPanel>
+                                                                <TextBlock Margin="0,0,0,6" Style="{StaticResource MetaTextStyle}" Text="手动摘要" />
+                                                                <ComboBox AutomationProperties.Name="Feed 手动摘要策略"
+                                                                          ItemsSource="{Binding AiPolicySwitchChoices}"
+                                                                          DisplayMemberPath="Label"
+                                                                          SelectedValuePath="Policy"
+                                                                          SelectedValue="{Binding FeedManualSummaryPolicy}" />
+                                                            </StackPanel>
+                                                            <StackPanel Grid.Column="2">
+                                                                <TextBlock Margin="0,0,0,6" Style="{StaticResource MetaTextStyle}" Text="自动摘要" />
+                                                                <ComboBox AutomationProperties.Name="Feed 自动摘要策略"
+                                                                          ItemsSource="{Binding AiPolicySwitchChoices}"
+                                                                          DisplayMemberPath="Label"
+                                                                          SelectedValuePath="Policy"
+                                                                          SelectedValue="{Binding FeedAutoSummaryPolicy}" />
+                                                            </StackPanel>
+                                                            <StackPanel Grid.Column="4">
+                                                                <TextBlock Margin="0,0,0,6" Style="{StaticResource MetaTextStyle}" Text="自动翻译" />
+                                                                <ComboBox AutomationProperties.Name="Feed 自动翻译策略"
+                                                                          ItemsSource="{Binding AiPolicySwitchChoices}"
+                                                                          DisplayMemberPath="Label"
+                                                                          SelectedValuePath="Policy"
+                                                                          SelectedValue="{Binding FeedAutoTranslationPolicy}" />
+                                                            </StackPanel>
+                                                        </Grid>
+                                                        <Grid Margin="0,12,0,0">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="*" />
+                                                                <ColumnDefinition Width="10" />
+                                                                <ColumnDefinition Width="*" />
+                                                                <ColumnDefinition Width="10" />
+                                                                <ColumnDefinition Width="*" />
+                                                            </Grid.ColumnDefinitions>
+                                                            <StackPanel>
+                                                                <TextBlock Margin="0,0,0,6" Style="{StaticResource MetaTextStyle}" Text="翻译语言" />
+                                                                <ComboBox AutomationProperties.Name="Feed 翻译目标语言"
+                                                                          ItemsSource="{Binding AiLanguageChoices}"
+                                                                          DisplayMemberPath="Label"
+                                                                          SelectedValuePath="Language"
+                                                                          SelectedValue="{Binding FeedTranslationTargetLanguage}" />
+                                                            </StackPanel>
+                                                            <StackPanel Grid.Column="2">
+                                                                <TextBlock Margin="0,0,0,6" Style="{StaticResource MetaTextStyle}" Text="每日条目（1～1000）" />
+                                                                <TextBox AutomationProperties.Name="Feed 每日 AI 条目上限"
+                                                                         Text="{Binding FeedAiDailyEntryLimit, UpdateSourceTrigger=PropertyChanged}" />
+                                                            </StackPanel>
+                                                            <StackPanel Grid.Column="4">
+                                                                <TextBlock Margin="0,0,0,6" Style="{StaticResource MetaTextStyle}" Text="并发（1～4）" />
+                                                                <TextBox AutomationProperties.Name="Feed AI 并发上限"
+                                                                         Text="{Binding FeedAiMaxConcurrency, UpdateSourceTrigger=PropertyChanged}" />
+                                                                </StackPanel>
+                                                            </Grid>
+                                                        <TextBlock Margin="0,12,0,0"
+                                                                   AutomationProperties.Name="Feed AI 用量预估"
+                                                                   Foreground="{DynamicResource Brush.Accent}"
+                                                                   FontWeight="SemiBold"
+                                                                   Text="{Binding FeedAiUsageEstimate}"
+                                                                   TextWrapping="Wrap" />
+                                                    </StackPanel>
+                                                </Border>
 
                                                 <CheckBox Margin="0,14,0,0"
                                                           Foreground="{DynamicResource Brush.TextPrimary}"

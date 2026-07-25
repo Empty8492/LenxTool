@@ -3,7 +3,8 @@ namespace LenxTool.Core.Models;
 public sealed record FeedCategoryInput(
     string Name,
     int SortOrder,
-    bool IsEnabled);
+    bool IsEnabled,
+    FeedAiPolicy? AiPolicy = null);
 
 public sealed record FeedCatalogItemInput(
     string OriginalUrl,
@@ -14,4 +15,5 @@ public sealed record FeedCatalogItemInput(
     int RefreshIntervalMinutes,
     int SortOrder,
     bool IsEnabled,
-    FeedFullTextPolicy FullTextPolicy = FeedFullTextPolicy.None);
+    FeedFullTextPolicy FullTextPolicy = FeedFullTextPolicy.None,
+    FeedAiPolicy? AiPolicy = null);

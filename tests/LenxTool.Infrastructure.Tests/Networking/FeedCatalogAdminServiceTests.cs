@@ -96,6 +96,38 @@ public sealed class FeedCatalogAdminServiceTests
     }
 
     [Fact]
+    public async Task InvalidAiPolicyIsRejectedBeforeCatalogMutation()
+    {
+        int adminCalls = 0;
+        var handler = new StubHandler((request, cancellationToken) =>
+        {
+            if (request.RequestUri?.AbsolutePath == "/v1/auth/login")
+                return Task.FromResult(JsonResponse(HttpStatusCode.OK, LoginJson("ADMIN")));
+            adminCalls++;
+            return Task.FromResult(JsonResponse(HttpStatusCode.Created, "{\"catalogVersion\":2}"));
+        });
+        using WorkerAccountSessionService account = CreateAccount(handler);
+        await account.LoginAsync("owner", "password", CancellationToken.None);
+        var service = new FeedCatalogAdminService(account);
+        FeedCatalogItemInput input = new(
+            "https://feeds.example/rss.xml",
+            "Example",
+            "https://feeds.example/",
+            null,
+            FeedViewKind.Article,
+            60,
+            100,
+            true,
+            FeedFullTextPolicy.None,
+            FeedAiPolicy.Inherited with { DailyEntryLimit = 0 });
+
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
+            () => service.CreateFeedAsync(input, 1, CancellationToken.None));
+
+        Assert.Equal(0, adminCalls);
+    }
+
+    [Fact]
     public async Task CreateCategorySendsVersionAndIdempotencyHeadersAndReturnsNewVersion()
     {
         string? idempotencyKey = null;
@@ -113,6 +145,13 @@ public sealed class FeedCatalogAdminServiceTests
             Assert.Equal("技术", body.RootElement.GetProperty("name").GetString());
             Assert.Equal(100, body.RootElement.GetProperty("sortOrder").GetInt32());
             Assert.True(body.RootElement.GetProperty("isEnabled").GetBoolean());
+            JsonElement aiPolicy = body.RootElement.GetProperty("aiPolicy");
+            Assert.Equal("DISABLED", aiPolicy.GetProperty("manualSummary").GetString());
+            Assert.Equal("ENABLED", aiPolicy.GetProperty("autoSummary").GetString());
+            Assert.Equal("INHERIT", aiPolicy.GetProperty("autoTranslation").GetString());
+            Assert.Equal("ja", aiPolicy.GetProperty("translationTargetLanguage").GetString());
+            Assert.Equal(12, aiPolicy.GetProperty("dailyEntryLimit").GetInt32());
+            Assert.Equal(2, aiPolicy.GetProperty("maxConcurrency").GetInt32());
             return JsonResponse(HttpStatusCode.Created, "{\"catalogVersion\":8,\"category\":{}}");
         });
         using WorkerAccountSessionService account = CreateAccount(handler);
@@ -120,7 +159,17 @@ public sealed class FeedCatalogAdminServiceTests
         var service = new FeedCatalogAdminService(account);
 
         long version = await service.CreateCategoryAsync(
-            new("技术", 100, true),
+            new(
+                "技术",
+                100,
+                true,
+                new(
+                    FeedAiPolicySwitch.Disabled,
+                    FeedAiPolicySwitch.Enabled,
+                    FeedAiPolicySwitch.Inherit,
+                    "ja",
+                    12,
+                    2)),
             7,
             CancellationToken.None);
 

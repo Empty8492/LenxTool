@@ -19,6 +19,7 @@ public sealed partial class FeedAdminViewModel
         FeedRefreshIntervalMinutes = 60;
         FeedSortOrder = NextSortOrder(Feeds.Select(feed => feed.SortOrder));
         FeedIsEnabled = true;
+        ResetFeedAiPolicy();
         PendingDeleteFeedId = null;
         ClearDiscoveryPreview();
         Status = "先输入站点或 Feed URL 并执行安全验证。";
@@ -76,7 +77,8 @@ public sealed partial class FeedAdminViewModel
             SelectedFullTextPolicy.Policy,
             FeedRefreshIntervalMinutes,
             FeedSortOrder,
-            FeedIsEnabled);
+            FeedIsEnabled,
+            CreateFeedAiPolicy());
         return ExecuteMutationAsync(
             (version, token) => SelectedFeed is null
                 ? _adminService.CreateFeedAsync(input, version, token)

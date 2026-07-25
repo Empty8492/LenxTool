@@ -187,6 +187,7 @@ public sealed partial class FeedAdminViewModel : PageViewModel
             CategoryNameInput = value.Name;
             CategorySortOrder = value.SortOrder;
             CategoryIsEnabled = value.IsEnabled;
+            ApplyCategoryAiPolicy(value.AiPolicy);
             PendingDeleteCategoryId = null;
         }
     }
@@ -276,7 +277,11 @@ public sealed partial class FeedAdminViewModel : PageViewModel
         get => _selectedCategoryId;
         set
         {
-            if (SetProperty(ref _selectedCategoryId, value)) NotifyFeedCommands();
+            if (SetProperty(ref _selectedCategoryId, value))
+            {
+                NotifyFeedCommands();
+                OnPropertyChanged(nameof(FeedAiUsageEstimate));
+            }
         }
     }
 

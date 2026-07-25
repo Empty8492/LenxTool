@@ -19,7 +19,7 @@ public sealed class FeedCatalogAdminService(
             HttpMethod.Post,
             "/v1/admin/feed-categories",
             expectedCatalogVersion,
-            new { input.Name, input.SortOrder, input.IsEnabled },
+            ToPayload(input),
             cancellationToken);
     }
 
@@ -35,7 +35,7 @@ public sealed class FeedCatalogAdminService(
             HttpMethod.Patch,
             $"/v1/admin/feed-categories/{id}",
             expectedCatalogVersion,
-            new { input.Name, input.SortOrder, input.IsEnabled },
+            ToPayload(input),
             cancellationToken);
     }
 
@@ -176,6 +176,14 @@ public sealed class FeedCatalogAdminService(
         return result.CatalogVersion;
     }
 
+    private static object ToPayload(FeedCategoryInput input) => new
+    {
+        input.Name,
+        input.SortOrder,
+        input.IsEnabled,
+        AiPolicy = ToAiPolicyPayload(input.AiPolicy ?? FeedAiPolicy.Inherited)
+    };
+
     private static object ToPayload(FeedCatalogItemInput input) => new
     {
         input.OriginalUrl,
@@ -186,7 +194,8 @@ public sealed class FeedCatalogAdminService(
         FullTextPolicy = ToWireValue(input.FullTextPolicy),
         input.RefreshIntervalMinutes,
         input.SortOrder,
-        input.IsEnabled
+        input.IsEnabled,
+        AiPolicy = ToAiPolicyPayload(input.AiPolicy ?? FeedAiPolicy.Inherited)
     };
 
     private static Dictionary<string, object?> ToBatchPayload(
@@ -243,7 +252,8 @@ public sealed class FeedCatalogAdminService(
         {
             ["name"] = input.Name,
             ["sortOrder"] = input.SortOrder,
-            ["isEnabled"] = input.IsEnabled
+            ["isEnabled"] = input.IsEnabled,
+            ["aiPolicy"] = ToAiPolicyPayload(input.AiPolicy ?? FeedAiPolicy.Inherited)
         };
     }
 
@@ -264,7 +274,8 @@ public sealed class FeedCatalogAdminService(
             ["fullTextPolicy"] = ToWireValue(input.FullTextPolicy),
             ["refreshIntervalMinutes"] = input.RefreshIntervalMinutes,
             ["sortOrder"] = input.SortOrder,
-            ["isEnabled"] = input.IsEnabled
+            ["isEnabled"] = input.IsEnabled,
+            ["aiPolicy"] = ToAiPolicyPayload(input.AiPolicy ?? FeedAiPolicy.Inherited)
         };
         if (operation.CategoryOperationId is null)
         {
@@ -342,6 +353,7 @@ public sealed class FeedCatalogAdminService(
         ArgumentNullException.ThrowIfNull(input);
         ValidateText(input.Name, 80, nameof(input.Name));
         ValidateSortOrder(input.SortOrder, nameof(input.SortOrder));
+        ValidateAiPolicy(input.AiPolicy ?? FeedAiPolicy.Inherited);
     }
 
     private static void ValidateFeed(FeedCatalogItemInput input)
@@ -358,6 +370,32 @@ public sealed class FeedCatalogAdminService(
         if (input.RefreshIntervalMinutes is < 5 or > 1440)
             throw new ArgumentOutOfRangeException(nameof(input), "RefreshIntervalMinutes is invalid.");
         ValidateSortOrder(input.SortOrder, nameof(input.SortOrder));
+        ValidateAiPolicy(input.AiPolicy ?? FeedAiPolicy.Inherited);
+    }
+
+    private static object ToAiPolicyPayload(FeedAiPolicy policy) => new
+    {
+        ManualSummary = ToWireValue(policy.ManualSummary),
+        AutoSummary = ToWireValue(policy.AutoSummary),
+        AutoTranslation = ToWireValue(policy.AutoTranslation),
+        policy.TranslationTargetLanguage,
+        policy.DailyEntryLimit,
+        policy.MaxConcurrency
+    };
+
+    private static void ValidateAiPolicy(FeedAiPolicy policy)
+    {
+        ArgumentNullException.ThrowIfNull(policy);
+        if (!Enum.IsDefined(policy.ManualSummary)
+            || !Enum.IsDefined(policy.AutoSummary)
+            || !Enum.IsDefined(policy.AutoTranslation)
+            || (policy.TranslationTargetLanguage is not null
+                && policy.TranslationTargetLanguage is not ("zh-Hans" or "en" or "ja" or "ko"))
+            || policy.DailyEntryLimit is < 1 or > 1000
+            || policy.MaxConcurrency is < 1 or > 4)
+        {
+            throw new ArgumentOutOfRangeException(nameof(policy), "Feed AI policy is invalid.");
+        }
     }
 
     private static string ValidateId(string value, string parameterName)
@@ -373,6 +411,14 @@ public sealed class FeedCatalogAdminService(
         FeedFullTextPolicy.None => "NONE",
         FeedFullTextPolicy.OnOpen => "ON_OPEN",
         FeedFullTextPolicy.Background => "BACKGROUND",
+        _ => throw new ArgumentOutOfRangeException(nameof(policy))
+    };
+
+    private static string ToWireValue(FeedAiPolicySwitch policy) => policy switch
+    {
+        FeedAiPolicySwitch.Inherit => "INHERIT",
+        FeedAiPolicySwitch.Enabled => "ENABLED",
+        FeedAiPolicySwitch.Disabled => "DISABLED",
         _ => throw new ArgumentOutOfRangeException(nameof(policy))
     };
 
