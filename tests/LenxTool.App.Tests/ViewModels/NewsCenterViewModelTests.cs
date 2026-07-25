@@ -660,6 +660,7 @@ public sealed class NewsCenterViewModelTests
             "default",
             true,
             false,
+            false,
             42,
             "稍后回看",
             TimelineNow);
@@ -716,6 +717,7 @@ public sealed class NewsCenterViewModelTests
             entry.Id,
             "default",
             true,
+            false,
             false,
             10,
             string.Empty,
@@ -1567,11 +1569,20 @@ public sealed class NewsCenterViewModelTests
                 throw new InvalidOperationException("Simulated entry state write failure.");
             }
             EntryState current = States.GetValueOrDefault(entryId)
-                ?? new(entryId, localProfile, false, false, 0, string.Empty, TimelineNow);
+                ?? new(
+                    entryId,
+                    localProfile,
+                    false,
+                    false,
+                    false,
+                    0,
+                    string.Empty,
+                    TimelineNow);
             EntryState updated = current with
             {
                 IsRead = patch.IsRead ?? current.IsRead,
                 IsStarred = patch.IsStarred ?? current.IsStarred,
+                IsHidden = patch.IsHidden ?? current.IsHidden,
                 Progress = patch.Progress ?? current.Progress,
                 Note = patch.Note ?? current.Note,
                 UpdatedAt = TimelineNow
@@ -1711,6 +1722,24 @@ public sealed class NewsCenterViewModelTests
                 ? SeedTag(normalized, color)
                 : existing with { Name = normalized, Color = color };
             Tags[tag.Id] = tag;
+            return tag;
+        }
+
+        public async Task<TagItem> AddTagAsync(
+            string entityType,
+            string entityId,
+            string name,
+            string color,
+            CancellationToken cancellationToken)
+        {
+            Assert.Equal(EntityType, entityType);
+            TagItem tag = await UpsertTagAsync(name, color, cancellationToken);
+            if (!_entityTags.TryGetValue(entityId, out HashSet<string>? tagIds))
+            {
+                tagIds = new(StringComparer.Ordinal);
+                _entityTags[entityId] = tagIds;
+            }
+            tagIds.Add(tag.Id);
             return tag;
         }
 

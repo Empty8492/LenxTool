@@ -188,6 +188,50 @@ public sealed class FavoriteRepositoryTests : IDisposable
                 CancellationToken.None));
     }
 
+    [Fact]
+    public async Task AddTagPreservesExistingTagsAndIsIdempotent()
+    {
+        using SqliteDatabase database = await CreateDatabaseAsync();
+        var repository = new FavoriteRepository(database);
+        TagItem existing = await repository.UpsertTagAsync(
+            "Existing",
+            "#111111",
+            CancellationToken.None);
+        await repository.SetTagsAsync(
+            "feed_entry",
+            "entry-automation",
+            [existing.Id],
+            CancellationToken.None);
+        TagItem userConfigured = await repository.UpsertTagAsync(
+            "AI",
+            "#123456",
+            CancellationToken.None);
+
+        TagItem first = await repository.AddTagAsync(
+            "feed_entry",
+            "entry-automation",
+            "  ＡＩ  ",
+            "#4B6B88",
+            CancellationToken.None);
+        TagItem replay = await repository.AddTagAsync(
+            "feed_entry",
+            "entry-automation",
+            "AI",
+            "#4B6B88",
+            CancellationToken.None);
+
+        Assert.Equal(first.Id, replay.Id);
+        Assert.Equal(userConfigured.Id, first.Id);
+        Assert.Equal("#123456", replay.Color);
+        Assert.Equal(
+            ["AI", "Existing"],
+            (await repository.GetTagsForEntityAsync(
+                "feed_entry",
+                "entry-automation",
+                CancellationToken.None))
+            .Select(tag => tag.Name));
+    }
+
     private async Task<SqliteDatabase> CreateDatabaseAsync()
     {
         var database = new SqliteDatabase(

@@ -336,11 +336,20 @@ public sealed class HistoryViewModelTests
             CancellationToken cancellationToken)
         {
             EntryState current = States.GetValueOrDefault(entryId)
-                ?? new(entryId, localProfile, false, false, 0, string.Empty, DateTimeOffset.UtcNow);
+                ?? new(
+                    entryId,
+                    localProfile,
+                    false,
+                    false,
+                    false,
+                    0,
+                    string.Empty,
+                    DateTimeOffset.UtcNow);
             EntryState updated = current with
             {
                 IsRead = patch.IsRead ?? current.IsRead,
                 IsStarred = patch.IsStarred ?? current.IsStarred,
+                IsHidden = patch.IsHidden ?? current.IsHidden,
                 Progress = patch.Progress ?? current.Progress,
                 Note = patch.Note ?? current.Note,
                 UpdatedAt = DateTimeOffset.UtcNow
@@ -424,6 +433,23 @@ public sealed class HistoryViewModelTests
                 item => string.Equals(item.Name, normalized, StringComparison.OrdinalIgnoreCase))
                 ?? SeedTag(normalized);
             return Task.FromResult(tag);
+        }
+
+        public async Task<TagItem> AddTagAsync(
+            string entityType,
+            string entityId,
+            string name,
+            string color,
+            CancellationToken cancellationToken)
+        {
+            TagItem tag = await UpsertTagAsync(name, color, cancellationToken);
+            if (!_entityTags.TryGetValue(entityId, out HashSet<string>? tagIds))
+            {
+                tagIds = new(StringComparer.Ordinal);
+                _entityTags[entityId] = tagIds;
+            }
+            tagIds.Add(tag.Id);
+            return tag;
         }
 
         public Task<IReadOnlyList<TagItem>> GetTagsAsync(CancellationToken cancellationToken) =>

@@ -259,6 +259,42 @@ public sealed class FeedEntryRepositoryTests : IDisposable
         Assert.Equal(["active"], page.Items.Select(item => item.ExternalId));
     }
 
+    [Fact]
+    public async Task QueryExcludesHiddenEntriesOnlyForTheSelectedProfile()
+    {
+        using SqliteDatabase database = await CreateDatabaseAsync();
+        var repository = new FeedEntryRepository(database);
+        FeedEntry visible = Entry("visible", "Visible", "visible", Now.AddHours(-1));
+        FeedEntry hidden = Entry("hidden", "Hidden", "hidden", Now.AddHours(-2));
+        await repository.UpsertAsync(
+            FeedId,
+            [visible, hidden],
+            CancellationToken.None);
+        await new EntryStateRepository(database).PatchAsync(
+            hidden.Id,
+            "default",
+            new(IsHidden: true),
+            CancellationToken.None);
+
+        FeedEntryPage defaultPage = await repository.QueryAsync(
+            Query(),
+            CancellationToken.None);
+        FeedEntryPage includingHidden = await repository.QueryAsync(
+            Query(includeHidden: true),
+            CancellationToken.None);
+        FeedEntryPage otherProfile = await repository.QueryAsync(
+            Query(localProfile: "secondary"),
+            CancellationToken.None);
+
+        Assert.Equal(["visible"], defaultPage.Items.Select(item => item.ExternalId));
+        Assert.Equal(
+            ["visible", "hidden"],
+            includingHidden.Items.Select(item => item.ExternalId));
+        Assert.Equal(
+            ["visible", "hidden"],
+            otherProfile.Items.Select(item => item.ExternalId));
+    }
+
     public void Dispose()
     {
         SqliteConnection.ClearAllPools();
@@ -327,7 +363,8 @@ public sealed class FeedEntryRepositoryTests : IDisposable
         bool activeOnly = false,
         bool favoritesOnly = false,
         string? tagId = null,
-        string localProfile = "default") => new(
+        string localProfile = "default",
+        bool includeHidden = false) => new(
             searchText,
             feedId,
             categoryId,
@@ -339,5 +376,6 @@ public sealed class FeedEntryRepositoryTests : IDisposable
             activeOnly,
             favoritesOnly,
             tagId,
-            localProfile);
+            localProfile,
+            includeHidden);
 }

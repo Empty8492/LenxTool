@@ -48,7 +48,8 @@ public sealed record FeedEntryQuery(
     bool ActiveOnly = false,
     bool FavoritesOnly = false,
     string? TagId = null,
-    string LocalProfile = "default");
+    string LocalProfile = "default",
+    bool IncludeHidden = false);
 
 public sealed record FeedEntryPage(
     IReadOnlyList<FeedEntry> Items,

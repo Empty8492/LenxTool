@@ -368,6 +368,14 @@ public sealed class DashboardViewModelTests
             CancellationToken cancellationToken) =>
             throw new NotSupportedException();
 
+        public Task<TagItem> AddTagAsync(
+            string entityType,
+            string entityId,
+            string name,
+            string color,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
         public Task<IReadOnlyList<TagItem>> GetTagsAsync(
             CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<TagItem>>([]);

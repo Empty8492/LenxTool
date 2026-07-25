@@ -22,7 +22,12 @@ public sealed class EntryStateRepositoryTests : IDisposable
         EntryState first = await repository.PatchAsync(
             "entry-1",
             "default",
-            new(IsRead: true, IsStarred: true, Progress: 42.5, Note: "keep"),
+            new(
+                IsRead: true,
+                IsStarred: true,
+                IsHidden: true,
+                Progress: 42.5,
+                Note: "keep"),
             CancellationToken.None);
         EntryState partial = await repository.PatchAsync(
             "entry-1",
@@ -37,14 +42,17 @@ public sealed class EntryStateRepositoryTests : IDisposable
 
         Assert.True(first.IsRead);
         Assert.True(first.IsStarred);
+        Assert.True(first.IsHidden);
         Assert.Equal(42.5, first.Progress);
         Assert.Equal("keep", first.Note);
         Assert.False(partial.IsRead);
         Assert.True(partial.IsStarred);
+        Assert.True(partial.IsHidden);
         Assert.Equal(42.5, partial.Progress);
         Assert.Equal("keep", partial.Note);
         Assert.Equal("work", otherProfile.LocalProfile);
         Assert.False(otherProfile.IsRead);
+        Assert.False(otherProfile.IsHidden);
 
         IReadOnlyDictionary<string, EntryState> states = await repository.GetAsync(
             ["entry-1", "missing"],

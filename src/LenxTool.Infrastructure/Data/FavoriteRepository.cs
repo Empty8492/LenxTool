@@ -181,6 +181,83 @@ public sealed class FavoriteRepository(SqliteDatabase database) : IFavoriteRepos
         return item;
     }
 
+    public async Task<TagItem> AddTagAsync(
+        string entityType,
+        string entityId,
+        string name,
+        string color,
+        CancellationToken cancellationToken)
+    {
+        ValidateEntity(entityType, entityId);
+        string normalizedName = NormalizeTagName(name);
+        ValidateTagColor(color);
+        await using SqliteConnection connection = await database.OpenConnectionAsync(cancellationToken)
+            .ConfigureAwait(false);
+        await using SqliteTransaction transaction = (SqliteTransaction)await connection
+            .BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        await using SqliteCommand command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            INSERT INTO tags(id, name, color, created_at)
+            VALUES($id, $name, $color, $createdAt)
+            ON CONFLICT(name) DO NOTHING;
+            """;
+        command.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
+        command.Parameters.AddWithValue("$name", normalizedName);
+        command.Parameters.AddWithValue("$color", color);
+        command.Parameters.AddWithValue(
+            "$createdAt",
+            FormatTimestamp(DateTimeOffset.UtcNow));
+        await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        TagItem item = await ReadTagAsync(
+            connection,
+            transaction,
+            normalizedName,
+            cancellationToken).ConfigureAwait(false)
+            ?? throw new InvalidOperationException("标签写入后无法读取。");
+
+        command.Parameters.Clear();
+        command.CommandText = """
+            INSERT OR IGNORE INTO entity_tags(entity_type, entity_id, tag_id)
+            SELECT $entityType, $entityId, $tagId
+            WHERE (
+                SELECT COUNT(*)
+                FROM entity_tags
+                WHERE entity_type=$entityType AND entity_id=$entityId
+            ) < $maximumTags;
+            """;
+        command.Parameters.AddWithValue("$entityType", entityType);
+        command.Parameters.AddWithValue("$entityId", entityId);
+        command.Parameters.AddWithValue("$tagId", item.Id);
+        command.Parameters.AddWithValue("$maximumTags", MaximumTagsPerEntity);
+        await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+
+        command.Parameters.Clear();
+        command.CommandText = """
+            SELECT EXISTS(
+                SELECT 1
+                FROM entity_tags
+                WHERE entity_type=$entityType
+                  AND entity_id=$entityId
+                  AND tag_id=$tagId);
+            """;
+        command.Parameters.AddWithValue("$entityType", entityType);
+        command.Parameters.AddWithValue("$entityId", entityId);
+        command.Parameters.AddWithValue("$tagId", item.Id);
+        bool attached =
+            (long)(await command.ExecuteScalarAsync(cancellationToken)
+                .ConfigureAwait(false))! == 1;
+        if (!attached)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(name),
+                "实体标签数量已达到上限。");
+        }
+
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return item;
+    }
+
     public async Task<IReadOnlyList<TagItem>> GetTagsAsync(
         CancellationToken cancellationToken)
     {

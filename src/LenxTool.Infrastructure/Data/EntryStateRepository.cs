@@ -36,7 +36,8 @@ public sealed class EntryStateRepository(SqliteDatabase database) : IEntryStateR
         }
         command.Parameters.AddWithValue("$profile", localProfile);
         command.CommandText = $"""
-            SELECT entry_id, local_profile, is_read, is_starred, progress, note, updated_at
+            SELECT entry_id, local_profile, is_read, is_starred, is_hidden,
+                   progress, note, updated_at
             FROM user_entry_states
             WHERE local_profile=$profile AND entry_id IN ({string.Join(", ", parameters)});
             """;
@@ -81,6 +82,7 @@ public sealed class EntryStateRepository(SqliteDatabase database) : IEntryStateR
             localProfile,
             patch.IsRead ?? current?.IsRead ?? false,
             patch.IsStarred ?? current?.IsStarred ?? false,
+            patch.IsHidden ?? current?.IsHidden ?? false,
             patch.Progress ?? current?.Progress ?? 0,
             patch.Note ?? current?.Note ?? string.Empty,
             now);
@@ -89,11 +91,15 @@ public sealed class EntryStateRepository(SqliteDatabase database) : IEntryStateR
         command.Transaction = transaction;
         command.CommandText = """
             INSERT INTO user_entry_states(
-                entry_id, local_profile, is_read, is_starred, progress, note, updated_at)
-            VALUES($entryId, $profile, $isRead, $isStarred, $progress, $note, $updatedAt)
+                entry_id, local_profile, is_read, is_starred, is_hidden,
+                progress, note, updated_at)
+            VALUES(
+                $entryId, $profile, $isRead, $isStarred, $isHidden,
+                $progress, $note, $updatedAt)
             ON CONFLICT(entry_id, local_profile) DO UPDATE SET
                 is_read=excluded.is_read,
                 is_starred=excluded.is_starred,
+                is_hidden=excluded.is_hidden,
                 progress=excluded.progress,
                 note=excluded.note,
                 updated_at=excluded.updated_at;
@@ -102,6 +108,7 @@ public sealed class EntryStateRepository(SqliteDatabase database) : IEntryStateR
         command.Parameters.AddWithValue("$profile", updated.LocalProfile);
         command.Parameters.AddWithValue("$isRead", updated.IsRead);
         command.Parameters.AddWithValue("$isStarred", updated.IsStarred);
+        command.Parameters.AddWithValue("$isHidden", updated.IsHidden);
         command.Parameters.AddWithValue("$progress", updated.Progress);
         command.Parameters.AddWithValue("$note", updated.Note);
         command.Parameters.AddWithValue("$updatedAt", FormatTimestamp(updated.UpdatedAt));
@@ -120,7 +127,8 @@ public sealed class EntryStateRepository(SqliteDatabase database) : IEntryStateR
         await using SqliteCommand command = connection.CreateCommand();
         command.Transaction = transaction;
         command.CommandText = """
-            SELECT entry_id, local_profile, is_read, is_starred, progress, note, updated_at
+            SELECT entry_id, local_profile, is_read, is_starred, is_hidden,
+                   progress, note, updated_at
             FROM user_entry_states
             WHERE entry_id=$entryId AND local_profile=$profile;
             """;
@@ -138,9 +146,10 @@ public sealed class EntryStateRepository(SqliteDatabase database) : IEntryStateR
         reader.GetString(1),
         reader.GetInt64(2) != 0,
         reader.GetInt64(3) != 0,
-        reader.GetDouble(4),
-        reader.GetString(5),
-        DateTimeOffset.Parse(reader.GetString(6), CultureInfo.InvariantCulture));
+        reader.GetInt64(4) != 0,
+        reader.GetDouble(5),
+        reader.GetString(6),
+        DateTimeOffset.Parse(reader.GetString(7), CultureInfo.InvariantCulture));
 
     private static void ValidateEntryId(string value)
     {

@@ -10,7 +10,7 @@ public sealed partial class SqliteDatabase(
     AppPaths paths,
     ILogger<SqliteDatabase> logger) : IDisposable
 {
-    private const int CurrentSchemaVersion = 12;
+    private const int CurrentSchemaVersion = 13;
     private readonly SemaphoreSlim _initializationGate = new(1, 1);
     private bool _initialized;
     private bool _disposed;
@@ -268,6 +268,18 @@ public sealed partial class SqliteDatabase(
                 command.CommandText = "INSERT INTO schema_versions(version, applied_at, checksum) VALUES (12, $appliedAt, $checksum);";
                 command.Parameters.AddWithValue("$appliedAt", DateTimeOffset.UtcNow.ToString("O"));
                 command.Parameters.AddWithValue("$checksum", "lenx-schema-v12-feed-automation-runs");
+                await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                version = 12;
+            }
+
+            if (version < 13)
+            {
+                command.CommandText = MigrationThirteenSql;
+                command.Parameters.Clear();
+                await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                command.CommandText = "INSERT INTO schema_versions(version, applied_at, checksum) VALUES (13, $appliedAt, $checksum);";
+                command.Parameters.AddWithValue("$appliedAt", DateTimeOffset.UtcNow.ToString("O"));
+                command.Parameters.AddWithValue("$checksum", "lenx-schema-v13-private-hidden-state");
                 await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
             }
         }
@@ -862,5 +874,14 @@ public sealed partial class SqliteDatabase(
             ON feed_automation_action_runs(
                 entry_id, created_at, rule_priority DESC,
                 rule_conflict_order, rule_id, action_order);
+        """;
+
+    private const string MigrationThirteenSql = """
+        ALTER TABLE user_entry_states
+            ADD COLUMN is_hidden INTEGER NOT NULL DEFAULT 0
+            CHECK(is_hidden IN (0, 1));
+
+        CREATE INDEX ix_user_entry_states_profile_hidden
+            ON user_entry_states(local_profile, is_hidden, entry_id);
         """;
 }

@@ -134,6 +134,9 @@ public partial class App : Application
         services.AddSingleton<
             IFeedAutomationActionQueueRepository,
             FeedAutomationActionQueueRepository>();
+        services.AddSingleton<
+            IFeedAutomationLocalActionService,
+            FeedAutomationLocalActionService>();
         services.AddSingleton(FeedAiAutomationOptions.Default);
         services.AddSingleton<FeedAiAutomationQueueService>();
         services.AddSingleton<IFeedAiAutomationQueueService>(static services =>

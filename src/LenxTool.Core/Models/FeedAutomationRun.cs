@@ -16,6 +16,12 @@ public enum FeedAutomationActionRunOutcome
     Failed
 }
 
+public enum FeedAutomationLocalActionResult
+{
+    Completed,
+    EntryMissing
+}
+
 public sealed record FeedAutomationRuleRun(
     string EntryId,
     string RuleId,

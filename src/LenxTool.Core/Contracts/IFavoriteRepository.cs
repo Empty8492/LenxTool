@@ -32,6 +32,13 @@ public interface IFavoriteRepository
         string color,
         CancellationToken cancellationToken);
 
+    Task<TagItem> AddTagAsync(
+        string entityType,
+        string entityId,
+        string name,
+        string color,
+        CancellationToken cancellationToken);
+
     Task<IReadOnlyList<TagItem>> GetTagsAsync(
         CancellationToken cancellationToken);
 

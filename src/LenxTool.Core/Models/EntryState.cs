@@ -5,6 +5,7 @@ public sealed record EntryState(
     string LocalProfile,
     bool IsRead,
     bool IsStarred,
+    bool IsHidden,
     double Progress,
     string Note,
     DateTimeOffset UpdatedAt);
@@ -12,5 +13,6 @@ public sealed record EntryState(
 public sealed record EntryStatePatch(
     bool? IsRead = null,
     bool? IsStarred = null,
+    bool? IsHidden = null,
     double? Progress = null,
     string? Note = null);

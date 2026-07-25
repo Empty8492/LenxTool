@@ -76,6 +76,12 @@ public sealed class FeedEntryRepository(SqliteDatabase database) : IFeedEntryRep
             WHERE ($feedId IS NULL OR e.feed_id=$feedId)
               AND ($categoryId IS NULL OR f.category_id=$categoryId)
               AND ($activeOnly = 0 OR (f.is_enabled = 1 AND (f.category_id IS NULL OR c.is_enabled = 1)))
+              AND ($includeHidden = 1 OR NOT EXISTS (
+                    SELECT 1
+                    FROM user_entry_states private_hidden
+                    WHERE private_hidden.entry_id=e.id
+                      AND private_hidden.local_profile=$localProfile
+                      AND private_hidden.is_hidden=1))
               AND ($publishedFrom IS NULL OR julianday(COALESCE(e.published_at, e.updated_at, e.fetched_at)) >= julianday($publishedFrom))
               AND ($publishedBefore IS NULL OR julianday(COALESCE(e.published_at, e.updated_at, e.fetched_at)) < julianday($publishedBefore))
               AND (
@@ -120,6 +126,7 @@ public sealed class FeedEntryRepository(SqliteDatabase database) : IFeedEntryRep
         command.Parameters.AddWithValue("$feedId", (object?)query.FeedId ?? DBNull.Value);
         command.Parameters.AddWithValue("$categoryId", (object?)query.CategoryId ?? DBNull.Value);
         command.Parameters.AddWithValue("$activeOnly", query.ActiveOnly ? 1 : 0);
+        command.Parameters.AddWithValue("$includeHidden", query.IncludeHidden ? 1 : 0);
         command.Parameters.AddWithValue("$publishedFrom", FormatNullableTimestamp(query.PublishedFrom));
         command.Parameters.AddWithValue("$publishedBefore", FormatNullableTimestamp(query.PublishedBefore));
         command.Parameters.AddWithValue("$readFilter", (int)query.ReadFilter);
