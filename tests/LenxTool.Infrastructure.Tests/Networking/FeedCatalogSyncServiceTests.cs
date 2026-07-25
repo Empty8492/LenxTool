@@ -46,6 +46,50 @@ public sealed class FeedCatalogSyncServiceTests
     }
 
     [Fact]
+    public async Task SyncMapsVersionedAiPolicyDefaultsAndResourceOverrides()
+    {
+        var handler = new StubHandler((request, cancellationToken) => Task.FromResult(
+            request.RequestUri?.AbsolutePath == "/v1/auth/login"
+                ? LoginResponse("USER")
+                : PolicyCatalogResponse(autoSummary: "ENABLED")));
+        var repository = new FakeFeedCatalogRepository();
+        using WorkerAccountSessionService account = CreateAccount(handler);
+        await account.LoginAsync("reader", "password", CancellationToken.None);
+        using var service = CreateService(account, repository);
+
+        await service.SyncAsync(CancellationToken.None);
+
+        FeedCatalogSnapshot snapshot = Assert.IsType<FeedCatalogSnapshot>(repository.Snapshot);
+        Assert.Equal(FeedAiPolicy.SafeDefaults, snapshot.AiPolicyDefaults);
+        Assert.Equal(FeedAiPolicySwitch.Disabled, snapshot.Categories.Single().AiPolicy?.ManualSummary);
+        Assert.Equal(FeedAiPolicySwitch.Enabled, snapshot.Categories.Single().AiPolicy?.AutoSummary);
+        Assert.Equal(12, snapshot.Categories.Single().AiPolicy?.DailyEntryLimit);
+        Assert.Equal("ko", snapshot.Feeds.Single().AiPolicy?.TranslationTargetLanguage);
+        Assert.Equal(2, snapshot.Feeds.Single().AiPolicy?.MaxConcurrency);
+    }
+
+    [Fact]
+    public async Task InvalidAiPolicyResponsePreservesLastGoodCatalog()
+    {
+        FeedCatalogSnapshot existing = CreateSnapshot(4, FeedCatalogScope.Active, Now.AddMinutes(-5));
+        var repository = new FakeFeedCatalogRepository(existing);
+        var handler = new StubHandler((request, cancellationToken) => Task.FromResult(
+            request.RequestUri?.AbsolutePath == "/v1/auth/login"
+                ? LoginResponse("USER")
+                : PolicyCatalogResponse(autoSummary: "ALWAYS")));
+        using WorkerAccountSessionService account = CreateAccount(handler);
+        await account.LoginAsync("reader", "password", CancellationToken.None);
+        using var service = CreateService(account, repository);
+
+        AppException error = await Assert.ThrowsAsync<AppException>(
+            () => service.SyncAsync(CancellationToken.None));
+
+        Assert.Equal(AppErrorCode.ProviderUnavailable, error.Error.Code);
+        Assert.Equal(existing, repository.Snapshot);
+        Assert.Equal(0, repository.ReplaceCount);
+    }
+
+    [Fact]
     public async Task UnchangedResponseOnlyAdvancesLastSynchronizedTime()
     {
         var repository = new FakeFeedCatalogRepository(CreateSnapshot(7, FeedCatalogScope.Active, Now.AddHours(-2)));
@@ -427,6 +471,74 @@ public sealed class FeedCatalogSyncServiceTests
         createdAt = "2026-07-20T08:00:00Z",
         updatedAt = "2026-07-22T08:00:00Z"
     };
+
+    private static HttpResponseMessage PolicyCatalogResponse(string autoSummary) =>
+        JsonResponse(HttpStatusCode.OK, new
+        {
+            catalogVersion = 5,
+            scope = "ACTIVE",
+            generatedAt = "2026-07-22T08:00:00Z",
+            aiPolicyDefaults = new
+            {
+                manualSummary = "ENABLED",
+                autoSummary = "DISABLED",
+                autoTranslation = "DISABLED",
+                translationTargetLanguage = "zh-Hans",
+                dailyEntryLimit = 20,
+                maxConcurrency = 1
+            },
+            categories = new[]
+            {
+                new
+                {
+                    id = "20000000-0000-4000-8000-000000000001",
+                    name = "Technology",
+                    sortOrder = 10,
+                    isEnabled = true,
+                    aiPolicy = new
+                    {
+                        manualSummary = "DISABLED",
+                        autoSummary,
+                        autoTranslation = "INHERIT",
+                        translationTargetLanguage = (string?)null,
+                        dailyEntryLimit = (int?)12,
+                        maxConcurrency = (int?)null
+                    },
+                    version = 5,
+                    createdAt = "2026-07-20T08:00:00Z",
+                    updatedAt = "2026-07-22T08:00:00Z"
+                }
+            },
+            feeds = new[]
+            {
+                new
+                {
+                    id = "30000000-0000-4000-8000-000000000001",
+                    originalUrl = "https://feeds.example/daily.xml",
+                    normalizedUrl = "https://feeds.example/daily.xml",
+                    displayName = "Daily Feed",
+                    siteUrl = "https://feeds.example/",
+                    categoryId = "20000000-0000-4000-8000-000000000001",
+                    viewKind = "ARTICLE",
+                    fullTextPolicy = "BACKGROUND",
+                    refreshIntervalMinutes = 60,
+                    sortOrder = 10,
+                    isEnabled = true,
+                    aiPolicy = new
+                    {
+                        manualSummary = "INHERIT",
+                        autoSummary = "INHERIT",
+                        autoTranslation = "ENABLED",
+                        translationTargetLanguage = "ko",
+                        dailyEntryLimit = (int?)null,
+                        maxConcurrency = (int?)2
+                    },
+                    version = 5,
+                    createdAt = "2026-07-20T08:00:00Z",
+                    updatedAt = "2026-07-22T08:00:00Z"
+                }
+            }
+        });
 
     private static HttpResponseMessage ErrorResponse(HttpStatusCode status, string code) =>
         JsonResponse(status, new { error = new { code, requestId = "catalog-test" } });

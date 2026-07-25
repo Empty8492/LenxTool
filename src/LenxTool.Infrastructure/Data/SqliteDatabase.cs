@@ -10,7 +10,7 @@ public sealed partial class SqliteDatabase(
     AppPaths paths,
     ILogger<SqliteDatabase> logger) : IDisposable
 {
-    private const int CurrentSchemaVersion = 9;
+    private const int CurrentSchemaVersion = 10;
     private readonly SemaphoreSlim _initializationGate = new(1, 1);
     private bool _initialized;
     private bool _disposed;
@@ -234,6 +234,17 @@ public sealed partial class SqliteDatabase(
                 command.CommandText = "INSERT INTO schema_versions(version, applied_at, checksum) VALUES (9, $appliedAt, $checksum);";
                 command.Parameters.AddWithValue("$appliedAt", DateTimeOffset.UtcNow.ToString("O"));
                 command.Parameters.AddWithValue("$checksum", "lenx-schema-v9-feed-ai-cache");
+                await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            if (version < 10)
+            {
+                command.CommandText = MigrationTenSql;
+                command.Parameters.Clear();
+                await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                command.CommandText = "INSERT INTO schema_versions(version, applied_at, checksum) VALUES (10, $appliedAt, $checksum);";
+                command.Parameters.AddWithValue("$appliedAt", DateTimeOffset.UtcNow.ToString("O"));
+                command.Parameters.AddWithValue("$checksum", "lenx-schema-v10-feed-ai-policy");
                 await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
             }
         }
@@ -635,5 +646,73 @@ public sealed partial class SqliteDatabase(
         CREATE INDEX IF NOT EXISTS ix_ai_reports_feed_history
             ON ai_reports(
                 entity_type, entity_id, report_type, target_language, created_at DESC);
+        """;
+
+    private const string MigrationTenSql = """
+        ALTER TABLE feed_catalog_state
+            ADD COLUMN ai_manual_summary_policy TEXT NOT NULL DEFAULT 'ENABLED'
+            CHECK(ai_manual_summary_policy IN ('ENABLED', 'DISABLED'));
+        ALTER TABLE feed_catalog_state
+            ADD COLUMN ai_auto_summary_policy TEXT NOT NULL DEFAULT 'DISABLED'
+            CHECK(ai_auto_summary_policy IN ('ENABLED', 'DISABLED'));
+        ALTER TABLE feed_catalog_state
+            ADD COLUMN ai_auto_translation_policy TEXT NOT NULL DEFAULT 'DISABLED'
+            CHECK(ai_auto_translation_policy IN ('ENABLED', 'DISABLED'));
+        ALTER TABLE feed_catalog_state
+            ADD COLUMN ai_translation_target_language TEXT NOT NULL DEFAULT 'zh-Hans'
+            CHECK(ai_translation_target_language IN ('zh-Hans', 'en', 'ja', 'ko'));
+        ALTER TABLE feed_catalog_state
+            ADD COLUMN ai_daily_entry_limit INTEGER NOT NULL DEFAULT 20
+            CHECK(typeof(ai_daily_entry_limit) = 'integer' AND ai_daily_entry_limit BETWEEN 1 AND 1000);
+        ALTER TABLE feed_catalog_state
+            ADD COLUMN ai_max_concurrency INTEGER NOT NULL DEFAULT 1
+            CHECK(typeof(ai_max_concurrency) = 'integer' AND ai_max_concurrency BETWEEN 1 AND 4);
+
+        ALTER TABLE feed_categories
+            ADD COLUMN ai_manual_summary_policy TEXT NOT NULL DEFAULT 'INHERIT'
+            CHECK(ai_manual_summary_policy IN ('INHERIT', 'ENABLED', 'DISABLED'));
+        ALTER TABLE feed_categories
+            ADD COLUMN ai_auto_summary_policy TEXT NOT NULL DEFAULT 'INHERIT'
+            CHECK(ai_auto_summary_policy IN ('INHERIT', 'ENABLED', 'DISABLED'));
+        ALTER TABLE feed_categories
+            ADD COLUMN ai_auto_translation_policy TEXT NOT NULL DEFAULT 'INHERIT'
+            CHECK(ai_auto_translation_policy IN ('INHERIT', 'ENABLED', 'DISABLED'));
+        ALTER TABLE feed_categories
+            ADD COLUMN ai_translation_target_language TEXT
+            CHECK(ai_translation_target_language IS NULL OR ai_translation_target_language IN ('zh-Hans', 'en', 'ja', 'ko'));
+        ALTER TABLE feed_categories
+            ADD COLUMN ai_daily_entry_limit INTEGER
+            CHECK(ai_daily_entry_limit IS NULL OR
+                (typeof(ai_daily_entry_limit) = 'integer' AND ai_daily_entry_limit BETWEEN 1 AND 1000));
+        ALTER TABLE feed_categories
+            ADD COLUMN ai_max_concurrency INTEGER
+            CHECK(ai_max_concurrency IS NULL OR
+                (typeof(ai_max_concurrency) = 'integer' AND ai_max_concurrency BETWEEN 1 AND 4));
+
+        ALTER TABLE feed_catalog
+            ADD COLUMN ai_manual_summary_policy TEXT NOT NULL DEFAULT 'INHERIT'
+            CHECK(ai_manual_summary_policy IN ('INHERIT', 'ENABLED', 'DISABLED'));
+        ALTER TABLE feed_catalog
+            ADD COLUMN ai_auto_summary_policy TEXT NOT NULL DEFAULT 'INHERIT'
+            CHECK(ai_auto_summary_policy IN ('INHERIT', 'ENABLED', 'DISABLED'));
+        ALTER TABLE feed_catalog
+            ADD COLUMN ai_auto_translation_policy TEXT NOT NULL DEFAULT 'INHERIT'
+            CHECK(ai_auto_translation_policy IN ('INHERIT', 'ENABLED', 'DISABLED'));
+        ALTER TABLE feed_catalog
+            ADD COLUMN ai_translation_target_language TEXT
+            CHECK(ai_translation_target_language IS NULL OR ai_translation_target_language IN ('zh-Hans', 'en', 'ja', 'ko'));
+        ALTER TABLE feed_catalog
+            ADD COLUMN ai_daily_entry_limit INTEGER
+            CHECK(ai_daily_entry_limit IS NULL OR
+                (typeof(ai_daily_entry_limit) = 'integer' AND ai_daily_entry_limit BETWEEN 1 AND 1000));
+        ALTER TABLE feed_catalog
+            ADD COLUMN ai_max_concurrency INTEGER
+            CHECK(ai_max_concurrency IS NULL OR
+                (typeof(ai_max_concurrency) = 'integer' AND ai_max_concurrency BETWEEN 1 AND 4));
+
+        CREATE INDEX IF NOT EXISTS ix_feed_categories_ai_automation
+            ON feed_categories(ai_auto_summary_policy, ai_auto_translation_policy, id);
+        CREATE INDEX IF NOT EXISTS ix_feed_catalog_ai_automation
+            ON feed_catalog(ai_auto_summary_policy, ai_auto_translation_policy, id);
         """;
 }

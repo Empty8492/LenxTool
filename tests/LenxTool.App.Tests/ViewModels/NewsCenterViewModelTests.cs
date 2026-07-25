@@ -402,6 +402,42 @@ public sealed class NewsCenterViewModelTests
     }
 
     [Fact]
+    public async Task DisabledManualSummaryPolicyBlocksSelectedAndBatchGeneration()
+    {
+        FeedCatalogSnapshot baseCatalog = CreateCatalog();
+        FeedCatalogSnapshot policyCatalog = baseCatalog with
+        {
+            AiPolicyDefaults = FeedAiPolicy.SafeDefaults,
+            Feeds =
+            [
+                baseCatalog.Feeds[0] with
+                {
+                    AiPolicy = FeedAiPolicy.Inherited with
+                    {
+                        ManualSummary = FeedAiPolicySwitch.Disabled
+                    }
+                }
+            ]
+        };
+        var summaries = new StubFeedAiSummaryService();
+        using NewsCenterViewModel viewModel = CreateViewModel(
+            CreateSnapshot(),
+            feedEntries: new([CreateFeedEntry(0)]),
+            catalogRepository: new StubFeedCatalogRepository(policyCatalog),
+            summaries: summaries);
+
+        await viewModel.InitializeAsync(CancellationToken.None);
+
+        Assert.False(viewModel.GenerateFeedSummaryCommand.CanExecute(null));
+        Assert.False(viewModel.GenerateVisibleFeedSummariesCommand.CanExecute(null));
+        await viewModel.GenerateFeedSummaryCommand.ExecuteAsync();
+        await viewModel.GenerateVisibleFeedSummariesCommand.ExecuteAsync();
+        Assert.Empty(summaries.SingleInputs);
+        Assert.Empty(summaries.BatchInputs);
+        Assert.Contains("管理员", viewModel.FeedSummaryStatus, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task GenerateVisibleFeedSummariesUsesBoundedFirstPageAndShowsSelectedResult()
     {
         var entries = new StubFeedEntryRepository(

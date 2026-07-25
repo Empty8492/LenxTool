@@ -383,6 +383,9 @@ public sealed class FeedCatalogSyncService : IFeedCatalogSyncService, IDisposabl
 
         var categoryIds = new HashSet<string>(StringComparer.Ordinal);
         var categories = new List<FeedCategory>(dto.Categories.Count);
+        FeedAiPolicy? aiPolicyDefaults = dto.AiPolicyDefaults is null
+            ? null
+            : MapAiPolicy(dto.AiPolicyDefaults, requireResolved: true);
         foreach (CatalogCategoryDto category in dto.Categories)
         {
             ValidateGuid(category.Id);
@@ -402,7 +405,10 @@ public sealed class FeedCatalogSyncService : IFeedCatalogSyncService, IDisposabl
                 category.IsEnabled,
                 category.Version,
                 category.CreatedAt!.Value,
-                category.UpdatedAt!.Value));
+                category.UpdatedAt!.Value,
+                category.AiPolicy is null
+                    ? null
+                    : MapAiPolicy(category.AiPolicy, requireResolved: false)));
         }
 
         var feedIds = new HashSet<string>(StringComparer.Ordinal);
@@ -458,14 +464,54 @@ public sealed class FeedCatalogSyncService : IFeedCatalogSyncService, IDisposabl
                 feed.Version,
                 feed.CreatedAt!.Value,
                 feed.UpdatedAt!.Value,
-                fullTextPolicy));
+                fullTextPolicy,
+                feed.AiPolicy is null
+                    ? null
+                    : MapAiPolicy(feed.AiPolicy, requireResolved: false)));
         }
 
         return new(
             new(dto.CatalogVersion, scope, dto.GeneratedAt, synchronizedAt),
             categories,
-            feeds);
+            feeds,
+            aiPolicyDefaults);
     }
+
+    private static FeedAiPolicy MapAiPolicy(CatalogAiPolicyDto dto, bool requireResolved)
+    {
+        FeedAiPolicySwitch manualSummary = ParseAiPolicySwitch(dto.ManualSummary);
+        FeedAiPolicySwitch autoSummary = ParseAiPolicySwitch(dto.AutoSummary);
+        FeedAiPolicySwitch autoTranslation = ParseAiPolicySwitch(dto.AutoTranslation);
+        if ((requireResolved
+                && (manualSummary == FeedAiPolicySwitch.Inherit
+                    || autoSummary == FeedAiPolicySwitch.Inherit
+                    || autoTranslation == FeedAiPolicySwitch.Inherit
+                    || dto.TranslationTargetLanguage is null
+                    || dto.DailyEntryLimit is null
+                    || dto.MaxConcurrency is null))
+            || (dto.TranslationTargetLanguage is not null
+                && dto.TranslationTargetLanguage is not ("zh-Hans" or "en" or "ja" or "ko"))
+            || dto.DailyEntryLimit is < 1 or > 1000
+            || dto.MaxConcurrency is < 1 or > 4)
+        {
+            throw CreateInvalidCatalogException();
+        }
+        return new(
+            manualSummary,
+            autoSummary,
+            autoTranslation,
+            dto.TranslationTargetLanguage,
+            dto.DailyEntryLimit,
+            dto.MaxConcurrency);
+    }
+
+    private static FeedAiPolicySwitch ParseAiPolicySwitch(string? value) => value switch
+    {
+        "INHERIT" => FeedAiPolicySwitch.Inherit,
+        "ENABLED" => FeedAiPolicySwitch.Enabled,
+        "DISABLED" => FeedAiPolicySwitch.Disabled,
+        _ => throw CreateInvalidCatalogException()
+    };
 
     private static async Task<byte[]> ReadBoundedAsync(
         HttpContent content,
@@ -572,6 +618,7 @@ public sealed class FeedCatalogSyncService : IFeedCatalogSyncService, IDisposabl
         public long CatalogVersion { get; init; }
         public string? Scope { get; init; }
         public DateTimeOffset? GeneratedAt { get; init; }
+        public CatalogAiPolicyDto? AiPolicyDefaults { get; init; }
         public List<CatalogCategoryDto>? Categories { get; init; }
         public List<CatalogFeedDto>? Feeds { get; init; }
     }
@@ -582,6 +629,7 @@ public sealed class FeedCatalogSyncService : IFeedCatalogSyncService, IDisposabl
         public string? Name { get; init; }
         public int SortOrder { get; init; }
         public bool IsEnabled { get; init; }
+        public CatalogAiPolicyDto? AiPolicy { get; init; }
         public long Version { get; init; }
         public DateTimeOffset? CreatedAt { get; init; }
         public DateTimeOffset? UpdatedAt { get; init; }
@@ -600,8 +648,19 @@ public sealed class FeedCatalogSyncService : IFeedCatalogSyncService, IDisposabl
         public int RefreshIntervalMinutes { get; init; }
         public int SortOrder { get; init; }
         public bool IsEnabled { get; init; }
+        public CatalogAiPolicyDto? AiPolicy { get; init; }
         public long Version { get; init; }
         public DateTimeOffset? CreatedAt { get; init; }
         public DateTimeOffset? UpdatedAt { get; init; }
+    }
+
+    private sealed class CatalogAiPolicyDto
+    {
+        public string? ManualSummary { get; init; }
+        public string? AutoSummary { get; init; }
+        public string? AutoTranslation { get; init; }
+        public string? TranslationTargetLanguage { get; init; }
+        public int? DailyEntryLimit { get; init; }
+        public int? MaxConcurrency { get; init; }
     }
 }

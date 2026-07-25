@@ -57,7 +57,12 @@ public sealed class FeedCatalogRepository(SqliteDatabase database) : IFeedCatalo
             }
         }
 
-        await UpdateStateAsync(connection, transaction, snapshot.State, cancellationToken)
+        await UpdateStateAsync(
+                connection,
+                transaction,
+                snapshot.State,
+                snapshot.AiPolicyDefaults ?? FeedAiPolicy.SafeDefaults,
+                cancellationToken)
             .ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
@@ -79,6 +84,10 @@ public sealed class FeedCatalogRepository(SqliteDatabase database) : IFeedCatalo
             await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
             return null;
         }
+        FeedAiPolicy aiPolicyDefaults = await ReadAiPolicyDefaultsAsync(
+            connection,
+            transaction,
+            cancellationToken).ConfigureAwait(false);
 
         IReadOnlyList<FeedCategory> categories = await ReadCategoriesAsync(
             connection,
@@ -92,7 +101,7 @@ public sealed class FeedCatalogRepository(SqliteDatabase database) : IFeedCatalo
             cancellationToken).ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
 
-        return new(storedState with { Scope = scope }, categories, feeds);
+        return new(storedState with { Scope = scope }, categories, feeds, aiPolicyDefaults);
     }
 
     public async Task<FeedCatalogState> GetStateAsync(CancellationToken cancellationToken)
@@ -148,10 +157,15 @@ public sealed class FeedCatalogRepository(SqliteDatabase database) : IFeedCatalo
         command.Transaction = transaction;
         command.CommandText = """
             INSERT INTO feed_categories(
-                id, name, name_norm, sort_order, is_enabled, version, created_at, updated_at)
+                id, name, name_norm, sort_order, is_enabled, version, created_at, updated_at,
+                ai_manual_summary_policy, ai_auto_summary_policy, ai_auto_translation_policy,
+                ai_translation_target_language, ai_daily_entry_limit, ai_max_concurrency)
             VALUES(
-                $id, $name, $normalizedName, $sortOrder, $isEnabled, $version, $createdAt, $updatedAt);
+                $id, $name, $normalizedName, $sortOrder, $isEnabled, $version, $createdAt, $updatedAt,
+                $manualSummary, $autoSummary, $autoTranslation,
+                $translationTargetLanguage, $dailyEntryLimit, $maxConcurrency);
             """;
+        FeedAiPolicy policy = category.AiPolicy ?? FeedAiPolicy.Inherited;
         command.Parameters.AddWithValue("$id", category.Id);
         command.Parameters.AddWithValue("$name", category.Name);
         command.Parameters.AddWithValue("$normalizedName", category.NormalizedName);
@@ -160,6 +174,7 @@ public sealed class FeedCatalogRepository(SqliteDatabase database) : IFeedCatalo
         command.Parameters.AddWithValue("$version", category.Version);
         command.Parameters.AddWithValue("$createdAt", FormatTimestamp(category.CreatedAt));
         command.Parameters.AddWithValue("$updatedAt", FormatTimestamp(category.UpdatedAt));
+        AddAiPolicyParameters(command, policy);
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
 
@@ -175,12 +190,17 @@ public sealed class FeedCatalogRepository(SqliteDatabase database) : IFeedCatalo
             INSERT INTO feed_catalog(
                 id, original_url, normalized_url, display_name, site_url, category_id,
                 view_kind, refresh_interval_minutes, sort_order, is_enabled, version,
-                created_at, updated_at, full_text_policy)
+                created_at, updated_at, full_text_policy,
+                ai_manual_summary_policy, ai_auto_summary_policy, ai_auto_translation_policy,
+                ai_translation_target_language, ai_daily_entry_limit, ai_max_concurrency)
             VALUES(
                 $id, $originalUrl, $normalizedUrl, $displayName, $siteUrl, $categoryId,
                 $viewKind, $refreshIntervalMinutes, $sortOrder, $isEnabled, $version,
-                $createdAt, $updatedAt, $fullTextPolicy);
+                $createdAt, $updatedAt, $fullTextPolicy,
+                $manualSummary, $autoSummary, $autoTranslation,
+                $translationTargetLanguage, $dailyEntryLimit, $maxConcurrency);
             """;
+        FeedAiPolicy policy = feed.AiPolicy ?? FeedAiPolicy.Inherited;
         command.Parameters.AddWithValue("$id", feed.Id);
         command.Parameters.AddWithValue("$originalUrl", feed.OriginalUrl);
         command.Parameters.AddWithValue("$normalizedUrl", feed.NormalizedUrl);
@@ -195,6 +215,7 @@ public sealed class FeedCatalogRepository(SqliteDatabase database) : IFeedCatalo
         command.Parameters.AddWithValue("$createdAt", FormatTimestamp(feed.CreatedAt));
         command.Parameters.AddWithValue("$updatedAt", FormatTimestamp(feed.UpdatedAt));
         command.Parameters.AddWithValue("$fullTextPolicy", ToStorageValue(feed.FullTextPolicy));
+        AddAiPolicyParameters(command, policy);
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
 
@@ -230,6 +251,7 @@ public sealed class FeedCatalogRepository(SqliteDatabase database) : IFeedCatalo
         SqliteConnection connection,
         SqliteTransaction transaction,
         FeedCatalogState state,
+        FeedAiPolicy aiPolicyDefaults,
         CancellationToken cancellationToken)
     {
         await using SqliteCommand command = connection.CreateCommand();
@@ -239,13 +261,20 @@ public sealed class FeedCatalogRepository(SqliteDatabase database) : IFeedCatalo
             SET catalog_version=$version,
                 scope=$scope,
                 generated_at=$generatedAt,
-                last_synced_at=$lastSyncedAt
+                last_synced_at=$lastSyncedAt,
+                ai_manual_summary_policy=$manualSummary,
+                ai_auto_summary_policy=$autoSummary,
+                ai_auto_translation_policy=$autoTranslation,
+                ai_translation_target_language=$translationTargetLanguage,
+                ai_daily_entry_limit=$dailyEntryLimit,
+                ai_max_concurrency=$maxConcurrency
             WHERE singleton_id=1;
             """;
         command.Parameters.AddWithValue("$version", state.Version);
         command.Parameters.AddWithValue("$scope", ToStorageValue(state.Scope));
         command.Parameters.AddWithValue("$generatedAt", FormatNullableTimestamp(state.GeneratedAt));
         command.Parameters.AddWithValue("$lastSyncedAt", FormatNullableTimestamp(state.LastSyncedAt));
+        AddAiPolicyParameters(command, aiPolicyDefaults);
         int rows = await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         if (rows != 1)
         {
@@ -279,6 +308,28 @@ public sealed class FeedCatalogRepository(SqliteDatabase database) : IFeedCatalo
             ReadNullableTimestamp(reader, 3));
     }
 
+    private static async Task<FeedAiPolicy> ReadAiPolicyDefaultsAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        CancellationToken cancellationToken)
+    {
+        await using SqliteCommand command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            SELECT ai_manual_summary_policy, ai_auto_summary_policy, ai_auto_translation_policy,
+                   ai_translation_target_language, ai_daily_entry_limit, ai_max_concurrency
+            FROM feed_catalog_state
+            WHERE singleton_id=1;
+            """;
+        await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken)
+            .ConfigureAwait(false);
+        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            throw new InvalidOperationException("The feed catalog state row is missing.");
+        }
+        return ReadAiPolicy(reader, 0);
+    }
+
     private static async Task<IReadOnlyList<FeedCategory>> ReadCategoriesAsync(
         SqliteConnection connection,
         SqliteTransaction transaction,
@@ -288,7 +339,9 @@ public sealed class FeedCatalogRepository(SqliteDatabase database) : IFeedCatalo
         await using SqliteCommand command = connection.CreateCommand();
         command.Transaction = transaction;
         command.CommandText = """
-            SELECT id, name, name_norm, sort_order, is_enabled, version, created_at, updated_at
+            SELECT id, name, name_norm, sort_order, is_enabled, version, created_at, updated_at,
+                   ai_manual_summary_policy, ai_auto_summary_policy, ai_auto_translation_policy,
+                   ai_translation_target_language, ai_daily_entry_limit, ai_max_concurrency
             FROM feed_categories
             WHERE $includeDisabled=1 OR is_enabled=1
             ORDER BY sort_order, name, id;
@@ -307,7 +360,8 @@ public sealed class FeedCatalogRepository(SqliteDatabase database) : IFeedCatalo
                 reader.GetBoolean(4),
                 reader.GetInt64(5),
                 ReadTimestamp(reader, 6),
-                ReadTimestamp(reader, 7)));
+                ReadTimestamp(reader, 7),
+                ReadAiPolicyOverride(reader, 8)));
         }
 
         return categories;
@@ -324,7 +378,9 @@ public sealed class FeedCatalogRepository(SqliteDatabase database) : IFeedCatalo
         command.CommandText = """
             SELECT f.id, f.original_url, f.normalized_url, f.display_name, f.site_url,
                    f.category_id, f.view_kind, f.refresh_interval_minutes, f.sort_order,
-                   f.is_enabled, f.version, f.created_at, f.updated_at, f.full_text_policy
+                   f.is_enabled, f.version, f.created_at, f.updated_at, f.full_text_policy,
+                   f.ai_manual_summary_policy, f.ai_auto_summary_policy, f.ai_auto_translation_policy,
+                   f.ai_translation_target_language, f.ai_daily_entry_limit, f.ai_max_concurrency
             FROM feed_catalog f
             LEFT JOIN feed_categories c ON c.id=f.category_id
             WHERE $includeDisabled=1
@@ -358,7 +414,8 @@ public sealed class FeedCatalogRepository(SqliteDatabase database) : IFeedCatalo
                 reader.GetInt64(10),
                 ReadTimestamp(reader, 11),
                 ReadTimestamp(reader, 12),
-                ParseFullTextPolicy(reader.GetString(13))));
+                ParseFullTextPolicy(reader.GetString(13)),
+                ReadAiPolicyOverride(reader, 14)));
         }
 
         return feeds;
@@ -420,6 +477,15 @@ public sealed class FeedCatalogRepository(SqliteDatabase database) : IFeedCatalo
                 nameof(snapshot),
                 "Feed full-text policy is invalid.");
         }
+        ValidateAiPolicy(snapshot.AiPolicyDefaults ?? FeedAiPolicy.SafeDefaults, requireResolved: true);
+        foreach (FeedCategory category in snapshot.Categories)
+        {
+            ValidateAiPolicy(category.AiPolicy ?? FeedAiPolicy.Inherited, requireResolved: false);
+        }
+        foreach (FeedCatalogItem feed in snapshot.Feeds)
+        {
+            ValidateAiPolicy(feed.AiPolicy ?? FeedAiPolicy.Inherited, requireResolved: false);
+        }
     }
 
     private static void ValidateScope(FeedCatalogScope scope)
@@ -479,6 +545,70 @@ public sealed class FeedCatalogRepository(SqliteDatabase database) : IFeedCatalo
         "BACKGROUND" => FeedFullTextPolicy.Background,
         _ => throw new InvalidDataException($"Unknown feed full-text policy '{value}'.")
     };
+
+    private static void AddAiPolicyParameters(SqliteCommand command, FeedAiPolicy policy)
+    {
+        command.Parameters.AddWithValue("$manualSummary", ToStorageValue(policy.ManualSummary));
+        command.Parameters.AddWithValue("$autoSummary", ToStorageValue(policy.AutoSummary));
+        command.Parameters.AddWithValue("$autoTranslation", ToStorageValue(policy.AutoTranslation));
+        command.Parameters.AddWithValue(
+            "$translationTargetLanguage",
+            (object?)policy.TranslationTargetLanguage ?? DBNull.Value);
+        command.Parameters.AddWithValue("$dailyEntryLimit", (object?)policy.DailyEntryLimit ?? DBNull.Value);
+        command.Parameters.AddWithValue("$maxConcurrency", (object?)policy.MaxConcurrency ?? DBNull.Value);
+    }
+
+    private static FeedAiPolicy ReadAiPolicy(SqliteDataReader reader, int ordinal) => new(
+        ParseAiPolicySwitch(reader.GetString(ordinal)),
+        ParseAiPolicySwitch(reader.GetString(ordinal + 1)),
+        ParseAiPolicySwitch(reader.GetString(ordinal + 2)),
+        reader.IsDBNull(ordinal + 3) ? null : reader.GetString(ordinal + 3),
+        reader.IsDBNull(ordinal + 4) ? null : reader.GetInt32(ordinal + 4),
+        reader.IsDBNull(ordinal + 5) ? null : reader.GetInt32(ordinal + 5));
+
+    private static FeedAiPolicy? ReadAiPolicyOverride(SqliteDataReader reader, int ordinal)
+    {
+        FeedAiPolicy policy = ReadAiPolicy(reader, ordinal);
+        return policy == FeedAiPolicy.Inherited ? null : policy;
+    }
+
+    private static string ToStorageValue(FeedAiPolicySwitch value) => value switch
+    {
+        FeedAiPolicySwitch.Inherit => "INHERIT",
+        FeedAiPolicySwitch.Enabled => "ENABLED",
+        FeedAiPolicySwitch.Disabled => "DISABLED",
+        _ => throw new ArgumentOutOfRangeException(nameof(value))
+    };
+
+    private static FeedAiPolicySwitch ParseAiPolicySwitch(string value) => value switch
+    {
+        "INHERIT" => FeedAiPolicySwitch.Inherit,
+        "ENABLED" => FeedAiPolicySwitch.Enabled,
+        "DISABLED" => FeedAiPolicySwitch.Disabled,
+        _ => throw new InvalidDataException($"Unknown Feed AI policy switch '{value}'.")
+    };
+
+    private static void ValidateAiPolicy(FeedAiPolicy policy, bool requireResolved)
+    {
+        ArgumentNullException.ThrowIfNull(policy);
+        if (!Enum.IsDefined(policy.ManualSummary)
+            || !Enum.IsDefined(policy.AutoSummary)
+            || !Enum.IsDefined(policy.AutoTranslation)
+            || (requireResolved
+                && (policy.ManualSummary == FeedAiPolicySwitch.Inherit
+                    || policy.AutoSummary == FeedAiPolicySwitch.Inherit
+                    || policy.AutoTranslation == FeedAiPolicySwitch.Inherit
+                    || policy.TranslationTargetLanguage is null
+                    || policy.DailyEntryLimit is null
+                    || policy.MaxConcurrency is null))
+            || (policy.TranslationTargetLanguage is not null
+                && policy.TranslationTargetLanguage is not ("zh-Hans" or "en" or "ja" or "ko"))
+            || policy.DailyEntryLimit is < 1 or > 1000
+            || policy.MaxConcurrency is < 1 or > 4)
+        {
+            throw new ArgumentOutOfRangeException(nameof(policy), "Feed AI policy is invalid.");
+        }
+    }
 
     private static string FormatTimestamp(DateTimeOffset value) =>
         value.ToString("O", CultureInfo.InvariantCulture);

@@ -77,6 +77,41 @@ public sealed class FeedCatalogRepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task ReplaceAsyncPersistsAiPolicyDefaultsAndResourceOverridesOffline()
+    {
+        using SqliteDatabase database = CreateDatabase();
+        await database.InitializeAsync(CancellationToken.None);
+        var repository = new FeedCatalogRepository(database);
+        FeedAiPolicy defaults = FeedAiPolicy.SafeDefaults with { DailyEntryLimit = 30, MaxConcurrency = 2 };
+        var categoryPolicy = FeedAiPolicy.Inherited with
+        {
+            ManualSummary = FeedAiPolicySwitch.Disabled,
+            AutoSummary = FeedAiPolicySwitch.Enabled,
+            DailyEntryLimit = 12
+        };
+        var feedPolicy = FeedAiPolicy.Inherited with
+        {
+            AutoTranslation = FeedAiPolicySwitch.Enabled,
+            TranslationTargetLanguage = "ko",
+            MaxConcurrency = 3
+        };
+        FeedCatalogSnapshot snapshot = Catalog(
+            13,
+            FeedCatalogScope.Active,
+            [Category(EnabledCategoryId, "AI", 0, true) with { AiPolicy = categoryPolicy }],
+            [Feed(EnabledFeedId, "ai", "AI Feed", EnabledCategoryId, 0, true) with { AiPolicy = feedPolicy }])
+            with { AiPolicyDefaults = defaults };
+
+        await repository.ReplaceAsync(snapshot, CancellationToken.None);
+
+        FeedCatalogSnapshot stored = Assert.IsType<FeedCatalogSnapshot>(
+            await repository.GetCatalogAsync(FeedCatalogScope.Active, CancellationToken.None));
+        Assert.Equal(defaults, stored.AiPolicyDefaults);
+        Assert.Equal(categoryPolicy, stored.Categories.Single().AiPolicy);
+        Assert.Equal(feedPolicy, stored.Feeds.Single().AiPolicy);
+    }
+
+    [Fact]
     public async Task ReplaceAsyncRejectsVersionRegressionWithoutChangingStoredCatalog()
     {
         using SqliteDatabase database = CreateDatabase();

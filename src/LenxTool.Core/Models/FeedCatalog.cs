@@ -31,7 +31,8 @@ public sealed record FeedCatalogState(
 public sealed record FeedCatalogSnapshot(
     FeedCatalogState State,
     IReadOnlyList<FeedCategory> Categories,
-    IReadOnlyList<FeedCatalogItem> Feeds);
+    IReadOnlyList<FeedCatalogItem> Feeds,
+    FeedAiPolicy? AiPolicyDefaults = null);
 
 public sealed record FeedCategory(
     string Id,
@@ -41,7 +42,8 @@ public sealed record FeedCategory(
     bool IsEnabled,
     long Version,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    FeedAiPolicy? AiPolicy = null);
 
 public sealed record FeedCatalogItem(
     string Id,
@@ -57,7 +59,8 @@ public sealed record FeedCatalogItem(
     long Version,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
-    FeedFullTextPolicy FullTextPolicy = FeedFullTextPolicy.None);
+    FeedFullTextPolicy FullTextPolicy = FeedFullTextPolicy.None,
+    FeedAiPolicy? AiPolicy = null);
 
 public sealed record FeedFetchState(
     string FeedId,

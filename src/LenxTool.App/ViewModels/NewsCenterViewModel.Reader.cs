@@ -1,8 +1,10 @@
 using System.Collections.ObjectModel;
+using System.IO;
 using LenxTool.App.Controls;
 using LenxTool.App.Mvvm;
 using LenxTool.Core.Contracts;
 using LenxTool.Core.Errors;
+using LenxTool.Core.Feeds;
 using LenxTool.Core.Models;
 
 namespace LenxTool.App.ViewModels;
@@ -227,10 +229,10 @@ public sealed partial class NewsCenterViewModel
             CanOpenSelectedFeedOriginal);
         GenerateFeedSummaryCommand = new(
             GenerateSelectedFeedSummaryAsync,
-            () => SelectedTimelineEntry is not null);
+            () => IsManualFeedSummaryEnabled(SelectedTimelineEntry));
         GenerateVisibleFeedSummariesCommand = new(
             GenerateVisibleFeedSummariesAsync,
-            () => TimelineEntries.Count > 0);
+            () => TimelineEntries.Any(IsManualFeedSummaryEnabled));
         GenerateFeedTranslationCommand = new(
             GenerateSelectedFeedTranslationAsync,
             () => SelectedTimelineEntry is not null);
@@ -365,6 +367,11 @@ public sealed partial class NewsCenterViewModel
         FeedAiSummaryInput? input = CreateCurrentFeedSummaryInput();
         FeedTimelineItem? selected = SelectedTimelineEntry;
         if (input is null || selected is null) return;
+        if (!IsManualFeedSummaryEnabled(selected))
+        {
+            FeedSummaryStatus = "管理员已关闭此 Feed 的手动 AI 摘要。";
+            return;
+        }
         int expectedGeneration = Volatile.Read(ref _feedReaderGeneration);
         FeedSummaryError = null;
         FeedSummaryStatus = $"正在基于{SelectedFeedReaderSource.Label}生成摘要…";
@@ -407,6 +414,7 @@ public sealed partial class NewsCenterViewModel
     {
         int timelineGeneration = Volatile.Read(ref _timelineQueryGeneration);
         FeedAiSummaryInput[] inputs = TimelineEntries
+            .Where(IsManualFeedSummaryEnabled)
             .Take(20)
             .Select(item => CreateRssFeedSummaryInput(item.Entry))
             .ToArray();
@@ -533,9 +541,30 @@ public sealed partial class NewsCenterViewModel
 
         SelectedFeedSummary = null;
         FeedSummaryError = null;
-        FeedSummaryStatus = SelectedTimelineEntry is null
-            ? "选择资讯后可生成摘要。"
-            : $"可基于{SelectedFeedReaderSource.Label}生成摘要。";
+        FeedSummaryStatus = SelectedTimelineEntry switch
+        {
+            null => "选择资讯后可生成摘要。",
+            { } selected when !IsManualFeedSummaryEnabled(selected) =>
+                "管理员已关闭此 Feed 的手动 AI 摘要。",
+            _ => $"可基于{SelectedFeedReaderSource.Label}生成摘要。"
+        };
+    }
+
+    private bool IsManualFeedSummaryEnabled(FeedTimelineItem? item)
+    {
+        if (item is null) return false;
+        if (_timelineCatalog is null) return FeedAiPolicy.SafeDefaults.ManualSummary
+            == FeedAiPolicySwitch.Enabled;
+        try
+        {
+            return FeedAiPolicyResolver.Resolve(_timelineCatalog, item.Entry.FeedId)
+                .ManualSummaryEnabled;
+        }
+        catch (Exception exception) when (
+            exception is InvalidDataException or KeyNotFoundException)
+        {
+            return false;
+        }
     }
 
     private static RichArticleDocument? CreateRssReaderDocument(FeedTimelineItem item)
