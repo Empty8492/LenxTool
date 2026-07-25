@@ -36,11 +36,19 @@ public sealed class FeedEntryRepositoryTests : IDisposable
 
         await repository.UpsertAsync(FeedId, [original], CancellationToken.None);
         await repository.UpsertAsync(FeedId, [updated], CancellationToken.None);
+        FeedEntry? byId = await repository.GetByIdAsync(
+            updated.Id,
+            CancellationToken.None);
         FeedEntryPage page = await repository.QueryAsync(
             new FeedEntryQuery("quantum", null, null, null, null, FeedEntryReadFilter.All, 0, 20),
             CancellationToken.None);
 
         FeedEntry item = Assert.Single(page.Items);
+        Assert.NotNull(byId);
+        Assert.Equal(updated.Id, byId.Id);
+        Assert.Equal(updated.Title, byId.Title);
+        Assert.Equal(updated.Summary, byId.Summary);
+        Assert.Equal(updated.ContentHash, byId.ContentHash);
         Assert.Equal("Updated", item.Title);
         Assert.Equal(updated.ContentHash, item.ContentHash);
         Assert.False(page.HasMore);

@@ -58,6 +58,10 @@ public sealed class DependencyInjectionTests
             provider.GetRequiredService<IFeedAiSummaryService>());
         Assert.IsType<CachedFeedAiTranslationService>(
             provider.GetRequiredService<IFeedAiTranslationService>());
+        Assert.IsType<FeedAiAutomationJobRepository>(
+            provider.GetRequiredService<IFeedAiAutomationJobRepository>());
+        Assert.IsType<FeedAiAutomationQueueService>(
+            provider.GetRequiredService<IFeedAiAutomationQueueService>());
         Assert.IsType<FeedFullTextQueueService>(
             provider.GetRequiredService<IFeedFullTextQueueService>());
         Assert.NotNull(provider.GetRequiredService<IFeedRefreshService>());

@@ -28,6 +28,31 @@ public sealed class FeedEntryRepository(SqliteDatabase database) : IFeedEntryRep
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task<FeedEntry?> GetByIdAsync(
+        string entryId,
+        CancellationToken cancellationToken)
+    {
+        ValidateOptionalIdentifier(entryId, nameof(entryId));
+        await using SqliteConnection connection = await database.OpenConnectionAsync(cancellationToken)
+            .ConfigureAwait(false);
+        await using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT
+                id, feed_id, external_id, normalized_url, title, author,
+                published_at, updated_at, summary, sanitized_content,
+                enclosure_json, content_hash, fetched_at, has_full_content
+            FROM feed_entries
+            WHERE id=$entryId
+            LIMIT 1;
+            """;
+        command.Parameters.AddWithValue("$entryId", entryId);
+        await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken)
+            .ConfigureAwait(false);
+        return await reader.ReadAsync(cancellationToken).ConfigureAwait(false)
+            ? ReadEntry(reader)
+            : null;
+    }
+
     public async Task<FeedEntryPage> QueryAsync(
         FeedEntryQuery query,
         CancellationToken cancellationToken)

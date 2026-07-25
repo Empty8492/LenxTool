@@ -242,6 +242,11 @@ public sealed class DashboardViewModelTests
     {
         public FeedEntryQuery? LastQuery { get; private set; }
 
+        public Task<FeedEntry?> GetByIdAsync(
+            string entryId,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<FeedEntry?>(entry.Id == entryId ? entry : null);
+
         public Task<FeedEntryPage> QueryAsync(
             FeedEntryQuery query,
             CancellationToken cancellationToken)

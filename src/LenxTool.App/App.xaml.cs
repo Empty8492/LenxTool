@@ -129,6 +129,12 @@ public partial class App : Application
         services.AddSingleton<IFeedAiSummaryService, DeepSeekFeedAiSummaryService>();
         services.AddSingleton(FeedAiTranslationOptions.Default);
         services.AddSingleton<IFeedAiTranslationService, CachedFeedAiTranslationService>();
+        services.AddSingleton<IFeedAiAutomationJobRepository, FeedAiAutomationJobRepository>();
+        services.AddSingleton(FeedAiAutomationOptions.Default);
+        services.AddSingleton<FeedAiAutomationQueueService>();
+        services.AddSingleton<IFeedAiAutomationQueueService>(static services =>
+            services.GetRequiredService<FeedAiAutomationQueueService>());
+        services.AddHostedService<FeedAiAutomationBackgroundService>();
         services.AddSingleton(FeedFullTextQueueOptions.Default);
         services.AddSingleton<FeedFullTextQueueService>();
         services.AddSingleton<IFeedFullTextQueueService>(static services =>

@@ -10,7 +10,7 @@ public sealed partial class SqliteDatabase(
     AppPaths paths,
     ILogger<SqliteDatabase> logger) : IDisposable
 {
-    private const int CurrentSchemaVersion = 10;
+    private const int CurrentSchemaVersion = 11;
     private readonly SemaphoreSlim _initializationGate = new(1, 1);
     private bool _initialized;
     private bool _disposed;
@@ -245,6 +245,17 @@ public sealed partial class SqliteDatabase(
                 command.CommandText = "INSERT INTO schema_versions(version, applied_at, checksum) VALUES (10, $appliedAt, $checksum);";
                 command.Parameters.AddWithValue("$appliedAt", DateTimeOffset.UtcNow.ToString("O"));
                 command.Parameters.AddWithValue("$checksum", "lenx-schema-v10-feed-ai-policy");
+                await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            if (version < 11)
+            {
+                command.CommandText = MigrationElevenSql;
+                command.Parameters.Clear();
+                await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                command.CommandText = "INSERT INTO schema_versions(version, applied_at, checksum) VALUES (11, $appliedAt, $checksum);";
+                command.Parameters.AddWithValue("$appliedAt", DateTimeOffset.UtcNow.ToString("O"));
+                command.Parameters.AddWithValue("$checksum", "lenx-schema-v11-feed-ai-automation");
                 await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
             }
         }
@@ -714,5 +725,42 @@ public sealed partial class SqliteDatabase(
             ON feed_categories(ai_auto_summary_policy, ai_auto_translation_policy, id);
         CREATE INDEX IF NOT EXISTS ix_feed_catalog_ai_automation
             ON feed_catalog(ai_auto_summary_policy, ai_auto_translation_policy, id);
+        """;
+
+    private const string MigrationElevenSql = """
+        CREATE TABLE feed_ai_automation_jobs(
+            id TEXT PRIMARY KEY CHECK(length(id) = 36),
+            feed_id TEXT NOT NULL CHECK(length(feed_id) = 36),
+            entry_id TEXT NOT NULL REFERENCES feed_entries(id) ON DELETE CASCADE,
+            content_hash TEXT NOT NULL CHECK(length(content_hash) = 64),
+            task_type TEXT NOT NULL CHECK(task_type IN ('SUMMARY', 'TRANSLATION')),
+            target_language TEXT NOT NULL CHECK(length(target_language) BETWEEN 1 AND 32),
+            status TEXT NOT NULL DEFAULT 'PENDING'
+                CHECK(status IN ('PENDING', 'RUNNING', 'RETRY', 'SUCCEEDED', 'SKIPPED', 'SUPERSEDED')),
+            attempt_count INTEGER NOT NULL DEFAULT 0 CHECK(attempt_count >= 0),
+            next_attempt_at TEXT NOT NULL CHECK(length(next_attempt_at) BETWEEN 20 AND 40),
+            lease_token TEXT CHECK(lease_token IS NULL OR length(lease_token) = 32),
+            lease_expires_at TEXT
+                CHECK(lease_expires_at IS NULL OR length(lease_expires_at) BETWEEN 20 AND 40),
+            last_error_code TEXT CHECK(last_error_code IS NULL OR length(last_error_code) BETWEEN 1 AND 128),
+            created_at TEXT NOT NULL CHECK(length(created_at) BETWEEN 20 AND 40),
+            updated_at TEXT NOT NULL CHECK(length(updated_at) BETWEEN 20 AND 40),
+            UNIQUE(feed_id, entry_id, content_hash, task_type, target_language)
+        );
+
+        CREATE TABLE feed_ai_automation_daily_entries(
+            usage_date TEXT NOT NULL CHECK(length(usage_date) = 10),
+            feed_id TEXT NOT NULL CHECK(length(feed_id) = 36),
+            entry_id TEXT NOT NULL CHECK(length(entry_id) BETWEEN 1 AND 256),
+            reserved_at TEXT NOT NULL CHECK(length(reserved_at) BETWEEN 20 AND 40),
+            PRIMARY KEY(usage_date, feed_id, entry_id)
+        );
+
+        CREATE INDEX ix_feed_ai_automation_jobs_due
+            ON feed_ai_automation_jobs(status, next_attempt_at, lease_expires_at, created_at, id);
+        CREATE INDEX ix_feed_ai_automation_jobs_entry
+            ON feed_ai_automation_jobs(feed_id, entry_id, task_type, status);
+        CREATE INDEX ix_feed_ai_automation_daily_limit
+            ON feed_ai_automation_daily_entries(usage_date, feed_id, entry_id);
         """;
 }

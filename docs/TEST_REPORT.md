@@ -9,14 +9,14 @@
 | 测试组 | 结果 |
 |---|---:|
 | LenxTool.Core.Tests | 42 passed |
-| LenxTool.Infrastructure.Tests | 258 passed |
-| LenxTool.App.Tests | 127 passed |
+| LenxTool.Infrastructure.Tests | 269 passed |
+| LenxTool.App.Tests | 132 passed |
 | Cloudflare Worker Vitest | 44 passed |
 | Worker TypeScript strict typecheck | passed |
 | .NET build warnings | 0 |
 | NuGet vulnerable packages | 0 detected |
 
-本轮执行三个 .NET 测试项目及隔离输出的单节点 Release 构建，结果为 0 警告、0 错误；Core 42、Infrastructure 264、App 127，共 433/433 通过且无跳过。运行中的 Lenx Tools 占用默认 Debug 输出时，App 测试使用框架依赖模式的隔离 `OutDir`，测试程序集和依赖仍由当前源码重新编译。Worker 严格 typecheck 和官方 workerd/D1 Vitest 44/44 通过。
+本轮执行三个 .NET 测试项目及隔离输出的单节点 Release 构建，结果为 0 警告、0 错误；Core 42、Infrastructure 269、App 132，共 443/443 通过且无跳过。运行中的 Lenx Tools 占用默认 Debug 输出时，App 测试使用框架依赖模式的隔离 `OutDir`，测试程序集和依赖仍由当前源码重新编译。Worker 严格 typecheck 和官方 workerd/D1 Vitest 44/44 沿用本日最近一次通过结果；本片未修改 Worker。
 
 P0-08 覆盖 4 项 SQLite 集成场景并同步既有 schema 断言：新建库创建目录状态、分类、Feed、抓取状态、条目、索引和搜索映射；真实 schema v2 哨兵数据经 v3/v4 原位升级后仍可由现有仓储读取；迁移对象冲突时完整回滚且版本停留在 v3；相同外部 ID、URL 和内容哈希可存在于不同 Feed，同一 Feed 内重复外部 ID 被约束拒绝。既有包含未 checkpoint WAL 提交的一致性备份测试继续通过。
 
@@ -71,6 +71,8 @@ P1-12 新增 7 个 Infrastructure 翻译服务场景及 6 个 App 行为/布局�
 P1-13 Worker 策略第一片新增 5 个端到端场景并扩展目录/迁移回归：分类和 Feed 的手动摘要、自动摘要、自动翻译覆盖使用受限枚举，自动处理由全局安全默认保持关闭；目标语言、每日条目和并发上限受 D1 与请求双重约束。普通用户可读策略但不能写，管理员单项/批量写继续复用目录版本、幂等键和最小审计；旧版本与未知字段不会改变状态。公开快照不含文章、摘要或译文，完整 Worker 44/44 通过。
 
 P1-13 共享额度门控新增 6 个 Infrastructure 场景并扩展桌面依赖注入回归：自备 DeepSeek Key 优先且不消耗共享额度；无 Key 的已登录普通用户走 `/v1/proxy/ai`，明确零余额时不发网，成功后本地额度立即递减；管理员跳过本地额度检查，未登录同时提示保存 Key 或登录。真实账号客户端覆盖授权代理请求、JSON 原样转发和成功用量更新。摘要精确缓存仍在选择凭据前返回，翻译的重试、恢复点和结构化错误继续通过原有回归。
+
+P1-13 本地自动处理新增 3 个 SQLite 队列场景、4 个 App 执行场景和 2 个 Feed 刷新联动场景：持久化任务按 Feed/条目/内容哈希/任务/语言幂等，正文变化废弃旧任务；每日不同条目上限跨任务与重启保持一致；过期租约可回收且旧持有者不能提交。后台执行使用阅读器兼容的纯文本块，调用前再次检查最新策略、内容哈希和翻译语言；策略关闭、每日上限、成功摘要/翻译、重试与取消分别收敛到可恢复状态。Feed 刷新仅在条目和验证器成功持久化后入队，队列故障不改变正常刷新结果。schema v11 新建与旧库升级回归全部通过。
 
 桌面账号新增 8 项 Infrastructure 测试和 7 项 App 测试：覆盖登录、refresh token 恢复、`/v1/me`、并发 401 单次刷新、每请求最多重放一次、失效清理、离线退出、DPAPI 删除/写入失败脱敏、登录密码清空、过期与额度显示、admin/user 导航隔离、角色降级回退和 XAML 自动化名称/绑定。
 

@@ -1485,6 +1485,11 @@ public sealed class NewsCenterViewModelTests
     {
         public List<FeedEntryQuery> Queries { get; } = [];
 
+        public Task<FeedEntry?> GetByIdAsync(
+            string entryId,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(entries.FirstOrDefault(entry => entry.Id == entryId));
+
         public Task<FeedEntryPage> QueryAsync(
             FeedEntryQuery query,
             CancellationToken cancellationToken)

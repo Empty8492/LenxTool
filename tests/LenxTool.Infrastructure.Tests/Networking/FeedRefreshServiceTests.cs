@@ -113,6 +113,53 @@ public sealed class FeedRefreshServiceTests
     }
 
     [Fact]
+    public async Task SuccessfulRefreshQueuesPersistedEntriesForAiAutomation()
+    {
+        var repository = new FakeFeedFetchStateRepository(Target());
+        var automation = new FakeFeedAiAutomationQueueService();
+        var transport = new FakeRefreshTransport((_, _, _, _) => Task.FromResult(
+            Response(HttpStatusCode.OK, Rss("queued"))));
+        using FeedRefreshService service = CreateService(
+            repository,
+            transport,
+            aiAutomationQueue: automation);
+
+        FeedRefreshResult result = await service.RefreshAsync(
+            FeedId,
+            force: true,
+            CancellationToken.None);
+
+        Assert.Equal(FeedRefreshOutcome.Updated, result.Outcome);
+        Assert.Equal(1, automation.EnqueueCalls);
+        Assert.Equal("queued", Assert.Single(automation.LastEntries).ExternalId);
+    }
+
+    [Fact]
+    public async Task AiQueueFailureDoesNotChangeSuccessfulRefreshOutcome()
+    {
+        var repository = new FakeFeedFetchStateRepository(Target());
+        var automation = new FakeFeedAiAutomationQueueService
+        {
+            Failure = new IOException("queue unavailable")
+        };
+        var transport = new FakeRefreshTransport((_, _, _, _) => Task.FromResult(
+            Response(HttpStatusCode.OK, Rss("still-persisted"))));
+        using FeedRefreshService service = CreateService(
+            repository,
+            transport,
+            aiAutomationQueue: automation);
+
+        FeedRefreshResult result = await service.RefreshAsync(
+            FeedId,
+            force: true,
+            CancellationToken.None);
+
+        Assert.Equal(FeedRefreshOutcome.Updated, result.Outcome);
+        Assert.Equal(1, automation.EnqueueCalls);
+        Assert.Equal(Now, repository.Saved?.LastSuccessAt);
+    }
+
+    [Fact]
     public async Task EntryWriteFailureDoesNotCommitNewValidator()
     {
         var oldState = new FeedFetchState(
@@ -461,7 +508,8 @@ public sealed class FeedRefreshServiceTests
         FeedRefreshOptions? options = null,
         FeedDiscoveryOptions? networkOptions = null,
         IFeedHostResolver? resolver = null,
-        IFeedEntryWriter? entryWriter = null) => new(
+        IFeedEntryWriter? entryWriter = null,
+        IFeedAiAutomationQueueService? aiAutomationQueue = null) => new(
             repository,
             entryWriter ?? new FakeFeedEntryWriter(),
             new FeedDocumentParser(),
@@ -469,7 +517,8 @@ public sealed class FeedRefreshServiceTests
             transport,
             networkOptions ?? FeedDiscoveryOptions.Default,
             options ?? FeedRefreshOptions.Default,
-            new FixedTimeProvider(Now));
+            new FixedTimeProvider(Now),
+            aiAutomationQueue);
 
     private static FeedRefreshTarget Target(
         FeedFetchState? state = null,
@@ -545,6 +594,26 @@ public sealed class FeedRefreshServiceTests
             LastEntries = entries;
             return Failure is null ? Task.CompletedTask : Task.FromException(Failure);
         }
+    }
+
+    private sealed class FakeFeedAiAutomationQueueService : IFeedAiAutomationQueueService
+    {
+        public int EnqueueCalls { get; private set; }
+        public IReadOnlyList<FeedEntry> LastEntries { get; private set; } = [];
+        public Exception? Failure { get; init; }
+
+        public Task EnqueueAsync(
+            string feedId,
+            IReadOnlyList<FeedEntry> entries,
+            CancellationToken cancellationToken)
+        {
+            EnqueueCalls++;
+            LastEntries = entries;
+            return Failure is null ? Task.CompletedTask : Task.FromException(Failure);
+        }
+
+        public Task<int> ProcessBackgroundBatchAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(0);
     }
 
     private sealed class FakeRefreshTransport(
