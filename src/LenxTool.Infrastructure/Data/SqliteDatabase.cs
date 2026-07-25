@@ -10,7 +10,7 @@ public sealed partial class SqliteDatabase(
     AppPaths paths,
     ILogger<SqliteDatabase> logger) : IDisposable
 {
-    private const int CurrentSchemaVersion = 11;
+    private const int CurrentSchemaVersion = 12;
     private readonly SemaphoreSlim _initializationGate = new(1, 1);
     private bool _initialized;
     private bool _disposed;
@@ -256,6 +256,18 @@ public sealed partial class SqliteDatabase(
                 command.CommandText = "INSERT INTO schema_versions(version, applied_at, checksum) VALUES (11, $appliedAt, $checksum);";
                 command.Parameters.AddWithValue("$appliedAt", DateTimeOffset.UtcNow.ToString("O"));
                 command.Parameters.AddWithValue("$checksum", "lenx-schema-v11-feed-ai-automation");
+                await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                version = 11;
+            }
+
+            if (version < 12)
+            {
+                command.CommandText = MigrationTwelveSql;
+                command.Parameters.Clear();
+                await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                command.CommandText = "INSERT INTO schema_versions(version, applied_at, checksum) VALUES (12, $appliedAt, $checksum);";
+                command.Parameters.AddWithValue("$appliedAt", DateTimeOffset.UtcNow.ToString("O"));
+                command.Parameters.AddWithValue("$checksum", "lenx-schema-v12-feed-automation-runs");
                 await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
             }
         }
@@ -762,5 +774,93 @@ public sealed partial class SqliteDatabase(
             ON feed_ai_automation_jobs(feed_id, entry_id, task_type, status);
         CREATE INDEX ix_feed_ai_automation_daily_limit
             ON feed_ai_automation_daily_entries(usage_date, feed_id, entry_id);
+        """;
+
+    private const string MigrationTwelveSql = """
+        CREATE TABLE feed_automation_runs(
+            entry_id TEXT NOT NULL CHECK(length(entry_id) BETWEEN 1 AND 256),
+            rule_id TEXT NOT NULL CHECK(length(rule_id) = 36),
+            rule_version INTEGER NOT NULL
+                CHECK(typeof(rule_version) = 'integer' AND rule_version >= 1),
+            evaluation_outcome TEXT NOT NULL
+                CHECK(evaluation_outcome IN ('DISABLED', 'MATCHED', 'NOT_MATCHED')),
+            plan_order INTEGER NOT NULL
+                CHECK(typeof(plan_order) = 'integer' AND plan_order BETWEEN 0 AND 99),
+            evaluated_at TEXT NOT NULL CHECK(length(evaluated_at) BETWEEN 20 AND 40),
+            PRIMARY KEY(entry_id, rule_id, rule_version)
+        ) WITHOUT ROWID;
+
+        CREATE TABLE feed_automation_action_runs(
+            idempotency_key TEXT PRIMARY KEY CHECK(length(idempotency_key) = 64),
+            entry_id TEXT NOT NULL CHECK(length(entry_id) BETWEEN 1 AND 256),
+            rule_id TEXT NOT NULL CHECK(length(rule_id) = 36),
+            rule_version INTEGER NOT NULL
+                CHECK(typeof(rule_version) = 'integer' AND rule_version >= 1),
+            rule_priority INTEGER NOT NULL
+                CHECK(typeof(rule_priority) = 'integer' AND rule_priority BETWEEN 0 AND 1000),
+            rule_conflict_order INTEGER NOT NULL
+                CHECK(typeof(rule_conflict_order) = 'integer' AND rule_conflict_order BETWEEN 0 AND 1000),
+            action_type TEXT NOT NULL
+                CHECK(action_type IN (
+                    'ADD_TAG', 'HIDE', 'MARK_READ', 'GENERATE_SUMMARY',
+                    'TRANSLATE', 'SEND_TO_MEDIA', 'NOTIFY')),
+            action_order INTEGER NOT NULL
+                CHECK(typeof(action_order) = 'integer' AND action_order BETWEEN 0 AND 1000),
+            action_value TEXT CHECK(action_value IS NULL OR length(action_value) BETWEEN 1 AND 80),
+            disposition TEXT NOT NULL CHECK(disposition IN ('PLANNED', 'SUPPRESSED')),
+            suppression_reason TEXT NOT NULL
+                CHECK(suppression_reason IN ('NONE', 'DUPLICATE_SINGLETON', 'DUPLICATE_TAG')),
+            winning_rule_id TEXT CHECK(winning_rule_id IS NULL OR length(winning_rule_id) = 36),
+            winning_rule_version INTEGER
+                CHECK(winning_rule_version IS NULL OR
+                    (typeof(winning_rule_version) = 'integer' AND winning_rule_version >= 1)),
+            winning_action_order INTEGER
+                CHECK(winning_action_order IS NULL OR
+                    (typeof(winning_action_order) = 'integer' AND winning_action_order BETWEEN 0 AND 1000)),
+            status TEXT NOT NULL
+                CHECK(status IN ('PENDING', 'RUNNING', 'RETRY', 'SUCCEEDED', 'FAILED', 'SUPPRESSED')),
+            attempt_count INTEGER NOT NULL DEFAULT 0
+                CHECK(typeof(attempt_count) = 'integer' AND attempt_count >= 0),
+            next_attempt_at TEXT
+                CHECK(next_attempt_at IS NULL OR length(next_attempt_at) BETWEEN 20 AND 40),
+            lease_token TEXT CHECK(lease_token IS NULL OR length(lease_token) = 32),
+            lease_expires_at TEXT
+                CHECK(lease_expires_at IS NULL OR length(lease_expires_at) BETWEEN 20 AND 40),
+            last_error_code TEXT
+                CHECK(last_error_code IS NULL OR length(last_error_code) BETWEEN 1 AND 128),
+            created_at TEXT NOT NULL CHECK(length(created_at) BETWEEN 20 AND 40),
+            updated_at TEXT NOT NULL CHECK(length(updated_at) BETWEEN 20 AND 40),
+            UNIQUE(entry_id, rule_id, rule_version, action_order),
+            FOREIGN KEY(entry_id, rule_id, rule_version)
+                REFERENCES feed_automation_runs(entry_id, rule_id, rule_version)
+                ON DELETE CASCADE,
+            CHECK(
+                (disposition = 'PLANNED'
+                    AND suppression_reason = 'NONE'
+                    AND winning_rule_id IS NULL
+                    AND winning_rule_version IS NULL
+                    AND winning_action_order IS NULL
+                    AND status <> 'SUPPRESSED')
+                OR
+                (disposition = 'SUPPRESSED'
+                    AND suppression_reason <> 'NONE'
+                    AND winning_rule_id IS NOT NULL
+                    AND winning_rule_version IS NOT NULL
+                    AND winning_action_order IS NOT NULL
+                    AND status = 'SUPPRESSED')),
+            CHECK(
+                (status IN ('PENDING', 'RETRY') AND next_attempt_at IS NOT NULL)
+                OR
+                (status NOT IN ('PENDING', 'RETRY') AND next_attempt_at IS NULL))
+        );
+
+        CREATE INDEX ix_feed_automation_action_runs_due
+            ON feed_automation_action_runs(
+                status, next_attempt_at, lease_expires_at,
+                rule_priority DESC, rule_conflict_order, created_at, idempotency_key);
+        CREATE INDEX ix_feed_automation_action_runs_entry
+            ON feed_automation_action_runs(
+                entry_id, created_at, rule_priority DESC,
+                rule_conflict_order, rule_id, action_order);
         """;
 }
