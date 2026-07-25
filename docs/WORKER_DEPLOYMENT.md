@@ -2,7 +2,7 @@
 
 ## 设计目标
 
-Worker 只保存账号、邀请码、角色、额度、用量、refresh token 哈希、基础审计，以及管理员发布的共享分类和 Feed 配置；不保存文章正文、早报正文、字幕、音视频、文件、本地路径或请求正文。共享 Groq/DeepSeek Key 仅保存在 Worker Secret。目录表与约束见 [Worker D1 Schema](api/worker-d1-schema.md)。
+Worker 只保存账号、邀请码、角色、额度、用量、refresh token 哈希、基础审计，以及管理员发布的共享分类、Feed 和 AI 开关/上限配置；不保存文章正文、摘要、译文、早报正文、字幕、音视频、文件、本地路径或请求正文。共享 Groq/DeepSeek Key 仅保存在 Worker Secret。目录表与约束见 [Worker D1 Schema](api/worker-d1-schema.md)。
 
 ## 资源准备
 

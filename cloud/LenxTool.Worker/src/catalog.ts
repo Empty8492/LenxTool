@@ -22,6 +22,12 @@ export interface CategoryRow {
   name_norm: string;
   sort_order: number;
   is_enabled: number;
+  ai_manual_summary_policy: AiPolicySwitch;
+  ai_auto_summary_policy: AiPolicySwitch;
+  ai_auto_translation_policy: AiPolicySwitch;
+  ai_translation_target_language: AiTranslationTargetLanguage | null;
+  ai_daily_entry_limit: number | null;
+  ai_max_concurrency: number | null;
   version: number;
   created_at: string;
   updated_at: string;
@@ -39,6 +45,12 @@ export interface FeedRow {
   refresh_interval_minutes: number;
   sort_order: number;
   is_enabled: number;
+  ai_manual_summary_policy: AiPolicySwitch;
+  ai_auto_summary_policy: AiPolicySwitch;
+  ai_auto_translation_policy: AiPolicySwitch;
+  ai_translation_target_language: AiTranslationTargetLanguage | null;
+  ai_daily_entry_limit: number | null;
+  ai_max_concurrency: number | null;
   version: number;
   created_at: string;
   updated_at: string;
@@ -81,13 +93,42 @@ interface CommitMutationSpec {
 
 export type ViewKind = "ARTICLE" | "PICTURE" | "AUDIO" | "VIDEO" | "NOTIFICATION";
 export type FullTextPolicy = "NONE" | "ON_OPEN" | "BACKGROUND";
+export type AiPolicySwitch = "INHERIT" | "ENABLED" | "DISABLED";
+export type AiTranslationTargetLanguage = "zh-Hans" | "en" | "ja" | "ko";
+
+export interface AiPolicyFields {
+  manualSummary: AiPolicySwitch;
+  autoSummary: AiPolicySwitch;
+  autoTranslation: AiPolicySwitch;
+  translationTargetLanguage: AiTranslationTargetLanguage | null;
+  dailyEntryLimit: number | null;
+  maxConcurrency: number | null;
+}
 
 const idempotencyKeyPattern = /^[A-Za-z0-9._:-]{16,128}$/u;
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 const viewKinds = new Set<ViewKind>(["ARTICLE", "PICTURE", "AUDIO", "VIDEO", "NOTIFICATION"]);
 const fullTextPolicies = new Set<FullTextPolicy>(["NONE", "ON_OPEN", "BACKGROUND"]);
+const aiPolicySwitches = new Set<AiPolicySwitch>(["INHERIT", "ENABLED", "DISABLED"]);
+const aiTranslationTargetLanguages = new Set<AiTranslationTargetLanguage>(["zh-Hans", "en", "ja", "ko"]);
 const encoder = new TextEncoder();
 const catalogResponseLimit = 10 * 1024 * 1024;
+const inheritedAiPolicy: AiPolicyFields = Object.freeze({
+  manualSummary: "INHERIT",
+  autoSummary: "INHERIT",
+  autoTranslation: "INHERIT",
+  translationTargetLanguage: null,
+  dailyEntryLimit: null,
+  maxConcurrency: null
+});
+const aiPolicyDefaults = Object.freeze({
+  manualSummary: "ENABLED",
+  autoSummary: "DISABLED",
+  autoTranslation: "DISABLED",
+  translationTargetLanguage: "zh-Hans",
+  dailyEntryLimit: 20,
+  maxConcurrency: 1
+});
 
 export async function handleCatalogReadRequest(
   request: Request,
@@ -107,13 +148,17 @@ export async function handleCatalogReadRequest(
 
   const activeOnly = conditions.scope === "ACTIVE";
   const categorySql =
-    "SELECT id,name,name_norm,sort_order,is_enabled,version,created_at,updated_at " +
+    "SELECT id,name,name_norm,sort_order,is_enabled,ai_manual_summary_policy,ai_auto_summary_policy," +
+    "ai_auto_translation_policy,ai_translation_target_language,ai_daily_entry_limit,ai_max_concurrency," +
+    "version,created_at,updated_at " +
     "FROM feed_categories WHERE deleted_at IS NULL" +
     (activeOnly ? " AND is_enabled=1" : "") +
     " ORDER BY sort_order,name COLLATE BINARY,id";
   const feedSql =
     "SELECT f.id,f.original_url,f.normalized_url,f.display_name,f.site_url,f.category_id,f.view_kind,f.full_text_policy," +
-    "f.refresh_interval_minutes,f.sort_order,f.is_enabled,f.version,f.created_at,f.updated_at " +
+    "f.refresh_interval_minutes,f.sort_order,f.is_enabled,f.ai_manual_summary_policy,f.ai_auto_summary_policy," +
+    "f.ai_auto_translation_policy,f.ai_translation_target_language,f.ai_daily_entry_limit,f.ai_max_concurrency," +
+    "f.version,f.created_at,f.updated_at " +
     "FROM managed_feeds f LEFT JOIN feed_categories c ON c.id=f.category_id AND c.deleted_at IS NULL " +
     "WHERE f.deleted_at IS NULL AND (f.category_id IS NULL OR c.id IS NOT NULL)" +
     (activeOnly ? " AND f.is_enabled=1 AND (f.category_id IS NULL OR c.is_enabled=1)" : "") +
@@ -152,6 +197,7 @@ export async function handleCatalogReadRequest(
     catalogVersion: state.catalog_version,
     scope: conditions.scope,
     generatedAt: state.updated_at,
+    aiPolicyDefaults,
     categories: categories.map(toCatalogCategory),
     feeds: feeds.map(toCatalogFeed)
   });
@@ -263,6 +309,7 @@ function toCatalogCategory(row: CategoryRow) {
     name: row.name,
     sortOrder: row.sort_order,
     isEnabled: row.is_enabled === 1,
+    aiPolicy: aiPolicyFromRow(row),
     version: row.version,
     createdAt: row.created_at,
     updatedAt: row.updated_at
@@ -282,6 +329,7 @@ function toCatalogFeed(row: FeedRow) {
     refreshIntervalMinutes: row.refresh_interval_minutes,
     sortOrder: row.sort_order,
     isEnabled: row.is_enabled === 1,
+    aiPolicy: aiPolicyFromRow(row),
     version: row.version,
     createdAt: row.created_at,
     updatedAt: row.updated_at
@@ -297,11 +345,14 @@ async function createCategory(
   const body = await readJson(request, 8192);
   const prepared = await prepareMutation(request, db, auth, path, body);
   if (prepared instanceof Response) return prepared;
-  assertOnlyFields(body, ["name", "sortOrder", "isEnabled"]);
+  assertOnlyFields(body, ["name", "sortOrder", "isEnabled", "aiPolicy"]);
   const name = requireTrimmedString(body.name, "分类名称", 80);
   const nameNorm = normalizeCategoryName(name);
   const sortOrder = requireInteger(body.sortOrder ?? 0, 0, 1_000_000, "分类排序");
   const isEnabled = requireBoolean(body.isEnabled ?? true, "分类启用状态");
+  const aiPolicy = body.aiPolicy === undefined
+    ? inheritedAiPolicy
+    : requireAiPolicyFields(body.aiPolicy, inheritedAiPolicy);
 
   if (await categoryNameExists(db, nameNorm)) {
     throw new CatalogApiError(409, "DUPLICATE_CATEGORY", "已存在同名分类");
@@ -317,6 +368,7 @@ async function createCategory(
     name,
     sortOrder,
     isEnabled,
+    aiPolicy,
     version: prepared.newVersion,
     createdAt: now,
     updatedAt: now
@@ -333,9 +385,22 @@ async function createCategory(
     successTable: "feed_categories",
     duplicateCode: "DUPLICATE_CATEGORY",
     businessStatement: mutationId => db.prepare(
-      "INSERT INTO feed_categories(id,name,name_norm,sort_order,is_enabled,version,created_at,updated_at) " +
-      "SELECT ?,?,?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM feed_catalog_state WHERE singleton_id=1 AND last_mutation_id=?)"
-    ).bind(id, name, nameNorm, sortOrder, isEnabled ? 1 : 0, prepared.newVersion, now, now, mutationId)
+      "INSERT INTO feed_categories(id,name,name_norm,sort_order,is_enabled,ai_manual_summary_policy," +
+      "ai_auto_summary_policy,ai_auto_translation_policy,ai_translation_target_language,ai_daily_entry_limit," +
+      "ai_max_concurrency,version,created_at,updated_at) SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,? WHERE EXISTS " +
+      "(SELECT 1 FROM feed_catalog_state WHERE singleton_id=1 AND last_mutation_id=?)"
+    ).bind(
+      id,
+      name,
+      nameNorm,
+      sortOrder,
+      isEnabled ? 1 : 0,
+      ...aiPolicyDatabaseValues(aiPolicy),
+      prepared.newVersion,
+      now,
+      now,
+      mutationId
+    )
   });
 }
 
@@ -349,7 +414,7 @@ async function patchCategory(
   const body = await readJson(request, 8192);
   const prepared = await prepareMutation(request, db, auth, path, body);
   if (prepared instanceof Response) return prepared;
-  assertOnlyFields(body, ["name", "sortOrder", "isEnabled"]);
+  assertOnlyFields(body, ["name", "sortOrder", "isEnabled", "aiPolicy"]);
   assertHasFields(body, "分类更新至少需要一个字段");
   const current = await getCategory(db, categoryId);
   const name = body.name === undefined ? current.name : requireTrimmedString(body.name, "分类名称", 80);
@@ -360,6 +425,9 @@ async function patchCategory(
   const isEnabled = body.isEnabled === undefined
     ? current.is_enabled === 1
     : requireBoolean(body.isEnabled, "分类启用状态");
+  const aiPolicy = body.aiPolicy === undefined
+    ? aiPolicyFromRow(current)
+    : requireAiPolicyFields(body.aiPolicy, aiPolicyFromRow(current));
 
   if (await categoryNameExists(db, nameNorm, categoryId)) {
     throw new CatalogApiError(409, "DUPLICATE_CATEGORY", "已存在同名分类");
@@ -371,6 +439,7 @@ async function patchCategory(
     name,
     sortOrder,
     isEnabled,
+    aiPolicy,
     version: prepared.newVersion,
     createdAt: current.created_at,
     updatedAt: now
@@ -387,10 +456,22 @@ async function patchCategory(
     successTable: "feed_categories",
     duplicateCode: "DUPLICATE_CATEGORY",
     businessStatement: mutationId => db.prepare(
-      "UPDATE feed_categories SET name=?,name_norm=?,sort_order=?,is_enabled=?,version=?,updated_at=? " +
+      "UPDATE feed_categories SET name=?,name_norm=?,sort_order=?,is_enabled=?,ai_manual_summary_policy=?," +
+      "ai_auto_summary_policy=?,ai_auto_translation_policy=?,ai_translation_target_language=?," +
+      "ai_daily_entry_limit=?,ai_max_concurrency=?,version=?,updated_at=? " +
       "WHERE id=? AND deleted_at IS NULL AND EXISTS " +
       "(SELECT 1 FROM feed_catalog_state WHERE singleton_id=1 AND last_mutation_id=?)"
-    ).bind(name, nameNorm, sortOrder, isEnabled ? 1 : 0, prepared.newVersion, now, categoryId, mutationId)
+    ).bind(
+      name,
+      nameNorm,
+      sortOrder,
+      isEnabled ? 1 : 0,
+      ...aiPolicyDatabaseValues(aiPolicy),
+      prepared.newVersion,
+      now,
+      categoryId,
+      mutationId
+    )
   });
 }
 
@@ -446,7 +527,7 @@ async function createFeed(
   if (prepared instanceof Response) return prepared;
   assertOnlyFields(body, [
     "originalUrl", "displayName", "siteUrl", "categoryId", "viewKind", "fullTextPolicy",
-    "refreshIntervalMinutes", "sortOrder", "isEnabled"
+    "refreshIntervalMinutes", "sortOrder", "isEnabled", "aiPolicy"
   ]);
   const originalUrl = requireOriginalFeedUrl(body.originalUrl);
   const normalizedUrl = normalizeHttpsUrl(originalUrl, "Feed URL");
@@ -462,6 +543,9 @@ async function createFeed(
   const refreshIntervalMinutes = requireInteger(body.refreshIntervalMinutes ?? 60, 5, 1440, "刷新间隔");
   const sortOrder = requireInteger(body.sortOrder ?? 0, 0, 1_000_000, "Feed 排序");
   const isEnabled = requireBoolean(body.isEnabled ?? true, "Feed 启用状态");
+  const aiPolicy = body.aiPolicy === undefined
+    ? inheritedAiPolicy
+    : requireAiPolicyFields(body.aiPolicy, inheritedAiPolicy);
 
   const category = categoryId === null ? null : await getCategory(db, categoryId);
   if (isEnabled && category?.is_enabled === 0) {
@@ -488,6 +572,7 @@ async function createFeed(
     refreshIntervalMinutes,
     sortOrder,
     isEnabled,
+    aiPolicy,
     version: prepared.newVersion,
     createdAt: now,
     updatedAt: now
@@ -505,12 +590,14 @@ async function createFeed(
     duplicateCode: "DUPLICATE_FEED",
     businessStatement: mutationId => db.prepare(
       "INSERT INTO managed_feeds(id,original_url,normalized_url,display_name,site_url,category_id,view_kind,full_text_policy," +
-      "refresh_interval_minutes,sort_order,is_enabled,version,created_at,updated_at) " +
-      "SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,? WHERE EXISTS " +
+      "refresh_interval_minutes,sort_order,is_enabled,ai_manual_summary_policy,ai_auto_summary_policy," +
+      "ai_auto_translation_policy,ai_translation_target_language,ai_daily_entry_limit,ai_max_concurrency," +
+      "version,created_at,updated_at) SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,? WHERE EXISTS " +
       "(SELECT 1 FROM feed_catalog_state WHERE singleton_id=1 AND last_mutation_id=?)"
     ).bind(
       id, originalUrl, normalizedUrl, displayName, siteUrl, categoryId, viewKind, fullTextPolicy,
-      refreshIntervalMinutes, sortOrder, isEnabled ? 1 : 0, prepared.newVersion, now, now, mutationId
+      refreshIntervalMinutes, sortOrder, isEnabled ? 1 : 0, ...aiPolicyDatabaseValues(aiPolicy),
+      prepared.newVersion, now, now, mutationId
     )
   });
 }
@@ -527,7 +614,7 @@ async function patchFeed(
   if (prepared instanceof Response) return prepared;
   assertOnlyFields(body, [
     "originalUrl", "displayName", "siteUrl", "categoryId", "viewKind", "fullTextPolicy",
-    "refreshIntervalMinutes", "sortOrder", "isEnabled"
+    "refreshIntervalMinutes", "sortOrder", "isEnabled", "aiPolicy"
   ]);
   assertHasFields(body, "Feed 更新至少需要一个字段");
   const current = await getFeed(db, feedId);
@@ -563,6 +650,9 @@ async function patchFeed(
   const isEnabled = body.isEnabled === undefined
     ? current.is_enabled === 1
     : requireBoolean(body.isEnabled, "Feed 启用状态");
+  const aiPolicy = body.aiPolicy === undefined
+    ? aiPolicyFromRow(current)
+    : requireAiPolicyFields(body.aiPolicy, aiPolicyFromRow(current));
 
   const category = categoryId === null ? null : await getCategory(db, categoryId);
   if (isEnabled && category?.is_enabled === 0 && (body.isEnabled === true || body.categoryId !== undefined)) {
@@ -585,6 +675,7 @@ async function patchFeed(
     refreshIntervalMinutes,
     sortOrder,
     isEnabled,
+    aiPolicy,
     version: prepared.newVersion,
     createdAt: current.created_at,
     updatedAt: now
@@ -602,12 +693,15 @@ async function patchFeed(
     duplicateCode: "DUPLICATE_FEED",
     businessStatement: mutationId => db.prepare(
       "UPDATE managed_feeds SET original_url=?,normalized_url=?,display_name=?,site_url=?,category_id=?,view_kind=?,full_text_policy=?," +
-      "refresh_interval_minutes=?,sort_order=?,is_enabled=?,version=?,updated_at=? " +
+      "refresh_interval_minutes=?,sort_order=?,is_enabled=?,ai_manual_summary_policy=?,ai_auto_summary_policy=?," +
+      "ai_auto_translation_policy=?,ai_translation_target_language=?,ai_daily_entry_limit=?,ai_max_concurrency=?," +
+      "version=?,updated_at=? " +
       "WHERE id=? AND deleted_at IS NULL AND EXISTS " +
       "(SELECT 1 FROM feed_catalog_state WHERE singleton_id=1 AND last_mutation_id=?)"
     ).bind(
       originalUrl, normalizedUrl, displayName, siteUrl, categoryId, viewKind, fullTextPolicy,
-      refreshIntervalMinutes, sortOrder, isEnabled ? 1 : 0, prepared.newVersion, now, feedId, mutationId
+      refreshIntervalMinutes, sortOrder, isEnabled ? 1 : 0, ...aiPolicyDatabaseValues(aiPolicy),
+      prepared.newVersion, now, feedId, mutationId
     )
   });
 }
@@ -799,7 +893,9 @@ export async function getCatalogVersion(db: D1Database): Promise<number> {
 
 async function getCategory(db: D1Database, categoryId: string): Promise<CategoryRow> {
   const row = await db.prepare(
-    "SELECT id,name,name_norm,sort_order,is_enabled,version,created_at,updated_at " +
+    "SELECT id,name,name_norm,sort_order,is_enabled,ai_manual_summary_policy,ai_auto_summary_policy," +
+    "ai_auto_translation_policy,ai_translation_target_language,ai_daily_entry_limit,ai_max_concurrency," +
+    "version,created_at,updated_at " +
     "FROM feed_categories WHERE id=? AND deleted_at IS NULL"
   ).bind(categoryId).first<CategoryRow>();
   if (!row) throw new CatalogApiError(404, "RESOURCE_NOT_FOUND", "分类不存在");
@@ -809,7 +905,9 @@ async function getCategory(db: D1Database, categoryId: string): Promise<Category
 async function getFeed(db: D1Database, feedId: string): Promise<FeedRow> {
   const row = await db.prepare(
     "SELECT id,original_url,normalized_url,display_name,site_url,category_id,view_kind,full_text_policy," +
-    "refresh_interval_minutes,sort_order,is_enabled,version,created_at,updated_at " +
+    "refresh_interval_minutes,sort_order,is_enabled,ai_manual_summary_policy,ai_auto_summary_policy," +
+    "ai_auto_translation_policy,ai_translation_target_language,ai_daily_entry_limit,ai_max_concurrency," +
+    "version,created_at,updated_at " +
     "FROM managed_feeds WHERE id=? AND deleted_at IS NULL"
   ).bind(feedId).first<FeedRow>();
   if (!row) throw new CatalogApiError(404, "RESOURCE_NOT_FOUND", "Feed 不存在");
@@ -926,6 +1024,94 @@ export function requireFullTextPolicy(value: unknown): FullTextPolicy {
     throw new CatalogApiError(400, "VALIDATION_ERROR", "Feed 全文抓取策略无效");
   }
   return value as FullTextPolicy;
+}
+
+export function requireAiPolicyFields(value: unknown, current: AiPolicyFields): AiPolicyFields {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new CatalogApiError(400, "VALIDATION_ERROR", "AI 策略格式无效");
+  }
+  const input = value as Record<string, unknown>;
+  assertOnlyFields(input, [
+    "manualSummary",
+    "autoSummary",
+    "autoTranslation",
+    "translationTargetLanguage",
+    "dailyEntryLimit",
+    "maxConcurrency"
+  ]);
+  assertHasFields(input, "AI 策略更新至少需要一个字段");
+  return {
+    manualSummary: input.manualSummary === undefined
+      ? current.manualSummary
+      : requireAiPolicySwitch(input.manualSummary, "手动摘要策略"),
+    autoSummary: input.autoSummary === undefined
+      ? current.autoSummary
+      : requireAiPolicySwitch(input.autoSummary, "自动摘要策略"),
+    autoTranslation: input.autoTranslation === undefined
+      ? current.autoTranslation
+      : requireAiPolicySwitch(input.autoTranslation, "自动翻译策略"),
+    translationTargetLanguage: input.translationTargetLanguage === undefined
+      ? current.translationTargetLanguage
+      : input.translationTargetLanguage === null
+        ? null
+        : requireAiTranslationTargetLanguage(input.translationTargetLanguage),
+    dailyEntryLimit: input.dailyEntryLimit === undefined
+      ? current.dailyEntryLimit
+      : input.dailyEntryLimit === null
+        ? null
+        : requireInteger(input.dailyEntryLimit, 1, 1000, "AI 每日条目上限"),
+    maxConcurrency: input.maxConcurrency === undefined
+      ? current.maxConcurrency
+      : input.maxConcurrency === null
+        ? null
+        : requireInteger(input.maxConcurrency, 1, 4, "AI 并发上限")
+  };
+}
+
+export function aiPolicyFromRow(row: CategoryRow | FeedRow): AiPolicyFields {
+  return {
+    manualSummary: row.ai_manual_summary_policy,
+    autoSummary: row.ai_auto_summary_policy,
+    autoTranslation: row.ai_auto_translation_policy,
+    translationTargetLanguage: row.ai_translation_target_language,
+    dailyEntryLimit: row.ai_daily_entry_limit,
+    maxConcurrency: row.ai_max_concurrency
+  };
+}
+
+export function aiPolicyDatabaseValues(
+  policy: AiPolicyFields
+): [
+  AiPolicySwitch,
+  AiPolicySwitch,
+  AiPolicySwitch,
+  AiTranslationTargetLanguage | null,
+  number | null,
+  number | null
+] {
+  return [
+    policy.manualSummary,
+    policy.autoSummary,
+    policy.autoTranslation,
+    policy.translationTargetLanguage,
+    policy.dailyEntryLimit,
+    policy.maxConcurrency
+  ];
+}
+
+function requireAiPolicySwitch(value: unknown, label: string): AiPolicySwitch {
+  if (typeof value !== "string" || !aiPolicySwitches.has(value as AiPolicySwitch)) {
+    throw new CatalogApiError(400, "VALIDATION_ERROR", `${label}无效`);
+  }
+  return value as AiPolicySwitch;
+}
+
+function requireAiTranslationTargetLanguage(value: unknown): AiTranslationTargetLanguage {
+  if (typeof value !== "string" ||
+      !aiTranslationTargetLanguages.has(value as AiTranslationTargetLanguage)) {
+    throw new CatalogApiError(400, "VALIDATION_ERROR", "AI 翻译目标语言无效");
+  }
+  return value as AiTranslationTargetLanguage;
 }
 
 export function assertOnlyFields(body: Record<string, unknown>, allowed: readonly string[]): void {

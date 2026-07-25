@@ -1,6 +1,6 @@
 # 测试报告
 
-测试日期：.NET 2026-07-25 / Worker 2026-07-24（Asia/Shanghai）
+测试日期：.NET / Worker 2026-07-25（Asia/Shanghai）
 版本：0.1.0  
 配置：Release / win-x64 / .NET SDK 10.0.302
 
@@ -11,12 +11,12 @@
 | LenxTool.Core.Tests | 39 passed |
 | LenxTool.Infrastructure.Tests | 254 passed |
 | LenxTool.App.Tests | 124 passed |
-| Cloudflare Worker Vitest | 39 passed |
+| Cloudflare Worker Vitest | 44 passed |
 | Worker TypeScript strict typecheck | passed |
 | .NET build warnings | 0 |
 | NuGet vulnerable packages | 0 detected |
 
-本轮执行三个 .NET 测试项目及 `dotnet build LenxTools.slnx -c Release --no-restore`，结果为 0 警告、0 错误；Core 39、Infrastructure 254、App 124，共 417/417 通过且无跳过。运行中的 Lenx Tools 占用默认 Debug 输出时，App 测试使用隔离 `OutDir`，测试程序集和依赖仍由当前源码重新编译。Worker 严格 typecheck 和官方 workerd/D1 Vitest 39/39 保持上次通过记录。
+本轮执行三个 .NET 测试项目及 `dotnet build LenxTools.slnx -c Release --no-restore`，结果为 0 警告、0 错误；Core 39、Infrastructure 254、App 124，共 417/417 通过且无跳过。运行中的 Lenx Tools 占用默认 Debug 输出时，App 测试使用隔离 `OutDir`，测试程序集和依赖仍由当前源码重新编译。Worker 严格 typecheck 和官方 workerd/D1 Vitest 44/44 通过。
 
 P0-08 覆盖 4 项 SQLite 集成场景并同步既有 schema 断言：新建库创建目录状态、分类、Feed、抓取状态、条目、索引和搜索映射；真实 schema v2 哨兵数据经 v3/v4 原位升级后仍可由现有仓储读取；迁移对象冲突时完整回滚且版本停留在 v3；相同外部 ID、URL 和内容哈希可存在于不同 Feed，同一 Feed 内重复外部 ID 被约束拒绝。既有包含未 checkpoint WAL 提交的一致性备份测试继续通过。
 
@@ -67,6 +67,8 @@ P1-06 新增 11 个 Infrastructure 场景并扩展真实 WPF 运行场景：缓�
 P1-07 新增 25 个 Infrastructure 场景：12 组独立文章 fixture 覆盖 `article`/`main`/内容容器、中文、列表、引用、相对链接、延迟图片、噪声布局、畸形 HTML、元数据和提示注入文本；其余场景覆盖 GB18030、脚本/样式/表单/iframe/危险协议净化、空正文警告、DOM 深度、正文/块上限、最终 URL、固定 DNS 地址、私网 DNS/重定向阻断、响应大小、调用方取消、总超时和同主机并发 1。Core 契约不暴露解析器类型，组合根测试确认 `IArticleContentExtractor` 可解析。`dotnet list LenxTools.slnx package --vulnerable --include-transitive` 对包括 `HtmlAgilityPack 1.12.4` 在内的全部项目报告 0 个已知易受攻击包。
 
 P1-12 新增 7 个 Infrastructure 翻译服务场景及 6 个 App 行为/布局场景：完整缓存跳过凭据与模型调用；每个批次保存恢复点并按原序归一乱序结果；供应商失败和调用方取消保留已完成块并在下次从精确位置继续；目标语言、模型、内容哈希改变时缓存正确失效；同键并发只执行一次。App 覆盖标题/正文翻译输入、原文/译文/双语切换、失败保留原文、切换条目取消、超长段落 Unicode 安全拆分、图片顺序及原文链接目标保留；模型 HTML/Markdown 仅进入纯文本 `Run`。真实 WPF STA 场景确认阅读模式、目标语言和翻译按钮可访问且默认原文/简体中文。
+
+P1-13 Worker 策略第一片新增 5 个端到端场景并扩展目录/迁移回归：分类和 Feed 的手动摘要、自动摘要、自动翻译覆盖使用受限枚举，自动处理由全局安全默认保持关闭；目标语言、每日条目和并发上限受 D1 与请求双重约束。普通用户可读策略但不能写，管理员单项/批量写继续复用目录版本、幂等键和最小审计；旧版本与未知字段不会改变状态。公开快照不含文章、摘要或译文，完整 Worker 44/44 通过。
 
 桌面账号新增 8 项 Infrastructure 测试和 7 项 App 测试：覆盖登录、refresh token 恢复、`/v1/me`、并发 401 单次刷新、每请求最多重放一次、失效清理、离线退出、DPAPI 删除/写入失败脱敏、登录密码清空、过期与额度显示、admin/user 导航隔离、角色降级回退和 XAML 自动化名称/绑定。
 

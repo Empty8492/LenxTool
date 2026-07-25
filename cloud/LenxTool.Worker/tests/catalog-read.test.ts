@@ -28,6 +28,7 @@ interface CatalogCategory {
   name: string;
   sortOrder: number;
   isEnabled: boolean;
+  aiPolicy: AiPolicy;
   version: number;
   createdAt: string;
   updatedAt: string;
@@ -45,6 +46,7 @@ interface CatalogFeed {
   refreshIntervalMinutes: number;
   sortOrder: number;
   isEnabled: boolean;
+  aiPolicy: AiPolicy;
   version: number;
   createdAt: string;
   updatedAt: string;
@@ -54,8 +56,18 @@ interface CatalogSnapshot {
   catalogVersion: number;
   scope: "ACTIVE" | "ALL";
   generatedAt: string;
+  aiPolicyDefaults: AiPolicy;
   categories: CatalogCategory[];
   feeds: CatalogFeed[];
+}
+
+interface AiPolicy {
+  manualSummary: "INHERIT" | "ENABLED" | "DISABLED";
+  autoSummary: "INHERIT" | "ENABLED" | "DISABLED";
+  autoTranslation: "INHERIT" | "ENABLED" | "DISABLED";
+  translationTargetLanguage: "zh-Hans" | "en" | "ja" | "ko" | null;
+  dailyEntryLimit: number | null;
+  maxConcurrency: number | null;
 }
 
 beforeEach(async () => {
@@ -95,6 +107,7 @@ describe("Worker v1 feed catalog read route", () => {
       catalogVersion: 7,
       scope: "ACTIVE",
       generatedAt,
+      aiPolicyDefaults: defaultAiPolicy(),
       categories: [categoryDto(categoryIds.alpha, "Alpha", 10, true), categoryDto(categoryIds.beta, "Beta", 10, true)],
       feeds: [
         feedDto(feedIds.alpha, "Alpha Feed", categoryIds.alpha, 10, true),
@@ -215,6 +228,7 @@ describe("Worker v1 feed catalog read route", () => {
       catalogVersion: 0,
       scope: "ACTIVE",
       generatedAt,
+      aiPolicyDefaults: defaultAiPolicy(),
       categories: [],
       feeds: []
     });
@@ -285,7 +299,16 @@ function feedStatement(
 }
 
 function categoryDto(id: string, name: string, sortOrder: number, isEnabled: boolean): CatalogCategory {
-  return { id, name, sortOrder, isEnabled, version: 7, createdAt: generatedAt, updatedAt: generatedAt };
+  return {
+    id,
+    name,
+    sortOrder,
+    isEnabled,
+    aiPolicy: inheritedAiPolicy(),
+    version: 7,
+    createdAt: generatedAt,
+    updatedAt: generatedAt
+  };
 }
 
 function feedDto(
@@ -309,9 +332,32 @@ function feedDto(
     refreshIntervalMinutes: 60,
     sortOrder,
     isEnabled,
+    aiPolicy: inheritedAiPolicy(),
     version: 7,
     createdAt: generatedAt,
     updatedAt: generatedAt
+  };
+}
+
+function inheritedAiPolicy(): AiPolicy {
+  return {
+    manualSummary: "INHERIT",
+    autoSummary: "INHERIT",
+    autoTranslation: "INHERIT",
+    translationTargetLanguage: null,
+    dailyEntryLimit: null,
+    maxConcurrency: null
+  };
+}
+
+function defaultAiPolicy(): AiPolicy {
+  return {
+    manualSummary: "ENABLED",
+    autoSummary: "DISABLED",
+    autoTranslation: "DISABLED",
+    translationTargetLanguage: "zh-Hans",
+    dailyEntryLimit: 20,
+    maxConcurrency: 1
   };
 }
 

@@ -37,7 +37,8 @@ describe("feed catalog migrations", () => {
       "0001_initial.sql",
       "0002_feed_catalog.sql",
       "0003_catalog_mutations.sql",
-      "0004_feed_full_text_policy.sql"
+      "0004_feed_full_text_policy.sql",
+      "0005_feed_ai_policy.sql"
     ]);
   });
 
@@ -208,12 +209,15 @@ describe("feed catalog migrations", () => {
     const auditColumns = await tableColumns("audit_events");
 
     expect(categoryColumns).toEqual([
-      "id", "name", "name_norm", "sort_order", "is_enabled", "deleted_at", "version", "created_at", "updated_at"
+      "id", "name", "name_norm", "sort_order", "is_enabled", "deleted_at", "version", "created_at", "updated_at",
+      "ai_manual_summary_policy", "ai_auto_summary_policy", "ai_auto_translation_policy",
+      "ai_translation_target_language", "ai_daily_entry_limit", "ai_max_concurrency"
     ]);
     expect(feedColumns).toEqual([
       "id", "original_url", "normalized_url", "display_name", "site_url", "category_id", "view_kind",
       "refresh_interval_minutes", "sort_order", "is_enabled", "deleted_at", "version", "created_at", "updated_at",
-      "full_text_policy"
+      "full_text_policy", "ai_manual_summary_policy", "ai_auto_summary_policy", "ai_auto_translation_policy",
+      "ai_translation_target_language", "ai_daily_entry_limit", "ai_max_concurrency"
     ]);
     expect(stateColumns).toEqual(["singleton_id", "catalog_version", "updated_at", "last_mutation_id"]);
     expect(idempotencyColumns).toEqual([
@@ -224,7 +228,9 @@ describe("feed catalog migrations", () => {
     expect(auditColumns).toContain("catalog_version");
 
     const allColumns = [...categoryColumns, ...feedColumns, ...stateColumns].join(" ");
-    expect(allColumns).not.toMatch(/article|body|content|summary|ai|path|file|user_state/iu);
+    expect(allColumns).not.toMatch(
+      /article|body|content|summary_text|translation_text|result_text|prompt|path|file|user_state|secret|credential/iu
+    );
     expect(idempotencyColumns.join(" ")).not.toMatch(/request_body|password|secret|token_hash|credential/iu);
   });
 });

@@ -1,9 +1,11 @@
 import {
   CatalogApiError,
+  type AiPolicyFields,
   type CatalogAuthContext,
   type CategoryRow,
   type FeedRow,
   type PreparedMutation,
+  aiPolicyFromRow,
   assertHasFields,
   assertOnlyFields,
   findIdempotency,
@@ -16,6 +18,7 @@ import {
   prepareMutation,
   readJson,
   replayOrReject,
+  requireAiPolicyFields,
   requireBoolean,
   requireFullTextPolicy,
   requireInteger,
@@ -26,6 +29,15 @@ import {
   sha256,
   versionConflict
 } from "./catalog";
+
+const inheritedAiPolicy: AiPolicyFields = {
+  manualSummary: "INHERIT",
+  autoSummary: "INHERIT",
+  autoTranslation: "INHERIT",
+  translationTargetLanguage: null,
+  dailyEntryLimit: null,
+  maxConcurrency: null
+};
 
 type BatchOperationType =
   | "CREATE_CATEGORY"
@@ -148,11 +160,14 @@ function prepareCreateCategory(
 ): PreparedBatchOperation {
   assertOnlyFields(operation, ["operationId", "type", "input"]);
   const input = requireRecord(operation.input, "分类输入");
-  assertOnlyFields(input, ["name", "sortOrder", "isEnabled"]);
+  assertOnlyFields(input, ["name", "sortOrder", "isEnabled", "aiPolicy"]);
   const name = requireTrimmedString(input.name, "分类名称", 80);
   const nameNorm = normalizeCategoryName(name);
   const sortOrder = requireInteger(input.sortOrder ?? 0, 0, 1_000_000, "分类排序");
   const isEnabled = requireBoolean(input.isEnabled ?? true, "分类启用状态");
+  const aiPolicy = input.aiPolicy === undefined
+    ? inheritedAiPolicy
+    : requireAiPolicyFields(input.aiPolicy, inheritedAiPolicy);
   if (hasCategoryName(catalog, nameNorm)) {
     throw new CatalogApiError(409, "DUPLICATE_CATEGORY", "已存在同名分类");
   }
@@ -168,6 +183,12 @@ function prepareCreateCategory(
     name_norm: nameNorm,
     sort_order: sortOrder,
     is_enabled: isEnabled ? 1 : 0,
+    ai_manual_summary_policy: aiPolicy.manualSummary,
+    ai_auto_summary_policy: aiPolicy.autoSummary,
+    ai_auto_translation_policy: aiPolicy.autoTranslation,
+    ai_translation_target_language: aiPolicy.translationTargetLanguage,
+    ai_daily_entry_limit: aiPolicy.dailyEntryLimit,
+    ai_max_concurrency: aiPolicy.maxConcurrency,
     version: newVersion,
     created_at: now,
     updated_at: now
@@ -180,7 +201,7 @@ function prepareCreateCategory(
     "CREATE_CATEGORY",
     "feed_category.created",
     "feed_category",
-    { id, name, nameNorm, sortOrder, isEnabled, version: newVersion, createdAt: now, updatedAt: now }
+    { id, name, nameNorm, sortOrder, isEnabled, aiPolicy, version: newVersion, createdAt: now, updatedAt: now }
   );
 }
 
@@ -194,7 +215,7 @@ function preparePatchCategory(
   const categoryId = requireUuid(operation.categoryId, "分类 ID");
   const current = requireCategory(catalog, categoryId);
   const input = requireRecord(operation.input, "分类输入");
-  assertOnlyFields(input, ["name", "sortOrder", "isEnabled"]);
+  assertOnlyFields(input, ["name", "sortOrder", "isEnabled", "aiPolicy"]);
   assertHasFields(input, "分类更新至少需要一个字段");
   const name = input.name === undefined ? current.name : requireTrimmedString(input.name, "分类名称", 80);
   const nameNorm = normalizeCategoryName(name);
@@ -204,6 +225,9 @@ function preparePatchCategory(
   const isEnabled = input.isEnabled === undefined
     ? current.is_enabled === 1
     : requireBoolean(input.isEnabled, "分类启用状态");
+  const aiPolicy = input.aiPolicy === undefined
+    ? aiPolicyFromRow(current)
+    : requireAiPolicyFields(input.aiPolicy, aiPolicyFromRow(current));
   if (hasCategoryName(catalog, nameNorm, categoryId)) {
     throw new CatalogApiError(409, "DUPLICATE_CATEGORY", "已存在同名分类");
   }
@@ -214,6 +238,12 @@ function preparePatchCategory(
     name_norm: nameNorm,
     sort_order: sortOrder,
     is_enabled: isEnabled ? 1 : 0,
+    ai_manual_summary_policy: aiPolicy.manualSummary,
+    ai_auto_summary_policy: aiPolicy.autoSummary,
+    ai_auto_translation_policy: aiPolicy.autoTranslation,
+    ai_translation_target_language: aiPolicy.translationTargetLanguage,
+    ai_daily_entry_limit: aiPolicy.dailyEntryLimit,
+    ai_max_concurrency: aiPolicy.maxConcurrency,
     version: newVersion,
     updated_at: now
   });
@@ -224,7 +254,7 @@ function preparePatchCategory(
     "PATCH_CATEGORY",
     "feed_category.updated",
     "feed_category",
-    { id: categoryId, name, nameNorm, sortOrder, isEnabled, version: newVersion, updatedAt: now }
+    { id: categoryId, name, nameNorm, sortOrder, isEnabled, aiPolicy, version: newVersion, updatedAt: now }
   );
 }
 
@@ -263,7 +293,7 @@ function prepareCreateFeed(
   const input = requireRecord(operation.input, "Feed 输入");
   assertOnlyFields(input, [
     "originalUrl", "displayName", "siteUrl", "categoryId", "categoryRef", "viewKind", "fullTextPolicy",
-    "refreshIntervalMinutes", "sortOrder", "isEnabled"
+    "refreshIntervalMinutes", "sortOrder", "isEnabled", "aiPolicy"
   ]);
   const originalUrl = requireOriginalFeedUrl(input.originalUrl);
   const normalizedUrl = normalizeHttpsUrl(originalUrl, "Feed URL");
@@ -277,6 +307,9 @@ function prepareCreateFeed(
   const refreshIntervalMinutes = requireInteger(input.refreshIntervalMinutes ?? 60, 5, 1440, "刷新间隔");
   const sortOrder = requireInteger(input.sortOrder ?? 0, 0, 1_000_000, "Feed 排序");
   const isEnabled = requireBoolean(input.isEnabled ?? true, "Feed 启用状态");
+  const aiPolicy = input.aiPolicy === undefined
+    ? inheritedAiPolicy
+    : requireAiPolicyFields(input.aiPolicy, inheritedAiPolicy);
   const category = categoryId === null ? null : requireCategory(catalog, categoryId);
   if (isEnabled && category?.is_enabled === 0) {
     throw new CatalogApiError(400, "VALIDATION_ERROR", "不能在停用分类下启用 Feed");
@@ -302,6 +335,12 @@ function prepareCreateFeed(
     refresh_interval_minutes: refreshIntervalMinutes,
     sort_order: sortOrder,
     is_enabled: isEnabled ? 1 : 0,
+    ai_manual_summary_policy: aiPolicy.manualSummary,
+    ai_auto_summary_policy: aiPolicy.autoSummary,
+    ai_auto_translation_policy: aiPolicy.autoTranslation,
+    ai_translation_target_language: aiPolicy.translationTargetLanguage,
+    ai_daily_entry_limit: aiPolicy.dailyEntryLimit,
+    ai_max_concurrency: aiPolicy.maxConcurrency,
     version: newVersion,
     created_at: now,
     updated_at: now
@@ -315,7 +354,7 @@ function prepareCreateFeed(
     "feed",
     {
       id, originalUrl, normalizedUrl, displayName, siteUrl, categoryId, viewKind, fullTextPolicy,
-      refreshIntervalMinutes, sortOrder, isEnabled, version: newVersion, createdAt: now, updatedAt: now
+      refreshIntervalMinutes, sortOrder, isEnabled, aiPolicy, version: newVersion, createdAt: now, updatedAt: now
     }
   );
 }
@@ -332,7 +371,7 @@ function preparePatchFeed(
   const input = requireRecord(operation.input, "Feed 输入");
   assertOnlyFields(input, [
     "originalUrl", "displayName", "siteUrl", "categoryId", "viewKind", "fullTextPolicy",
-    "refreshIntervalMinutes", "sortOrder", "isEnabled"
+    "refreshIntervalMinutes", "sortOrder", "isEnabled", "aiPolicy"
   ]);
   assertHasFields(input, "Feed 更新至少需要一个字段");
   const originalUrl = input.originalUrl === undefined
@@ -367,6 +406,9 @@ function preparePatchFeed(
   const isEnabled = input.isEnabled === undefined
     ? current.is_enabled === 1
     : requireBoolean(input.isEnabled, "Feed 启用状态");
+  const aiPolicy = input.aiPolicy === undefined
+    ? aiPolicyFromRow(current)
+    : requireAiPolicyFields(input.aiPolicy, aiPolicyFromRow(current));
   const category = categoryId === null ? null : requireCategory(catalog, categoryId);
   if (isEnabled && category?.is_enabled === 0 && (input.isEnabled === true || input.categoryId !== undefined)) {
     throw new CatalogApiError(400, "VALIDATION_ERROR", "不能在停用分类下启用 Feed");
@@ -387,6 +429,12 @@ function preparePatchFeed(
     refresh_interval_minutes: refreshIntervalMinutes,
     sort_order: sortOrder,
     is_enabled: isEnabled ? 1 : 0,
+    ai_manual_summary_policy: aiPolicy.manualSummary,
+    ai_auto_summary_policy: aiPolicy.autoSummary,
+    ai_auto_translation_policy: aiPolicy.autoTranslation,
+    ai_translation_target_language: aiPolicy.translationTargetLanguage,
+    ai_daily_entry_limit: aiPolicy.dailyEntryLimit,
+    ai_max_concurrency: aiPolicy.maxConcurrency,
     version: newVersion,
     updated_at: now
   });
@@ -399,7 +447,7 @@ function preparePatchFeed(
     "feed",
     {
       id: feedId, originalUrl, normalizedUrl, displayName, siteUrl, categoryId, viewKind, fullTextPolicy,
-      refreshIntervalMinutes, sortOrder, isEnabled, version: newVersion, updatedAt: now
+      refreshIntervalMinutes, sortOrder, isEnabled, aiPolicy, version: newVersion, updatedAt: now
     }
   );
 }
@@ -581,21 +629,39 @@ function buildBusinessStatements(
     "SELECT json_extract(value,'$.id') AS id,json_extract(value,'$.name') AS name," +
     "json_extract(value,'$.nameNorm') AS name_norm,json_extract(value,'$.sortOrder') AS sort_order," +
     "json_extract(value,'$.isEnabled') AS is_enabled,json_extract(value,'$.version') AS version," +
+    "json_extract(value,'$.aiPolicy.manualSummary') AS ai_manual_summary_policy," +
+    "json_extract(value,'$.aiPolicy.autoSummary') AS ai_auto_summary_policy," +
+    "json_extract(value,'$.aiPolicy.autoTranslation') AS ai_auto_translation_policy," +
+    "json_extract(value,'$.aiPolicy.translationTargetLanguage') AS ai_translation_target_language," +
+    "json_extract(value,'$.aiPolicy.dailyEntryLimit') AS ai_daily_entry_limit," +
+    "json_extract(value,'$.aiPolicy.maxConcurrency') AS ai_max_concurrency," +
     "json_extract(value,'$.updatedAt') AS updated_at FROM json_each(?)" +
     ") UPDATE feed_categories SET " +
     "name=(SELECT name FROM changes WHERE changes.id=feed_categories.id)," +
     "name_norm=(SELECT name_norm FROM changes WHERE changes.id=feed_categories.id)," +
     "sort_order=(SELECT sort_order FROM changes WHERE changes.id=feed_categories.id)," +
     "is_enabled=(SELECT is_enabled FROM changes WHERE changes.id=feed_categories.id)," +
+    "ai_manual_summary_policy=(SELECT ai_manual_summary_policy FROM changes WHERE changes.id=feed_categories.id)," +
+    "ai_auto_summary_policy=(SELECT ai_auto_summary_policy FROM changes WHERE changes.id=feed_categories.id)," +
+    "ai_auto_translation_policy=(SELECT ai_auto_translation_policy FROM changes WHERE changes.id=feed_categories.id)," +
+    "ai_translation_target_language=(SELECT ai_translation_target_language FROM changes WHERE changes.id=feed_categories.id)," +
+    "ai_daily_entry_limit=(SELECT ai_daily_entry_limit FROM changes WHERE changes.id=feed_categories.id)," +
+    "ai_max_concurrency=(SELECT ai_max_concurrency FROM changes WHERE changes.id=feed_categories.id)," +
     "version=(SELECT version FROM changes WHERE changes.id=feed_categories.id)," +
     "updated_at=(SELECT updated_at FROM changes WHERE changes.id=feed_categories.id) " +
     "WHERE id IN (SELECT id FROM changes) AND deleted_at IS NULL AND EXISTS " +
     "(SELECT 1 FROM feed_catalog_state WHERE singleton_id=1 AND last_mutation_id=?)"
   ).bind(rows, mutationId));
   appendJsonStatement(statements, operations, "CREATE_CATEGORY", rows => db.prepare(
-    "INSERT INTO feed_categories(id,name,name_norm,sort_order,is_enabled,version,created_at,updated_at) " +
+    "INSERT INTO feed_categories(id,name,name_norm,sort_order,is_enabled,ai_manual_summary_policy," +
+    "ai_auto_summary_policy,ai_auto_translation_policy,ai_translation_target_language,ai_daily_entry_limit," +
+    "ai_max_concurrency,version,created_at,updated_at) " +
     "SELECT json_extract(value,'$.id'),json_extract(value,'$.name'),json_extract(value,'$.nameNorm')," +
-    "json_extract(value,'$.sortOrder'),json_extract(value,'$.isEnabled'),json_extract(value,'$.version')," +
+    "json_extract(value,'$.sortOrder'),json_extract(value,'$.isEnabled')," +
+    "json_extract(value,'$.aiPolicy.manualSummary'),json_extract(value,'$.aiPolicy.autoSummary')," +
+    "json_extract(value,'$.aiPolicy.autoTranslation'),json_extract(value,'$.aiPolicy.translationTargetLanguage')," +
+    "json_extract(value,'$.aiPolicy.dailyEntryLimit'),json_extract(value,'$.aiPolicy.maxConcurrency')," +
+    "json_extract(value,'$.version')," +
     "json_extract(value,'$.createdAt'),json_extract(value,'$.updatedAt') FROM json_each(?) WHERE EXISTS " +
     "(SELECT 1 FROM feed_catalog_state WHERE singleton_id=1 AND last_mutation_id=?)"
   ).bind(rows, mutationId));
@@ -607,6 +673,12 @@ function buildBusinessStatements(
     "json_extract(value,'$.viewKind') AS view_kind,json_extract(value,'$.fullTextPolicy') AS full_text_policy," +
     "json_extract(value,'$.refreshIntervalMinutes') AS refresh_interval_minutes," +
     "json_extract(value,'$.sortOrder') AS sort_order,json_extract(value,'$.isEnabled') AS is_enabled," +
+    "json_extract(value,'$.aiPolicy.manualSummary') AS ai_manual_summary_policy," +
+    "json_extract(value,'$.aiPolicy.autoSummary') AS ai_auto_summary_policy," +
+    "json_extract(value,'$.aiPolicy.autoTranslation') AS ai_auto_translation_policy," +
+    "json_extract(value,'$.aiPolicy.translationTargetLanguage') AS ai_translation_target_language," +
+    "json_extract(value,'$.aiPolicy.dailyEntryLimit') AS ai_daily_entry_limit," +
+    "json_extract(value,'$.aiPolicy.maxConcurrency') AS ai_max_concurrency," +
     "json_extract(value,'$.version') AS version,json_extract(value,'$.updatedAt') AS updated_at FROM json_each(?)" +
     ") UPDATE managed_feeds SET " +
     "original_url=(SELECT original_url FROM changes WHERE changes.id=managed_feeds.id)," +
@@ -619,6 +691,12 @@ function buildBusinessStatements(
     "refresh_interval_minutes=(SELECT refresh_interval_minutes FROM changes WHERE changes.id=managed_feeds.id)," +
     "sort_order=(SELECT sort_order FROM changes WHERE changes.id=managed_feeds.id)," +
     "is_enabled=(SELECT is_enabled FROM changes WHERE changes.id=managed_feeds.id)," +
+    "ai_manual_summary_policy=(SELECT ai_manual_summary_policy FROM changes WHERE changes.id=managed_feeds.id)," +
+    "ai_auto_summary_policy=(SELECT ai_auto_summary_policy FROM changes WHERE changes.id=managed_feeds.id)," +
+    "ai_auto_translation_policy=(SELECT ai_auto_translation_policy FROM changes WHERE changes.id=managed_feeds.id)," +
+    "ai_translation_target_language=(SELECT ai_translation_target_language FROM changes WHERE changes.id=managed_feeds.id)," +
+    "ai_daily_entry_limit=(SELECT ai_daily_entry_limit FROM changes WHERE changes.id=managed_feeds.id)," +
+    "ai_max_concurrency=(SELECT ai_max_concurrency FROM changes WHERE changes.id=managed_feeds.id)," +
     "version=(SELECT version FROM changes WHERE changes.id=managed_feeds.id)," +
     "updated_at=(SELECT updated_at FROM changes WHERE changes.id=managed_feeds.id) " +
     "WHERE id IN (SELECT id FROM changes) AND deleted_at IS NULL AND EXISTS " +
@@ -626,11 +704,17 @@ function buildBusinessStatements(
   ).bind(rows, mutationId));
   appendJsonStatement(statements, operations, "CREATE_FEED", rows => db.prepare(
     "INSERT INTO managed_feeds(id,original_url,normalized_url,display_name,site_url,category_id,view_kind,full_text_policy," +
-    "refresh_interval_minutes,sort_order,is_enabled,version,created_at,updated_at) " +
+    "refresh_interval_minutes,sort_order,is_enabled,ai_manual_summary_policy,ai_auto_summary_policy," +
+    "ai_auto_translation_policy,ai_translation_target_language,ai_daily_entry_limit,ai_max_concurrency," +
+    "version,created_at,updated_at) " +
     "SELECT json_extract(value,'$.id'),json_extract(value,'$.originalUrl'),json_extract(value,'$.normalizedUrl')," +
     "json_extract(value,'$.displayName'),json_extract(value,'$.siteUrl'),json_extract(value,'$.categoryId')," +
-    "json_extract(value,'$.viewKind'),json_extract(value,'$.fullTextPolicy'),json_extract(value,'$.refreshIntervalMinutes'),json_extract(value,'$.sortOrder')," +
-    "json_extract(value,'$.isEnabled'),json_extract(value,'$.version'),json_extract(value,'$.createdAt')," +
+    "json_extract(value,'$.viewKind'),json_extract(value,'$.fullTextPolicy'),json_extract(value,'$.refreshIntervalMinutes')," +
+    "json_extract(value,'$.sortOrder'),json_extract(value,'$.isEnabled')," +
+    "json_extract(value,'$.aiPolicy.manualSummary'),json_extract(value,'$.aiPolicy.autoSummary')," +
+    "json_extract(value,'$.aiPolicy.autoTranslation'),json_extract(value,'$.aiPolicy.translationTargetLanguage')," +
+    "json_extract(value,'$.aiPolicy.dailyEntryLimit'),json_extract(value,'$.aiPolicy.maxConcurrency')," +
+    "json_extract(value,'$.version'),json_extract(value,'$.createdAt')," +
     "json_extract(value,'$.updatedAt') FROM json_each(?) WHERE EXISTS " +
     "(SELECT 1 FROM feed_catalog_state WHERE singleton_id=1 AND last_mutation_id=?)"
   ).bind(rows, mutationId));
@@ -650,12 +734,16 @@ function appendJsonStatement(
 async function loadCatalog(db: D1Database): Promise<MutableCatalog> {
   const results = await db.batch<CategoryRow | FeedRow>([
     db.prepare(
-      "SELECT id,name,name_norm,sort_order,is_enabled,version,created_at,updated_at " +
+      "SELECT id,name,name_norm,sort_order,is_enabled,ai_manual_summary_policy,ai_auto_summary_policy," +
+      "ai_auto_translation_policy,ai_translation_target_language,ai_daily_entry_limit,ai_max_concurrency," +
+      "version,created_at,updated_at " +
       "FROM feed_categories WHERE deleted_at IS NULL"
     ),
     db.prepare(
       "SELECT id,original_url,normalized_url,display_name,site_url,category_id,view_kind,full_text_policy," +
-      "refresh_interval_minutes,sort_order,is_enabled,version,created_at,updated_at " +
+      "refresh_interval_minutes,sort_order,is_enabled,ai_manual_summary_policy,ai_auto_summary_policy," +
+      "ai_auto_translation_policy,ai_translation_target_language,ai_daily_entry_limit,ai_max_concurrency," +
+      "version,created_at,updated_at " +
       "FROM managed_feeds WHERE deleted_at IS NULL"
     )
   ]);

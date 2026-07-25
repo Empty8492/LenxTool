@@ -1,7 +1,7 @@
 # Worker v1 账号与共享订阅目录 API 契约
 
-状态：已冻结，P0-02～P0-06 身份、目录 schema、管理员写入、只读目录和桌面接线均已实现
-最后核对：2026-07-24
+状态：v1 基线已冻结；P0 身份/目录已实现，P1-13 以向后兼容字段新增 AI 策略
+最后核对：2026-07-25
 适用范围：LenxTool 桌面端与 `cloud/LenxTool.Worker` 之间的账号、会话和管理员策展目录接口
 
 本文是 P0 的契约真相源。实现顺序和验收见 [P0 详细计划](../plans/RSS_P0_ADMIN_CATALOG.md)，安全边界见 [威胁模型](../THREAT_MODEL.md)，云端只保存共享目录配置的决策见 [ADR-001](../decisions/ADR-001-admin-curated-rss.md)。
@@ -130,6 +130,14 @@ Idempotency-Key: 018f87d4-0f7e-7ad0-9c06-b285e52e7664
   "name": "技术",
   "sortOrder": 100,
   "isEnabled": true,
+  "aiPolicy": {
+    "manualSummary": "INHERIT",
+    "autoSummary": "INHERIT",
+    "autoTranslation": "INHERIT",
+    "translationTargetLanguage": null,
+    "dailyEntryLimit": null,
+    "maxConcurrency": null
+  },
   "version": 42,
   "createdAt": "2026-07-21T08:30:00Z",
   "updatedAt": "2026-07-21T08:30:00Z"
@@ -147,9 +155,18 @@ Idempotency-Key: 018f87d4-0f7e-7ad0-9c06-b285e52e7664
   "siteUrl": "https://example.com/",
   "categoryId": "4a5feea7-...",
   "viewKind": "ARTICLE",
+  "fullTextPolicy": "NONE",
   "refreshIntervalMinutes": 60,
   "sortOrder": 100,
   "isEnabled": true,
+  "aiPolicy": {
+    "manualSummary": "INHERIT",
+    "autoSummary": "INHERIT",
+    "autoTranslation": "INHERIT",
+    "translationTargetLanguage": null,
+    "dailyEntryLimit": null,
+    "maxConcurrency": null
+  },
   "version": 42,
   "createdAt": "2026-07-21T08:30:00Z",
   "updatedAt": "2026-07-21T08:30:00Z"
@@ -157,6 +174,7 @@ Idempotency-Key: 018f87d4-0f7e-7ad0-9c06-b285e52e7664
 ```
 
 - `viewKind` 的 v1 值为 `ARTICLE`、`PICTURE`、`AUDIO`、`VIDEO`、`NOTIFICATION`；旧桌面端遇到未知值必须回退 `ARTICLE`。
+- `aiPolicy` 是分类或 Feed 对全局/上级策略的覆盖：三个开关只能是 `INHERIT`、`ENABLED`、`DISABLED`；目标语言可为 `zh-Hans`、`en`、`ja`、`ko` 或 null；每日条目上限可为 1～1,000 或 null，并发上限可为 1～4 或 null。null/`INHERIT` 表示继续向上解析，不表示自动启用。
 - 管理端只提交 `originalUrl`；`normalizedUrl` 由服务端生成并用于重复检测。目录写路由只做语法、方案和规范化校验，不发起网络请求。DNS、固定地址连接、重定向、响应/解压大小、MIME 和 XML 安全验证由桌面 P0-11 发现服务执行；P0-15 管理界面在提交写 API 前调用该服务。
 - 普通目录响应只含未删除、已启用且分类已启用的 Feed；它不含抓取结果、正文、健康详情或用户私人状态。
 
@@ -293,10 +311,20 @@ Content-Type: application/json
   "catalogVersion": 42,
   "scope": "ACTIVE",
   "generatedAt": "2026-07-21T08:30:00Z",
+  "aiPolicyDefaults": {
+    "manualSummary": "ENABLED",
+    "autoSummary": "DISABLED",
+    "autoTranslation": "DISABLED",
+    "translationTargetLanguage": "zh-Hans",
+    "dailyEntryLimit": 20,
+    "maxConcurrency": 1
+  },
   "categories": [],
   "feeds": []
 }
 ```
+
+策略解析顺序为 Feed 覆盖 → 所属分类覆盖 → `aiPolicyDefaults`。自动摘要和自动翻译在全局默认中均关闭；Worker 只发布版本化配置，正文、摘要和译文不上传 D1，实际计算由桌面端在本机触发。
 
 排序是契约的一部分：分类按 `sortOrder`、`name`、`id`；Feed 按分类顺序、`sortOrder`、`displayName`、`id`，未分类 Feed 排在已分类 Feed 之后。即使客户端重新排序，也不能依赖 D1 的未指定行顺序。
 

@@ -1,8 +1,8 @@
 # Worker D1 Schema
 
-状态：P0-04 schema/写入已实现，P0-05 只读发布已接入
-最后核对：2026-07-22
-权威迁移：[0001_initial.sql](../../cloud/LenxTool.Worker/migrations/0001_initial.sql)、[0002_feed_catalog.sql](../../cloud/LenxTool.Worker/migrations/0002_feed_catalog.sql)、[0003_catalog_mutations.sql](../../cloud/LenxTool.Worker/migrations/0003_catalog_mutations.sql)
+状态：P0 目录 schema/读写已实现，P1-13 Worker AI 策略字段已接入
+最后核对：2026-07-25
+权威迁移：[0001_initial.sql](../../cloud/LenxTool.Worker/migrations/0001_initial.sql)、[0002_feed_catalog.sql](../../cloud/LenxTool.Worker/migrations/0002_feed_catalog.sql)、[0003_catalog_mutations.sql](../../cloud/LenxTool.Worker/migrations/0003_catalog_mutations.sql)、[0004_feed_full_text_policy.sql](../../cloud/LenxTool.Worker/migrations/0004_feed_full_text_policy.sql)、[0005_feed_ai_policy.sql](../../cloud/LenxTool.Worker/migrations/0005_feed_ai_policy.sql)
 接口语义：[Worker v1 API 契约](worker-v1.md)
 
 ## 1. 数据边界
@@ -21,6 +21,7 @@ D1 是账号和管理员发布的共享订阅配置的权威来源。它保存�
 - `0001_initial.sql` 创建身份、额度和审计表。
 - `0002_feed_catalog.sql` 只做加法，创建目录状态、分类、Managed Feed 和索引，不改写 0001 数据。
 - `0003_catalog_mutations.sql` 增加条件目录写入标记、审计版本、幂等成功响应和事务 guard；不保存原始请求正文、凭据或文章内容。
+- `0004_feed_full_text_policy.sql` 增加受限的全文获取枚举；`0005_feed_ai_policy.sql` 为分类和 Feed 增加显式 AI 策略覆盖、目标语言、每日条目和并发上限，自动开关默认继承全局关闭值。
 - 测试启动器先应用 0001、写入旧 schema 哨兵行，再应用全部迁移，从而验证带数据升级；再次调用迁移流程不会重复执行已记录文件。
 - Wrangler 应用某个迁移失败时会回滚该迁移，并保留之前成功的迁移。生产恢复遵循第 6 节，不提交手写“向下迁移”去伪造 `d1_migrations` 历史。
 
@@ -50,6 +51,10 @@ P0-04 的每个成功单项写入会在同一事务中比较并递增该版本�
 | `name_norm` | 内部唯一键；P0-04 计算 NFKC + Unicode case fold，不出现在公开 DTO |
 | `sort_order` | 整数 0～1,000,000 |
 | `is_enabled` | 整数布尔值 0/1 |
+| `ai_*_policy` | 手动摘要、自动摘要、自动翻译的 `INHERIT` / `ENABLED` / `DISABLED` 覆盖；默认 `INHERIT` |
+| `ai_translation_target_language` | null 或 `zh-Hans` / `en` / `ja` / `ko` |
+| `ai_daily_entry_limit` | null 或整数 1～1,000；null 表示继承 |
+| `ai_max_concurrency` | null 或整数 1～4；null 表示继承 |
 | `deleted_at` | null 或 UTC 时间；只用于软删除，不出现在公开 DTO |
 | `version` | 非负整数；资源最后变更时的全局目录版本 |
 | `created_at` / `updated_at` | 20～40 字符的 UTC 时间文本 |
@@ -70,6 +75,10 @@ P0-04 的每个成功单项写入会在同一事务中比较并递增该版本�
 | `refresh_interval_minutes` | 整数 5～1,440 |
 | `sort_order` | 整数 0～1,000,000 |
 | `is_enabled` | 整数布尔值 0/1 |
+| `ai_*_policy` | 手动摘要、自动摘要、自动翻译的 `INHERIT` / `ENABLED` / `DISABLED` 覆盖；默认 `INHERIT` |
+| `ai_translation_target_language` | null 或 `zh-Hans` / `en` / `ja` / `ko` |
+| `ai_daily_entry_limit` | null 或整数 1～1,000；null 表示继承 |
+| `ai_max_concurrency` | null 或整数 1～4；null 表示继承 |
 | `deleted_at` | null 或 UTC 时间；Feed 删除只做软删除 |
 | `version` | 非负整数；资源最后变更时的全局目录版本 |
 | `created_at` / `updated_at` | 20～40 字符的 UTC 时间文本 |
@@ -89,6 +98,7 @@ D1 默认在查询和迁移中强制外键。分类关系使用 `RESTRICT`，因
 数据库直接保证：
 
 - 单例目录版本、非负版本、整数范围、布尔值、Feed 视图枚举和 HTTPS 基线。
+- AI 开关、目标语言、每日条目上限和并发上限均受 CHECK 约束；数据库不保存提示词、文章正文、摘要或译文。
 - 未删除分类规范名唯一、未删除 Feed 规范 URL 唯一。
 - Feed 只能引用存在的分类；分类硬删除不会级联删除 Feed。
 - D1 batch 中后续约束失败会回滚该批次先前写入。
