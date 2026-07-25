@@ -206,23 +206,114 @@ public sealed class RichArticleFormatterTests
         RichArticleBlock[] attachmentBlocks = document.Blocks
             .SkipWhile(block => block.Text != "附件")
             .ToArray();
-        Assert.Collection(
-            attachmentBlocks,
-            block => Assert.Equal((RichArticleBlockKind.Subheading, "附件"), (block.Kind, block.Text)),
-            block => Assert.Contains(
-                block.Inlines,
-                inline => inline is
-                {
-                    Text: "Audio",
-                    Url: "https://example.com/media/audio.mp3"
-                }),
-            block => Assert.Contains(
-                block.Inlines,
-                inline => inline is
-                {
-                    Text: "Video",
-                    Url: "https://cdn.example/video.mp4"
-                }));
+        Assert.Equal(
+            (RichArticleBlockKind.Subheading, "附件"),
+            (attachmentBlocks[0].Kind, attachmentBlocks[0].Text));
+        RichArticleBlock[] details = attachmentBlocks
+            .Where(block => block.Kind == RichArticleBlockKind.Bullet)
+            .ToArray();
+        Assert.Equal(3, details.Length);
+        Assert.Contains(
+            details[0].Inlines,
+            inline => inline.Url
+                == "https://example.com/media/audio.mp3");
+        Assert.DoesNotContain(
+            details[1].Inlines,
+            inline => inline.Url is not null);
+        Assert.Contains(
+            details[2].Inlines,
+            inline => inline.Url
+                == "https://cdn.example/video.mp4");
+        Assert.Contains("音频", details[0].Text, StringComparison.Ordinal);
+        Assert.Contains("100 B", details[0].Text, StringComparison.Ordinal);
+        Assert.Contains("外部来源", details[0].Text, StringComparison.Ordinal);
+        Assert.Contains("地址已阻止", details[1].Text, StringComparison.Ordinal);
+        Assert.Contains("视频", details[2].Text, StringComparison.Ordinal);
+        Assert.Contains("200 B", details[2].Text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void EnclosuresOnlyPreviewVerifiedBoundedHttpsImages()
+    {
+        RichArticleDocument document = RichArticleFormatter.WithEnclosures(
+            new(null, []),
+            [
+                new(
+                    "https://cdn.example.com/cover.jpg",
+                    "image/jpeg",
+                    1024 * 1024,
+                    "Cover"),
+                new(
+                    "https://cdn.example.com/large.jpg",
+                    "image/jpeg",
+                    13L * 1024 * 1024,
+                    "Large cover"),
+                new(
+                    "https://cdn.example.com/episode.mp3",
+                    null,
+                    null,
+                    "Episode"),
+                new(
+                    "https://cdn.example.com/conflict.mp3",
+                    "video/mp4",
+                    2048,
+                    "Conflict"),
+                new(
+                    "https://127.0.0.1/private.mp3",
+                    "audio/mpeg",
+                    4096,
+                    "Private")
+            ],
+            "https://news.example/posts/1");
+
+        RichArticleBlock preview = Assert.Single(
+            document.Blocks,
+            block => block.Kind == RichArticleBlockKind.Image);
+        Assert.Equal(
+            "https://cdn.example.com/cover.jpg",
+            preview.ImageUrl);
+        Assert.Equal("Cover", preview.Text);
+
+        RichArticleBlock[] details = document.Blocks
+            .Where(block => block.Kind == RichArticleBlockKind.Bullet)
+            .ToArray();
+        Assert.Equal(5, details.Length);
+        Assert.Contains(
+            details,
+            block => block.Text.Contains(
+                    "图片 · Cover · 1 MB · 外部来源",
+                    StringComparison.Ordinal)
+                && block.Inlines.Any(inline =>
+                    inline.Url == "https://cdn.example.com/cover.jpg"));
+        Assert.Contains(
+            details,
+            block => block.Text.Contains(
+                    "图片 · Large cover · 13 MB · 外部来源",
+                    StringComparison.Ordinal)
+                && block.Inlines.Any(inline =>
+                    inline.Url == "https://cdn.example.com/large.jpg"));
+        Assert.Contains(
+            details,
+            block => block.Text.Contains(
+                    "音频 · Episode · 大小未知 · 类型未验证",
+                    StringComparison.Ordinal)
+                && block.Inlines.Any(inline =>
+                    inline.Url == "https://cdn.example.com/episode.mp3"));
+        Assert.Contains(
+            details,
+            block => block.Text.Contains(
+                    "类型与扩展名不一致",
+                    StringComparison.Ordinal)
+                && block.Inlines.Any(inline =>
+                    inline.Url == "https://cdn.example.com/conflict.mp3"));
+        RichArticleBlock blocked = Assert.Single(
+            details,
+            block => block.Text.Contains(
+                "地址已阻止",
+                StringComparison.Ordinal));
+        Assert.DoesNotContain(
+            blocked.Inlines,
+            inline => inline.Url is not null);
     }
 
     [Fact]

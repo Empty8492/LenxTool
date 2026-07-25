@@ -14,6 +14,8 @@ internal sealed class FeedDocumentParser : IFeedParser
     private static readonly XNamespace AtomNamespace = "http://www.w3.org/2005/Atom";
     private static readonly XNamespace ContentNamespace = "http://purl.org/rss/1.0/modules/content/";
     private static readonly XNamespace DublinCoreNamespace = "http://purl.org/dc/elements/1.1/";
+    private static readonly XNamespace MediaNamespace = "http://search.yahoo.com/mrss/";
+    private const int MaximumEnclosuresPerEntry = 32;
     private readonly FeedParserOptions _options;
 
     public FeedDocumentParser() : this(FeedParserOptions.Default)
@@ -259,21 +261,48 @@ internal sealed class FeedDocumentParser : IFeedParser
             hasFullContent);
     }
 
-    private static List<FeedEnclosure> ReadRssEnclosures(XElement item, Uri baseUri) =>
-        ReadEnclosures(item.Elements().Where(element => element.Name.LocalName == "enclosure").Select(element => new EnclosureValue(
-            (string?)element.Attribute("url"),
-            (string?)element.Attribute("type"),
-            (string?)element.Attribute("length"),
-            (string?)element.Attribute("title"))), baseUri);
+    private static List<FeedEnclosure> ReadRssEnclosures(
+        XElement item,
+        Uri baseUri)
+    {
+        IEnumerable<EnclosureValue> standard = item.Elements()
+            .Where(element => element.Name.LocalName == "enclosure")
+            .Select(element => new EnclosureValue(
+                (string?)element.Attribute("url"),
+                (string?)element.Attribute("type"),
+                (string?)element.Attribute("length"),
+                (string?)element.Attribute("title")));
+        return ReadEnclosures(
+            standard.Concat(ReadMediaRssValues(item)),
+            baseUri);
+    }
 
-    private static List<FeedEnclosure> ReadAtomEnclosures(XElement entry, Uri baseUri) =>
-        ReadEnclosures(entry.Elements(AtomNamespace + "link")
+    private static List<FeedEnclosure> ReadAtomEnclosures(
+        XElement entry,
+        Uri baseUri)
+    {
+        IEnumerable<EnclosureValue> standard = entry
+            .Elements(AtomNamespace + "link")
             .Where(link => string.Equals((string?)link.Attribute("rel"), "enclosure", StringComparison.OrdinalIgnoreCase))
             .Select(link => new EnclosureValue(
                 (string?)link.Attribute("href"),
                 (string?)link.Attribute("type"),
                 (string?)link.Attribute("length"),
-                (string?)link.Attribute("title"))), baseUri);
+                (string?)link.Attribute("title")));
+        return ReadEnclosures(
+            standard.Concat(ReadMediaRssValues(entry)),
+            baseUri);
+    }
+
+    private static IEnumerable<EnclosureValue> ReadMediaRssValues(
+        XElement entry) =>
+        entry.Descendants(MediaNamespace + "content")
+            .Select(content => new EnclosureValue(
+                (string?)content.Attribute("url"),
+                (string?)content.Attribute("type"),
+                (string?)content.Attribute("fileSize"),
+                (string?)content.Attribute("title")
+                    ?? content.Element(MediaNamespace + "title")?.Value));
 
     private static List<FeedEnclosure> ReadEnclosures(
         IEnumerable<EnclosureValue> values,
@@ -297,6 +326,10 @@ internal sealed class FeedDocumentParser : IFeedParser
                 CleanOptional(enclosure.MediaType, 128),
                 length,
                 CleanOptional(enclosure.Title, 256)));
+            if (enclosures.Count == MaximumEnclosuresPerEntry)
+            {
+                break;
+            }
         }
         return enclosures;
     }

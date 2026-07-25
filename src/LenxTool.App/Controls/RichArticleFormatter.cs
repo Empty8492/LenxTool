@@ -1,5 +1,8 @@
+using System.Globalization;
+using System.IO;
 using System.Net;
 using System.Text.RegularExpressions;
+using LenxTool.Core.Feeds;
 using LenxTool.Core.Models;
 
 namespace LenxTool.App.Controls;
@@ -33,6 +36,10 @@ public sealed record RichArticleTranslationSource(
 
 public static partial class RichArticleFormatter
 {
+    private const int MaximumEnclosuresPerArticle = 32;
+    private const long MaximumAutomaticEnclosureImageBytes =
+        12L * 1024 * 1024;
+
     public static RichArticleTranslationSource CreateTranslationSource(
         RichArticleDocument document,
         string title)
@@ -201,20 +208,27 @@ public static partial class RichArticleFormatter
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(enclosures);
         var attachments = new List<RichArticleBlock>();
-        foreach (FeedEnclosure enclosure in enclosures)
+        foreach (FeedEnclosure enclosure in enclosures.Take(
+                     MaximumEnclosuresPerArticle))
         {
-            string? url = ResolveUrl(enclosure.Url, baseUrl);
-            if (url is null) continue;
-            string label = NormalizeReaderText(enclosure.Title);
-            if (string.IsNullOrWhiteSpace(label))
-            {
-                label = string.IsNullOrWhiteSpace(enclosure.MediaType)
-                    ? "附件"
-                    : enclosure.MediaType;
-            }
+            FeedAttachmentClassification classification =
+                FeedAttachmentClassifier.Classify(enclosure, baseUrl);
+            string title = GetAttachmentTitle(classification);
+            string label = CreateAttachmentLabel(
+                classification,
+                title);
             attachments.Add(new(
                 RichArticleBlockKind.Bullet,
-                [new(label, url)]));
+                classification.SafeUrl is null
+                    ? [new(label)]
+                    : [new(label, classification.SafeUrl)]));
+            if (CanPreviewAutomatically(classification))
+            {
+                attachments.Add(new(
+                    RichArticleBlockKind.Image,
+                    [new(title)],
+                    classification.SafeUrl));
+            }
         }
 
         if (attachments.Count == 0) return document;
@@ -226,6 +240,106 @@ public static partial class RichArticleFormatter
             [new("附件")]));
         blocks.AddRange(attachments);
         return new(document.HeroImageUrl, blocks);
+    }
+
+    private static bool CanPreviewAutomatically(
+        FeedAttachmentClassification attachment) =>
+        attachment is
+        {
+            Kind: FeedAttachmentKind.Image,
+            TypeStatus: FeedAttachmentTypeStatus.Verified,
+            Length: > 0 and <= MaximumAutomaticEnclosureImageBytes,
+            SafeUrl: not null
+        }
+        && attachment.SafeUrl.StartsWith(
+            "https://",
+            StringComparison.Ordinal);
+
+    private static string CreateAttachmentLabel(
+        FeedAttachmentClassification attachment,
+        string title)
+    {
+        string kind = attachment.Kind switch
+        {
+            FeedAttachmentKind.Image => "图片",
+            FeedAttachmentKind.Audio => "音频",
+            FeedAttachmentKind.Video => "视频",
+            _ => "附件"
+        };
+        string typeWarning = attachment.TypeStatus switch
+        {
+            FeedAttachmentTypeStatus.Verified => string.Empty,
+            FeedAttachmentTypeStatus.Unverified => " · 类型未验证",
+            FeedAttachmentTypeStatus.Conflicting =>
+                " · 类型与扩展名不一致",
+            _ => " · 不支持的附件类型"
+        };
+        string sourceWarning = attachment.SafeUrl is null
+            ? "地址已阻止"
+            : "外部来源，打开前请确认";
+        return string.Concat(
+            kind,
+            " · ",
+            title,
+            " · ",
+            FormatAttachmentLength(attachment.Length),
+            typeWarning,
+            " · ",
+            sourceWarning);
+    }
+
+    private static string GetAttachmentTitle(
+        FeedAttachmentClassification attachment)
+    {
+        string title = NormalizeReaderText(attachment.Title);
+        if (!string.IsNullOrWhiteSpace(title))
+        {
+            return title;
+        }
+
+        if (Uri.TryCreate(
+                attachment.SafeUrl,
+                UriKind.Absolute,
+                out Uri? uri))
+        {
+            string fileName = NormalizeReaderText(
+                Path.GetFileName(uri.AbsolutePath));
+            if (!string.IsNullOrWhiteSpace(fileName))
+            {
+                return fileName;
+            }
+        }
+
+        return "未命名附件";
+    }
+
+    private static string FormatAttachmentLength(long? length)
+    {
+        if (length is null)
+        {
+            return "大小未知";
+        }
+
+        if (length < 1024)
+        {
+            return $"{length.Value.ToString(CultureInfo.InvariantCulture)} B";
+        }
+
+        double value = length.Value;
+        string unit = "KB";
+        value /= 1024;
+        if (value >= 1024)
+        {
+            value /= 1024;
+            unit = "MB";
+        }
+        if (value >= 1024)
+        {
+            value /= 1024;
+            unit = "GB";
+        }
+
+        return $"{value.ToString("0.#", CultureInfo.InvariantCulture)} {unit}";
     }
 
     public static RichArticleDocument Parse(string? htmlOrText, string? baseUrl = null)

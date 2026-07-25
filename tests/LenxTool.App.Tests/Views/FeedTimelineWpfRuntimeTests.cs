@@ -97,11 +97,9 @@ public sealed class FeedTimelineWpfRuntimeTests
                     [tag.Id],
                     CancellationToken.None).GetAwaiter().GetResult();
 
-                application = new LenxTool.App.App
-                {
-                    ShutdownMode = ShutdownMode.OnExplicitShutdown
-                };
+                application = new LenxTool.App.App();
                 application.InitializeComponent();
+                application.ShutdownMode = ShutdownMode.OnExplicitShutdown;
                 SynchronizationContext.SetSynchronizationContext(
                     new DispatcherSynchronizationContext(Dispatcher.CurrentDispatcher));
 

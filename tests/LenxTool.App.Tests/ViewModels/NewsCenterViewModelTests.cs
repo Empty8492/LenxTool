@@ -325,7 +325,12 @@ public sealed class NewsCenterViewModelTests
             block => block.Text == "Extracted body");
         Assert.Contains(
             viewModel.SelectedFeedArticleDocument.Blocks,
-            block => block.Text == "Audio");
+            block => block.Kind == RichArticleBlockKind.Bullet
+                     && block.Text
+                     == "音频 · Audio · 128 B · 外部来源，打开前请确认"
+                     && block.Inlines.Count == 1
+                     && block.Inlines[0].Url
+                     == "https://cdn.example/audio.mp3");
 
         viewModel.SelectedFeedReaderSource = viewModel.FeedReaderSourceOptions[0];
 
@@ -334,7 +339,12 @@ public sealed class NewsCenterViewModelTests
         Assert.Null(viewModel.FeedReaderExtractedAt);
         Assert.Contains(
             viewModel.SelectedFeedArticleDocument!.Blocks,
-            block => block.Text == "Audio");
+            block => block.Kind == RichArticleBlockKind.Bullet
+                     && block.Text
+                     == "音频 · Audio · 128 B · 外部来源，打开前请确认"
+                     && block.Inlines.Count == 1
+                     && block.Inlines[0].Url
+                     == "https://cdn.example/audio.mp3");
         Assert.Equal(entry.SanitizedContent, viewModel.SelectedFeedArticle?.RichContent);
     }
 

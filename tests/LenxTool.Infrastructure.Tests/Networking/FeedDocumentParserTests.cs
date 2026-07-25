@@ -77,6 +77,53 @@ public sealed class FeedDocumentParserTests
     }
 
     [Fact]
+    public void MediaRssContentIsOrderedDeduplicatedAndBounded()
+    {
+        string mediaItems = string.Concat(
+            Enumerable.Range(0, 40).Select(index =>
+                $"""
+                 <media:content
+                     url="https://cdn.example.com/media/{index}.mp3"
+                     type="audio/mpeg"
+                     fileSize="{index + 1}">
+                   <media:title>Episode {index}</media:title>
+                 </media:content>
+                 """));
+        string rss = $$"""
+            <rss version="2.0"
+                 xmlns:media="http://search.yahoo.com/mrss/">
+              <channel>
+                <title>Media feed</title>
+                <item>
+                  <guid>media-entry</guid>
+                  <title>Media entry</title>
+                  <enclosure
+                      url="https://cdn.example.com/media/0.mp3"
+                      type="audio/mpeg"
+                      length="1" />
+                  {{mediaItems}}
+                </item>
+              </channel>
+            </rss>
+            """;
+
+        FeedEntry entry = Assert.Single(Parse(rss).Entries);
+
+        Assert.Equal(32, entry.Enclosures.Count);
+        Assert.Equal(
+            "https://cdn.example.com/media/0.mp3",
+            entry.Enclosures[0].Url);
+        Assert.Equal(
+            "https://cdn.example.com/media/1.mp3",
+            entry.Enclosures[1].Url);
+        Assert.Equal("Episode 1", entry.Enclosures[1].Title);
+        Assert.Equal(2, entry.Enclosures[1].Length);
+        Assert.Equal(
+            "https://cdn.example.com/media/31.mp3",
+            entry.Enclosures[^1].Url);
+    }
+
+    [Fact]
     public void StableIdentityPrefersGuidThenUrlThenFeedScopedContentFingerprint()
     {
         const string rss = """

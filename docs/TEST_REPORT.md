@@ -123,6 +123,10 @@ P1-15 ACTIVE 规则缓存片新增 5 项 Infrastructure 场景并扩展数据库
 P1-15 Worker ACTIVE 规则同步片新增 8 项 Infrastructure 与 1 项 App 场景并扩展依赖注入回归：200 响应按显式大写契约映射并走 `scope=ACTIVE&afterVersion=本地版本`；首次空规则集和既有快照的 304 分别验证已同步空快照与仅更新时间。错误 scope、空规则节点、4 MiB 超限和调用方取消均保留旧缓存，未登录不发网；登录事件会唤醒后台同步。Debug/Release 完整 .NET 508/508（Core 65、Infrastructure 297、App 146）与 Release build 0 警告/0 错误通过。
 P1-15 Feed 刷新规则触发片新增 4 项规划服务和 2 项刷新集成场景并扩展依赖注入回归：分类、摘要回退正文和 audio enclosure 可共同命中规则并暂存计划，空 ACTIVE 快照不访问运行账本，跨 Feed 条目在任何暂存前拒绝，超过 100,000 字符的正文以 Unicode 安全边界投影。成功刷新在提交抓取状态后传递本批条目，304 不触发；规划仓储失败被隔离且不改变刷新成功。Debug/Release 完整 .NET 514/514（Core 65、Infrastructure 303、App 146）与 Release build 0 警告/0 错误通过。
 
+P1-15 AI 摘要/翻译规则动作片新增 8 项动作场景并扩展队列与 DI 回归：处理器只领取 `GenerateSummary`/`Translate`，在读取条目前拒绝非法载荷，缺失条目、停用 Feed/分类进入明确终态；规则授权仍受每日不同条目上限约束。摘要与翻译复用既有富文本投影、本地缓存、可恢复翻译、共享额度和供应商错误模型，所有模型调用位于 SQLite 事务之外；重试、最大尝试次数和取消释放租约均有覆盖。Debug/Release 完整 .NET 522/522（Core 65、Infrastructure 303、App 154）与 Release build 0 警告/0 错误通过。
+
+P1-17 附件分类与安全打开片新增 Core 分类器、Media RSS 解析和阅读器回退测试：允许清单覆盖常见图片/音频/视频 MIME 与扩展组合，参数化 MIME 可规范化；不匹配、缺失和未知类型不会被当成已验证媒体。URL 场景覆盖相对地址、危险协议、凭据、非默认端口、保留主机名、回环/私网/保留字面 IP 与 HTTP/HTTPS 默认端口。RSS/Atom 标准 enclosure 和 Media RSS 按标准优先顺序去重并限制 32 项；UI 验证大小未知、来源警告、危险地址无链接、音视频/大图安全外链，以及仅对已验证、已知不超过 12 MiB 的 HTTPS 图片建立既有受限预览块。既有真实 WPF 验收同时修复 `ShutdownMode` 被 App.xaml 初始化覆盖的时序问题。Debug/Release 完整 .NET 555/555（Core 96、Infrastructure 304、App 155）与 Release build 0 警告/0 错误通过。
+
 ## 本次已验证的异常路径
 
 - 完全离线的资讯缓存回退设计与网络错误映射。
