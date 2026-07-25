@@ -218,12 +218,13 @@ npm.cmd test -- --run
 - P1-14 受限规则模型与发布边界已完成：规则只暴露 Feed/分类/标题/作者/正文/语言/发布时间/音视频存在性九类字段、六类操作符和七类受限动作；显式保存规则版本、规则集版本、优先级、冲突顺序、启用状态、匹配模式和动作顺序。Core 与 Worker 都按字段白名单约束操作符，文本、集合、规则总数和排序均有上限；正则在 Worker 只编译不执行，拒绝反向引用/前后查找等非便携结构，本地固定使用 100 ms 超时的非回溯引擎。D1 schema v6 保存当前快照和不可变历史版本，管理员发布使用 `If-Match`、幂等键和最小审计，普通用户只能读取 ACTIVE 快照；无参数动作拒绝 URL、命令或其他载荷，D1 不保存新闻正文或 AI 结果。
 - P1-15 Core 确定性解释器、运行账本、动作租约、受限本地状态动作与后台处理器已完成：ACTIVE 规则先验证并编译为可复用只读规则集，按优先级降序、冲突顺序升序、规则 ID 和规则内动作顺序稳定计算。九类字段、ALL/ANY、带时区时间、音视频存在性和非回溯 regex 均在纯内存中匹配；加标签按本地 `NOCASE` 语义去重，其余副作用动作全局只保留第一个胜者。schema v12 在单个 SQLite 事务中保存每个条目/规则版本的命中结果和全部动作决策，计划动作使用稳定幂等键，被抑制动作保留胜者引用；同一版本重放或重启后再次暂存都不会追加记录。待执行动作按确定顺序和显式动作类型集合领取，租约过期可回收，旧持有者不能提交；失败可延时重试，主动释放可立即重领，成功/永久失败进入不可再次领取的终态。schema v13 增加按本地档案隔离的隐藏状态，普通时间线默认排除隐藏条目；本地执行服务只接受加标签、隐藏和标为已读，先做有界载荷校验，再调用原子追加标签或私人状态仓储。追加标签保留现有标签与同名标签颜色，重放不重复关联；缺失条目返回可终结结果。后台处理器只领取上述三类本地动作，以最多 4 并发执行；缺失条目和非法载荷永久失败，可重试应用错误尊重受限 `Retry-After`，未知错误指数退避，5 次后终结，取消会释放已经领取且仍在并发门外等待的租约。AI、媒体和通知动作不会被本地处理器领取，等待各自受限适配器；数据库事务仍不请求网络。
 - P1-15 ACTIVE 规则缓存已完成：schema v14 用单例状态和按稳定顺序索引的规则表保存 Worker 规则集版本、生成/同步时间及完整受限规则。仓储写入前复用 Core 验证器与解释器编译，拒绝停用规则、重复 ID、旧/同版本覆盖、非 UTC 时间和超量快照；规则规范化后在单个事务中整体替换，重启后可完整恢复。读取会交叉核对独立元数据与 JSON，并把格式或语义损坏统一视为无效本地缓存；同步时间只允许在预期版本仍匹配时更新。下一片接入 Worker `ACTIVE` 规则同步与 Feed 刷新后的本地计划暂存。
+- P1-15 Worker ACTIVE 规则同步已完成：登录后立即请求 `/v1/automation-rules?scope=ACTIVE&afterVersion=本地版本`，之后每 15 分钟增量检查；失败按 1 分钟重试，退出登录后停止请求。200 响应有 4 MiB 上限并逐项显式映射大写字段/操作符/动作契约，随后再次经过 Core 验证、编译和本地原子替换；304 只推进当前版本的同步时间，首次空规则集也会留下已同步标记。401 继续复用账号服务的单次令牌刷新，取消不写缓存，错误 scope、旧版本、超限或畸形快照均保留最后成功规则。下一片在 Feed 成功写入后用该只读 ACTIVE 快照计算并暂存规则运行计划。
 - P0 最终验收第一片已完成：`p0-final-acceptance.test.ts` 在真实 workerd/D1 中走临时 bootstrap/login，覆盖管理员发布与停用、目录刷新、普通用户同步/阅读、六类管理员写端点 403 隔离和审计字段脱敏。
 - P0 最终验收第二片已完成：完整 .NET 310/310、Worker 39/39、typecheck 和 Release 0 警告/0 错误复核了 OPML 导入/导出、断网缓存、坏源隔离、schema v2 原位升级和 10k 条目首屏性能；五份终验文档已同步，P0 已关闭。
 
 ### 10.2 下一里程碑
 
-Gate 0 字幕闭环和 P0“管理员策展 RSS”已经完成。P1-01～P1-14、P1-A、P1-B 与 P1-C 已完成；P1-15 Core 确定性解释器、SQLite v12～v14 运行账本/动作租约/受限本地状态动作/ACTIVE 规则缓存和后台处理器已完成。下一切片进入 Worker 规则同步与 Feed 刷新触发点。
+Gate 0 字幕闭环和 P0“管理员策展 RSS”已经完成。P1-01～P1-14、P1-A、P1-B 与 P1-C 已完成；P1-15 Core 确定性解释器、SQLite v12～v14 运行账本/动作租约/受限本地状态动作/ACTIVE 规则缓存、Worker 增量同步和后台处理器已完成。下一切片进入 Feed 刷新规则触发点。
 
 字幕闭环完成后的产品主路线已确定为“管理员策展 RSS”：管理员维护共享 RSS/Atom 目录，普通用户只能同步和阅读，不得修改共享订阅、分类、抓取策略或自动化规则。为保持现有“云端不存新闻正文”边界，首版采用 Worker/D1 保存权威目录、各桌面客户端本地抓取和 SQLite 缓存的模式。
 
@@ -231,7 +232,7 @@ Gate 0 字幕闭环和 P0“管理员策展 RSS”已经完成。P1-01～P1-14�
 
 1. Gate 0 字幕闭环已完成；验收记录见 [`plans/EXISTING_BACKLOG_ALIGNMENT.md`](plans/EXISTING_BACKLOG_ALIGNMENT.md)。
 2. P0-01～P0-20、P0-B/P0-C 及最终检查点已完成；P0 关闭记录见 [`plans/RSS_P0_ADMIN_CATALOG.md`](plans/RSS_P0_ADMIN_CATALOG.md)，现在才进入 P1。
-3. P1-01～P1-14、P1-A、P1-B 与 P1-C 已完成；P1-15 Core 解释器、SQLite v12～v14 运行账本/动作租约/受限本地状态动作/ACTIVE 规则缓存和后台处理器已完成，继续 Worker 规则同步与 Feed 刷新触发点，具体见 [`plans/RSS_P1_READING_INTELLIGENCE.md`](plans/RSS_P1_READING_INTELLIGENCE.md)。
+3. P1-01～P1-14、P1-A、P1-B 与 P1-C 已完成；P1-15 Core 解释器、SQLite v12～v14 运行账本/动作租约/受限本地状态动作/ACTIVE 规则缓存、Worker 增量同步和后台处理器已完成，继续 Feed 刷新规则触发点，具体见 [`plans/RSS_P1_READING_INTELLIGENCE.md`](plans/RSS_P1_READING_INTELLIGENCE.md)。
 4. 实现多内容视图、外部导出适配器、本地定时摘要和通知；具体见 [`plans/RSS_P2_VIEWS_INTEGRATIONS.md`](plans/RSS_P2_VIEWS_INTEGRATIONS.md)。
 
 总路线、参考项目和许可证边界见 [`plans/RSS_MASTER_ROADMAP.md`](plans/RSS_MASTER_ROADMAP.md)，架构决策见 [`decisions/ADR-001-admin-curated-rss.md`](decisions/ADR-001-admin-curated-rss.md) 与 [`decisions/ADR-002-article-content-extraction.md`](decisions/ADR-002-article-content-extraction.md)。P0-01～P0-20、P0-B/P0-C、P1-01～P1-14 与 P1-A/P1-B/P1-C 可作为已实现基础；规则本地执行/模拟管理、媒体投递和外部导出仍不能作为已交付功能宣传。

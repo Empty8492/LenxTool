@@ -66,3 +66,15 @@ public sealed record FeedAutomationRuleSnapshot(
     DateTimeOffset? GeneratedAt,
     DateTimeOffset? LastSyncedAt,
     IReadOnlyList<FeedAutomationRule> Rules);
+
+public enum FeedAutomationRuleSyncOutcome
+{
+    Updated,
+    Unchanged,
+    SkippedNotAuthenticated
+}
+
+public sealed record FeedAutomationRuleSyncResult(
+    FeedAutomationRuleSyncOutcome Outcome,
+    long RuleSetVersion,
+    DateTimeOffset? SynchronizedAt);

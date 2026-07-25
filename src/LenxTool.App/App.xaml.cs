@@ -134,6 +134,12 @@ public partial class App : Application
         services.AddSingleton<
             IFeedAutomationRuleRepository,
             FeedAutomationRuleRepository>();
+        services.AddSingleton(FeedAutomationRuleSyncOptions.Default);
+        services.AddSingleton<
+            IFeedAutomationRuleSyncService,
+            FeedAutomationRuleSyncService>();
+        services.AddHostedService<
+            FeedAutomationRuleSyncBackgroundService>();
         services.AddSingleton<
             IFeedAutomationActionQueueRepository,
             FeedAutomationActionQueueRepository>();
