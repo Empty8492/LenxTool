@@ -60,3 +60,9 @@ public sealed record FeedAutomationRule(
     FeedAutomationMatchMode MatchMode,
     IReadOnlyList<FeedAutomationCondition> Conditions,
     IReadOnlyList<FeedAutomationAction> Actions);
+
+public sealed record FeedAutomationRuleSnapshot(
+    long RuleSetVersion,
+    DateTimeOffset? GeneratedAt,
+    DateTimeOffset? LastSyncedAt,
+    IReadOnlyList<FeedAutomationRule> Rules);

@@ -10,7 +10,7 @@ public sealed partial class SqliteDatabase(
     AppPaths paths,
     ILogger<SqliteDatabase> logger) : IDisposable
 {
-    private const int CurrentSchemaVersion = 13;
+    private const int CurrentSchemaVersion = 14;
     private readonly SemaphoreSlim _initializationGate = new(1, 1);
     private bool _initialized;
     private bool _disposed;
@@ -281,6 +281,24 @@ public sealed partial class SqliteDatabase(
                 command.Parameters.AddWithValue("$appliedAt", DateTimeOffset.UtcNow.ToString("O"));
                 command.Parameters.AddWithValue("$checksum", "lenx-schema-v13-private-hidden-state");
                 await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                version = 13;
+            }
+
+            if (version < 14)
+            {
+                command.CommandText = MigrationFourteenSql;
+                command.Parameters.Clear();
+                await command.ExecuteNonQueryAsync(cancellationToken)
+                    .ConfigureAwait(false);
+                command.CommandText = "INSERT INTO schema_versions(version, applied_at, checksum) VALUES (14, $appliedAt, $checksum);";
+                command.Parameters.AddWithValue(
+                    "$appliedAt",
+                    DateTimeOffset.UtcNow.ToString("O"));
+                command.Parameters.AddWithValue(
+                    "$checksum",
+                    "lenx-schema-v14-feed-automation-rule-cache");
+                await command.ExecuteNonQueryAsync(cancellationToken)
+                    .ConfigureAwait(false);
             }
         }
 
@@ -883,5 +901,42 @@ public sealed partial class SqliteDatabase(
 
         CREATE INDEX ix_user_entry_states_profile_hidden
             ON user_entry_states(local_profile, is_hidden, entry_id);
+        """;
+
+    private const string MigrationFourteenSql = """
+        CREATE TABLE feed_automation_rule_state(
+            singleton_id INTEGER PRIMARY KEY CHECK(singleton_id = 1),
+            rule_set_version INTEGER NOT NULL DEFAULT 0
+                CHECK(typeof(rule_set_version) = 'integer'
+                    AND rule_set_version >= 0),
+            generated_at TEXT
+                CHECK(generated_at IS NULL
+                    OR length(generated_at) BETWEEN 20 AND 40),
+            last_synced_at TEXT
+                CHECK(last_synced_at IS NULL
+                    OR length(last_synced_at) BETWEEN 20 AND 40)
+        );
+
+        INSERT INTO feed_automation_rule_state(
+            singleton_id, rule_set_version, generated_at, last_synced_at)
+        VALUES(1, 0, NULL, NULL);
+
+        CREATE TABLE feed_automation_rules(
+            id TEXT PRIMARY KEY CHECK(length(id) = 36),
+            version INTEGER NOT NULL
+                CHECK(typeof(version) = 'integer' AND version >= 1),
+            priority INTEGER NOT NULL
+                CHECK(typeof(priority) = 'integer'
+                    AND priority BETWEEN 0 AND 1000),
+            conflict_order INTEGER NOT NULL
+                CHECK(typeof(conflict_order) = 'integer'
+                    AND conflict_order BETWEEN 0 AND 1000),
+            rule_json TEXT NOT NULL
+                CHECK(length(rule_json) BETWEEN 2 AND 65536)
+        );
+
+        CREATE INDEX ix_feed_automation_rules_order
+            ON feed_automation_rules(
+                priority DESC, conflict_order, id);
         """;
 }
