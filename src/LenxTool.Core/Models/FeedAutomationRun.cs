@@ -37,6 +37,13 @@ public enum FeedAutomationMediaActionResult
     NoSupportedMedia
 }
 
+public enum FeedAutomationNotificationActionResult
+{
+    Completed,
+    EntryMissing,
+    FeedUnavailable
+}
+
 public sealed record FeedAutomationRuleRun(
     string EntryId,
     string RuleId,

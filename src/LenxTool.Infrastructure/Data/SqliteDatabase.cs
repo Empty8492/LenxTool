@@ -10,7 +10,7 @@ public sealed partial class SqliteDatabase(
     AppPaths paths,
     ILogger<SqliteDatabase> logger) : IDisposable
 {
-    private const int CurrentSchemaVersion = 15;
+    private const int CurrentSchemaVersion = 16;
     private readonly SemaphoreSlim _initializationGate = new(1, 1);
     private bool _initialized;
     private bool _disposed;
@@ -315,6 +315,24 @@ public sealed partial class SqliteDatabase(
                 command.Parameters.AddWithValue(
                     "$checksum",
                     "lenx-schema-v15-feed-media-deliveries");
+                await command.ExecuteNonQueryAsync(cancellationToken)
+                    .ConfigureAwait(false);
+                version = 15;
+            }
+
+            if (version < 16)
+            {
+                command.CommandText = MigrationSixteenSql;
+                command.Parameters.Clear();
+                await command.ExecuteNonQueryAsync(cancellationToken)
+                    .ConfigureAwait(false);
+                command.CommandText = "INSERT INTO schema_versions(version, applied_at, checksum) VALUES (16, $appliedAt, $checksum);";
+                command.Parameters.AddWithValue(
+                    "$appliedAt",
+                    DateTimeOffset.UtcNow.ToString("O"));
+                command.Parameters.AddWithValue(
+                    "$checksum",
+                    "lenx-schema-v16-app-notifications");
                 await command.ExecuteNonQueryAsync(cancellationToken)
                     .ConfigureAwait(false);
             }
@@ -986,5 +1004,31 @@ public sealed partial class SqliteDatabase(
 
         CREATE UNIQUE INDEX ux_feed_media_deliveries_job
             ON feed_media_deliveries(media_job_id);
+        """;
+
+    private const string MigrationSixteenSql = """
+        CREATE TABLE app_notifications(
+            id TEXT PRIMARY KEY CHECK(length(id) = 64),
+            entry_id TEXT NOT NULL
+                CHECK(length(entry_id) BETWEEN 1 AND 512),
+            feed_id TEXT NOT NULL
+                CHECK(length(feed_id) BETWEEN 1 AND 512),
+            rule_id TEXT NOT NULL CHECK(length(rule_id) = 36),
+            rule_version INTEGER NOT NULL
+                CHECK(typeof(rule_version) = 'integer'
+                    AND rule_version >= 1),
+            title TEXT NOT NULL
+                CHECK(length(title) BETWEEN 1 AND 1024),
+            source_label TEXT NOT NULL
+                CHECK(length(source_label) BETWEEN 1 AND 160),
+            created_at TEXT NOT NULL
+                CHECK(length(created_at) BETWEEN 20 AND 40),
+            read_at TEXT
+                CHECK(read_at IS NULL
+                    OR length(read_at) BETWEEN 20 AND 40)
+        ) WITHOUT ROWID;
+
+        CREATE INDEX ix_app_notifications_unread
+            ON app_notifications(read_at, created_at DESC, id);
         """;
 }

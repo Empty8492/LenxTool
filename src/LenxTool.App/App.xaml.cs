@@ -44,6 +44,10 @@ public partial class App : Application
 
             SqliteDatabase database = _host.Services.GetRequiredService<SqliteDatabase>();
             await database.InitializeAsync(CancellationToken.None).ConfigureAwait(true);
+            NotificationCenterViewModel notificationCenter =
+                _host.Services.GetRequiredService<NotificationCenterViewModel>();
+            await notificationCenter.InitializeAsync(CancellationToken.None)
+                .ConfigureAwait(true);
             NewsCenterViewModel newsCenter = _host.Services.GetRequiredService<NewsCenterViewModel>();
             await newsCenter.InitializeAsync(CancellationToken.None).ConfigureAwait(true);
             MediaWorkbenchViewModel media = _host.Services.GetRequiredService<MediaWorkbenchViewModel>();
@@ -171,6 +175,16 @@ public partial class App : Application
             static services =>
                 services.GetRequiredService<FeedAutomationMediaActionProcessor>());
         services.AddHostedService<FeedAutomationMediaActionBackgroundService>();
+        services.AddSingleton<
+            IFeedAutomationNotificationActionService,
+            FeedAutomationNotificationActionService>();
+        services.AddSingleton<FeedAutomationNotificationActionProcessor>();
+        services.AddSingleton<IFeedAutomationNotificationActionProcessor>(
+            static services =>
+                services.GetRequiredService<
+                    FeedAutomationNotificationActionProcessor>());
+        services.AddHostedService<
+            FeedAutomationNotificationActionBackgroundService>();
         services.AddSingleton(FeedAiAutomationOptions.Default);
         services.AddSingleton<FeedAiAutomationQueueService>();
         services.AddSingleton<IFeedAiAutomationQueueService>(static services =>
@@ -207,6 +221,12 @@ public partial class App : Application
             services.GetRequiredService<MediaJobRepository>());
         services.AddSingleton<ISubtitleRepository>(static services =>
             services.GetRequiredService<MediaJobRepository>());
+        services.AddSingleton<AppNotificationRepository>();
+        services.AddSingleton<IAppNotificationRepository>(static services =>
+            services.GetRequiredService<AppNotificationRepository>());
+        services.AddSingleton<AppNotificationInbox>();
+        services.AddSingleton<IAppNotificationInbox>(static services =>
+            services.GetRequiredService<AppNotificationInbox>());
         services.AddSingleton<IAppSettingsRepository, AppSettingsRepository>();
         services.AddSingleton<IFileHashService, FileHashService>();
         services.AddSingleton<ILocalModelService, LocalWhisperModelService>();
@@ -238,6 +258,7 @@ public partial class App : Application
         services.AddSingleton<ToolsViewModel>();
         services.AddSingleton<SettingsViewModel>();
         services.AddSingleton<FeedAdminViewModel>();
+        services.AddSingleton<NotificationCenterViewModel>();
         services.AddSingleton(CreateShellViewModel);
         services.AddSingleton<MainWindow>();
     }
@@ -252,6 +273,8 @@ public partial class App : Application
         SettingsViewModel settings = services.GetRequiredService<SettingsViewModel>();
         IAccountSessionService accountSession = services.GetRequiredService<IAccountSessionService>();
         FeedAdminViewModel feedAdmin = services.GetRequiredService<FeedAdminViewModel>();
+        NotificationCenterViewModel notificationCenter =
+            services.GetRequiredService<NotificationCenterViewModel>();
 
         return new(
         [
@@ -265,7 +288,7 @@ public partial class App : Application
             new("history", "历史与数据", "任务、收藏、搜索与备份", "M12,4 A8,8 0 1 1 4.5,9 M4,4 L4,9 9,9 M12,8 L12,13 16,15", history),
             new("feed-admin", "订阅管理", "管理员共享目录入口", "M4,5 L20,5 20,19 4,19 Z M8,9 L16,9 M8,13 L16,13 M8,17 L13,17", feedAdmin, AdminOnly: true),
             new("settings", "设置", "主题、密钥、账号与更新", "M12,8 A4,4 0 1 0 12,16 A4,4 0 1 0 12,8 M12,3 L13,5 16,6 18,5 20,9 18,11 18,14 20,16 18,20 15,19 13,20 11,19 8,20 6,18 7,15 6,12 4,10 6,6 9,6 Z", settings)
-        ], accountSession);
+        ], accountSession, notificationCenter);
     }
 
     private static WorkerAccountOptions CreateWorkerAccountOptions()

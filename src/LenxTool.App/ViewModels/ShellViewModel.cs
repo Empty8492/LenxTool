@@ -37,7 +37,10 @@ public sealed class ShellViewModel : ObservableObject
     private readonly SynchronizationContext? _synchronizationContext;
     private string _cloudAccountStatus = "云服务未登录 · 可离线使用";
 
-    public ShellViewModel(IEnumerable<PageNavigationItem> pages, IAccountSessionService accountSession)
+    public ShellViewModel(
+        IEnumerable<PageNavigationItem> pages,
+        IAccountSessionService accountSession,
+        NotificationCenterViewModel? notificationCenter = null)
     {
         PageNavigationItem[] pageArray = pages.ToArray();
         if (pageArray.Length == 0) throw new ArgumentException("至少需要一个导航页面。", nameof(pages));
@@ -46,6 +49,7 @@ public sealed class ShellViewModel : ObservableObject
         _allPages = pageArray;
         _accountSession = accountSession;
         _synchronizationContext = SynchronizationContext.Current;
+        NotificationCenter = notificationCenter;
 
         NavigationItems = [];
         _currentPage = _fallbackPage.ViewModel;
@@ -58,6 +62,7 @@ public sealed class ShellViewModel : ObservableObject
     }
 
     public ObservableCollection<PageNavigationItem> NavigationItems { get; }
+    public NotificationCenterViewModel? NotificationCenter { get; }
     public RelayCommand<string> NavigateCommand { get; }
     public RelayCommand OpenCommandPaletteCommand { get; }
     public RelayCommand CloseCommandPaletteCommand { get; }

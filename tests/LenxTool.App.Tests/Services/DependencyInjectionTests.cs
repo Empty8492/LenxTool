@@ -87,6 +87,16 @@ public sealed class DependencyInjectionTests
             provider.GetRequiredService<IFeedAutomationMediaActionService>());
         Assert.IsType<FeedAutomationMediaActionProcessor>(
             provider.GetRequiredService<IFeedAutomationMediaActionProcessor>());
+        Assert.IsType<AppNotificationRepository>(
+            provider.GetRequiredService<IAppNotificationRepository>());
+        Assert.IsType<AppNotificationInbox>(
+            provider.GetRequiredService<IAppNotificationInbox>());
+        Assert.IsType<FeedAutomationNotificationActionService>(
+            provider.GetRequiredService<
+                IFeedAutomationNotificationActionService>());
+        Assert.IsType<FeedAutomationNotificationActionProcessor>(
+            provider.GetRequiredService<
+                IFeedAutomationNotificationActionProcessor>());
         Assert.IsType<FeedAiAutomationQueueService>(
             provider.GetRequiredService<IFeedAiAutomationQueueService>());
         Assert.IsType<FeedFullTextQueueService>(
@@ -95,6 +105,7 @@ public sealed class DependencyInjectionTests
         Assert.NotNull(provider.GetRequiredService<NewsCenterViewModel>());
         Assert.IsType<FavoriteRepository>(provider.GetRequiredService<IFavoriteRepository>());
         Assert.NotNull(provider.GetRequiredService<DashboardViewModel>());
+        Assert.NotNull(provider.GetRequiredService<NotificationCenterViewModel>());
 
         ShellViewModel shell = provider.GetRequiredService<ShellViewModel>();
         Assert.Equal(
