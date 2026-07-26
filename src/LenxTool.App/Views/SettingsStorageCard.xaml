@@ -1,0 +1,119 @@
+<UserControl x:Class="LenxTool.App.Views.SettingsStorageCard"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             AutomationProperties.Name="本地存储占用">
+    <Border Style="{StaticResource BentoCardStyle}">
+        <StackPanel>
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel>
+                    <TextBlock Style="{StaticResource SectionTitleStyle}"
+                               Text="本地存储与安全清理" />
+                    <TextBlock Margin="0,7,0,0"
+                               Style="{StaticResource MetaTextStyle}"
+                               Text="默认只清理 180 天前且无收藏、备注、标签或活动任务引用的内容。"
+                               TextWrapping="Wrap" />
+                </StackPanel>
+                <StackPanel Grid.Column="1"
+                            Margin="20,0,0,0"
+                            VerticalAlignment="Center"
+                            Orientation="Horizontal">
+                    <Button Margin="0,0,8,0"
+                            AutomationProperties.Name="刷新存储占用"
+                            Command="{Binding RefreshStorageUsageCommand}"
+                            Content="刷新占用" />
+                    <Button Style="{StaticResource AccentButtonStyle}"
+                            AutomationProperties.Name="预览安全清理"
+                            Command="{Binding PreviewStorageCleanupCommand}"
+                            Content="预览清理" />
+                </StackPanel>
+            </Grid>
+            <Grid Margin="0,18,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="12" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="12" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Border Padding="14"
+                        Background="{DynamicResource Brush.SurfaceMuted}"
+                        CornerRadius="8">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource MetaTextStyle}"
+                                   Text="数据库" />
+                        <TextBlock Margin="0,7,0,0"
+                                   FontSize="18"
+                                   FontWeight="SemiBold"
+                                   Text="{Binding DatabaseUsage}" />
+                    </StackPanel>
+                </Border>
+                <Border Grid.Column="2"
+                        Padding="14"
+                        Background="{DynamicResource Brush.SurfaceMuted}"
+                        CornerRadius="8">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource MetaTextStyle}"
+                                   Text="图片缓存" />
+                        <TextBlock Margin="0,7,0,0"
+                                   FontSize="18"
+                                   FontWeight="SemiBold"
+                                   Text="{Binding ImageCacheUsage}" />
+                    </StackPanel>
+                </Border>
+                <Border Grid.Column="4"
+                        Padding="14"
+                        Background="{DynamicResource Brush.SurfaceMuted}"
+                        CornerRadius="8">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource MetaTextStyle}"
+                                   Text="本地模型" />
+                        <TextBlock Margin="0,7,0,0"
+                                   FontSize="18"
+                                   FontWeight="SemiBold"
+                                   Text="{Binding ModelUsage}" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+            <ProgressBar Height="3"
+                         Margin="0,14,0,0"
+                         IsIndeterminate="True"
+                         Visibility="{Binding IsStorageBusy, Converter={StaticResource BooleanToVisibilityConverter}}" />
+            <TextBlock Margin="0,12,0,0"
+                       Style="{StaticResource MetaTextStyle}"
+                       Text="{Binding StorageStatus}"
+                       TextWrapping="Wrap" />
+            <Border Margin="0,14,0,0"
+                    Padding="14"
+                    Background="{DynamicResource Brush.SurfaceMuted}"
+                    CornerRadius="8"
+                    Visibility="{Binding IsStorageCleanupPreviewVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Margin="0,0,20,0"
+                               VerticalAlignment="Center"
+                               Text="{Binding StorageCleanupPreviewSummary}"
+                               TextWrapping="Wrap" />
+                    <StackPanel Grid.Column="1"
+                                VerticalAlignment="Center"
+                                Orientation="Horizontal">
+                        <Button Margin="0,0,8,0"
+                                AutomationProperties.Name="取消安全清理"
+                                Command="{Binding CancelStorageCleanupPreviewCommand}"
+                                Content="取消" />
+                        <Button Style="{StaticResource AccentButtonStyle}"
+                                AutomationProperties.Name="确认安全清理"
+                                Command="{Binding ConfirmStorageCleanupCommand}"
+                                Content="确认清理" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </StackPanel>
+    </Border>
+</UserControl>

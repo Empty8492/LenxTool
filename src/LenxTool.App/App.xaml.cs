@@ -70,6 +70,8 @@ public partial class App : Application
             MainWindow = window;
             window.Show();
             _ = settings.CheckInBackgroundAsync(CancellationToken.None);
+            _ = settings.RefreshStorageUsageInBackgroundAsync(
+                CancellationToken.None);
         }
         catch (AppException exception)
         {

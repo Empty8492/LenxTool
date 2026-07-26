@@ -139,6 +139,49 @@ public sealed class EntryAssetStoreTests : IDisposable
         Assert.False(File.Exists(path));
     }
 
+    [Fact]
+    public async Task RemoveUnreferencedFilesDeletesOnlyContentOutsideTheIndex()
+    {
+        using SqliteDatabase database = await CreateDatabaseAsync();
+        AppPaths paths = CreatePaths();
+        var store = new EntryAssetStore(
+            database,
+            paths,
+            new(MaximumBytes: 256, MaximumAssetBytes: 64));
+        EntryAsset referenced = await store.PutAsync(
+            "entry-referenced",
+            "https://cdn.example.test/referenced.png",
+            "image/png",
+            new MemoryStream([1, 2, 3]),
+            CancellationToken.None);
+        EntryAsset orphaned = await store.PutAsync(
+            "entry-orphaned",
+            "https://cdn.example.test/orphaned.png",
+            "image/png",
+            new MemoryStream([4, 5, 6, 7]),
+            CancellationToken.None);
+        await using (SqliteConnection connection =
+            await database.OpenConnectionAsync(CancellationToken.None))
+        await using (SqliteCommand removeIndex = connection.CreateCommand())
+        {
+            removeIndex.CommandText = """
+                DELETE FROM entry_assets
+                WHERE entry_id='entry-orphaned';
+                """;
+            await removeIndex.ExecuteNonQueryAsync(CancellationToken.None);
+        }
+
+        EntryAssetPruneResult result =
+            await store.RemoveUnreferencedFilesAsync(CancellationToken.None);
+
+        Assert.Equal(1, result.RemovedFileCount);
+        Assert.Equal(4, result.RemovedBytes);
+        Assert.True(File.Exists(
+            Path.Combine(paths.AssetCacheDirectory, referenced.ContentHash)));
+        Assert.False(File.Exists(
+            Path.Combine(paths.AssetCacheDirectory, orphaned.ContentHash)));
+    }
+
     private async Task<SqliteDatabase> CreateDatabaseAsync()
     {
         var database = new SqliteDatabase(

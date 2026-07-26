@@ -1392,6 +1392,7 @@
                                 <TextBlock Grid.Row="2" Margin="0,12,0,0" Text="更新通道" /><TextBlock Grid.Row="2" Grid.Column="1" Margin="0,12,0,0" Style="{StaticResource MetaTextStyle}" Text="{Binding UpdateChannel}" />
                             </Grid>
                         </Border>
+                        <views:SettingsStorageCard Margin="0,16,0,0" />
                         <Border Margin="0,16,0,0" Style="{StaticResource BentoCardStyle}">
                             <Grid>
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>

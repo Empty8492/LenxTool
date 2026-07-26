@@ -1,3 +1,5 @@
+using LenxTool.Core.Models;
+
 namespace LenxTool.Core.Contracts;
 
 public sealed record LocalModelInfo(
@@ -39,4 +41,15 @@ public interface IDatabaseMaintenanceService
     Task<string> BackupAsync(string? destinationPath, CancellationToken cancellationToken);
 
     Task RestoreAsync(string sourcePath, CancellationToken cancellationToken);
+
+    Task<LocalStorageUsage> GetStorageUsageAsync(
+        CancellationToken cancellationToken);
+
+    Task<StorageCleanupPreview> PreviewCleanupAsync(
+        DateTimeOffset cutoff,
+        CancellationToken cancellationToken);
+
+    Task<StorageCleanupResult> RunCleanupAsync(
+        DateTimeOffset cutoff,
+        CancellationToken cancellationToken);
 }

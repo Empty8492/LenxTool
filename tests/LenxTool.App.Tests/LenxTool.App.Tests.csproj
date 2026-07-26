@@ -47,6 +47,9 @@
     <None Include="..\..\src\LenxTool.App\Views\HistorySearchFilterBar.xaml"
           Link="Fixtures\HistorySearchFilterBar.xaml"
           CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\src\LenxTool.App\Views\SettingsStorageCard.xaml"
+          Link="Fixtures\SettingsStorageCard.xaml"
+          CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

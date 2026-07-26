@@ -489,5 +489,9 @@ public sealed class CachedArticleImageDownloaderTests
             IReadOnlyCollection<string> protectedContentHashes,
             CancellationToken cancellationToken) =>
             Task.FromResult(0);
+
+        public Task<EntryAssetPruneResult> RemoveUnreferencedFilesAsync(
+            CancellationToken cancellationToken) =>
+            Task.FromResult(new EntryAssetPruneResult(0, 0));
     }
 }

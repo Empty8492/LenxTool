@@ -23,4 +23,7 @@ public interface IEntryAssetStore
     Task<int> PruneAsync(
         IReadOnlyCollection<string> protectedContentHashes,
         CancellationToken cancellationToken);
+
+    Task<EntryAssetPruneResult> RemoveUnreferencedFilesAsync(
+        CancellationToken cancellationToken);
 }

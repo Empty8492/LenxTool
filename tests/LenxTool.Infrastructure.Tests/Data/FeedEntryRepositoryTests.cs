@@ -153,8 +153,41 @@ public sealed class FeedEntryRepositoryTests : IDisposable
         FeedEntry favorite = Entry("favorite", "Favorite", "favorite-marker", Now.AddDays(-210));
         FeedEntry tagged = Entry("tagged", "Tagged", "tagged-marker", Now.AddDays(-220));
         FeedEntry stateful = Entry("stateful", "Stateful", "stateful-marker", Now.AddDays(-230));
+        FeedEntry fullTextActive = Entry(
+            "full-text-active",
+            "Full text active",
+            "full-text-active-marker",
+            Now.AddDays(-240));
+        FeedEntry aiActive = Entry(
+            "ai-active",
+            "AI active",
+            "ai-active-marker",
+            Now.AddDays(-250));
+        FeedEntry ruleActive = Entry(
+            "rule-active",
+            "Rule active",
+            "rule-active-marker",
+            Now.AddDays(-260));
+        FeedEntry mediaActive = Entry(
+            "media-active",
+            "Media active",
+            "media-active-marker",
+            Now.AddDays(-270));
         FeedEntry recent = Entry("recent", "Recent", "recent-marker", Now.AddDays(-20));
-        await repository.UpsertAsync(FeedId, [expired, favorite, tagged, stateful, recent], CancellationToken.None);
+        await repository.UpsertAsync(
+            FeedId,
+            [
+                expired,
+                favorite,
+                tagged,
+                stateful,
+                fullTextActive,
+                aiActive,
+                ruleActive,
+                mediaActive,
+                recent
+            ],
+            CancellationToken.None);
         await using (SqliteConnection connection = await database.OpenConnectionAsync(CancellationToken.None))
         await using (SqliteCommand state = connection.CreateCommand())
         {
@@ -168,10 +201,77 @@ public sealed class FeedEntryRepositoryTests : IDisposable
                 INSERT INTO user_entry_states(
                     entry_id, local_profile, is_read, is_starred, progress, note, updated_at)
                 VALUES($statefulId, 'default', 1, 0, 25, 'keep', $now);
+
+                INSERT INTO feed_full_text_jobs(
+                    entry_id, host, status, attempt_count, next_attempt_at,
+                    lease_expires_at, lease_id, last_error_code, updated_at)
+                VALUES(
+                    $fullTextActiveId, 'feeds.example', 'PENDING', 0, $now,
+                    NULL, NULL, NULL, $now);
+
+                INSERT INTO feed_ai_automation_jobs(
+                    id, feed_id, entry_id, content_hash, task_type,
+                    target_language, status, attempt_count, next_attempt_at,
+                    lease_token, lease_expires_at, last_error_code,
+                    created_at, updated_at)
+                VALUES(
+                    '60000000-0000-4000-8000-000000000001',
+                    $feedId, $aiActiveId, $contentHash, 'SUMMARY',
+                    'zh-CN', 'PENDING', 0, $now,
+                    NULL, NULL, NULL, $now, $now);
+
+                INSERT INTO feed_automation_runs(
+                    entry_id, rule_id, rule_version, evaluation_outcome,
+                    plan_order, evaluated_at)
+                VALUES(
+                    $ruleActiveId,
+                    '70000000-0000-4000-8000-000000000001',
+                    1, 'MATCHED', 0, $now);
+                INSERT INTO feed_automation_action_runs(
+                    idempotency_key, entry_id, rule_id, rule_version,
+                    rule_priority, rule_conflict_order, action_type,
+                    action_order, action_value, disposition,
+                    suppression_reason, winning_rule_id,
+                    winning_rule_version, winning_action_order, status,
+                    attempt_count, next_attempt_at, lease_token,
+                    lease_expires_at, last_error_code, created_at, updated_at)
+                VALUES(
+                    $idempotencyKey, $ruleActiveId,
+                    '70000000-0000-4000-8000-000000000001',
+                    1, 100, 0, 'HIDE', 0, NULL, 'PLANNED',
+                    'NONE', NULL, NULL, NULL, 'PENDING',
+                    0, $now, NULL, NULL, NULL, $now, $now);
+
+                INSERT INTO media_jobs(
+                    id, kind, input_path, output_path, status, progress,
+                    engine, model, shared_usage_seconds, ai_request_count,
+                    error_json, created_at, updated_at)
+                VALUES(
+                    '80000000-0000-4000-8000-000000000001',
+                    'FeedTranscription', 'C:\media\active.mp3', NULL,
+                    'Running', 10, 'Groq', NULL, 0, 0, NULL, $now, $now);
+                INSERT INTO feed_media_deliveries(
+                    entry_id, feed_id, entry_title, source_url,
+                    source_title, media_type, source_length, media_job_id,
+                    created_at)
+                VALUES(
+                    $mediaActiveId, $feedId, 'Media active',
+                    'https://cdn.example/media-active.mp3',
+                    'Media active', 'audio/mpeg', 128,
+                    '80000000-0000-4000-8000-000000000001', $now);
                 """;
             state.Parameters.AddWithValue("$favoriteId", favorite.Id);
             state.Parameters.AddWithValue("$taggedId", tagged.Id);
             state.Parameters.AddWithValue("$statefulId", stateful.Id);
+            state.Parameters.AddWithValue(
+                "$fullTextActiveId",
+                fullTextActive.Id);
+            state.Parameters.AddWithValue("$aiActiveId", aiActive.Id);
+            state.Parameters.AddWithValue("$ruleActiveId", ruleActive.Id);
+            state.Parameters.AddWithValue("$mediaActiveId", mediaActive.Id);
+            state.Parameters.AddWithValue("$feedId", FeedId);
+            state.Parameters.AddWithValue("$contentHash", new string('f', 64));
+            state.Parameters.AddWithValue("$idempotencyKey", new string('a', 64));
             state.Parameters.AddWithValue("$now", Now.ToString("O"));
             await state.ExecuteNonQueryAsync(CancellationToken.None);
         }
@@ -184,7 +284,16 @@ public sealed class FeedEntryRepositoryTests : IDisposable
         Assert.Equal(1, deleted);
         FeedEntryPage remaining = await repository.QueryAsync(Query(), CancellationToken.None);
         Assert.Equal(
-            ["favorite", "recent", "stateful", "tagged"],
+            [
+                "ai-active",
+                "favorite",
+                "full-text-active",
+                "media-active",
+                "recent",
+                "rule-active",
+                "stateful",
+                "tagged"
+            ],
             remaining.Items.Select(item => item.ExternalId).Order().ToArray());
         Assert.Empty((await repository.QueryAsync(
             Query(searchText: "remove-marker"),

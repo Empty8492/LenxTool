@@ -225,12 +225,13 @@ npm.cmd test -- --run
 - P1-16 规则管理和只读模拟已完成：管理员专属一级页面只用封闭字段、允许操作符和七类动作构建规则，不提供脚本或自定义请求。桌面读取 Worker `ALL` 快照，以独立规则集版本和幂等键发布；版本冲突刷新但不重放，响应继续走 Core 验证。模拟只读取本地最近条目和目录，在内存解释器中展示命中及计划动作，不取得运行账本、AI、媒体或通知服务。普通用户无入口，绕过 UI 的发布仍由 Worker 403 拒绝，管理员发布由既有 D1 不可变版本与审计记录覆盖。
 - P1-17 附件分类与安全打开已完成：RSS/Atom enclosure 与 Media RSS `media:content` 统一解析、稳定去重并限制每条 32 项；Core 以允许清单核对 MIME/扩展名，并阻止危险协议、凭据、自定义端口、保留主机名和非公网字面 IP。阅读器显示附件种类、大小/未知大小、类型状态和来源警告；仅经验证且不超过 12 MiB 的 HTTPS 图片进入既有安全图片下载器，音视频、大图、未知大小和不支持类型回退为受限外链，危险地址不生成链接。
 - P1-19 统一搜索扩展已完成：schema v17 把字幕、标签和收藏加入本地 FTS，并为旧库回填索引；字幕替换、收藏和标签更新/删除会同步索引，避免幽灵结果。历史页可按七类实体、日期、Feed、分类、标签和收藏组合筛选并稳定分页；Feed 结果在应用内打开精确阅读条目，字幕结果直接定位任务历史。
+- P1-20 保留、清理与数据库维护已完成：默认只清理严格早于 180 天、没有收藏/备注/标签/私人阅读状态且无全文、AI、规则或媒体活动任务引用的 Feed 条目；最多 5000 条一批，取消只停止后续批次。资源清理与缓存写入/LRU 共用互斥门闩，数据库优化在空间不足或占用时安全跳过压缩。设置页显示数据库、图片缓存和模型占用，提供只读预览、显式确认与取消；容量统计在主窗口显示后后台运行。
 - P0 最终验收第一片已完成：`p0-final-acceptance.test.ts` 在真实 workerd/D1 中走临时 bootstrap/login，覆盖管理员发布与停用、目录刷新、普通用户同步/阅读、六类管理员写端点 403 隔离和审计字段脱敏。
 - P0 最终验收第二片已完成：完整 .NET 310/310、Worker 39/39、typecheck 和 Release 0 警告/0 错误复核了 OPML 导入/导出、断网缓存、坏源隔离、schema v2 原位升级和 10k 条目首屏性能；五份终验文档已同步，P0 已关闭。
 
 ### 10.2 下一里程碑
 
-Gate 0 字幕闭环和 P0“管理员策展 RSS”已经完成。P1-01～P1-19、P1-A、P1-B、P1-C 与 P1-D 已完成。下一切片进入 P1-20 保留、清理与数据库维护。
+Gate 0 字幕闭环和 P0“管理员策展 RSS”已经完成。P1-01～P1-20、P1-A、P1-B、P1-C 与 P1-D 已完成。下一步进入 P1 最终检查点，不提前把 P1 标记为整体完成。
 
 字幕闭环完成后的产品主路线已确定为“管理员策展 RSS”：管理员维护共享 RSS/Atom 目录，普通用户只能同步和阅读，不得修改共享订阅、分类、抓取策略或自动化规则。为保持现有“云端不存新闻正文”边界，首版采用 Worker/D1 保存权威目录、各桌面客户端本地抓取和 SQLite 缓存的模式。
 
@@ -238,10 +239,10 @@ Gate 0 字幕闭环和 P0“管理员策展 RSS”已经完成。P1-01～P1-19�
 
 1. Gate 0 字幕闭环已完成；验收记录见 [`plans/EXISTING_BACKLOG_ALIGNMENT.md`](plans/EXISTING_BACKLOG_ALIGNMENT.md)。
 2. P0-01～P0-20、P0-B/P0-C 及最终检查点已完成；P0 关闭记录见 [`plans/RSS_P0_ADMIN_CATALOG.md`](plans/RSS_P0_ADMIN_CATALOG.md)，现在才进入 P1。
-3. P1-01～P1-19 与 P1-A/P1-B/P1-C/P1-D 已完成；继续 P1-20 保留、清理与数据库维护，具体见 [`plans/RSS_P1_READING_INTELLIGENCE.md`](plans/RSS_P1_READING_INTELLIGENCE.md)。
+3. P1-01～P1-20 与 P1-A/P1-B/P1-C/P1-D 已完成；继续 P1 最终检查点，具体见 [`plans/RSS_P1_READING_INTELLIGENCE.md`](plans/RSS_P1_READING_INTELLIGENCE.md)。
 4. 实现多内容视图、外部导出适配器、本地定时摘要和通知；具体见 [`plans/RSS_P2_VIEWS_INTEGRATIONS.md`](plans/RSS_P2_VIEWS_INTEGRATIONS.md)。
 
-总路线、参考项目和许可证边界见 [`plans/RSS_MASTER_ROADMAP.md`](plans/RSS_MASTER_ROADMAP.md)，架构决策见 [`decisions/ADR-001-admin-curated-rss.md`](decisions/ADR-001-admin-curated-rss.md) 与 [`decisions/ADR-002-article-content-extraction.md`](decisions/ADR-002-article-content-extraction.md)。P0-01～P0-20、P0-B/P0-C、P1-01～P1-19 与 P1-A/P1-B/P1-C/P1-D 可作为已实现基础；保留维护和外部导出仍不能作为已交付功能宣传。
+总路线、参考项目和许可证边界见 [`plans/RSS_MASTER_ROADMAP.md`](plans/RSS_MASTER_ROADMAP.md)，架构决策见 [`decisions/ADR-001-admin-curated-rss.md`](decisions/ADR-001-admin-curated-rss.md) 与 [`decisions/ADR-002-article-content-extraction.md`](decisions/ADR-002-article-content-extraction.md)。P0-01～P0-20、P0-B/P0-C、P1-01～P1-20 与 P1-A/P1-B/P1-C/P1-D 可作为已实现基础；P1 整体交付宣传仍需最终检查点通过。
 
 ### 10.3 其他尚未完成的产品功能
 

@@ -7,12 +7,13 @@ using Microsoft.Data.Sqlite;
 
 namespace LenxTool.Infrastructure.Data;
 
-public sealed class EntryAssetStore : IEntryAssetStore
+public sealed class EntryAssetStore : IEntryAssetStore, IDisposable
 {
     private const int BufferSize = 80 * 1024;
     private readonly SqliteDatabase _database;
     private readonly AppPaths _paths;
     private readonly AssetCacheOptions _options;
+    private readonly SemaphoreSlim _mutationGate = new(1, 1);
 
     public EntryAssetStore(
         SqliteDatabase database,
@@ -58,6 +59,31 @@ public sealed class EntryAssetStore : IEntryAssetStore
     }
 
     public async Task<EntryAsset> PutAsync(
+        string entryId,
+        string sourceUrl,
+        string mimeType,
+        Stream content,
+        CancellationToken cancellationToken)
+    {
+        await _mutationGate.WaitAsync(cancellationToken)
+            .ConfigureAwait(false);
+        try
+        {
+            return await PutCoreAsync(
+                    entryId,
+                    sourceUrl,
+                    mimeType,
+                    content,
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+        finally
+        {
+            _mutationGate.Release();
+        }
+    }
+
+    private async Task<EntryAsset> PutCoreAsync(
         string entryId,
         string sourceUrl,
         string mimeType,
@@ -122,7 +148,8 @@ public sealed class EntryAssetStore : IEntryAssetStore
                 now,
                 now);
             await UpsertAsync(asset, cancellationToken).ConfigureAwait(false);
-            await PruneAsync([contentHash], cancellationToken).ConfigureAwait(false);
+            await PruneCoreAsync([contentHash], cancellationToken)
+                .ConfigureAwait(false);
             return asset;
         }
         finally
@@ -179,6 +206,25 @@ public sealed class EntryAssetStore : IEntryAssetStore
     }
 
     public async Task<int> PruneAsync(
+        IReadOnlyCollection<string> protectedContentHashes,
+        CancellationToken cancellationToken)
+    {
+        await _mutationGate.WaitAsync(cancellationToken)
+            .ConfigureAwait(false);
+        try
+        {
+            return await PruneCoreAsync(
+                    protectedContentHashes,
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+        finally
+        {
+            _mutationGate.Release();
+        }
+    }
+
+    private async Task<int> PruneCoreAsync(
         IReadOnlyCollection<string> protectedContentHashes,
         CancellationToken cancellationToken)
     {
@@ -244,6 +290,89 @@ public sealed class EntryAssetStore : IEntryAssetStore
         }
 
         return removedRecords;
+    }
+
+    public async Task<EntryAssetPruneResult> RemoveUnreferencedFilesAsync(
+        CancellationToken cancellationToken)
+    {
+        await _mutationGate.WaitAsync(cancellationToken)
+            .ConfigureAwait(false);
+        try
+        {
+            await using SqliteConnection connection = await _database
+                .OpenConnectionAsync(cancellationToken)
+                .ConfigureAwait(false);
+            await using SqliteCommand command = connection.CreateCommand();
+            command.CommandText =
+                "SELECT DISTINCT content_hash FROM entry_assets;";
+            var referenced = new HashSet<string>(StringComparer.Ordinal);
+            await using (SqliteDataReader reader = await command
+                .ExecuteReaderAsync(cancellationToken)
+                .ConfigureAwait(false))
+            {
+                while (await reader.ReadAsync(cancellationToken)
+                    .ConfigureAwait(false))
+                {
+                    referenced.Add(reader.GetString(0));
+                }
+            }
+
+            if (!Directory.Exists(_paths.AssetCacheDirectory))
+            {
+                return new(0, 0);
+            }
+            int removedFiles = 0;
+            long removedBytes = 0;
+            try
+            {
+                foreach (string filePath in Directory.EnumerateFiles(
+                    _paths.AssetCacheDirectory))
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    string fileName = Path.GetFileName(filePath);
+                    if (referenced.Contains(fileName))
+                    {
+                        continue;
+                    }
+                    long size;
+                    try
+                    {
+                        size = new FileInfo(filePath).Length;
+                        File.Delete(filePath);
+                    }
+                    catch (FileNotFoundException)
+                    {
+                        continue;
+                    }
+                    catch (DirectoryNotFoundException)
+                    {
+                        break;
+                    }
+                    catch (IOException)
+                    {
+                        continue;
+                    }
+                    catch (UnauthorizedAccessException)
+                    {
+                        continue;
+                    }
+                    removedFiles++;
+                    removedBytes = checked(removedBytes + size);
+                }
+            }
+            catch (Exception exception) when (
+                exception is DirectoryNotFoundException
+                or IOException
+                or UnauthorizedAccessException)
+            {
+                // External cleanup can replace the directory mid-scan.
+            }
+            return new(removedFiles, removedBytes);
+        }
+        finally
+        {
+            _mutationGate.Release();
+        }
     }
 
     private async Task UpsertAsync(
@@ -434,4 +563,6 @@ public sealed class EntryAssetStore : IEntryAssetStore
         {
         }
     }
+
+    public void Dispose() => _mutationGate.Dispose();
 }

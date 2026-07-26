@@ -16,7 +16,7 @@
 |---:|---|---|
 | 0 | [现有未完成项与 RSS 路线对齐](plans/EXISTING_BACKLOG_ALIGNMENT.md) | [x] Gate 0 已完成 |
 | 1 | [P0：管理员订阅与普通用户只读目录](plans/RSS_P0_ADMIN_CATALOG.md) | [x] 已完成：P0-01～P0-20/P0-B/P0-C 及最终终验检查点通过 |
-| 2 | [P1：阅读增强、AI 与自动化](plans/RSS_P1_READING_INTELLIGENCE.md) | [ ] 进行中：P1-01～P1-19、P1-A/P1-B/P1-C/P1-D 已完成；下一项为 P1-20 保留、清理与数据库维护 |
+| 2 | [P1：阅读增强、AI 与自动化](plans/RSS_P1_READING_INTELLIGENCE.md) | [ ] 进行中：P1-01～P1-20、P1-A/P1-B/P1-C/P1-D 已完成；下一步为 P1 最终检查点 |
 | 3 | [P2：内容视图、导出与定时摘要](plans/RSS_P2_VIEWS_INTEGRATIONS.md) | [ ] 未开始 |
 
 总体目标、架构、来源溯源、Folo 许可证边界和全局发布闸门见 [RSS 集成总路线图](plans/RSS_MASTER_ROADMAP.md)，管理员策展决策见 [ADR-001](decisions/ADR-001-admin-curated-rss.md)。Folo 仅作为行为参考，LenxTool 不依赖其未开源后端、`api.folo.is` 或客户端 SDK，也不复制其 AGPL 源码和受限图标。
@@ -59,7 +59,7 @@
 - [x] 实现应用目录、SQLite 连接策略、迁移器和全部基础表/索引/FTS5。
   - 验收：首次启动建库；重复迁移幂等；迁移前自动备份。
   - 验证：临时数据库集成测试覆盖建库、FTS5、失败回滚。
-- [ ] 实现资讯/任务/设置仓储的事务读写与 180 天保留策略。
+- [x] 实现资讯/任务/设置仓储的事务读写与 180 天保留策略。
   - 验收：收藏实体不会被清理；指纹唯一约束防重复。
   - 验证：事务和保留策略测试通过。
 - [x] 实现 DPAPI SecretStore、日志脱敏、数据库备份/恢复及损坏检测。

@@ -90,7 +90,9 @@ AI 报告使用自备 DeepSeek Key 经请求级 Bearer 授权调用 `deepseek-v4
 
 `IFeedCatalogRepository` 是共享目录的本地边界。服务端快照写入时，分类、Feed、作用域、目录版本、生成时间和最后同步时间在同一事务提交；版本倒退在删除前拒绝，失败回滚整批替换。目录移除不会删除 `feed_entries`，仍存在 Feed 的 `feed_fetch_state` 会跨替换保留。读取状态、分类和 Feed 使用同一读事务，ACTIVE 投影过滤停用资源；若本地只同步过 ACTIVE，ALL 查询返回不可用而不是伪造管理员完整目录。
 
-`IFeedRefreshService` 只从 ACTIVE 投影选择到期 Feed，并通过 `FeedNetworkPolicy` 与固定地址传输执行条件 GET。调度有全局并发上限和 Feed 级单飞门闩；每次重定向重新做 SSRF 校验，跨 authority 不携带条件验证器。200 的提交顺序固定为“解析 → `IFeedEntryRepository` 单事务 upsert/FTS → `IFeedFetchStateRepository` 保存 ETag/Last-Modified 与下次时间”，因此条目写失败不会提交新验证器；状态保存失败最多造成下一次幂等重抓。304 不调用条目写入。仓储查询按稳定时间/ID 顺序分页，并以目录表关联 Feed/分类；清理接口排除收藏、标签和 `user_entry_states`，完整私人阅读闭环完成前不进入后台自动调度。
+`IFeedRefreshService` 只从 ACTIVE 投影选择到期 Feed，并通过 `FeedNetworkPolicy` 与固定地址传输执行条件 GET。调度有全局并发上限和 Feed 级单飞门闩；每次重定向重新做 SSRF 校验，跨 authority 不携带条件验证器。200 的提交顺序固定为“解析 → `IFeedEntryRepository` 单事务 upsert/FTS → `IFeedFetchStateRepository` 保存 ETag/Last-Modified 与下次时间”，因此条目写失败不会提交新验证器；状态保存失败最多造成下一次幂等重抓。304 不调用条目写入。仓储查询按稳定时间/ID 顺序分页，并以目录表关联 Feed/分类。
+
+P1-20 的保留候选由 `FeedRetentionSql` 统一投影，严格排除 favorites、entity tags、任意 `user_entry_states` 以及 PENDING/RUNNING/RETRY 的全文、AI、规则动作和媒体任务。`FeedEntryRepository` 把最多 5000 个候选装入连接级临时表，在同一事务中清理关联规则账本、媒体投递台账、资源索引和条目；全文/AI 队列与 FTS 继续由外键和触发器同步。`DatabaseMaintenanceService` 循环提交有界批次，随后删除索引不再引用的图片文件并执行既有 LRU 预算；清理取消不会回滚已经提交的安全批次。容量扫描在窗口显示后后台读取数据库/WAL/SHM、图片和模型目录。`PRAGMA optimize` 后只有可用空间至少为数据库两倍且不低于 32 MiB 时才执行 `VACUUM`，SQLite busy/full 被视为可恢复的“跳过压缩”。设置 ViewModel 只能经预览得到固定截止点，再由第二次显式确认执行清理。
 
 资讯中心的 Feed 时间线只读取 `IFeedEntryRepository` 和 ACTIVE 目录投影，不取得目录写服务。ViewModel 每页请求 50 条，按分类、Feed、本地日期边界和有界 FTS 关键词构造查询；筛选代次会丢弃过期分页结果，追加页同时记录仓储偏移并按条目 ID 去重。目录同步事件的版本高于已加载快照时，ViewModel 会回到 UI 上下文重新读取 ACTIVE 目录、重建筛选项并保留仍有效的分类/Feed 选择。固定高度的 `PagedListBox` 使用 `VirtualizingStackPanel` Recycling 模式，在接近底部时请求下一页；选择项映射为现有 `RichArticleView` 的只读模型，正文仍走原生净化渲染。同步或网络失败只更新“离线缓存/最后抓取/目录同步”状态，不清空已显示条目。
 

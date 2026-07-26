@@ -163,31 +163,55 @@ public sealed class FeedEntryRepository(SqliteDatabase database) : IFeedEntryRep
             .BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
         await using SqliteCommand command = connection.CreateCommand();
         command.Transaction = transaction;
-        command.CommandText = """
-            DELETE FROM feed_entries
-            WHERE id IN (
-                SELECT e.id
-                FROM feed_entries e
-                WHERE julianday(COALESCE(e.updated_at, e.published_at, e.fetched_at)) < julianday($cutoff)
-                  AND NOT EXISTS (
-                      SELECT 1 FROM favorites private_favorite
-                      WHERE private_favorite.entity_type='feed_entry'
-                        AND private_favorite.entity_id=e.id)
-                  AND NOT EXISTS (
-                      SELECT 1 FROM entity_tags private_tag
-                      WHERE private_tag.entity_type='feed_entry'
-                        AND private_tag.entity_id=e.id)
-                  AND NOT EXISTS (
-                      SELECT 1 FROM user_entry_states private_state
-                      WHERE private_state.entry_id=e.id)
-                ORDER BY julianday(COALESCE(e.updated_at, e.published_at, e.fetched_at)), e.id
-                LIMIT $maximumCount);
+        command.CommandText = $"""
+            CREATE TEMP TABLE IF NOT EXISTS retention_entry_ids(
+                id TEXT PRIMARY KEY
+            ) WITHOUT ROWID;
+            DELETE FROM retention_entry_ids;
+            INSERT INTO retention_entry_ids(id)
+            SELECT e.id
+            FROM feed_entries e
+            WHERE {FeedRetentionSql.CandidateWhereClause}
+            ORDER BY
+                julianday(COALESCE(
+                    e.updated_at,
+                    e.published_at,
+                    e.fetched_at)),
+                e.id
+            LIMIT $maximumCount;
             """;
         command.Parameters.AddWithValue("$cutoff", FormatTimestamp(cutoff));
         command.Parameters.AddWithValue("$maximumCount", maximumCount);
-        int deleted = await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        await command.ExecuteNonQueryAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        command.Parameters.Clear();
+        command.CommandText = "SELECT COUNT(*) FROM retention_entry_ids;";
+        int candidateCount = Convert.ToInt32(
+            await command.ExecuteScalarAsync(cancellationToken)
+                .ConfigureAwait(false),
+            CultureInfo.InvariantCulture);
+        if (candidateCount == 0)
+        {
+            await transaction.CommitAsync(cancellationToken)
+                .ConfigureAwait(false);
+            return 0;
+        }
+
+        command.CommandText = """
+            DELETE FROM feed_automation_runs
+            WHERE entry_id IN (SELECT id FROM retention_entry_ids);
+            DELETE FROM feed_media_deliveries
+            WHERE entry_id IN (SELECT id FROM retention_entry_ids);
+            DELETE FROM entry_assets
+            WHERE entry_id IN (SELECT id FROM retention_entry_ids);
+            DELETE FROM feed_entries
+            WHERE id IN (SELECT id FROM retention_entry_ids);
+            """;
+        await command.ExecuteNonQueryAsync(cancellationToken)
+            .ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
-        return deleted;
+        return candidateCount;
     }
 
     private static async Task UpsertEntryAsync(

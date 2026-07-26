@@ -6,19 +6,35 @@ using Microsoft.Data.Sqlite;
 
 namespace LenxTool.Infrastructure.Data;
 
-public sealed class DatabaseMaintenanceService(
-    AppPaths paths,
-    SqliteDatabase database) : IDatabaseMaintenanceService
+public sealed partial class DatabaseMaintenanceService
+    : IDatabaseMaintenanceService
 {
+    private readonly AppPaths _paths;
+    private readonly SqliteDatabase _database;
+    private readonly IFeedEntryRepository _feedEntries;
+    private readonly IEntryAssetStore _entryAssets;
+
+    public DatabaseMaintenanceService(
+        AppPaths paths,
+        SqliteDatabase database,
+        IFeedEntryRepository feedEntries,
+        IEntryAssetStore entryAssets)
+    {
+        _paths = paths;
+        _database = database;
+        _feedEntries = feedEntries;
+        _entryAssets = entryAssets;
+    }
+
     public async Task<string> BackupAsync(string? destinationPath, CancellationToken cancellationToken)
     {
-        paths.EnsureCreated();
+        _paths.EnsureCreated();
         string destination = destinationPath ?? Path.Combine(
-            paths.BackupDirectory,
+            _paths.BackupDirectory,
             $"lenx-backup-{DateTimeOffset.UtcNow.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture)}.db");
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(destination))!);
 
-        await using SqliteConnection source = await database.OpenConnectionAsync(cancellationToken)
+        await using SqliteConnection source = await _database.OpenConnectionAsync(cancellationToken)
             .ConfigureAwait(false);
         var builder = new SqliteConnectionStringBuilder { DataSource = destination, Mode = SqliteOpenMode.ReadWriteCreate };
         await using var target = new SqliteConnection(builder.ToString());
@@ -53,8 +69,8 @@ public sealed class DatabaseMaintenanceService(
 
         await BackupAsync(null, cancellationToken).ConfigureAwait(false);
         SqliteConnection.ClearAllPools();
-        string staging = paths.DatabasePath + ".restore";
+        string staging = _paths.DatabasePath + ".restore";
         File.Copy(sourcePath, staging, overwrite: true);
-        File.Move(staging, paths.DatabasePath, overwrite: true);
+        File.Move(staging, _paths.DatabasePath, overwrite: true);
     }
 }

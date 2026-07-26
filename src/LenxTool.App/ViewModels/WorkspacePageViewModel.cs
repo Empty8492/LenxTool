@@ -23,7 +23,7 @@ public class WorkspacePageViewModel(
     public IReadOnlyList<WorkspaceFeature> Features { get; } = features;
 }
 
-public sealed class SettingsViewModel : PageViewModel
+public sealed partial class SettingsViewModel : PageViewModel
 {
     private readonly IThemeService _themeService;
     private readonly IUpdateService _updateService;
@@ -56,7 +56,8 @@ public sealed class SettingsViewModel : PageViewModel
         ISecretStore secretStore,
         IAppSettingsRepository settings,
         IAccountSessionService accountSession,
-        IFeedCatalogSyncService catalogSync)
+        IFeedCatalogSyncService catalogSync,
+        IDatabaseMaintenanceService? databaseMaintenance = null)
         : base("设置", "外观、服务凭据、数据与更新")
     {
         _themeService = themeService;
@@ -65,6 +66,7 @@ public sealed class SettingsViewModel : PageViewModel
         _settings = settings;
         _accountSession = accountSession;
         _catalogSync = catalogSync;
+        _databaseMaintenance = databaseMaintenance;
         _synchronizationContext = SynchronizationContext.Current;
         CheckForUpdatesCommand = new(CheckForUpdatesAsync);
         DownloadUpdateCommand = new(DownloadUpdateAsync, () => _candidate is not null);
@@ -74,6 +76,7 @@ public sealed class SettingsViewModel : PageViewModel
         LoginCommand = new(LoginAsync, CanLogin);
         LogoutCommand = new(LogoutAsync, () => IsSignedIn);
         RefreshAccountCommand = new(RefreshAccountAsync, () => IsSignedIn);
+        ConfigureStorageMaintenance();
         _accountSession.SessionChanged += OnAccountSessionChanged;
         _catalogSync.StatusChanged += OnCatalogSyncStatusChanged;
         ApplyAccountSession(_accountSession.Current);

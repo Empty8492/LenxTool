@@ -486,6 +486,23 @@ public sealed class HistoryViewModelTests
         public Task<string> BackupAsync(string? destinationPath, CancellationToken cancellationToken) =>
             Task.FromResult("backup.db");
         public Task RestoreAsync(string sourcePath, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task<LocalStorageUsage> GetStorageUsageAsync(
+            CancellationToken cancellationToken) =>
+            Task.FromResult(new LocalStorageUsage(0, 0, 0, 0, 0));
+        public Task<StorageCleanupPreview> PreviewCleanupAsync(
+            DateTimeOffset cutoff,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(new StorageCleanupPreview(cutoff, 0, 0, 0));
+        public Task<StorageCleanupResult> RunCleanupAsync(
+            DateTimeOffset cutoff,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(new StorageCleanupResult(
+                cutoff,
+                0,
+                0,
+                0,
+                true,
+                new(0, 0, 0, 0, 0)));
     }
 
     private sealed class StubDialogs : IDesktopFileDialogService

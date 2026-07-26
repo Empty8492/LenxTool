@@ -167,15 +167,100 @@ public sealed class SettingsViewModelTests
         Assert.Contains("本地版本", viewModel.CatalogSyncStatus, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task StorageCleanupRequiresPreviewThenRefreshesUsage()
+    {
+        var maintenance = new FakeDatabaseMaintenanceService
+        {
+            Usage = new(
+                10L * 1024 * 1024,
+                2L * 1024 * 1024,
+                3,
+                4L * 1024 * 1024,
+                1),
+            Preview = new(
+                new DateTimeOffset(2026, 1, 28, 0, 0, 0, TimeSpan.Zero),
+                12,
+                2,
+                2048),
+            Result = new(
+                new DateTimeOffset(2026, 1, 28, 0, 0, 0, TimeSpan.Zero),
+                12,
+                2,
+                2048,
+                true,
+                new(9L * 1024 * 1024, 1024, 1, 4L * 1024 * 1024, 1))
+        };
+        var viewModel = CreateViewModel(
+            new FakeAccountSessionService(),
+            maintenance: maintenance);
+
+        await viewModel.RefreshStorageUsageCommand.ExecuteAsync();
+
+        Assert.Equal("10.0 MB", viewModel.DatabaseUsage);
+        Assert.Equal("2.0 MB · 3 个文件", viewModel.ImageCacheUsage);
+        Assert.Equal("4.0 MB · 1 个文件", viewModel.ModelUsage);
+        Assert.False(viewModel.ConfirmStorageCleanupCommand.CanExecute(null));
+
+        await viewModel.PreviewStorageCleanupCommand.ExecuteAsync();
+
+        Assert.True(viewModel.IsStorageCleanupPreviewVisible);
+        Assert.Contains(
+            "12 条",
+            viewModel.StorageCleanupPreviewSummary,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "2.0 KB",
+            viewModel.StorageCleanupPreviewSummary,
+            StringComparison.Ordinal);
+        Assert.Equal(0, maintenance.RunCalls);
+        Assert.True(viewModel.ConfirmStorageCleanupCommand.CanExecute(null));
+
+        await viewModel.ConfirmStorageCleanupCommand.ExecuteAsync();
+
+        Assert.Equal(1, maintenance.RunCalls);
+        Assert.False(viewModel.IsStorageCleanupPreviewVisible);
+        Assert.Equal("9.0 MB", viewModel.DatabaseUsage);
+        Assert.Contains(
+            "已清理 12 条",
+            viewModel.StorageStatus,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task CancelingStoragePreviewNeverRunsCleanup()
+    {
+        var maintenance = new FakeDatabaseMaintenanceService
+        {
+            Preview = new(
+                new DateTimeOffset(2026, 1, 28, 0, 0, 0, TimeSpan.Zero),
+                5,
+                1,
+                1024)
+        };
+        var viewModel = CreateViewModel(
+            new FakeAccountSessionService(),
+            maintenance: maintenance);
+        await viewModel.PreviewStorageCleanupCommand.ExecuteAsync();
+
+        viewModel.CancelStorageCleanupPreviewCommand.Execute(null);
+
+        Assert.False(viewModel.IsStorageCleanupPreviewVisible);
+        Assert.Equal(0, maintenance.RunCalls);
+        Assert.False(viewModel.ConfirmStorageCleanupCommand.CanExecute(null));
+    }
+
     private static SettingsViewModel CreateViewModel(
         IAccountSessionService account,
-        IFeedCatalogSyncService? sync = null) => new(
+        IFeedCatalogSyncService? sync = null,
+        IDatabaseMaintenanceService? maintenance = null) => new(
         new FakeThemeService(),
         new FakeUpdateService(),
         new FakeSecretStore(),
         new FakeSettingsRepository(),
         account,
-        sync ?? new FakeFeedCatalogSyncService());
+        sync ?? new FakeFeedCatalogSyncService(),
+        maintenance);
 
     private static AccountSessionSnapshot SignedIn(AccountRole role) => new(
         AccountSessionStatus.SignedIn,
@@ -299,6 +384,51 @@ public sealed class SettingsViewModelTests
         {
             Current = status;
             StatusChanged?.Invoke(this, new(status));
+        }
+    }
+
+    private sealed class FakeDatabaseMaintenanceService
+        : IDatabaseMaintenanceService
+    {
+        public LocalStorageUsage Usage { get; set; } =
+            new(0, 0, 0, 0, 0);
+        public StorageCleanupPreview Preview { get; set; } =
+            new(DateTimeOffset.UtcNow.AddDays(-180), 0, 0, 0);
+        public StorageCleanupResult Result { get; set; } =
+            new(
+                DateTimeOffset.UtcNow.AddDays(-180),
+                0,
+                0,
+                0,
+                true,
+                new(0, 0, 0, 0, 0));
+        public int RunCalls { get; private set; }
+
+        public Task<string> BackupAsync(
+            string? destinationPath,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(destinationPath ?? "backup.db");
+
+        public Task RestoreAsync(
+            string sourcePath,
+            CancellationToken cancellationToken) =>
+            Task.CompletedTask;
+
+        public Task<LocalStorageUsage> GetStorageUsageAsync(
+            CancellationToken cancellationToken) =>
+            Task.FromResult(Usage);
+
+        public Task<StorageCleanupPreview> PreviewCleanupAsync(
+            DateTimeOffset cutoff,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(Preview with { Cutoff = cutoff });
+
+        public Task<StorageCleanupResult> RunCleanupAsync(
+            DateTimeOffset cutoff,
+            CancellationToken cancellationToken)
+        {
+            RunCalls++;
+            return Task.FromResult(Result with { Cutoff = cutoff });
         }
     }
 }
