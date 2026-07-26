@@ -47,6 +47,8 @@ public sealed class DependencyInjectionTests
         Assert.IsType<FeedMediaDeliveryRepository>(
             provider.GetRequiredService<IFeedMediaDeliveryRepository>());
         Assert.NotNull(provider.GetRequiredService<IFeedMediaDeliveryService>());
+        Assert.IsType<MediaJobInbox>(
+            provider.GetRequiredService<IMediaJobInbox>());
         Assert.NotNull(provider.GetRequiredService<IArticleContentExtractor>());
         Assert.IsType<FeedFetchStateRepository>(provider.GetRequiredService<IFeedFetchStateRepository>());
         Assert.IsType<FeedEntryRepository>(provider.GetRequiredService<IFeedEntryWriter>());
@@ -81,6 +83,10 @@ public sealed class DependencyInjectionTests
             provider.GetRequiredService<IFeedAutomationAiActionService>());
         Assert.IsType<FeedAutomationAiActionProcessor>(
             provider.GetRequiredService<IFeedAutomationAiActionProcessor>());
+        Assert.IsType<FeedAutomationMediaActionService>(
+            provider.GetRequiredService<IFeedAutomationMediaActionService>());
+        Assert.IsType<FeedAutomationMediaActionProcessor>(
+            provider.GetRequiredService<IFeedAutomationMediaActionProcessor>());
         Assert.IsType<FeedAiAutomationQueueService>(
             provider.GetRequiredService<IFeedAiAutomationQueueService>());
         Assert.IsType<FeedFullTextQueueService>(

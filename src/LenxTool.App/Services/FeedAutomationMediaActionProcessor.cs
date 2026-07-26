@@ -1,0 +1,315 @@
+using System.IO;
+using LenxTool.Core.Contracts;
+using LenxTool.Core.Errors;
+using LenxTool.Core.Models;
+
+namespace LenxTool.App.Services;
+
+public sealed class FeedAutomationMediaActionProcessor :
+    IFeedAutomationMediaActionProcessor
+{
+    private static readonly IReadOnlyCollection<FeedAutomationActionType>
+        MediaActionTypes = Array.AsReadOnly<FeedAutomationActionType>(
+        [
+            FeedAutomationActionType.SendToMedia
+        ]);
+
+    private readonly IFeedAutomationActionQueueRepository _queue;
+    private readonly IFeedAutomationMediaActionService _mediaActions;
+    private readonly TimeProvider _timeProvider;
+    private readonly FeedAutomationActionProcessorOptions _options;
+
+    public FeedAutomationMediaActionProcessor(
+        IFeedAutomationActionQueueRepository queue,
+        IFeedAutomationMediaActionService mediaActions,
+        TimeProvider timeProvider,
+        FeedAutomationActionProcessorOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(queue);
+        ArgumentNullException.ThrowIfNull(mediaActions);
+        ArgumentNullException.ThrowIfNull(timeProvider);
+        ValidateOptions(options);
+        _queue = queue;
+        _mediaActions = mediaActions;
+        _timeProvider = timeProvider;
+        _options = options;
+    }
+
+    public async Task<int> ProcessBackgroundBatchAsync(
+        CancellationToken cancellationToken)
+    {
+        IReadOnlyList<FeedAutomationActionLease> claimed =
+            await _queue.ClaimDueAsync(
+                _timeProvider.GetUtcNow(),
+                MediaActionTypes,
+                1,
+                _options.LeaseDuration,
+                cancellationToken).ConfigureAwait(false);
+        if (claimed.Count == 0)
+        {
+            return 0;
+        }
+
+        using var gate = new SemaphoreSlim(1, 1);
+        await Task.WhenAll(claimed.Select(action =>
+            ProcessWithGateAsync(
+                action,
+                gate,
+                cancellationToken))).ConfigureAwait(false);
+        return claimed.Count;
+    }
+
+    private async Task ProcessWithGateAsync(
+        FeedAutomationActionLease action,
+        SemaphoreSlim gate,
+        CancellationToken cancellationToken)
+    {
+        bool entered = false;
+        try
+        {
+            await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            entered = true;
+            await ProcessClaimedAsync(action, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+            when (cancellationToken.IsCancellationRequested)
+        {
+            await ReleaseAfterCancellationAsync(action).ConfigureAwait(false);
+            throw;
+        }
+        finally
+        {
+            if (entered)
+            {
+                gate.Release();
+            }
+        }
+    }
+
+    private async Task ProcessClaimedAsync(
+        FeedAutomationActionLease action,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            FeedAutomationMediaActionResult result =
+                await _mediaActions.ExecuteAsync(
+                    action,
+                    cancellationToken).ConfigureAwait(false);
+            switch (result)
+            {
+                case FeedAutomationMediaActionResult.Completed:
+                    await TryCompleteAsync(
+                        action,
+                        FeedAutomationActionRunOutcome.Succeeded,
+                        errorCode: null,
+                        cancellationToken).ConfigureAwait(false);
+                    break;
+                case FeedAutomationMediaActionResult.EntryMissing:
+                    await TryCompleteAsync(
+                        action,
+                        FeedAutomationActionRunOutcome.Failed,
+                        "ENTRY_MISSING",
+                        cancellationToken).ConfigureAwait(false);
+                    break;
+                case FeedAutomationMediaActionResult.FeedUnavailable:
+                    await TryCompleteAsync(
+                        action,
+                        FeedAutomationActionRunOutcome.Failed,
+                        "POLICY_DISABLED",
+                        cancellationToken).ConfigureAwait(false);
+                    break;
+                case FeedAutomationMediaActionResult.NoSupportedMedia:
+                    await TryCompleteAsync(
+                        action,
+                        FeedAutomationActionRunOutcome.Failed,
+                        "MEDIA_UNAVAILABLE",
+                        cancellationToken).ConfigureAwait(false);
+                    break;
+                default:
+                    await TryCompleteAsync(
+                        action,
+                        FeedAutomationActionRunOutcome.Failed,
+                        "INVALID_ACTION",
+                        cancellationToken).ConfigureAwait(false);
+                    break;
+            }
+        }
+        catch (OperationCanceledException)
+            when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (AppException exception)
+        {
+            await HandleAppErrorAsync(
+                action,
+                exception.Error,
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (InvalidDataException)
+        {
+            await TryCompleteAsync(
+                action,
+                FeedAutomationActionRunOutcome.Failed,
+                "MEDIA_REJECTED",
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (ArgumentException)
+        {
+            await TryCompleteAsync(
+                action,
+                FeedAutomationActionRunOutcome.Failed,
+                "INVALID_ACTION",
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (TimeoutException)
+        {
+            await RetryOrCompleteAsync(
+                action,
+                "DOWNLOAD_TIMEOUT",
+                retryAfter: null,
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception)
+        {
+            await RetryOrCompleteAsync(
+                action,
+                "UNEXPECTED_ERROR",
+                retryAfter: null,
+                cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private Task HandleAppErrorAsync(
+        FeedAutomationActionLease action,
+        AppError error,
+        CancellationToken cancellationToken)
+    {
+        string errorCode = error.Code.ToString().ToUpperInvariant();
+        return error.IsRetryable
+            ? RetryOrCompleteAsync(
+                action,
+                errorCode,
+                error.RetryAfter,
+                cancellationToken)
+            : TryCompleteAsync(
+                action,
+                FeedAutomationActionRunOutcome.Failed,
+                errorCode,
+                cancellationToken);
+    }
+
+    private async Task RetryOrCompleteAsync(
+        FeedAutomationActionLease action,
+        string errorCode,
+        TimeSpan? retryAfter,
+        CancellationToken cancellationToken)
+    {
+        if (action.AttemptCount >= _options.MaximumAttempts)
+        {
+            await TryCompleteAsync(
+                action,
+                FeedAutomationActionRunOutcome.Failed,
+                errorCode,
+                cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        DateTimeOffset failedAt = _timeProvider.GetUtcNow();
+        TimeSpan delay = retryAfter is null
+            ? GetRetryDelay(action.AttemptCount)
+            : ClampRetryDelay(retryAfter.Value);
+        try
+        {
+            await _queue.ScheduleRetryAsync(
+                action,
+                errorCode,
+                failedAt.Add(delay),
+                failedAt,
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (InvalidOperationException)
+        {
+            // The lease expired and another processor already reclaimed it.
+        }
+    }
+
+    private async Task TryCompleteAsync(
+        FeedAutomationActionLease action,
+        FeedAutomationActionRunOutcome outcome,
+        string? errorCode,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _queue.CompleteAsync(
+                action,
+                outcome,
+                errorCode,
+                _timeProvider.GetUtcNow(),
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (InvalidOperationException)
+        {
+            // The lease expired and another processor already reclaimed it.
+        }
+    }
+
+    private async Task ReleaseAfterCancellationAsync(
+        FeedAutomationActionLease action)
+    {
+        try
+        {
+            await _queue.ReleaseAsync(
+                action,
+                _timeProvider.GetUtcNow(),
+                CancellationToken.None).ConfigureAwait(false);
+        }
+        catch
+        {
+            // The durable lease expires if shutdown interrupts this best-effort release.
+        }
+    }
+
+    private TimeSpan GetRetryDelay(int attemptCount)
+    {
+        int exponent = Math.Min(20, Math.Max(0, attemptCount - 1));
+        double ticks = Math.Min(
+            _options.MaximumRetryDelay.Ticks,
+            _options.BaseRetryDelay.Ticks * Math.Pow(2, exponent));
+        return TimeSpan.FromTicks((long)ticks);
+    }
+
+    private TimeSpan ClampRetryDelay(TimeSpan value)
+    {
+        if (value < _options.BaseRetryDelay)
+        {
+            return _options.BaseRetryDelay;
+        }
+
+        return value > _options.MaximumRetryDelay
+            ? _options.MaximumRetryDelay
+            : value;
+    }
+
+    private static void ValidateOptions(
+        FeedAutomationActionProcessorOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        if (options.BatchSize is < 1 or > 200 ||
+            options.MaximumConcurrency is < 1 or > 8 ||
+            options.MaximumAttempts is < 1 or > 20 ||
+            options.LeaseDuration <= TimeSpan.Zero ||
+            options.LeaseDuration > TimeSpan.FromHours(1) ||
+            options.InitialDelay < TimeSpan.Zero ||
+            options.PollInterval <= TimeSpan.Zero ||
+            options.BaseRetryDelay <= TimeSpan.Zero ||
+            options.MaximumRetryDelay < options.BaseRetryDelay ||
+            options.MaximumRetryDelay > TimeSpan.FromDays(1))
+        {
+            throw new ArgumentOutOfRangeException(nameof(options));
+        }
+    }
+}

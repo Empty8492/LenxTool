@@ -163,6 +163,14 @@ public partial class App : Application
             static services =>
                 services.GetRequiredService<FeedAutomationAiActionProcessor>());
         services.AddHostedService<FeedAutomationAiActionBackgroundService>();
+        services.AddSingleton<
+            IFeedAutomationMediaActionService,
+            FeedAutomationMediaActionService>();
+        services.AddSingleton<FeedAutomationMediaActionProcessor>();
+        services.AddSingleton<IFeedAutomationMediaActionProcessor>(
+            static services =>
+                services.GetRequiredService<FeedAutomationMediaActionProcessor>());
+        services.AddHostedService<FeedAutomationMediaActionBackgroundService>();
         services.AddSingleton(FeedAiAutomationOptions.Default);
         services.AddSingleton<FeedAiAutomationQueueService>();
         services.AddSingleton<IFeedAiAutomationQueueService>(static services =>
@@ -189,6 +197,9 @@ public partial class App : Application
         services.AddSingleton<IFeedMediaDeliveryRepository>(static services =>
             services.GetRequiredService<FeedMediaDeliveryRepository>());
         services.AddFeedMediaDelivery(FeedMediaDeliveryOptions.Default);
+        services.AddSingleton<MediaJobInbox>();
+        services.AddSingleton<IMediaJobInbox>(static services =>
+            services.GetRequiredService<MediaJobInbox>());
         services.AddArticleContentExtraction(ArticleContentExtractionOptions.Default);
         services.AddFeedRefresh(FeedRefreshOptions.Default);
         services.AddSingleton<MediaJobRepository>();

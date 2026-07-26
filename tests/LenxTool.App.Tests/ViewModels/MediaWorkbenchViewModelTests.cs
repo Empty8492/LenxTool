@@ -10,6 +10,49 @@ namespace LenxTool.App.Tests.ViewModels;
 public sealed class MediaWorkbenchViewModelTests
 {
     [Fact]
+    public async Task QueuedInboxJobAppearsImmediatelyAndDuplicateIsIgnored()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "Lenx Tools tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var repository = new FakeRepository();
+            var transcription = new FakeTranscription();
+            var inbox = new MediaJobInbox();
+            var viewModel = new MediaWorkbenchViewModel(
+                repository, repository, transcription, transcription, new FakeAudio(), new FakeModels(),
+                new FakeDialogs(), new AppPaths(root), NoopTranslator, CreateExporter(root), inbox);
+            await viewModel.InitializeAsync(CancellationToken.None);
+            DateTimeOffset now = DateTimeOffset.UtcNow;
+            var queued = new MediaJob(
+                "feed-job-1",
+                "FeedTranscription",
+                Path.Combine(root, "feed.mp3"),
+                null,
+                MediaJobStatus.Queued,
+                0,
+                TranscriptionEngine.Groq,
+                "whisper-large-v3",
+                0,
+                0,
+                null,
+                now,
+                now);
+
+            inbox.PublishQueued(queued);
+            inbox.PublishQueued(queued);
+
+            Assert.Equal(queued, Assert.Single(viewModel.RecentJobs));
+            Assert.Equal(queued.InputPath, viewModel.InputSummary);
+            Assert.True(viewModel.StartCommand.CanExecute(null));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task BrowsePersistsSelectedFileAsQueuedBeforeProcessingStarts()
     {
         string root = Path.Combine(Path.GetTempPath(), "Lenx Tools tests", Guid.NewGuid().ToString("N"));

@@ -227,7 +227,7 @@ npm.cmd test -- --run
 
 ### 10.2 下一里程碑
 
-Gate 0 字幕闭环和 P0“管理员策展 RSS”已经完成。P1-01～P1-14、P1-17、P1-A、P1-B 与 P1-C 已完成；P1-15 Core 确定性解释器、SQLite v12～v14 运行账本/动作租约/受限本地状态动作/ACTIVE 规则缓存、Worker 增量同步、Feed 刷新触发、本地动作处理器和 AI 摘要/翻译动作适配已完成。下一切片进入 P1-18 Feed 媒体投递，复用既有媒体任务、转写、翻译和导出闭环。
+Gate 0 字幕闭环和 P0“管理员策展 RSS”已经完成。P1-01～P1-14、P1-17、P1-18、P1-A、P1-B 与 P1-C 已完成；P1-15 Core 确定性解释器、SQLite v12～v14 运行账本/动作租约/受限本地状态动作/ACTIVE 规则缓存、Worker 增量同步、Feed 刷新触发以及本地、AI、媒体动作适配已完成。下一切片完成通知动作适配，再进入依赖完整 P1-15 的规则管理和模拟 UI。
 
 字幕闭环完成后的产品主路线已确定为“管理员策展 RSS”：管理员维护共享 RSS/Atom 目录，普通用户只能同步和阅读，不得修改共享订阅、分类、抓取策略或自动化规则。为保持现有“云端不存新闻正文”边界，首版采用 Worker/D1 保存权威目录、各桌面客户端本地抓取和 SQLite 缓存的模式。
 
@@ -235,17 +235,17 @@ Gate 0 字幕闭环和 P0“管理员策展 RSS”已经完成。P1-01～P1-14�
 
 1. Gate 0 字幕闭环已完成；验收记录见 [`plans/EXISTING_BACKLOG_ALIGNMENT.md`](plans/EXISTING_BACKLOG_ALIGNMENT.md)。
 2. P0-01～P0-20、P0-B/P0-C 及最终检查点已完成；P0 关闭记录见 [`plans/RSS_P0_ADMIN_CATALOG.md`](plans/RSS_P0_ADMIN_CATALOG.md)，现在才进入 P1。
-3. P1-01～P1-14、P1-17、P1-A、P1-B 与 P1-C 已完成；P1-15 Core 解释器、SQLite v12～v14 运行账本/动作租约/受限本地状态动作/ACTIVE 规则缓存、Worker 增量同步、Feed 刷新触发、本地动作处理器和 AI 摘要/翻译动作适配已完成，继续 P1-18 Feed 媒体投递及后续通知动作适配，具体见 [`plans/RSS_P1_READING_INTELLIGENCE.md`](plans/RSS_P1_READING_INTELLIGENCE.md)。
+3. P1-01～P1-14、P1-17、P1-18、P1-A、P1-B 与 P1-C 已完成；P1-15 Core 解释器、SQLite v12～v14 运行账本/动作租约/受限本地状态动作/ACTIVE 规则缓存、Worker 增量同步、Feed 刷新触发以及本地、AI、媒体动作适配已完成，继续通知动作适配及规则管理和模拟 UI，具体见 [`plans/RSS_P1_READING_INTELLIGENCE.md`](plans/RSS_P1_READING_INTELLIGENCE.md)。
 4. 实现多内容视图、外部导出适配器、本地定时摘要和通知；具体见 [`plans/RSS_P2_VIEWS_INTEGRATIONS.md`](plans/RSS_P2_VIEWS_INTEGRATIONS.md)。
 
-总路线、参考项目和许可证边界见 [`plans/RSS_MASTER_ROADMAP.md`](plans/RSS_MASTER_ROADMAP.md)，架构决策见 [`decisions/ADR-001-admin-curated-rss.md`](decisions/ADR-001-admin-curated-rss.md) 与 [`decisions/ADR-002-article-content-extraction.md`](decisions/ADR-002-article-content-extraction.md)。P0-01～P0-20、P0-B/P0-C、P1-01～P1-14 与 P1-A/P1-B/P1-C 可作为已实现基础；规则本地执行/模拟管理、媒体投递和外部导出仍不能作为已交付功能宣传。
+总路线、参考项目和许可证边界见 [`plans/RSS_MASTER_ROADMAP.md`](plans/RSS_MASTER_ROADMAP.md)，架构决策见 [`decisions/ADR-001-admin-curated-rss.md`](decisions/ADR-001-admin-curated-rss.md) 与 [`decisions/ADR-002-article-content-extraction.md`](decisions/ADR-002-article-content-extraction.md)。P0-01～P0-20、P0-B/P0-C、P1-01～P1-14、P1-17、P1-18 与 P1-A/P1-B/P1-C 可作为已实现基础；规则模拟管理、通知动作和外部导出仍不能作为已交付功能宣传。
 
 ### 10.3 其他尚未完成的产品功能
 
 本地产品缺口：
 
 - 首页已接入本地 Feed、旧早报、热点、媒体任务和收藏计数；资讯收藏、标签、备注的完整编辑入口仍待完成。
-- Feed AI 本地缓存、单条/批量摘要、可恢复条目翻译、管理员策略、共享额度门控和本地自动处理已建立；通用管理员规则的安全契约、权威版本、发布 API、本地解释器、运行账本、受限本地动作处理器、ACTIVE 快照缓存、Worker 同步与 AI 摘要/翻译动作适配已建立，媒体/通知动作适配与管理 UI 仍待 P1-15/P1-16。
+- Feed AI 本地缓存、单条/批量摘要、可恢复条目翻译、管理员策略、共享额度门控和本地自动处理已建立；通用管理员规则的安全契约、权威版本、发布 API、本地解释器、运行账本、受限本地动作处理器、ACTIVE 快照缓存、Worker 同步，以及 AI 摘要/翻译和媒体动作适配已建立，通知动作适配与管理 UI 仍待 P1-15/P1-16。
 - JSON 双栏结构 Diff 界面；目前只有 Core 层 Diff 算法。
 
 云端与管理缺口：

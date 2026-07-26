@@ -23,6 +23,7 @@ public sealed class MediaWorkbenchViewModel : PageViewModel
     private readonly AppPaths _paths;
     private readonly ISubtitleTranslator _translator;
     private readonly ISubtitleExportService _subtitleExporter;
+    private readonly SynchronizationContext? _synchronizationContext;
     private readonly List<MediaJob> _pendingJobs = [];
     private string _inputSummary = "尚未选择文件";
     private string _status = "支持批量导入；任务按顺序执行，可随时取消。";
@@ -50,7 +51,8 @@ public sealed class MediaWorkbenchViewModel : PageViewModel
         IDesktopFileDialogService dialogs,
         AppPaths paths,
         ISubtitleTranslator translator,
-        ISubtitleExportService subtitleExporter) : base("媒体工作台", "批量转写音视频，使用云端 Groq 或完全离线的本地 Whisper")
+        ISubtitleExportService subtitleExporter,
+        IMediaJobInbox? mediaJobInbox = null) : base("媒体工作台", "批量转写音视频，使用云端 Groq 或完全离线的本地 Whisper")
     {
         _jobs = jobs;
         _subtitles = subtitles;
@@ -62,6 +64,11 @@ public sealed class MediaWorkbenchViewModel : PageViewModel
         _paths = paths;
         _translator = translator;
         _subtitleExporter = subtitleExporter;
+        _synchronizationContext = SynchronizationContext.Current;
+        if (mediaJobInbox is not null)
+        {
+            mediaJobInbox.JobQueued += OnMediaJobQueued;
+        }
         _selectedExportOption = ExportOptions[1];
         ImportModelCommand = new(ImportModelAsync);
         StartCommand = new(ProcessQueueAsync, () => _pendingJobs.Count > 0);
@@ -803,6 +810,40 @@ public sealed class MediaWorkbenchViewModel : PageViewModel
             1 => _pendingJobs[0].InputPath,
             _ => $"待处理 {_pendingJobs.Count} 个文件 · {Path.GetFileName(_pendingJobs[0].InputPath)} 等"
         };
+    }
+
+    private void OnMediaJobQueued(MediaJob job)
+    {
+        if (_synchronizationContext is not null &&
+            !ReferenceEquals(
+                SynchronizationContext.Current,
+                _synchronizationContext))
+        {
+            _synchronizationContext.Post(
+                _ => AcceptQueuedMediaJob(job),
+                null);
+            return;
+        }
+
+        AcceptQueuedMediaJob(job);
+    }
+
+    private void AcceptQueuedMediaJob(MediaJob job)
+    {
+        if (job.Status != MediaJobStatus.Queued)
+        {
+            return;
+        }
+
+        if (_pendingJobs.All(existing => existing.Id != job.Id))
+        {
+            _pendingJobs.Add(job);
+        }
+
+        AddOrReplace(job);
+        UpdateQueueSummary();
+        StartCommand.NotifyCanExecuteChanged();
+        Status = $"已接收自动化媒体任务：{Path.GetFileName(job.InputPath)}";
     }
 
     private string UniqueOutputPath(string inputPath)

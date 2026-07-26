@@ -29,6 +29,14 @@ public enum FeedAutomationAiActionResult
     FeedUnavailable
 }
 
+public enum FeedAutomationMediaActionResult
+{
+    Completed,
+    EntryMissing,
+    FeedUnavailable,
+    NoSupportedMedia
+}
+
 public sealed record FeedAutomationRuleRun(
     string EntryId,
     string RuleId,

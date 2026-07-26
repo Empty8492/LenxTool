@@ -129,6 +129,8 @@ P1-17 附件分类与安全打开片新增 Core 分类器、Media RSS 解析和�
 
 P1-18 持久化与安全下载片新增 31 项定向场景并扩展 schema 迁移和依赖注入回归：schema v15 以 entry + enclosure URL 唯一键原子创建来源台账和既有 `MediaJob`，并发重放只产生一个任务，失败插入完整回滚，数据库重开后来源与排队任务保持一致。下载桥只接收 P1-17 已验证的音视频附件，逐跳复用固定 DNS/IP 和 SSRF 策略，限制响应大小、未知长度流、总超时、重定向与全局并发；MP3、M4A/AAC/Ogg/Opus/WAV/FLAC、MP4/WebM/MOV/OGV 均执行 MIME/扩展名/容器魔数交叉校验。调用方取消、超时、HTTP 非白名单、私网重定向、MIME 欺骗、超限和数据库失败不留下临时文件、最终文件或孤立任务；同键并发只下载一次，已登记文件丢失后复用原任务恢复。Debug/Release 完整 .NET 586/586（Core 96、Infrastructure 335、App 155）通过，Release build 0 警告/0 错误；最新 Release 主窗口可见、标题为 `Lenx Tools` 且 `Responding=True`。
 
+P1-18 自动化执行与工作台接入片新增 10 项媒体动作和即时队列场景并扩展依赖注入回归：只领取 `SendToMedia` 租约，动作、条目、Feed、分类和附件安全状态均在下载前复核；成功、永久失败、可重试错误、超时、取消和租约竞争分别进入受限状态。真实 SQLite 端到端小 MP3 覆盖规则暂存、安全下载、原子来源台账与任务创建、即时工作台通知和数据库重开恢复；重复通知不重复展示，单个 UI 订阅者异常不影响已落库投递。Debug/Release 完整 .NET 596/596（Core 96、Infrastructure 335、App 165）通过，Release build 0 警告/0 错误；Windows UI Automation 已在实际 Release 进程中切换到媒体工作台并确认空队列页面正常，主窗口标题为 `Lenx Tools` 且 `Responding=True`。
+
 ## 本次已验证的异常路径
 
 - 完全离线的资讯缓存回退设计与网络错误映射。
