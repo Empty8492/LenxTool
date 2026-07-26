@@ -61,6 +61,15 @@ public sealed record FeedAutomationRule(
     IReadOnlyList<FeedAutomationCondition> Conditions,
     IReadOnlyList<FeedAutomationAction> Actions);
 
+public sealed record FeedAutomationRuleDefinition(
+    string Name,
+    int Priority,
+    int ConflictOrder,
+    bool IsEnabled,
+    FeedAutomationMatchMode MatchMode,
+    IReadOnlyList<FeedAutomationCondition> Conditions,
+    IReadOnlyList<FeedAutomationAction> Actions);
+
 public sealed record FeedAutomationRuleSnapshot(
     long RuleSetVersion,
     DateTimeOffset? GeneratedAt,
@@ -78,3 +87,7 @@ public sealed record FeedAutomationRuleSyncResult(
     FeedAutomationRuleSyncOutcome Outcome,
     long RuleSetVersion,
     DateTimeOffset? SynchronizedAt);
+
+public sealed record FeedAutomationRuleMutationResult(
+    long RuleSetVersion,
+    FeedAutomationRule Rule);

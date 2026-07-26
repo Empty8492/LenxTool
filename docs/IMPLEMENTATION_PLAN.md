@@ -16,7 +16,7 @@
 |---:|---|---|
 | 0 | [现有未完成项与 RSS 路线对齐](plans/EXISTING_BACKLOG_ALIGNMENT.md) | [x] Gate 0 已完成 |
 | 1 | [P0：管理员订阅与普通用户只读目录](plans/RSS_P0_ADMIN_CATALOG.md) | [x] 已完成：P0-01～P0-20/P0-B/P0-C 及最终终验检查点通过 |
-| 2 | [P1：阅读增强、AI 与自动化](plans/RSS_P1_READING_INTELLIGENCE.md) | [ ] 进行中：P1-01～P1-15、P1-17、P1-18、P1-A/P1-B/P1-C 已完成；下一项为 P1-16 规则管理和只读模拟 UI |
+| 2 | [P1：阅读增强、AI 与自动化](plans/RSS_P1_READING_INTELLIGENCE.md) | [ ] 进行中：P1-01～P1-18、P1-A/P1-B/P1-C/P1-D 已完成；下一项为 P1-19 统一搜索扩展 |
 | 3 | [P2：内容视图、导出与定时摘要](plans/RSS_P2_VIEWS_INTEGRATIONS.md) | [ ] 未开始 |
 
 总体目标、架构、来源溯源、Folo 许可证边界和全局发布闸门见 [RSS 集成总路线图](plans/RSS_MASTER_ROADMAP.md)，管理员策展决策见 [ADR-001](decisions/ADR-001-admin-curated-rss.md)。Folo 仅作为行为参考，LenxTool 不依赖其未开源后端、`api.folo.is` 或客户端 SDK，也不复制其 AGPL 源码和受限图标。

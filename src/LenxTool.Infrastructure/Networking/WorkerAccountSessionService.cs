@@ -237,6 +237,51 @@ public sealed class WorkerAccountSessionService :
         }, cancellationToken);
     }
 
+    internal Task<HttpResponseMessage> SendAutomationMutationAsync(
+        HttpMethod method,
+        string path,
+        long expectedRuleSetVersion,
+        object payload,
+        CancellationToken cancellationToken)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        ArgumentNullException.ThrowIfNull(payload);
+        if (method != HttpMethod.Post && method != HttpMethod.Patch)
+            throw new ArgumentException(
+                "Automation mutations only support POST or PATCH.",
+                nameof(method));
+        if (string.IsNullOrWhiteSpace(path)
+            || path.Length > 256
+            || (path != "/v1/admin/automation-rules"
+                && !path.StartsWith(
+                    "/v1/admin/automation-rules/",
+                    StringComparison.Ordinal))
+            || path.Contains('?', StringComparison.Ordinal)
+            || path.Contains('#', StringComparison.Ordinal)
+            || path.Contains('\\', StringComparison.Ordinal)
+            || expectedRuleSetVersion is < 0 or > 9_007_199_254_740_991)
+        {
+            throw new ArgumentException(
+                "The automation mutation path or version is invalid.",
+                nameof(path));
+        }
+
+        string idempotencyKey = Guid.NewGuid().ToString("N");
+        return SendAuthorizedAsync(token =>
+        {
+            HttpRequestMessage request =
+                CreateAuthorizedRequest(method, path, token.AccessToken);
+            request.Headers.TryAddWithoutValidation(
+                "If-Match",
+                $"\"automation-all-{expectedRuleSetVersion}\"");
+            request.Headers.TryAddWithoutValidation(
+                "Idempotency-Key",
+                idempotencyKey);
+            request.Content = JsonContent.Create(payload);
+            return request;
+        }, cancellationToken);
+    }
+
     private async Task<HttpResponseMessage> SendAuthorizedAsync(
         Func<TokenState, HttpRequestMessage> requestFactory,
         CancellationToken cancellationToken)

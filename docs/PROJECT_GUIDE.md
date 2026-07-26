@@ -222,13 +222,14 @@ npm.cmd test -- --run
 - P1-15 Feed 刷新规则触发已完成：只有条目事务写入且抓取成功状态提交后，规划服务才读取一次 ACTIVE 快照并编译一次规则集；每个解析条目使用 Feed/分类、标题、作者、正文、发布时间和音视频投影计算计划，再写入既有幂等运行账本。正文优先使用清洗正文、缺失时回退摘要，并在 Unicode 边界内限制为 100,000 字符；音视频由 Feed 视图或 enclosure MIME 判断，当前 Feed 模型尚无可靠语言字段时显式传空。空规则不打开运行事务，304/写入失败不规划，同一条目+规则版本重放由账本保持零新增；规划失败与 AI 策略排队互相隔离，已成功的 Feed 刷新不回滚。
 - P1-15 AI 摘要/翻译规则动作已完成：独立处理器只领取 `GenerateSummary` 与 `Translate`，在读取条目前验证动作载荷，停用 Feed/分类和缺失条目进入明确终态；规则本身授权执行，因此不依赖自动摘要/自动翻译开关，但继续使用解析后的每日条目上限。实际处理复用既有摘要/翻译缓存、共享额度传输和富文本纯文本投影，AI 调用始终位于 SQLite 事务之外；可重试供应商错误遵循受限退避，取消会释放全部已领取租约。处理器保守串行执行，以满足任意 Feed 的最小并发上限。
 - P1-15 Notify 规则动作已完成：独立处理器只领取 `Notify`，在读取后复核 Feed/分类启用状态。schema v16 的 `app_notifications` 用动作幂等键保存本地标题、来源、规则追踪和创建/已读状态，不保存正文或 URI；并发与重启重放不重复。顶部铃铛显示最近通知、未读角标并支持单条/全部已读，后台事件切回 UI 上下文且订阅者异常与持久动作隔离。Windows 系统通知、勿扰与受控深链仍留在 P2-22。
+- P1-16 规则管理和只读模拟已完成：管理员专属一级页面只用封闭字段、允许操作符和七类动作构建规则，不提供脚本或自定义请求。桌面读取 Worker `ALL` 快照，以独立规则集版本和幂等键发布；版本冲突刷新但不重放，响应继续走 Core 验证。模拟只读取本地最近条目和目录，在内存解释器中展示命中及计划动作，不取得运行账本、AI、媒体或通知服务。普通用户无入口，绕过 UI 的发布仍由 Worker 403 拒绝，管理员发布由既有 D1 不可变版本与审计记录覆盖。
 - P1-17 附件分类与安全打开已完成：RSS/Atom enclosure 与 Media RSS `media:content` 统一解析、稳定去重并限制每条 32 项；Core 以允许清单核对 MIME/扩展名，并阻止危险协议、凭据、自定义端口、保留主机名和非公网字面 IP。阅读器显示附件种类、大小/未知大小、类型状态和来源警告；仅经验证且不超过 12 MiB 的 HTTPS 图片进入既有安全图片下载器，音视频、大图、未知大小和不支持类型回退为受限外链，危险地址不生成链接。
 - P0 最终验收第一片已完成：`p0-final-acceptance.test.ts` 在真实 workerd/D1 中走临时 bootstrap/login，覆盖管理员发布与停用、目录刷新、普通用户同步/阅读、六类管理员写端点 403 隔离和审计字段脱敏。
 - P0 最终验收第二片已完成：完整 .NET 310/310、Worker 39/39、typecheck 和 Release 0 警告/0 错误复核了 OPML 导入/导出、断网缓存、坏源隔离、schema v2 原位升级和 10k 条目首屏性能；五份终验文档已同步，P0 已关闭。
 
 ### 10.2 下一里程碑
 
-Gate 0 字幕闭环和 P0“管理员策展 RSS”已经完成。P1-01～P1-15、P1-17、P1-18、P1-A、P1-B 与 P1-C 已完成。下一切片进入 P1-16 规则管理和只读模拟 UI。
+Gate 0 字幕闭环和 P0“管理员策展 RSS”已经完成。P1-01～P1-18、P1-A、P1-B、P1-C 与 P1-D 已完成。下一切片进入 P1-19 统一搜索扩展。
 
 字幕闭环完成后的产品主路线已确定为“管理员策展 RSS”：管理员维护共享 RSS/Atom 目录，普通用户只能同步和阅读，不得修改共享订阅、分类、抓取策略或自动化规则。为保持现有“云端不存新闻正文”边界，首版采用 Worker/D1 保存权威目录、各桌面客户端本地抓取和 SQLite 缓存的模式。
 
@@ -236,17 +237,17 @@ Gate 0 字幕闭环和 P0“管理员策展 RSS”已经完成。P1-01～P1-15�
 
 1. Gate 0 字幕闭环已完成；验收记录见 [`plans/EXISTING_BACKLOG_ALIGNMENT.md`](plans/EXISTING_BACKLOG_ALIGNMENT.md)。
 2. P0-01～P0-20、P0-B/P0-C 及最终检查点已完成；P0 关闭记录见 [`plans/RSS_P0_ADMIN_CATALOG.md`](plans/RSS_P0_ADMIN_CATALOG.md)，现在才进入 P1。
-3. P1-01～P1-15、P1-17、P1-18、P1-A、P1-B 与 P1-C 已完成；继续 P1-16 规则管理和模拟 UI，具体见 [`plans/RSS_P1_READING_INTELLIGENCE.md`](plans/RSS_P1_READING_INTELLIGENCE.md)。
+3. P1-01～P1-18 与 P1-A/P1-B/P1-C/P1-D 已完成；继续 P1-19 统一搜索扩展和 P1-20 保留维护，具体见 [`plans/RSS_P1_READING_INTELLIGENCE.md`](plans/RSS_P1_READING_INTELLIGENCE.md)。
 4. 实现多内容视图、外部导出适配器、本地定时摘要和通知；具体见 [`plans/RSS_P2_VIEWS_INTEGRATIONS.md`](plans/RSS_P2_VIEWS_INTEGRATIONS.md)。
 
-总路线、参考项目和许可证边界见 [`plans/RSS_MASTER_ROADMAP.md`](plans/RSS_MASTER_ROADMAP.md)，架构决策见 [`decisions/ADR-001-admin-curated-rss.md`](decisions/ADR-001-admin-curated-rss.md) 与 [`decisions/ADR-002-article-content-extraction.md`](decisions/ADR-002-article-content-extraction.md)。P0-01～P0-20、P0-B/P0-C、P1-01～P1-15、P1-17、P1-18 与 P1-A/P1-B/P1-C 可作为已实现基础；规则模拟管理和外部导出仍不能作为已交付功能宣传。
+总路线、参考项目和许可证边界见 [`plans/RSS_MASTER_ROADMAP.md`](plans/RSS_MASTER_ROADMAP.md)，架构决策见 [`decisions/ADR-001-admin-curated-rss.md`](decisions/ADR-001-admin-curated-rss.md) 与 [`decisions/ADR-002-article-content-extraction.md`](decisions/ADR-002-article-content-extraction.md)。P0-01～P0-20、P0-B/P0-C、P1-01～P1-18 与 P1-A/P1-B/P1-C/P1-D 可作为已实现基础；统一搜索扩展、保留维护和外部导出仍不能作为已交付功能宣传。
 
 ### 10.3 其他尚未完成的产品功能
 
 本地产品缺口：
 
 - 首页已接入本地 Feed、旧早报、热点、媒体任务和收藏计数；资讯收藏、标签、备注的完整编辑入口仍待完成。
-- Feed AI 本地缓存、单条/批量摘要、可恢复条目翻译、管理员策略、共享额度门控和本地自动处理已建立；通用管理员规则的安全契约、权威版本、发布 API、本地解释器、运行账本、ACTIVE 快照缓存、Worker 同步，以及本地状态、AI、媒体和通知动作适配均已建立，规则管理 UI 仍待 P1-16。
+- Feed AI 本地缓存、单条/批量摘要、可恢复条目翻译、管理员策略、共享额度门控和本地自动处理已建立；通用管理员规则的安全契约、权威版本、图形管理/发布 UI、只读模拟、本地解释器、运行账本、ACTIVE 快照缓存、Worker 同步，以及本地状态、AI、媒体和通知动作适配均已建立。
 - JSON 双栏结构 Diff 界面；目前只有 Core 层 Diff 算法。
 
 云端与管理缺口：
@@ -254,7 +255,7 @@ Gate 0 字幕闭环和 P0“管理员策展 RSS”已经完成。P1-01～P1-15�
 - 客户端已接入共享账号登录、退出、过期状态、角色、额度和管理员目录管理；注册尚未实现。
 - Worker 认证、令牌轮换和管理员目录写入已有 workerd/D1 自动化；生产 D1 并发压测、共享额度代理链路和真实部署仍未验收。
 - 管理员分类/Feed 写 API、普通用户只读目录、ETag/304、桌面角色可见性、本地目录自动同步、安全发现/抓取和管理交互已实现。
-- 安全 Feed URL 发现、通用条目解析、抓取调度、OPML 管理、只读时间线、Feed 健康诊断、首页真实数据聚合、全文/图片离线、附件分类与安全外链、自动化规则发布边界、本地运行账本、规则同步、受限状态动作、AI 摘要/翻译动作、Feed 媒体投递和本地通知收件箱已实现；规则管理和外部导出仍待后续任务。
+- 安全 Feed URL 发现、通用条目解析、抓取调度、OPML 管理、只读时间线、Feed 健康诊断、首页真实数据聚合、全文/图片离线、附件分类与安全外链、自动化规则发布边界、图形管理与只读模拟、本地运行账本、规则同步、受限状态动作、AI 摘要/翻译动作、Feed 媒体投递和本地通知收件箱已实现；统一搜索扩展、保留维护和外部导出仍待后续任务。
 
 ### 10.4 普通本地使用需要配置
 

@@ -73,6 +73,10 @@ public sealed class DependencyInjectionTests
             provider.GetRequiredService<IFeedAutomationRuleRepository>());
         Assert.IsType<FeedAutomationRuleSyncService>(
             provider.GetRequiredService<IFeedAutomationRuleSyncService>());
+        Assert.IsType<FeedAutomationRuleAdminService>(
+            provider.GetRequiredService<IFeedAutomationRuleAdminService>());
+        Assert.IsType<FeedAutomationRuleSimulationService>(
+            provider.GetRequiredService<IFeedAutomationRuleSimulationService>());
         Assert.IsType<FeedAutomationActionQueueRepository>(
             provider.GetRequiredService<IFeedAutomationActionQueueRepository>());
         Assert.IsType<FeedAutomationLocalActionService>(
@@ -106,6 +110,7 @@ public sealed class DependencyInjectionTests
         Assert.IsType<FavoriteRepository>(provider.GetRequiredService<IFavoriteRepository>());
         Assert.NotNull(provider.GetRequiredService<DashboardViewModel>());
         Assert.NotNull(provider.GetRequiredService<NotificationCenterViewModel>());
+        Assert.NotNull(provider.GetRequiredService<AutomationAdminViewModel>());
 
         ShellViewModel shell = provider.GetRequiredService<ShellViewModel>();
         Assert.Equal(

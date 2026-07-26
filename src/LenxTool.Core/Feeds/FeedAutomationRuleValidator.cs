@@ -29,6 +29,30 @@ public static class FeedAutomationRuleValidator
             ["ko"] = "ko"
         };
 
+    public static FeedAutomationRuleDefinition ValidateAndNormalizeDefinition(
+        FeedAutomationRuleDefinition definition)
+    {
+        ArgumentNullException.ThrowIfNull(definition);
+        FeedAutomationRule normalized = ValidateAndNormalize(new(
+            "00000000-0000-0000-0000-000000000001",
+            1,
+            definition.Name,
+            definition.Priority,
+            definition.ConflictOrder,
+            definition.IsEnabled,
+            definition.MatchMode,
+            definition.Conditions,
+            definition.Actions));
+        return new(
+            normalized.Name,
+            normalized.Priority,
+            normalized.ConflictOrder,
+            normalized.IsEnabled,
+            normalized.MatchMode,
+            normalized.Conditions,
+            normalized.Actions);
+    }
+
     public static FeedAutomationRule ValidateAndNormalize(FeedAutomationRule rule)
     {
         ArgumentNullException.ThrowIfNull(rule);

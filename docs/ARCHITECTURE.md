@@ -121,6 +121,8 @@ UI 错误卡根据能力显示重试、复制脱敏详情、打开设置、切�
 
 - `ShellViewModel` 管理路由、全局命令和状态，不直接执行页面业务。
 - `FeedAdminViewModel` 只面向管理员会话编排安全发现、版本化目录写入和本地快照刷新；写入客户端不持有 token，授权仍由 Worker 执行。管理页使用原生 WPF 控件、语义资源、自动化名称和窄窗滚动边界。
+- `AutomationAdminViewModel` 只在管理员路由中编排规则 `ALL` 快照、图形草稿、只读模拟和版本化发布。`IFeedAutomationRuleAdminService` 复用安全会话，以独立 `automation-all` ETag/`If-Match` 和幂等键调用 Worker；响应仍经过 Core 白名单验证，客户端角色显示不替代 Worker RBAC 与 D1 审计。
+- `IFeedAutomationRuleSimulationService` 只依赖本地条目与目录的读取接口，把最近条目投影为解释器上下文并返回命中和计划动作；它不依赖运行账本、动作队列、AI、媒体或通知接口，因此模拟路径在结构上不能提交副作用。
 - 主题资源分为 Foundations、Colors、Typography、Controls、Components；所有颜色使用语义资源。
 - Soft Structuralism：用 1px 结构线、低海拔表面、明确留白和克制圆角表达层级。
 - Asymmetrical Bento：信息权重决定卡片跨度；窄窗转为单列而非等宽卡片墙。

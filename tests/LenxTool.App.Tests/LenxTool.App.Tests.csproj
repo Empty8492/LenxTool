@@ -41,6 +41,9 @@
     <None Include="..\..\src\LenxTool.App\Views\FeedHealthView.xaml"
           Link="Fixtures\FeedHealthView.xaml"
           CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\src\LenxTool.App\Views\AutomationAdminView.xaml"
+          Link="Fixtures\AutomationAdminView.xaml"
+          CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

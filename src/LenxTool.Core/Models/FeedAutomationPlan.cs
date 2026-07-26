@@ -55,3 +55,16 @@ public sealed record FeedAutomationPlan(
     string EntryId,
     IReadOnlyList<FeedAutomationRuleEvaluation> RuleEvaluations,
     IReadOnlyList<FeedAutomationActionDecision> Actions);
+
+public sealed record FeedAutomationSimulationEntry(
+    string EntryId,
+    string Title,
+    string SourceLabel,
+    DateTimeOffset? PublishedAt,
+    FeedAutomationRuleEvaluationOutcome Outcome,
+    IReadOnlyList<FeedAutomationActionDecision> Actions);
+
+public sealed record FeedAutomationSimulationResult(
+    int ExaminedCount,
+    int MatchedCount,
+    IReadOnlyList<FeedAutomationSimulationEntry> Entries);
