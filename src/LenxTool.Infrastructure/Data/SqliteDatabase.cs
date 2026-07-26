@@ -10,7 +10,7 @@ public sealed partial class SqliteDatabase(
     AppPaths paths,
     ILogger<SqliteDatabase> logger) : IDisposable
 {
-    private const int CurrentSchemaVersion = 14;
+    private const int CurrentSchemaVersion = 15;
     private readonly SemaphoreSlim _initializationGate = new(1, 1);
     private bool _initialized;
     private bool _disposed;
@@ -297,6 +297,24 @@ public sealed partial class SqliteDatabase(
                 command.Parameters.AddWithValue(
                     "$checksum",
                     "lenx-schema-v14-feed-automation-rule-cache");
+                await command.ExecuteNonQueryAsync(cancellationToken)
+                    .ConfigureAwait(false);
+                version = 14;
+            }
+
+            if (version < 15)
+            {
+                command.CommandText = MigrationFifteenSql;
+                command.Parameters.Clear();
+                await command.ExecuteNonQueryAsync(cancellationToken)
+                    .ConfigureAwait(false);
+                command.CommandText = "INSERT INTO schema_versions(version, applied_at, checksum) VALUES (15, $appliedAt, $checksum);";
+                command.Parameters.AddWithValue(
+                    "$appliedAt",
+                    DateTimeOffset.UtcNow.ToString("O"));
+                command.Parameters.AddWithValue(
+                    "$checksum",
+                    "lenx-schema-v15-feed-media-deliveries");
                 await command.ExecuteNonQueryAsync(cancellationToken)
                     .ConfigureAwait(false);
             }
@@ -938,5 +956,35 @@ public sealed partial class SqliteDatabase(
         CREATE INDEX ix_feed_automation_rules_order
             ON feed_automation_rules(
                 priority DESC, conflict_order, id);
+        """;
+
+    private const string MigrationFifteenSql = """
+        CREATE TABLE feed_media_deliveries(
+            entry_id TEXT NOT NULL
+                CHECK(length(entry_id) BETWEEN 1 AND 512),
+            feed_id TEXT NOT NULL
+                CHECK(length(feed_id) BETWEEN 1 AND 512),
+            entry_title TEXT NOT NULL
+                CHECK(length(entry_title) BETWEEN 1 AND 1024),
+            source_url TEXT NOT NULL
+                CHECK(length(source_url) BETWEEN 1 AND 4096),
+            source_title TEXT
+                CHECK(source_title IS NULL
+                    OR length(source_title) <= 1024),
+            media_type TEXT NOT NULL
+                CHECK(length(media_type) BETWEEN 1 AND 255),
+            source_length INTEGER
+                CHECK(source_length IS NULL
+                    OR (typeof(source_length) = 'integer'
+                        AND source_length >= 0)),
+            media_job_id TEXT NOT NULL
+                REFERENCES media_jobs(id) ON DELETE CASCADE,
+            created_at TEXT NOT NULL
+                CHECK(length(created_at) BETWEEN 20 AND 40),
+            PRIMARY KEY(entry_id, source_url)
+        );
+
+        CREATE UNIQUE INDEX ux_feed_media_deliveries_job
+            ON feed_media_deliveries(media_job_id);
         """;
 }

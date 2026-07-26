@@ -9,7 +9,7 @@ namespace LenxTool.Infrastructure.Data;
 
 public sealed class MediaJobRepository(SqliteDatabase database) : IMediaJobRepository, ISubtitleRepository
 {
-    private const string SelectColumns = "id,kind,input_path,output_path,status,progress,engine,model,shared_usage_seconds,ai_request_count,translation_provider,translation_target_language,translation_next_segment_index,translation_prompt_tokens,translation_completion_tokens,translation_total_tokens,error_json,created_at,updated_at";
+    internal const string SelectColumns = "id,kind,input_path,output_path,status,progress,engine,model,shared_usage_seconds,ai_request_count,translation_provider,translation_target_language,translation_next_segment_index,translation_prompt_tokens,translation_completion_tokens,translation_total_tokens,error_json,created_at,updated_at";
 
     public async Task UpsertAsync(MediaJob job, CancellationToken cancellationToken)
     {
@@ -254,6 +254,30 @@ public sealed class MediaJobRepository(SqliteDatabase database) : IMediaJobRepos
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    internal static async Task InsertAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        MediaJob job,
+        CancellationToken cancellationToken)
+    {
+        await using SqliteCommand command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            INSERT INTO media_jobs(
+              id, kind, input_path, output_path, status, progress, engine, model,
+              shared_usage_seconds, ai_request_count, translation_provider,
+              translation_target_language, translation_next_segment_index,
+              translation_prompt_tokens, translation_completion_tokens,
+              translation_total_tokens, error_json, created_at, updated_at)
+            VALUES($id,$kind,$input,$output,$status,$progress,$engine,$model,$usage,$requests,
+              $translationProvider,$translationTargetLanguage,$translationNextSegmentIndex,
+              $translationPromptTokens,$translationCompletionTokens,$translationTotalTokens,
+              $error,$created,$updated);
+            """;
+        AddParameters(command, job);
+        await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+    }
+
     private static void AddParameters(SqliteCommand command, MediaJob job)
     {
         command.Parameters.AddWithValue("$id", job.Id);
@@ -283,7 +307,7 @@ public sealed class MediaJobRepository(SqliteDatabase database) : IMediaJobRepos
         return value.Ticks / TimeSpan.TicksPerMillisecond;
     }
 
-    private static async Task<IReadOnlyList<MediaJob>> ReadAsync(
+    internal static async Task<IReadOnlyList<MediaJob>> ReadAsync(
         SqliteCommand command,
         CancellationToken cancellationToken)
     {
