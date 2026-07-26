@@ -11,12 +11,14 @@ public sealed class AppPaths
     public string RootDirectory { get; }
     public string DataDirectory => Path.Combine(RootDirectory, "Data");
     public string AssetCacheDirectory => Path.Combine(DataDirectory, "Assets");
+    public string FeedMediaDirectory => Path.Combine(DataDirectory, "FeedMedia");
     public string DatabasePath => Path.Combine(DataDirectory, "lenx.db");
     public string BackupDirectory => Path.Combine(DataDirectory, "Backups");
     public string SecretsDirectory => Path.Combine(RootDirectory, "Secrets");
     public string LogsDirectory => Path.Combine(RootDirectory, "Logs");
     public string ModelsDirectory => Path.Combine(RootDirectory, "Models");
     public string TempDirectory => Path.Combine(RootDirectory, "Temp");
+    public string FeedMediaTempDirectory => Path.Combine(TempDirectory, "FeedMedia");
     public string UpdatesDirectory => Path.Combine(RootDirectory, "Updates");
     public string OutputDirectory => Path.Combine(RootDirectory, "Output");
 
@@ -30,11 +32,13 @@ public sealed class AppPaths
     {
         Directory.CreateDirectory(DataDirectory);
         Directory.CreateDirectory(AssetCacheDirectory);
+        Directory.CreateDirectory(FeedMediaDirectory);
         Directory.CreateDirectory(BackupDirectory);
         Directory.CreateDirectory(SecretsDirectory);
         Directory.CreateDirectory(LogsDirectory);
         Directory.CreateDirectory(ModelsDirectory);
         Directory.CreateDirectory(TempDirectory);
+        Directory.CreateDirectory(FeedMediaTempDirectory);
         Directory.CreateDirectory(UpdatesDirectory);
         Directory.CreateDirectory(OutputDirectory);
     }

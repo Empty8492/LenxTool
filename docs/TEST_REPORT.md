@@ -127,6 +127,8 @@ P1-15 AI 摘要/翻译规则动作片新增 8 项动作场景并扩展队列与 
 
 P1-17 附件分类与安全打开片新增 Core 分类器、Media RSS 解析和阅读器回退测试：允许清单覆盖常见图片/音频/视频 MIME 与扩展组合，参数化 MIME 可规范化；不匹配、缺失和未知类型不会被当成已验证媒体。URL 场景覆盖相对地址、危险协议、凭据、非默认端口、保留主机名、回环/私网/保留字面 IP 与 HTTP/HTTPS 默认端口。RSS/Atom 标准 enclosure 和 Media RSS 按标准优先顺序去重并限制 32 项；UI 验证大小未知、来源警告、危险地址无链接、音视频/大图安全外链，以及仅对已验证、已知不超过 12 MiB 的 HTTPS 图片建立既有受限预览块。既有真实 WPF 验收同时修复 `ShutdownMode` 被 App.xaml 初始化覆盖的时序问题。Debug/Release 完整 .NET 555/555（Core 96、Infrastructure 304、App 155）与 Release build 0 警告/0 错误通过。
 
+P1-18 持久化与安全下载片新增 31 项定向场景并扩展 schema 迁移和依赖注入回归：schema v15 以 entry + enclosure URL 唯一键原子创建来源台账和既有 `MediaJob`，并发重放只产生一个任务，失败插入完整回滚，数据库重开后来源与排队任务保持一致。下载桥只接收 P1-17 已验证的音视频附件，逐跳复用固定 DNS/IP 和 SSRF 策略，限制响应大小、未知长度流、总超时、重定向与全局并发；MP3、M4A/AAC/Ogg/Opus/WAV/FLAC、MP4/WebM/MOV/OGV 均执行 MIME/扩展名/容器魔数交叉校验。调用方取消、超时、HTTP 非白名单、私网重定向、MIME 欺骗、超限和数据库失败不留下临时文件、最终文件或孤立任务；同键并发只下载一次，已登记文件丢失后复用原任务恢复。Debug/Release 完整 .NET 586/586（Core 96、Infrastructure 335、App 155）通过，Release build 0 警告/0 错误；最新 Release 主窗口可见、标题为 `Lenx Tools` 且 `Responding=True`。
+
 ## 本次已验证的异常路径
 
 - 完全离线的资讯缓存回退设计与网络错误映射。

@@ -429,6 +429,8 @@ Worker migration 0006 新增规则集状态、当前规则和不可变版本表�
 
 **参考：** Folo `useTranscription.ts` 的入口行为；LenxTool 现有 Groq/本地 Whisper 是唯一实现流水线。
 
+**进度记录（2026-07-26，持久化与安全下载片）：** SQLite schema v15 新增 `feed_media_deliveries`，在同一事务中创建既有 `MediaJob` 与来源台账，并以 entry + enclosure URL 保证跨并发、跨重启幂等；来源 Feed、条目标题、附件标题、规范 URL、MIME、实际字节数和任务 ID 均可追溯。下载桥只接收 P1-17 已验证的音视频附件，复用固定 DNS/IP 与 SSRF 策略逐跳校验重定向，并限制 512 MiB、10 分钟、5 次重定向和 2 路并发；内容长度未知时仍流式硬限，常见音视频容器以魔数复核。临时文件仅写入专用目录，失败、超限、伪装、调用方取消和超时均清理，不创建任务；同键并发只下载一次，已登记文件丢失时原任务可重新下载恢复。31 项定向场景及 Debug/Release 完整 .NET 586/586（Core 96、Infrastructure 335、App 155）通过，Release build 0 警告/0 错误；最新 Release 主窗口可见且 `Responding=True`。下一片接入 `SendToMedia` 动作租约与后台执行，随后完成端到端小音频验收。
+
 ### P1-19：统一搜索扩展
 
 **目标：** FTS5 统一搜索 Feed、旧早报、热点、AI、字幕、标签和收藏。
