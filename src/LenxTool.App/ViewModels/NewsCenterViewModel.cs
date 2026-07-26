@@ -9,7 +9,7 @@ using LenxTool.Core.Models;
 namespace LenxTool.App.ViewModels;
 
 public sealed partial class NewsCenterViewModel
-    : PageViewModel, INavigationAware, IDisposable
+    : PageViewModel, INavigationAware, IEntityNavigationAware, IDisposable
 {
     private static readonly string[] SectionTitles =
         ["资讯列表", "每日早报", "热点趋势", "AI 报告"];

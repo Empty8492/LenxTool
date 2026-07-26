@@ -92,6 +92,9 @@ public sealed class HistoryViewModelTests
         viewModel.SearchQuery = "   ";
 
         Assert.False(viewModel.SearchCommand.CanExecute(null));
+        Assert.Equal(
+            "输入关键词，搜索已缓存的 Feed、早报、热点、AI 报告、字幕、标签和收藏。",
+            viewModel.SearchStatus);
     }
 
     [Fact]
@@ -221,12 +224,211 @@ public sealed class HistoryViewModelTests
         Assert.Equal("历史页更新备注", states.States[result.EntityId].Note);
     }
 
+    [Fact]
+    public async Task SearchPassesCombinedFiltersAndLoadsTheNextStablePage()
+    {
+        ContentSearchResult[] results = Enumerable.Range(1, 51)
+            .Select(index => new ContentSearchResult(
+                $"feed-entry-{index:D2}",
+                ContentSearchResultType.FeedEntry,
+                $"Orion {index:D2}",
+                "orion",
+                "Daily Feed",
+                $"https://feeds.example/entry/{index:D2}",
+                DateTimeOffset.Parse(
+                    "2026-07-27T08:00:00+08:00",
+                    CultureInfo.InvariantCulture)))
+            .ToArray();
+        var news = new StubNewsRepository(results);
+        var favorites = new StubHistoryFavoriteRepository();
+        TagItem tag = favorites.SeedTag("精读");
+        var viewModel = new HistoryViewModel(
+            new StubMediaJobRepository(),
+            new StubDatabaseMaintenanceService(),
+            new StubDialogs(),
+            news,
+            new StubMediaJobRepository(),
+            new StubSubtitleExportService(),
+            new StubHistoryEntryStateRepository(),
+            favorites,
+            new StubHistoryFeedCatalogRepository(),
+            new StubAppNavigationService())
+        {
+            SearchQuery = "orion",
+            SearchPublishedFrom = new DateTime(2026, 7, 1),
+            SearchPublishedBefore = new DateTime(2026, 8, 1),
+            SearchFavoritesOnly = true
+        };
+        await viewModel.InitializeAsync(CancellationToken.None);
+        viewModel.SelectedSearchType = viewModel.SearchTypeOptions.Single(
+            option => option.Value == ContentSearchResultType.FeedEntry);
+        viewModel.SelectedSearchCategory = viewModel.SearchCategories.Single(
+            option => option.Id == StubHistoryFeedCatalogRepository.CategoryId);
+        viewModel.SelectedSearchFeed = viewModel.SearchFeeds.Single(
+            option => option.Id == StubHistoryFeedCatalogRepository.FeedId);
+        viewModel.SelectedSearchTag = viewModel.SearchTags.Single(
+            option => option.Id == tag.Id);
+
+        await viewModel.SearchCommand.ExecuteAsync();
+        ContentSearchQuery firstQuery = Assert.Single(news.Queries);
+
+        Assert.Equal(ContentSearchResultType.FeedEntry, firstQuery.Type);
+        Assert.Equal(
+            StubHistoryFeedCatalogRepository.CategoryId,
+            firstQuery.CategoryId);
+        Assert.Equal(StubHistoryFeedCatalogRepository.FeedId, firstQuery.FeedId);
+        Assert.Equal(tag.Id, firstQuery.TagId);
+        Assert.True(firstQuery.FavoritesOnly);
+        Assert.Equal(50, viewModel.SearchResults.Count);
+        Assert.True(viewModel.HasMoreSearchResults);
+
+        await viewModel.LoadMoreSearchResultsCommand.ExecuteAsync();
+
+        Assert.Equal(51, viewModel.SearchResults.Count);
+        Assert.False(viewModel.HasMoreSearchResults);
+        Assert.Equal(50, news.Queries[1].Offset);
+    }
+
+    [Fact]
+    public async Task ChangingSearchCriteriaInvalidatesThePreviousPageCursor()
+    {
+        ContentSearchResult[] results = Enumerable.Range(1, 51)
+            .Select(index => new ContentSearchResult(
+                $"news-{index:D2}",
+                ContentSearchResultType.News,
+                $"Orion {index:D2}",
+                "orion",
+                "Daily",
+                $"https://example.test/news/{index:D2}",
+                DateTimeOffset.UtcNow))
+            .ToArray();
+        var viewModel = new HistoryViewModel(
+            new StubMediaJobRepository(),
+            new StubDatabaseMaintenanceService(),
+            new StubDialogs(),
+            new StubNewsRepository(results),
+            new StubMediaJobRepository(),
+            new StubSubtitleExportService(),
+            new StubHistoryEntryStateRepository(),
+            new StubHistoryFavoriteRepository())
+        {
+            SearchQuery = "orion"
+        };
+
+        await viewModel.SearchCommand.ExecuteAsync();
+
+        Assert.True(viewModel.HasMoreSearchResults);
+        Assert.True(viewModel.LoadMoreSearchResultsCommand.CanExecute(null));
+
+        viewModel.SearchQuery = "changed";
+
+        Assert.False(viewModel.HasMoreSearchResults);
+        Assert.False(viewModel.LoadMoreSearchResultsCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task SearchResultsNavigateToFeedReaderAndSubtitleTask()
+    {
+        var feedResult = new ContentSearchResult(
+            "feed-entry-1",
+            ContentSearchResultType.FeedEntry,
+            "Feed result",
+            "reader",
+            "Daily Feed",
+            "https://feeds.example/entry/1",
+            DateTimeOffset.UtcNow);
+        var navigation = new StubAppNavigationService();
+        var feedViewModel = new HistoryViewModel(
+            new StubMediaJobRepository(),
+            new StubDatabaseMaintenanceService(),
+            new StubDialogs(),
+            new StubNewsRepository([feedResult]),
+            new StubMediaJobRepository(),
+            new StubSubtitleExportService(),
+            new StubHistoryEntryStateRepository(),
+            new StubHistoryFavoriteRepository(),
+            new StubHistoryFeedCatalogRepository(),
+            navigation)
+        {
+            SearchQuery = "reader"
+        };
+        await feedViewModel.SearchCommand.ExecuteAsync();
+
+        await feedViewModel.OpenSearchResultCommand.ExecuteAsync();
+
+        Assert.Equal(
+            new AppNavigationRequest("news", "feed_entry", "feed-entry-1"),
+            navigation.Request);
+
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        var job = new MediaJob(
+            "subtitle-job",
+            "SubtitleImport",
+            "D:\\subtitle.srt",
+            null,
+            MediaJobStatus.Completed,
+            100,
+            TranscriptionEngine.ImportedSrt,
+            null,
+            0,
+            0,
+            null,
+            now,
+            now);
+        var subtitleResult = new ContentSearchResult(
+            job.Id,
+            ContentSearchResultType.Subtitle,
+            "subtitle.srt",
+            "matched subtitle",
+            "ImportedSrt",
+            null,
+            now);
+        var jobs = new StubMediaJobRepository([job]);
+        var subtitleViewModel = new HistoryViewModel(
+            jobs,
+            new StubDatabaseMaintenanceService(),
+            new StubDialogs(),
+            new StubNewsRepository([subtitleResult]),
+            jobs,
+            new StubSubtitleExportService(),
+            new StubHistoryEntryStateRepository(),
+            new StubHistoryFavoriteRepository(),
+            new StubHistoryFeedCatalogRepository(),
+            new StubAppNavigationService())
+        {
+            SearchQuery = "subtitle"
+        };
+        await subtitleViewModel.InitializeAsync(CancellationToken.None);
+        await subtitleViewModel.SearchCommand.ExecuteAsync();
+
+        await subtitleViewModel.OpenSearchResultCommand.ExecuteAsync();
+
+        Assert.Equal(1, subtitleViewModel.SelectedHistoryTabIndex);
+        Assert.Equal(job, subtitleViewModel.SelectedJob);
+    }
+
     private sealed class StubNewsRepository(IReadOnlyList<ContentSearchResult> results) : INewsRepository
     {
+        public List<ContentSearchQuery> Queries { get; } = [];
+
         public Task<IReadOnlyList<ContentSearchResult>> SearchContentAsync(
             string query,
             int limit,
             CancellationToken cancellationToken) => Task.FromResult(results);
+
+        public Task<ContentSearchPage> SearchContentAsync(
+            ContentSearchQuery query,
+            CancellationToken cancellationToken)
+        {
+            Queries.Add(query);
+            ContentSearchResult[] page = results
+                .Skip(query.Offset)
+                .Take(query.Limit)
+                .ToArray();
+            return Task.FromResult(new ContentSearchPage(
+                page,
+                query.Offset + page.Length < results.Count));
+        }
 
         public Task UpsertReportAsync(AiReport report, CancellationToken cancellationToken) =>
             Task.CompletedTask;
@@ -479,5 +681,79 @@ public sealed class HistoryViewModelTests
 
         public Task<bool> DeleteTagAsync(string tagId, CancellationToken cancellationToken) =>
             Task.FromResult(_tags.Remove(tagId));
+    }
+
+    private sealed class StubHistoryFeedCatalogRepository
+        : IFeedCatalogRepository
+    {
+        public const string CategoryId =
+            "10000000-0000-4000-8000-000000000001";
+        public const string FeedId =
+            "30000000-0000-4000-8000-000000000001";
+
+        public Task ReplaceAsync(
+            FeedCatalogSnapshot snapshot,
+            CancellationToken cancellationToken) => Task.CompletedTask;
+
+        public Task<FeedCatalogSnapshot?> GetCatalogAsync(
+            FeedCatalogScope scope,
+            CancellationToken cancellationToken)
+        {
+            DateTimeOffset now = DateTimeOffset.UtcNow;
+            return Task.FromResult<FeedCatalogSnapshot?>(new(
+                new(1, scope, now, now),
+                [
+                    new(
+                        CategoryId,
+                        "Technology",
+                        "technology",
+                        1,
+                        true,
+                        1,
+                        now,
+                        now)
+                ],
+                [
+                    new(
+                        FeedId,
+                        "https://feeds.example/daily.xml",
+                        "https://feeds.example/daily.xml",
+                        "Daily Feed",
+                        "https://feeds.example/",
+                        CategoryId,
+                        FeedViewKind.Article,
+                        60,
+                        1,
+                        true,
+                        1,
+                        now,
+                        now)
+                ]));
+        }
+
+        public Task MarkSynchronizedAsync(
+            long expectedVersion,
+            DateTimeOffset synchronizedAt,
+            CancellationToken cancellationToken) => Task.CompletedTask;
+
+        public Task<FeedCatalogState> GetStateAsync(
+            CancellationToken cancellationToken) => Task.FromResult(new FeedCatalogState(
+                1,
+                FeedCatalogScope.Active,
+                DateTimeOffset.UtcNow,
+                DateTimeOffset.UtcNow));
+    }
+
+    private sealed class StubAppNavigationService : IAppNavigationService
+    {
+        public AppNavigationRequest? Request { get; private set; }
+
+        public Task NavigateAsync(
+            AppNavigationRequest request,
+            CancellationToken cancellationToken)
+        {
+            Request = request;
+            return Task.CompletedTask;
+        }
     }
 }

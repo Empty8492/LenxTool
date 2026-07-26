@@ -18,6 +18,10 @@ public interface INewsRepository
         int limit,
         CancellationToken cancellationToken);
 
+    Task<ContentSearchPage> SearchContentAsync(
+        ContentSearchQuery query,
+        CancellationToken cancellationToken);
+
     Task UpsertReportAsync(
         AiReport report,
         CancellationToken cancellationToken);

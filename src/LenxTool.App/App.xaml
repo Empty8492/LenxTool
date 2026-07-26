@@ -299,58 +299,60 @@
                             <Button Style="{StaticResource AccentButtonStyle}" Command="{Binding BackupCommand}" Content="立即备份" />
                         </StackPanel>
                     </DockPanel>
-                    <TabControl Grid.Row="2" Background="Transparent" BorderThickness="0">
+                    <TabControl Grid.Row="2"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                SelectedIndex="{Binding SelectedHistoryTabIndex}">
                         <TabItem Header="全局搜索">
                             <Grid Margin="0,12,0,0">
                                 <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="14" /><RowDefinition Height="*" /></Grid.RowDefinitions>
                                 <Border Style="{StaticResource BentoCardStyle}">
-                                    <Grid>
-                                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="12" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                                        <StackPanel>
-                                            <TextBlock Style="{StaticResource SectionTitleStyle}" Text="搜索本地内容" />
-                                            <TextBox Margin="0,10,0,0"
-                                                     MaxLength="200"
-                                                     AutomationProperties.Name="全局搜索关键词"
-                                                     Text="{Binding SearchQuery, UpdateSourceTrigger=PropertyChanged}">
-                                                <TextBox.InputBindings>
-                                                    <KeyBinding Key="Enter" Command="{Binding SearchCommand}" />
-                                                </TextBox.InputBindings>
-                                            </TextBox>
-                                            <TextBlock Margin="0,8,0,0" Style="{StaticResource MetaTextStyle}" Text="{Binding SearchStatus}" />
-                                        </StackPanel>
-                                        <Button Grid.Column="2" MinWidth="92" VerticalAlignment="Bottom" Style="{StaticResource AccentButtonStyle}" Command="{Binding SearchCommand}" Content="搜索" />
-                                    </Grid>
+                                    <views:HistorySearchFilterBar />
                                 </Border>
                                 <Grid Grid.Row="2">
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="1.6*" MinWidth="430" /><ColumnDefinition Width="14" /><ColumnDefinition Width="*" MinWidth="270" /></Grid.ColumnDefinitions>
                                     <Border Style="{StaticResource BentoCardStyle}" Padding="0">
-                                        <ListBox ItemsSource="{Binding SearchResults}"
-                                                 SelectedItem="{Binding SelectedSearchResult}"
-                                                 Background="Transparent"
-                                                 BorderThickness="0"
-                                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                                                 AutomationProperties.Name="全局搜索结果">
-                                            <ListBox.ItemTemplate>
-                                                <DataTemplate>
-                                                    <Border Padding="18,14" BorderBrush="{DynamicResource Brush.Border}" BorderThickness="0,0,0,1">
-                                                        <Grid>
-                                                            <Grid.ColumnDefinitions><ColumnDefinition Width="76" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                                                            <Border HorizontalAlignment="Left" VerticalAlignment="Top" Padding="8,4" Background="{DynamicResource Brush.AccentSoft}" CornerRadius="8">
-                                                                <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource Brush.Accent}" Text="{Binding TypeLabel}" />
-                                                            </Border>
-                                                            <StackPanel Grid.Column="1" Margin="4,0,18,0">
-                                                                <TextBlock FontSize="15" FontWeight="SemiBold" Text="{Binding Title}" TextWrapping="Wrap" />
-                                                                <TextBlock Margin="0,5,0,0" Style="{StaticResource MetaTextStyle}" Text="{Binding Summary}" TextWrapping="Wrap" MaxHeight="42" />
-                                                            </StackPanel>
-                                                            <StackPanel Grid.Column="2" HorizontalAlignment="Right">
-                                                                <TextBlock HorizontalAlignment="Right" Style="{StaticResource MetaTextStyle}" Text="{Binding Source}" />
-                                                                <TextBlock Margin="0,5,0,0" HorizontalAlignment="Right" Style="{StaticResource MetaTextStyle}" Text="{Binding Timestamp, StringFormat={}{0:yyyy-MM-dd HH:mm}}" />
-                                                            </StackPanel>
-                                                        </Grid>
-                                                    </Border>
-                                                </DataTemplate>
-                                            </ListBox.ItemTemplate>
-                                        </ListBox>
+                                        <Grid>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="*" />
+                                                <RowDefinition Height="Auto" />
+                                            </Grid.RowDefinitions>
+                                            <ListBox ItemsSource="{Binding SearchResults}"
+                                                     SelectedItem="{Binding SelectedSearchResult}"
+                                                     Background="Transparent"
+                                                     BorderThickness="0"
+                                                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                                     AutomationProperties.Name="全局搜索结果">
+                                                <ListBox.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <Border Padding="18,14" BorderBrush="{DynamicResource Brush.Border}" BorderThickness="0,0,0,1">
+                                                            <Grid>
+                                                                <Grid.ColumnDefinitions><ColumnDefinition Width="76" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                                                <Border HorizontalAlignment="Left" VerticalAlignment="Top" Padding="8,4" Background="{DynamicResource Brush.AccentSoft}" CornerRadius="8">
+                                                                    <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource Brush.Accent}" Text="{Binding TypeLabel}" />
+                                                                </Border>
+                                                                <StackPanel Grid.Column="1" Margin="4,0,18,0">
+                                                                    <TextBlock FontSize="15" FontWeight="SemiBold" Text="{Binding Title}" TextWrapping="Wrap" />
+                                                                    <TextBlock Margin="0,5,0,0" Style="{StaticResource MetaTextStyle}" Text="{Binding Summary}" TextWrapping="Wrap" MaxHeight="42" />
+                                                                </StackPanel>
+                                                                <StackPanel Grid.Column="2" HorizontalAlignment="Right">
+                                                                    <TextBlock HorizontalAlignment="Right" Style="{StaticResource MetaTextStyle}" Text="{Binding Source}" />
+                                                                    <TextBlock Margin="0,5,0,0" HorizontalAlignment="Right" Style="{StaticResource MetaTextStyle}" Text="{Binding Timestamp, StringFormat={}{0:yyyy-MM-dd HH:mm}}" />
+                                                                </StackPanel>
+                                                            </Grid>
+                                                        </Border>
+                                                    </DataTemplate>
+                                                </ListBox.ItemTemplate>
+                                            </ListBox>
+                                            <Button Grid.Row="1"
+                                                    Margin="14,10"
+                                                    HorizontalAlignment="Center"
+                                                    Padding="18,6"
+                                                    AutomationProperties.Name="加载更多搜索结果"
+                                                    Command="{Binding LoadMoreSearchResultsCommand}"
+                                                    Content="加载更多"
+                                                    Visibility="{Binding HasMoreSearchResults, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                        </Grid>
                                     </Border>
                                     <Border Grid.Column="2" Style="{StaticResource BentoCardStyle}">
                                         <ScrollViewer VerticalScrollBarVisibility="Auto"
@@ -361,7 +363,10 @@
                                             <TextBlock Style="{StaticResource MetaTextStyle}" Text="{Binding SelectedSearchResult.Summary, TargetNullValue=结果详情会显示在这里。}" TextWrapping="Wrap" />
                                             <TextBlock Margin="0,14,0,0" FontWeight="SemiBold" Text="{Binding SelectedSearchResult.Source}" />
                                             <TextBlock Margin="0,5,0,0" Style="{StaticResource MetaTextStyle}" Text="{Binding SelectedSearchResult.Timestamp, StringFormat={}{0:yyyy-MM-dd HH:mm}}" />
-                                            <Button Margin="0,18,0,0" Command="{Binding OpenSearchResultCommand}" Content="打开来源链接" />
+                                            <Button Margin="0,18,0,0"
+                                                    AutomationProperties.Name="打开搜索结果"
+                                                    Command="{Binding OpenSearchResultCommand}"
+                                                    Content="{Binding OpenSearchResultLabel}" />
                                             <Border Margin="0,18,0,0"
                                                     Padding="12"
                                                     Background="{DynamicResource Brush.SurfaceMuted}"

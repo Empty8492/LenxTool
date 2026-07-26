@@ -235,6 +235,70 @@ public sealed partial class NewsCenterViewModel
             ? $"已加载 {TimelineEntries.Count} 条 · 向下滚动继续"
             : $"已加载 {TimelineEntries.Count} 条 · 已到末尾";
 
+    public async Task OpenEntityAsync(
+        string entityType,
+        string entityId,
+        CancellationToken cancellationToken)
+    {
+        if (!string.Equals(
+                entityType,
+                FeedEntryFavoriteType,
+                StringComparison.Ordinal))
+        {
+            return;
+        }
+        FeedEntry? entry = await _feedEntryRepository.GetByIdAsync(
+            entityId,
+            cancellationToken);
+        if (entry is null)
+        {
+            TimelineStatus = "对应的 Feed 条目已被清理。";
+            return;
+        }
+        if (_timelineCatalog is null)
+        {
+            await ReloadTimelineCatalogAsync(
+                preserveSelection: false,
+                cancellationToken);
+        }
+        Task<IReadOnlyDictionary<string, EntryState>> stateTask =
+            _entryStateRepository.GetAsync(
+                [entry.Id],
+                DefaultTimelineProfile,
+                cancellationToken);
+        Task<IReadOnlyDictionary<string, FavoriteItem>> favoriteTask =
+            _favoriteRepository.GetForEntitiesAsync(
+                FeedEntryFavoriteType,
+                [entry.Id],
+                cancellationToken);
+        await Task.WhenAll(stateTask, favoriteTask);
+        IReadOnlyDictionary<string, EntryState> states =
+            await stateTask;
+        IReadOnlyDictionary<string, FavoriteItem> favorites =
+            await favoriteTask;
+        var item = CreateTimelineItem(
+            entry,
+            states.GetValueOrDefault(entry.Id),
+            favorites.GetValueOrDefault(entry.Id));
+        FeedTimelineItem? existing = TimelineEntries.FirstOrDefault(
+            value => string.Equals(
+                value.Entry.Id,
+                entry.Id,
+                StringComparison.Ordinal));
+        if (existing is not null)
+        {
+            int index = TimelineEntries.IndexOf(existing);
+            TimelineEntries[index] = item;
+        }
+        else
+        {
+            TimelineEntries.Insert(0, item);
+        }
+        SelectedSectionIndex = 0;
+        SelectedTimelineEntry = item;
+        TimelineStatus = $"已从统一搜索打开：{entry.Title}";
+    }
+
     private void ConfigureTimeline()
     {
         _selectedTimelineReadFilter = TimelineReadFilters[0];

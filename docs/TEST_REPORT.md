@@ -1,6 +1,6 @@
 # 测试报告
 
-测试日期：.NET 2026-07-26 / Worker 2026-07-25（Asia/Shanghai）
+测试日期：.NET 2026-07-27 / Worker 2026-07-25（Asia/Shanghai）
 版本：0.1.0  
 配置：Release / win-x64 / .NET SDK 10.0.302
 
@@ -8,15 +8,15 @@
 
 | 测试组 | 结果 |
 |---|---:|
-| LenxTool.Core.Tests | 65 passed |
-| LenxTool.Infrastructure.Tests | 303 passed |
-| LenxTool.App.Tests | 154 passed |
+| LenxTool.Core.Tests | 96 passed |
+| LenxTool.Infrastructure.Tests | 348 passed |
+| LenxTool.App.Tests | 195 passed |
 | Cloudflare Worker Vitest | 50 passed |
 | Worker TypeScript strict typecheck | passed |
 | .NET build warnings | 0 |
 | NuGet vulnerable packages | 0 detected |
 
-本轮执行三个 .NET 测试项目及单节点 Release 构建；Core 65、Infrastructure 303、App 154，共 522/522 通过且无跳过。AI 摘要/翻译规则动作新增 8 项行为场景，覆盖动作类型白名单、禁用自动开关下的规则授权、目标语言、每日限额、条目/Feed 终态、非法载荷前置拒绝、重试边界与取消释放。Worker 严格 typecheck 和官方 workerd/D1 Vitest 50/50 沿用本日最近一次通过结果；本片未修改 Worker。
+本轮执行三个 .NET 测试项目及单节点 Debug/Release 构建；Core 96、Infrastructure 348、App 195，共 639/639 通过且无跳过。统一搜索新增混合七类实体、筛选组合、确定排序、稳定分页、条件变化废弃旧游标、schema v16→v17 回填、字幕/标签/收藏更新与删除无幽灵结果、ViewModel 应用内跳转和 XAML 可访问性场景。Worker 严格 typecheck 和官方 workerd/D1 Vitest 50/50 沿用最近一次通过结果；本片未修改 Worker。
 
 P0-08 覆盖 4 项 SQLite 集成场景并同步既有 schema 断言：新建库创建目录状态、分类、Feed、抓取状态、条目、索引和搜索映射；真实 schema v2 哨兵数据经 v3/v4 原位升级后仍可由现有仓储读取；迁移对象冲突时完整回滚且版本停留在 v3；相同外部 ID、URL 和内容哈希可存在于不同 Feed，同一 Feed 内重复外部 ID 被约束拒绝。既有包含未 checkpoint WAL 提交的一致性备份测试继续通过。
 
@@ -134,6 +134,8 @@ P1-18 自动化执行与工作台接入片新增 10 项媒体动作和即时队�
 P1-15 通知动作闭环新增 17 项通知仓储、服务、处理器、ViewModel 和真实 SQLite 端到端场景并扩展 schema/DI 回归：schema v16 用动作幂等键持久化只含标题/来源的本地收件箱，并发注册只创建一次，数据库重开后通知及已读时间保持一致；最近通知稳定排序，未读计数、单条/全部已读均有覆盖。处理器只领取 `Notify`，在写入前复核动作、条目、Feed 和分类，永久失败、受限重试、取消释放及订阅者异常隔离均通过。顶部铃铛即时去重显示新通知，角标和已读状态同步。Debug/Release 完整 .NET 613/613（Core 96、Infrastructure 339、App 178）通过，Release build 0 警告/0 错误；实际 Release 中铃铛面板的“未读 0 条”“暂无通知”和禁用“全部已读”经 UI Automation 与截图目视检查正常，主窗口 `Responding=True`。
 
 P1-16 规则管理和只读模拟新增 17 项发布客户端、模拟服务、ViewModel 与 XAML 布局场景并扩展 DI 回归：管理员 `ALL` 快照映射包含停用规则，POST/PATCH 使用独立 `automation-all` 版本头和幂等键，图形定义不产生脚本字段；非法通知载荷在发网前拒绝，普通用户绕过 UI 的发布请求到达 Worker 后仍映射为访问拒绝。模拟只注入本地条目/目录只读仓储，最近条目按 Feed/分类、正文和音视频投影进入内存解释器，写仓储陷阱保持零调用。ViewModel 覆盖管理员加载、新建/更新、版本冲突只刷新不重放、角色降级清空，以及模拟结果与发布状态；布局验证字段/操作符/值/动作、只读警告和自动化名称，不存在脚本输入。Debug/Release 完整 .NET 630/630（Core 96、Infrastructure 344、App 190）、既有 Worker 规则 RBAC/不可变版本/审计 6/6、Worker typecheck 与 Release build 0 警告/0 错误通过。实际 Release 主窗口标题为 `Lenx Tools`、`Responding=True`；UI Automation 确认普通/未登录会话中管理员规则与订阅入口均不可见，首页和通知仍可访问。
+
+P1-19 统一搜索扩展新增 9 项直接场景并扩展 schema/DI/历史页回归：schema v17 为现有字幕、标签和收藏回填 FTS，字幕替换在同一事务重建任务搜索文档，收藏与标签触发器同步更新和删除；混合七类实体查询支持类型、日期、Feed、分类、标签和仅收藏组合筛选，稳定排序与 `limit + 1` 分页无重复，条件变化会废弃旧游标。历史页可清除筛选、加载后续页；Feed 结果通过应用内导航精确打开阅读器，字幕结果定位任务详情，外部地址仍只允许 HTTP/HTTPS。Debug/Release 完整 .NET 639/639（Core 96、Infrastructure 348、App 195）通过，Release build 0 警告/0 错误；实际 Release 已通过 UI Automation 切换到历史页，关键词、类型、起止日期、Feed 分类/来源、标签、仅收藏、清除筛选和任务历史控件均可访问，七类内容提示正确，主窗口标题为 `Lenx Tools` 且 `Responding=True`。
 
 ## 本次已验证的异常路径
 

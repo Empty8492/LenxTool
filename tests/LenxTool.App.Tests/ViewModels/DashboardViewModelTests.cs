@@ -285,6 +285,11 @@ public sealed class DashboardViewModelTests
             CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<ContentSearchResult>>([]);
 
+        public Task<ContentSearchPage> SearchContentAsync(
+            ContentSearchQuery query,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(new ContentSearchPage([], false));
+
         public Task UpsertReportAsync(
             AiReport report,
             CancellationToken cancellationToken) => Task.CompletedTask;

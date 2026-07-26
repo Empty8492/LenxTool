@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Threading;
 using LenxTool.App.Mvvm;
+using LenxTool.App.Services;
 using LenxTool.Core.Accounts;
 using LenxTool.Core.Contracts;
 
@@ -133,6 +134,22 @@ public sealed class ShellViewModel : ObservableObject
         SetProperty(ref _selectedPageId, target.Id, nameof(SelectedPageId));
         IsCommandPaletteOpen = false;
         CommandQuery = string.Empty;
+    }
+
+    internal async Task NavigateAsync(
+        AppNavigationRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        Navigate(request.RouteId);
+        if (CurrentPage is IEntityNavigationAware target)
+        {
+            await target.OpenEntityAsync(
+                    request.EntityType,
+                    request.EntityId,
+                    cancellationToken)
+                .ConfigureAwait(true);
+        }
     }
 
     private void OnAccountSessionChanged(object? sender, AccountSessionChangedEventArgs eventArgs)

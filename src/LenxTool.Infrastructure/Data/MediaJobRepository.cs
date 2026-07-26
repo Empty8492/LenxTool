@@ -33,6 +33,23 @@ public sealed class MediaJobRepository(SqliteDatabase database) : IMediaJobRepos
         return await ReadAsync(command, cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task<MediaJob?> GetByIdAsync(
+        string id,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(id);
+        await using SqliteConnection connection =
+            await database.OpenConnectionAsync(cancellationToken)
+                .ConfigureAwait(false);
+        await using SqliteCommand command = connection.CreateCommand();
+        command.CommandText =
+            $"SELECT {SelectColumns} FROM media_jobs WHERE id=$id;";
+        command.Parameters.AddWithValue("$id", id);
+        return (await ReadAsync(command, cancellationToken)
+                .ConfigureAwait(false))
+            .SingleOrDefault();
+    }
+
     public async Task<IReadOnlyList<MediaJob>> GetQueuedAsync(CancellationToken cancellationToken)
     {
         await using SqliteConnection connection = await database.OpenConnectionAsync(cancellationToken)
@@ -179,6 +196,39 @@ public sealed class MediaJobRepository(SqliteDatabase database) : IMediaJobRepos
                 (object?)segment.NoSpeechProbability ?? DBNull.Value);
             await insert.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         }
+
+        await using SqliteCommand rebuildSearch = connection.CreateCommand();
+        rebuildSearch.Transaction = transaction;
+        rebuildSearch.CommandText = """
+            DELETE FROM content_fts
+            WHERE entity_type='subtitle' AND entity_id=$mediaJobId;
+
+            INSERT INTO content_fts(entity_type, entity_id, title, content)
+            SELECT
+                'subtitle',
+                m.id,
+                m.input_path,
+                (
+                    SELECT group_concat(document.segment_text, char(10))
+                    FROM (
+                        SELECT trim(
+                            s.text || ' ' || COALESCE(s.translated_text, ''))
+                            AS segment_text
+                        FROM subtitle_segments s
+                        WHERE s.media_job_id=m.id
+                        ORDER BY s.sequence
+                    ) document
+                )
+            FROM media_jobs m
+            WHERE m.id=$mediaJobId
+              AND EXISTS(
+                  SELECT 1
+                  FROM subtitle_segments s
+                  WHERE s.media_job_id=m.id);
+            """;
+        rebuildSearch.Parameters.AddWithValue("$mediaJobId", mediaJobId);
+        await rebuildSearch.ExecuteNonQueryAsync(cancellationToken)
+            .ConfigureAwait(false);
     }
 
     public async Task<IReadOnlyList<SubtitleSegment>> GetByMediaJobIdAsync(

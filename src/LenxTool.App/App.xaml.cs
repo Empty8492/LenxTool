@@ -249,6 +249,9 @@ public partial class App : Application
             services.GetRequiredService<DesktopFileDialogService>());
         services.AddSingleton<IOpmlFileDialogService>(static services =>
             services.GetRequiredService<DesktopFileDialogService>());
+        services.AddSingleton<AppNavigationService>();
+        services.AddSingleton<IAppNavigationService>(static services =>
+            services.GetRequiredService<AppNavigationService>());
         services.AddSingleton<ISubtitleExportService, SubtitleExportService>();
         services.AddSingleton(CreateUpdateOptions());
         services.AddSingleton<IUpdateService, UpdateService>();
@@ -288,7 +291,7 @@ public partial class App : Application
         NotificationCenterViewModel notificationCenter =
             services.GetRequiredService<NotificationCenterViewModel>();
 
-        return new(
+        var shell = new ShellViewModel(
         [
             new("home", "首页", "今日概览与快捷开始", "M3,11 L12,3 21,11 21,21 14,21 14,15 10,15 10,21 3,21 Z", dashboard),
             new("news", "资讯列表", "浏览订阅内容与本地缓存", "M4,4 L20,4 20,18 7,18 4,21 Z M8,8 L16,8 M8,12 L17,12 M8,16 L14,16", news),
@@ -302,6 +305,9 @@ public partial class App : Application
             new("automation-admin", "自动化规则", "管理员规则编辑与只读模拟", "M5,4 L19,4 19,20 5,20 Z M8,8 L16,8 M8,12 L13,12 M8,16 L15,16 M17,14 L21,18 M21,14 L17,18", automationAdmin, AdminOnly: true),
             new("settings", "设置", "主题、密钥、账号与更新", "M12,8 A4,4 0 1 0 12,16 A4,4 0 1 0 12,8 M12,3 L13,5 16,6 18,5 20,9 18,11 18,14 20,16 18,20 15,19 13,20 11,19 8,20 6,18 7,15 6,12 4,10 6,6 9,6 Z", settings)
         ], accountSession, notificationCenter);
+        services.GetRequiredService<AppNavigationService>()
+            .Attach(shell.NavigateAsync);
+        return shell;
     }
 
     private static WorkerAccountOptions CreateWorkerAccountOptions()

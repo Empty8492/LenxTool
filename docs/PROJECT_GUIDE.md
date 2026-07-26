@@ -224,12 +224,13 @@ npm.cmd test -- --run
 - P1-15 Notify 规则动作已完成：独立处理器只领取 `Notify`，在读取后复核 Feed/分类启用状态。schema v16 的 `app_notifications` 用动作幂等键保存本地标题、来源、规则追踪和创建/已读状态，不保存正文或 URI；并发与重启重放不重复。顶部铃铛显示最近通知、未读角标并支持单条/全部已读，后台事件切回 UI 上下文且订阅者异常与持久动作隔离。Windows 系统通知、勿扰与受控深链仍留在 P2-22。
 - P1-16 规则管理和只读模拟已完成：管理员专属一级页面只用封闭字段、允许操作符和七类动作构建规则，不提供脚本或自定义请求。桌面读取 Worker `ALL` 快照，以独立规则集版本和幂等键发布；版本冲突刷新但不重放，响应继续走 Core 验证。模拟只读取本地最近条目和目录，在内存解释器中展示命中及计划动作，不取得运行账本、AI、媒体或通知服务。普通用户无入口，绕过 UI 的发布仍由 Worker 403 拒绝，管理员发布由既有 D1 不可变版本与审计记录覆盖。
 - P1-17 附件分类与安全打开已完成：RSS/Atom enclosure 与 Media RSS `media:content` 统一解析、稳定去重并限制每条 32 项；Core 以允许清单核对 MIME/扩展名，并阻止危险协议、凭据、自定义端口、保留主机名和非公网字面 IP。阅读器显示附件种类、大小/未知大小、类型状态和来源警告；仅经验证且不超过 12 MiB 的 HTTPS 图片进入既有安全图片下载器，音视频、大图、未知大小和不支持类型回退为受限外链，危险地址不生成链接。
+- P1-19 统一搜索扩展已完成：schema v17 把字幕、标签和收藏加入本地 FTS，并为旧库回填索引；字幕替换、收藏和标签更新/删除会同步索引，避免幽灵结果。历史页可按七类实体、日期、Feed、分类、标签和收藏组合筛选并稳定分页；Feed 结果在应用内打开精确阅读条目，字幕结果直接定位任务历史。
 - P0 最终验收第一片已完成：`p0-final-acceptance.test.ts` 在真实 workerd/D1 中走临时 bootstrap/login，覆盖管理员发布与停用、目录刷新、普通用户同步/阅读、六类管理员写端点 403 隔离和审计字段脱敏。
 - P0 最终验收第二片已完成：完整 .NET 310/310、Worker 39/39、typecheck 和 Release 0 警告/0 错误复核了 OPML 导入/导出、断网缓存、坏源隔离、schema v2 原位升级和 10k 条目首屏性能；五份终验文档已同步，P0 已关闭。
 
 ### 10.2 下一里程碑
 
-Gate 0 字幕闭环和 P0“管理员策展 RSS”已经完成。P1-01～P1-18、P1-A、P1-B、P1-C 与 P1-D 已完成。下一切片进入 P1-19 统一搜索扩展。
+Gate 0 字幕闭环和 P0“管理员策展 RSS”已经完成。P1-01～P1-19、P1-A、P1-B、P1-C 与 P1-D 已完成。下一切片进入 P1-20 保留、清理与数据库维护。
 
 字幕闭环完成后的产品主路线已确定为“管理员策展 RSS”：管理员维护共享 RSS/Atom 目录，普通用户只能同步和阅读，不得修改共享订阅、分类、抓取策略或自动化规则。为保持现有“云端不存新闻正文”边界，首版采用 Worker/D1 保存权威目录、各桌面客户端本地抓取和 SQLite 缓存的模式。
 
@@ -237,10 +238,10 @@ Gate 0 字幕闭环和 P0“管理员策展 RSS”已经完成。P1-01～P1-18�
 
 1. Gate 0 字幕闭环已完成；验收记录见 [`plans/EXISTING_BACKLOG_ALIGNMENT.md`](plans/EXISTING_BACKLOG_ALIGNMENT.md)。
 2. P0-01～P0-20、P0-B/P0-C 及最终检查点已完成；P0 关闭记录见 [`plans/RSS_P0_ADMIN_CATALOG.md`](plans/RSS_P0_ADMIN_CATALOG.md)，现在才进入 P1。
-3. P1-01～P1-18 与 P1-A/P1-B/P1-C/P1-D 已完成；继续 P1-19 统一搜索扩展和 P1-20 保留维护，具体见 [`plans/RSS_P1_READING_INTELLIGENCE.md`](plans/RSS_P1_READING_INTELLIGENCE.md)。
+3. P1-01～P1-19 与 P1-A/P1-B/P1-C/P1-D 已完成；继续 P1-20 保留、清理与数据库维护，具体见 [`plans/RSS_P1_READING_INTELLIGENCE.md`](plans/RSS_P1_READING_INTELLIGENCE.md)。
 4. 实现多内容视图、外部导出适配器、本地定时摘要和通知；具体见 [`plans/RSS_P2_VIEWS_INTEGRATIONS.md`](plans/RSS_P2_VIEWS_INTEGRATIONS.md)。
 
-总路线、参考项目和许可证边界见 [`plans/RSS_MASTER_ROADMAP.md`](plans/RSS_MASTER_ROADMAP.md)，架构决策见 [`decisions/ADR-001-admin-curated-rss.md`](decisions/ADR-001-admin-curated-rss.md) 与 [`decisions/ADR-002-article-content-extraction.md`](decisions/ADR-002-article-content-extraction.md)。P0-01～P0-20、P0-B/P0-C、P1-01～P1-18 与 P1-A/P1-B/P1-C/P1-D 可作为已实现基础；统一搜索扩展、保留维护和外部导出仍不能作为已交付功能宣传。
+总路线、参考项目和许可证边界见 [`plans/RSS_MASTER_ROADMAP.md`](plans/RSS_MASTER_ROADMAP.md)，架构决策见 [`decisions/ADR-001-admin-curated-rss.md`](decisions/ADR-001-admin-curated-rss.md) 与 [`decisions/ADR-002-article-content-extraction.md`](decisions/ADR-002-article-content-extraction.md)。P0-01～P0-20、P0-B/P0-C、P1-01～P1-19 与 P1-A/P1-B/P1-C/P1-D 可作为已实现基础；保留维护和外部导出仍不能作为已交付功能宣传。
 
 ### 10.3 其他尚未完成的产品功能
 
@@ -255,7 +256,7 @@ Gate 0 字幕闭环和 P0“管理员策展 RSS”已经完成。P1-01～P1-18�
 - 客户端已接入共享账号登录、退出、过期状态、角色、额度和管理员目录管理；注册尚未实现。
 - Worker 认证、令牌轮换和管理员目录写入已有 workerd/D1 自动化；生产 D1 并发压测、共享额度代理链路和真实部署仍未验收。
 - 管理员分类/Feed 写 API、普通用户只读目录、ETag/304、桌面角色可见性、本地目录自动同步、安全发现/抓取和管理交互已实现。
-- 安全 Feed URL 发现、通用条目解析、抓取调度、OPML 管理、只读时间线、Feed 健康诊断、首页真实数据聚合、全文/图片离线、附件分类与安全外链、自动化规则发布边界、图形管理与只读模拟、本地运行账本、规则同步、受限状态动作、AI 摘要/翻译动作、Feed 媒体投递和本地通知收件箱已实现；统一搜索扩展、保留维护和外部导出仍待后续任务。
+- 安全 Feed URL 发现、通用条目解析、抓取调度、OPML 管理、只读时间线、Feed 健康诊断、首页真实数据聚合、全文/图片离线、附件分类与安全外链、自动化规则发布边界、图形管理与只读模拟、本地运行账本、规则同步、受限状态动作、AI 摘要/翻译动作、Feed 媒体投递、本地通知收件箱和七类实体统一搜索已实现；保留维护和外部导出仍待后续任务。
 
 ### 10.4 普通本地使用需要配置
 

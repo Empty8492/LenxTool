@@ -10,7 +10,7 @@ public sealed partial class SqliteDatabase(
     AppPaths paths,
     ILogger<SqliteDatabase> logger) : IDisposable
 {
-    private const int CurrentSchemaVersion = 16;
+    private const int CurrentSchemaVersion = 17;
     private readonly SemaphoreSlim _initializationGate = new(1, 1);
     private bool _initialized;
     private bool _disposed;
@@ -333,6 +333,23 @@ public sealed partial class SqliteDatabase(
                 command.Parameters.AddWithValue(
                     "$checksum",
                     "lenx-schema-v16-app-notifications");
+                await command.ExecuteNonQueryAsync(cancellationToken)
+                    .ConfigureAwait(false);
+            }
+
+            if (version < 17)
+            {
+                command.CommandText = MigrationSeventeenSql;
+                command.Parameters.Clear();
+                await command.ExecuteNonQueryAsync(cancellationToken)
+                    .ConfigureAwait(false);
+                command.CommandText = "INSERT INTO schema_versions(version, applied_at, checksum) VALUES (17, $appliedAt, $checksum);";
+                command.Parameters.AddWithValue(
+                    "$appliedAt",
+                    DateTimeOffset.UtcNow.ToString("O"));
+                command.Parameters.AddWithValue(
+                    "$checksum",
+                    "lenx-schema-v17-unified-content-search");
                 await command.ExecuteNonQueryAsync(cancellationToken)
                     .ConfigureAwait(false);
             }
@@ -1031,4 +1048,5 @@ public sealed partial class SqliteDatabase(
         CREATE INDEX ix_app_notifications_unread
             ON app_notifications(read_at, created_at DESC, id);
         """;
+
 }

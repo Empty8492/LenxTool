@@ -73,8 +73,9 @@ AI 报告使用自备 DeepSeek Key 经请求级 Bearer 授权调用 `deepseek-v4
 - `tags`、`entity_tags`：标签与多态关联。
 - `app_settings`：非秘密设置。
 - `schema_versions`：已应用迁移及校验和。
-- `content_fts`：早报、热点、AI 报告和 Feed 条目的统一 FTS5 内容索引。
+- `content_fts`：Feed、早报、热点、AI 报告、字幕、标签和收藏的统一 FTS5 内容索引。
 - `feed_entry_search_documents`：Feed 条目的搜索文档投影；schema v5 触发器负责与 `content_fts` 同事务同步。
+- `subtitle_search_documents`：按媒体任务聚合字幕原文和译文；字幕批量替换在同一事务中重建该任务的单个搜索文档，媒体任务删除触发索引清理。
 - `user_entry_states`：按 `(entry_id, local_profile)` 保存本机已读、收藏、阅读进度、私人备注和更新时间；不建立 Feed 外键，确保目录软删除或条目清理不会误删私人状态。
 - `entry_assets`：按条目和来源 URL 建立本地资源索引，记录内容哈希、MIME、大小及创建/访问时间；物理缓存以 SHA-256 命名并在读取时校验。
 - `feed_full_text_content`、`feed_full_text_jobs`、`feed_full_text_host_state`：全文缓存、可恢复任务租约和单主机退避。
@@ -83,7 +84,9 @@ AI 报告使用自备 DeepSeek Key 经请求级 Bearer 授权调用 `deepseek-v4
 - `feed_media_deliveries`：Feed 附件到既有媒体任务的幂等来源台账。
 - `app_notifications`：本地规则通知的条目/Feed/规则来源、标题及创建/已读状态；不保存正文预览或任意 URI。
 
-本地数据库当前版本为 schema v16。v3～v7 依次建立字幕翻译用量、Feed 目录/条目、Feed FTS、私人阅读状态和离线资源；v8～v11 建立全文策略/队列、Feed AI 缓存策略和本地自动处理；v12～v14 建立规则运行账本、隐藏状态与 ACTIVE 规则缓存；v15 建立 Feed 媒体投递台账；v16 建立应用内通知收件箱。旧 v2 数据会依次应用全部迁移，任何一步失败均在事务中回滚且不提升版本。
+本地数据库当前版本为 schema v17。v3～v7 依次建立字幕翻译用量、Feed 目录/条目、Feed FTS、私人阅读状态和离线资源；v8～v11 建立全文策略/队列、Feed AI 缓存策略和本地自动处理；v12～v14 建立规则运行账本、隐藏状态与 ACTIVE 规则缓存；v15 建立 Feed 媒体投递台账；v16 建立应用内通知收件箱；v17 回填字幕、标签和收藏搜索文档，并为收藏和标签建立同步触发器。旧 v2 数据会依次应用全部迁移，任何一步失败均在事务中回滚且不提升版本。
+
+统一搜索仓储只接受参数化查询对象，先约束关键词、日期、筛选组合、偏移和页大小，再通过七类实体 CTE 投影到同一结果模型。排序固定为 FTS 排名、实体时间倒序、实体类型和稳定文档 ID；仓储读取 `limit + 1` 决定下一页，UI 使用原始页数量推进偏移并按稳定结果身份防重。应用内导航服务只传递路由和实体 ID：Feed 结果由资讯 ViewModel 精确读取并打开，字幕结果由历史 ViewModel 精确定位任务，其他外部地址仍经 HTTP/HTTPS 安全命令打开。
 
 `IFeedCatalogRepository` 是共享目录的本地边界。服务端快照写入时，分类、Feed、作用域、目录版本、生成时间和最后同步时间在同一事务提交；版本倒退在删除前拒绝，失败回滚整批替换。目录移除不会删除 `feed_entries`，仍存在 Feed 的 `feed_fetch_state` 会跨替换保留。读取状态、分类和 Feed 使用同一读事务，ACTIVE 投影过滤停用资源；若本地只同步过 ACTIVE，ALL 查询返回不可用而不是伪造管理员完整目录。
 

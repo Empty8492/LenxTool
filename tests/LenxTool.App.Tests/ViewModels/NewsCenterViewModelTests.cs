@@ -1163,6 +1163,25 @@ public sealed class NewsCenterViewModelTests
             $"首屏加载耗时 {stopwatch.Elapsed.TotalMilliseconds:F0} ms。");
     }
 
+    [Fact]
+    public async Task EntityNavigationOpensFeedEntryInTheReader()
+    {
+        FeedEntry entry = CreateFeedEntry(42);
+        using NewsCenterViewModel viewModel = CreateViewModel(
+            CreateSnapshot(),
+            feedEntries: new([entry]));
+
+        await viewModel.OpenEntityAsync(
+            "feed_entry",
+            entry.Id,
+            CancellationToken.None);
+
+        Assert.Equal(0, viewModel.SelectedSectionIndex);
+        Assert.Equal(entry.Id, viewModel.SelectedTimelineEntry?.Entry.Id);
+        Assert.Equal(entry.Id, viewModel.SelectedFeedArticle?.Id);
+        Assert.Contains("统一搜索", viewModel.TimelineStatus);
+    }
+
     private static NewsCenterViewModel CreateViewModel(
         NewsCenterSnapshot snapshot,
         StubDesktopFileDialogService? dialogs = null,
@@ -1479,6 +1498,11 @@ public sealed class NewsCenterViewModelTests
             string query,
             int limit,
             CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<ContentSearchResult>>([]);
+
+        public Task<ContentSearchPage> SearchContentAsync(
+            ContentSearchQuery query,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(new ContentSearchPage([], false));
 
         public Task<IReadOnlyList<NewsArticle>> GetLatestAsync(
             int limit,

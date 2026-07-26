@@ -18,10 +18,12 @@ public sealed partial class HistoryViewModel : PageViewModel
     private readonly ISubtitleExportService _subtitleExporter;
     private readonly IEntryStateRepository _entryStates;
     private readonly IFavoriteRepository _favorites;
+    private readonly IFeedCatalogRepository? _searchCatalogRepository;
+    private readonly IAppNavigationService? _navigationService;
     private MediaJob? _selectedJob;
     private ContentSearchResult? _selectedSearchResult;
     private string _searchQuery = string.Empty;
-    private string _searchStatus = "输入关键词，搜索已缓存的早报、热点和 AI 报告。";
+    private string _searchStatus = "输入关键词，搜索已缓存的 Feed、早报、热点、AI 报告、字幕、标签和收藏。";
     private string _status = "任务、错误和输出文件均保存在本机。";
     private Task _selectedJobLoad = Task.CompletedTask;
     private int _selectedJobLoadVersion;
@@ -38,7 +40,10 @@ public sealed partial class HistoryViewModel : PageViewModel
         ISubtitleRepository subtitles,
         ISubtitleExportService subtitleExporter,
         IEntryStateRepository entryStates,
-        IFavoriteRepository favorites) : base("历史与数据", "搜索任务、查看输出，并管理 SQLite 数据库备份")
+        IFavoriteRepository favorites,
+        IFeedCatalogRepository? searchCatalogRepository = null,
+        IAppNavigationService? navigationService = null)
+        : base("历史与数据", "搜索任务、查看输出，并管理 SQLite 数据库备份")
     {
         _jobs = jobs;
         _database = database;
@@ -48,13 +53,18 @@ public sealed partial class HistoryViewModel : PageViewModel
         _subtitleExporter = subtitleExporter;
         _entryStates = entryStates;
         _favorites = favorites;
+        _searchCatalogRepository = searchCatalogRepository;
+        _navigationService = navigationService;
         _selectedExportOption = ExportOptions[0];
         RefreshCommand = new(LoadAsync);
         BackupCommand = new(BackupAsync);
         RestoreCommand = new(RestoreAsync);
         OpenOutputCommand = new(OpenOutput, () => SelectedJob?.OutputPath is not null);
-        SearchCommand = new(SearchAsync, () => !string.IsNullOrWhiteSpace(SearchQuery));
-        OpenSearchResultCommand = new(OpenSearchResult, () => SelectedSearchResult?.Url is not null);
+        ConfigureSearch();
+        SearchCommand = new(SearchAsync, CanStartSearch);
+        OpenSearchResultCommand = new(
+            OpenSearchResultAsync,
+            CanOpenSearchResult);
         ExportSubtitleCommand = new(ExportSubtitleAsync, CanExportSubtitle);
         ConfigureSelectedSearchPrivateState();
     }
@@ -74,7 +84,7 @@ public sealed partial class HistoryViewModel : PageViewModel
     public AsyncRelayCommand RestoreCommand { get; }
     public RelayCommand OpenOutputCommand { get; }
     public AsyncRelayCommand SearchCommand { get; }
-    public RelayCommand OpenSearchResultCommand { get; }
+    public AsyncRelayCommand OpenSearchResultCommand { get; }
     public AsyncRelayCommand ExportSubtitleCommand { get; }
     public string Status { get => _status; private set => SetProperty(ref _status, value); }
     public MediaJob? SelectedJob
@@ -133,7 +143,7 @@ public sealed partial class HistoryViewModel : PageViewModel
         {
             if (SetProperty(ref _searchQuery, value ?? string.Empty))
             {
-                SearchCommand.NotifyCanExecuteChanged();
+                InvalidateSearchPaging();
             }
         }
     }
@@ -152,12 +162,18 @@ public sealed partial class HistoryViewModel : PageViewModel
             if (SetProperty(ref _selectedSearchResult, value))
             {
                 OpenSearchResultCommand.NotifyCanExecuteChanged();
+                OnPropertyChanged(nameof(OpenSearchResultLabel));
                 OnSelectedSearchResultChanged(value);
             }
         }
     }
 
-    public Task InitializeAsync(CancellationToken cancellationToken) => LoadAsync(cancellationToken);
+    public async Task InitializeAsync(CancellationToken cancellationToken)
+    {
+        await Task.WhenAll(
+            LoadAsync(cancellationToken),
+            InitializeSearchFiltersAsync(cancellationToken));
+    }
 
     private async Task LoadAsync(CancellationToken cancellationToken)
     {
@@ -248,21 +264,7 @@ public sealed partial class HistoryViewModel : PageViewModel
 
     private async Task SearchAsync(CancellationToken cancellationToken)
     {
-        IReadOnlyList<ContentSearchResult> results = await _news.SearchContentAsync(
-            SearchQuery.Trim(),
-            100,
-            cancellationToken);
-        SearchResults.Clear();
-        HashSet<string> identities = [];
-        foreach (ContentSearchResult result in results)
-        {
-            string identity = NormalizeSearchIdentity(result);
-            if (identities.Add(identity)) SearchResults.Add(result);
-        }
-        SelectedSearchResult = SearchResults.FirstOrDefault();
-        SearchStatus = SearchResults.Count == 0
-            ? "没有找到相关内容；请尝试更短或不同的关键词。"
-            : $"找到 {SearchResults.Count} 条相关内容。";
+        await SearchPageAsync(reset: true, cancellationToken);
     }
 
     private async Task RestoreAsync(CancellationToken cancellationToken)
@@ -280,10 +282,65 @@ public sealed partial class HistoryViewModel : PageViewModel
     }
 
 
-    private void OpenSearchResult()
+    private bool CanOpenSearchResult() =>
+        SelectedSearchResult?.Type switch
+        {
+            ContentSearchResultType.FeedEntry =>
+                _navigationService is not null
+                || CanOpenUri(SelectedSearchResult.Url),
+            ContentSearchResultType.Subtitle => true,
+            _ => CanOpenUri(SelectedSearchResult?.Url)
+        };
+
+    private async Task OpenSearchResultAsync(
+        CancellationToken cancellationToken)
     {
-        if (SelectedSearchResult?.Url is { } uri) _dialogs.OpenUri(uri);
+        ContentSearchResult? result = SelectedSearchResult;
+        if (result is null)
+        {
+            return;
+        }
+        if (result.Type == ContentSearchResultType.FeedEntry
+            && _navigationService is not null)
+        {
+            await _navigationService.NavigateAsync(
+                new("news", "feed_entry", result.EntityId),
+                cancellationToken);
+            return;
+        }
+        if (result.Type == ContentSearchResultType.Subtitle)
+        {
+            MediaJob? job = await _jobs.GetByIdAsync(
+                result.EntityId,
+                cancellationToken);
+            if (job is null)
+            {
+                SearchStatus = "对应的字幕任务已被清理。";
+                return;
+            }
+            MediaJob? existing = Jobs.FirstOrDefault(
+                item => string.Equals(
+                    item.Id,
+                    job.Id,
+                    StringComparison.Ordinal));
+            if (existing is null)
+            {
+                Jobs.Insert(0, job);
+            }
+            SelectedJob = existing ?? job;
+            SelectedHistoryTabIndex = 1;
+            Status = $"已打开字幕任务：{Path.GetFileName(job.InputPath)}";
+            return;
+        }
+        if (CanOpenUri(result.Url))
+        {
+            _dialogs.OpenUri(result.Url!);
+        }
     }
+
+    private static bool CanOpenUri(string? value) =>
+        Uri.TryCreate(value, UriKind.Absolute, out Uri? uri)
+        && uri.Scheme is "http" or "https";
 
     private static string NormalizeSearchIdentity(ContentSearchResult result)
     {
