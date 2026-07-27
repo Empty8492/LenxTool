@@ -99,3 +99,47 @@ public sealed record FeedDiscoveryCandidate(
             ? FeedDiscoveryConfidence.Low
             : Evidence.Max(evidence => evidence.Confidence);
 }
+
+public enum FeedDiscoverySourceStatus
+{
+    Succeeded,
+    NoResults,
+    TimedOut,
+    RateLimited,
+    Unavailable,
+    CircuitOpen
+}
+
+public enum FeedDiscoveryCompletionStatus
+{
+    Complete,
+    Partial,
+    Unavailable
+}
+
+public sealed record FeedDiscoveryProviderPolicy(
+    TimeSpan Timeout,
+    int MaximumConcurrency,
+    TimeSpan CacheDuration,
+    int MaximumCacheEntries,
+    int CircuitBreakerFailureThreshold,
+    TimeSpan CircuitBreakerOpenDuration,
+    int MaximumCandidates);
+
+public sealed record FeedDiscoveryProviderResult(
+    IReadOnlyList<FeedDiscoveryCandidate> Candidates,
+    bool IsTruncated = false);
+
+public sealed record FeedDiscoverySourceReport(
+    string SourceId,
+    FeedDiscoverySourceKind SourceKind,
+    FeedDiscoverySourceStatus Status,
+    int CandidateCount,
+    bool IsFromCache,
+    bool IsTruncated);
+
+public sealed record UnifiedFeedDiscoveryResult(
+    FeedDiscoveryQuery Query,
+    IReadOnlyList<FeedDiscoveryCandidate> Candidates,
+    IReadOnlyList<FeedDiscoverySourceReport> Sources,
+    FeedDiscoveryCompletionStatus Status);

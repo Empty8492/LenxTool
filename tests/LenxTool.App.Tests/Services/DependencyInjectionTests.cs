@@ -2,6 +2,7 @@ using System.Reflection;
 using LenxTool.App.ViewModels;
 using LenxTool.App.Services;
 using LenxTool.Core.Contracts;
+using LenxTool.Core.Models;
 using LenxTool.Infrastructure.Data;
 using LenxTool.Infrastructure.Networking;
 using Microsoft.Extensions.DependencyInjection;
@@ -42,6 +43,18 @@ public sealed class DependencyInjectionTests
             provider.GetRequiredService<IOpmlFileDialogService>());
         Assert.NotNull(provider.GetRequiredService<FeedAdminViewModel>());
         Assert.NotNull(provider.GetRequiredService<IFeedDiscoveryService>());
+        Assert.NotNull(provider.GetRequiredService<IUnifiedFeedDiscoveryService>());
+        IFeedDiscoveryProvider[] discoveryProviders =
+            provider.GetServices<IFeedDiscoveryProvider>().ToArray();
+        Assert.Collection(
+            discoveryProviders,
+            item => Assert.IsType<DirectFeedDiscoveryProvider>(item),
+            item => Assert.IsType<KnownCatalogFeedDiscoveryProvider>(item));
+        Assert.DoesNotContain(
+            discoveryProviders,
+            item => item.SourceKind is
+                FeedDiscoverySourceKind.RssHubAdapter or
+                FeedDiscoverySourceKind.ExternalProvider);
         Assert.NotNull(provider.GetRequiredService<IFeedParser>());
         Assert.NotNull(provider.GetRequiredService<IArticleImageDownloader>());
         Assert.IsType<FeedMediaDeliveryRepository>(

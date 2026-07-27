@@ -159,3 +159,11 @@ P1-08～P1-20 在上述边界上形成闭环：全文、AI 和规则动作都先
 P2-02 在该边界上增加本地图片流：分类查询以原始稳定 continuation 分块扫描，普通时间线不承担后过滤成本；图片页首次进入才加载并以虚拟化三列行展示。缩略图复用 P1 安全下载边界，网络响应流式写缓存，缓存读取以有界缓冲校验哈希后返回文件流，WPF 只按目标像素宽度解码。目录的独立显式视图状态由本地 schema v18 与 D1 0007 保存，历史非 Article 覆盖和旧 v1 客户端语义均向前兼容。
 
 P1 终验（2026-07-27）以两条独立数据流验证架构边界：真实 schema v17 SQLite 在重开后的离线库中覆盖 10,000 条 Feed、1,000 个收藏、混合媒体和全文/AI/规则/媒体活动引用，查询、搜索、预览和清理均满足既定预算；真实 workerd/D1 覆盖管理员发布目录/AI 策略/规则、普通用户写入 403、版本不变及应用表/字段内容隐私白名单。Release 回归为 .NET 648/648、Worker 52/52、strict typecheck 和 0 警告构建。该记录关闭 P1 架构交付，不替代生产部署与正式签名发布。
+
+## 10. 统一 Feed 发现协调
+
+DISC-01～DISC-03 建立不依赖 UI 的统一发现边界。Core 将输入确定性分类为 URL、RSSHub 路由或关键词，并以规范 Feed URL 合并候选，同时保留类型化来源证据、置信度、健康状态和警告。Infrastructure 的 `IUnifiedFeedDiscoveryService` 并行调用已注册的 `IFeedDiscoveryProvider`，按注册顺序返回每来源报告；一个来源超时、限流、格式损坏或熔断只产生类型化降级状态，不暴露上游响应或异常文本，也不阻断其他来源。
+
+默认注册只有两条数据流：Worker 已知目录使用现有授权会话读取 `/v1/feeds/discoveries`，对 JSON 大小、HTTPS 元数据、分页、枚举、目录 ID、来源证据和警告逐字段验证；direct provider 复用原 `IFeedDiscoveryService`，因此继续执行公网地址分类、完整 DNS 答案验证、固定 IP 连接、逐跳重定向复核、响应/解压大小、MIME、XML DTD/实体和总超时限制。RSSHub 与外部平台仅保留公开 provider 扩展契约，在官方 API、速率限制、许可和隐私条款完成审核前不注册。
+
+每个 provider 拥有独立并发门闩、总等待/执行超时、成功结果内存缓存和进程内熔断状态；策略上限在协调器构造时验证，缓存条目数、候选数和 TTL 均有硬上限。调用方取消始终传播，不写失败缓存；provider 结果必须让全部证据和具名警告归属于该 provider，不能伪造其他来源。超时使用 .NET 的 [`CancellationTokenSource.CancelAfter`](https://learn.microsoft.com/en-us/dotnet/api/system.threading.cancellationtokensource.cancelafter?view=net-10.0)，多 provider 组合沿用内建 DI 的 [`IEnumerable<T>` 注册顺序语义](https://learn.microsoft.com/en-us/dotnet/core/extensions/dependency-injection/service-registration)，缓存和熔断时钟通过 [`TimeProvider`](https://learn.microsoft.com/en-us/dotnet/standard/datetime/) 注入以保持可测试性。

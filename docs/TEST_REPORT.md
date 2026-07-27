@@ -1,6 +1,6 @@
 # 测试报告
 
-测试日期：.NET / Worker 2026-07-27（Asia/Shanghai）
+测试日期：.NET / Worker 2026-07-28（Asia/Shanghai）
 版本：0.1.0  
 配置：Release / win-x64 / .NET SDK 10.0.302
 
@@ -8,15 +8,18 @@
 
 | 测试组 | 结果 |
 |---|---:|
-| LenxTool.Core.Tests | 116 passed |
-| LenxTool.Infrastructure.Tests | 361 passed |
-| LenxTool.App.Tests | 204 passed / 1 environment-blocked |
-| Cloudflare Worker Vitest | 55 passed |
+| LenxTool.Core.Tests | 140 passed |
+| LenxTool.Infrastructure.Tests | 377 passed |
+| LenxTool.App.Tests | 205 passed |
+| Cloudflare Worker Vitest | 63 passed |
 | Worker TypeScript strict typecheck | passed |
 | .NET build warnings | 0 |
 | NuGet vulnerable packages | 0 detected |
+| npm audit vulnerabilities | 0 detected |
 
-本轮 P2-02 的完整 Release 结果为 Core 116/116、Infrastructure 361/361、App/WPF 204/205、Worker workerd/D1 Vitest 55/55、Worker strict typecheck 与全解决方案 build 0 警告/0 错误。App 唯一未通过项仍是既有 `LongArticleRestoresPrivateStateAcrossRealWpfViewRecreation` 在当前受限环境等待真实 WPF 线程 20 秒后超时；排除该环境项后的 204 项全部通过，新图片流真实 WPF 测试独立通过。
+本轮 DISC-03 的完整 Release 结果为 Core 140/140、Infrastructure 377/377、App/WPF 205/205、Worker workerd/D1 Vitest 63/63、Worker strict typecheck、npm audit 0 漏洞与全解决方案 build 0 警告/0 错误。
+
+DISC-03 新增统一发现协调器、Worker 已知目录 provider、复用既有 SSRF 防护的 direct provider 和默认 DI 组合。16 项新增测试与既有 31 项安全探测回归共同覆盖 provider 独立超时/并发、成功缓存、熔断恢复、429、畸形和空目录项、重复候选、来源证据/警告伪造、provider 集合快照、调用方取消、部分成功、全源不可用、私网/环回/混合 DNS/重绑定、逐跳重定向复核与固定 IP。外部 RSSHub/平台 provider 默认未注册；完整结果对象只包含类型化来源状态，不包含上游异常或响应正文。
 
 P2-02 新增视图内分页分类、图片页 ViewModel/WPF、流式缩略图接口、本地 schema v18 和 Worker/D1 0007。查询在原始稳定顺序中分块扫描并返回原始 continuation，显式覆盖状态可区分自动模式和强制 Article；图片页首次选择才加载，并以不可变筛选快照、取消代次和只重建末尾不完整行避免分页竞态与滚动扰动。缩略图不先物化完整响应或缓存文件，而是在既有 SSRF、逐跳重定向、MIME/签名、大小、带宽和并发边界内流式写入缓存，并以有界缓冲校验文件哈希后返回文件流，再按 360 像素解码。1,000 条混合 SQLite 数据跨页无重复；真实图片页装载 1,000 张图片、334 行和缩略图控件，在首屏、200% WPF 布局缩放和滚动到底部时只实现 1～40 个行容器且实际缩略图请求少于总量四分之一。离线/损坏占位、旧请求取消、键盘打开、来源/分类/日期/收藏筛选、旧目录升级和旧 v1 客户端视图覆盖语义均有回归。
 
