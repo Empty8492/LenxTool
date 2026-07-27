@@ -260,6 +260,8 @@ describe("P1 final Worker/D1 acceptance", () => {
       "daily_usage",
       "feed_catalog_state",
       "feed_categories",
+      "feed_discovery_index",
+      "feed_discovery_rate_limits",
       "invites",
       "managed_feeds",
       "refresh_tokens",

@@ -40,8 +40,104 @@ describe("feed catalog migrations", () => {
       "0004_feed_full_text_policy.sql",
       "0005_feed_ai_policy.sql",
       "0006_automation_rules.sql",
-      "0007_explicit_feed_view_kind.sql"
+      "0007_explicit_feed_view_kind.sql",
+      "0008_feed_discovery_index.sql"
     ]);
+  });
+
+  it("backfills and maintains the privacy-scoped discovery index from existing catalog rows", async () => {
+    for (const trigger of [
+      "tr_feed_discovery_feed_insert",
+      "tr_feed_discovery_feed_update",
+      "tr_feed_discovery_feed_delete",
+      "tr_feed_discovery_category_update"
+    ]) {
+      await env.DB.prepare(`DROP TRIGGER IF EXISTS ${trigger}`).run();
+    }
+    await env.DB.prepare("DROP TABLE IF EXISTS feed_discovery_rate_limits").run();
+    await env.DB.prepare("DROP TABLE IF EXISTS feed_discovery_index").run();
+    await env.DB.prepare(
+      "DELETE FROM d1_migrations WHERE name='0008_feed_discovery_index.sql'"
+    ).run();
+
+    const categoryId = crypto.randomUUID();
+    const feedId = crypto.randomUUID();
+    await insertCategory(categoryId);
+    await insertFeed({
+      id: feedId,
+      normalizedUrl: "https://example.com/discovery.xml",
+      categoryId
+    });
+
+    await applyD1Migrations(env.DB, env.TEST_MIGRATIONS);
+
+    const columns = await tableColumns("feed_discovery_index");
+    expect(columns).toEqual([
+      "feed_id",
+      "normalized_url",
+      "display_name",
+      "display_name_norm",
+      "site_url",
+      "category_id",
+      "category_name",
+      "category_name_norm",
+      "category_is_enabled",
+      "view_kind",
+      "feed_is_enabled",
+      "updated_at"
+    ]);
+    expect(columns.join(" ")).not.toMatch(
+      /article|body|content|summary|translation|prompt|path|file|user_state|secret|credential/iu
+    );
+
+    const backfilled = await env.DB.prepare(
+      "SELECT feed_id,normalized_url,display_name,category_name,category_is_enabled,feed_is_enabled " +
+        "FROM feed_discovery_index WHERE feed_id=?"
+    ).bind(feedId).first<{
+      feed_id: string;
+      normalized_url: string;
+      display_name: string;
+      category_name: string;
+      category_is_enabled: number;
+      feed_is_enabled: number;
+    }>();
+    expect(backfilled).toEqual({
+      feed_id: feedId,
+      normalized_url: "https://example.com/discovery.xml",
+      display_name: "Example Feed",
+      category_name: "Technology",
+      category_is_enabled: 1,
+      feed_is_enabled: 1
+    });
+
+    await env.DB.batch([
+      env.DB.prepare(
+        "UPDATE managed_feeds SET display_name='Discovery Renamed',is_enabled=0,updated_at=? WHERE id=?"
+      ).bind(now, feedId),
+      env.DB.prepare(
+        "UPDATE feed_categories SET name='Engineering',name_norm='engineering',is_enabled=0,updated_at=? WHERE id=?"
+      ).bind(now, categoryId)
+    ]);
+    const updated = await env.DB.prepare(
+      "SELECT display_name,display_name_norm,category_name,category_name_norm," +
+        "category_is_enabled,feed_is_enabled FROM feed_discovery_index WHERE feed_id=?"
+    ).bind(feedId).first<Record<string, unknown>>();
+    expect(updated).toEqual({
+      display_name: "Discovery Renamed",
+      display_name_norm: "discovery renamed",
+      category_name: "Engineering",
+      category_name_norm: "engineering",
+      category_is_enabled: 0,
+      feed_is_enabled: 0
+    });
+
+    await env.DB.prepare(
+      "UPDATE managed_feeds SET deleted_at=?,updated_at=? WHERE id=?"
+    ).bind(now, now, feedId).run();
+    const removed = await env.DB.prepare(
+      "SELECT feed_id FROM feed_discovery_index WHERE feed_id=?"
+    ).bind(feedId).first();
+    expect(removed).toBeNull();
   });
 
   it("preserves legacy non-article view overrides when applying 0007", async () => {

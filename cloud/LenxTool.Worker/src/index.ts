@@ -1,6 +1,7 @@
 import { CatalogApiError, handleCatalogAdminRequest, handleCatalogReadRequest } from "./catalog";
 import { handleCatalogBatchRequest } from "./catalog-batch";
 import { handleAutomationRuleRequest } from "./automation-rules";
+import { handleFeedDiscoveryRequest } from "./feed-discovery";
 
 export interface Env {
   DB: D1Database;
@@ -59,6 +60,13 @@ export default {
         url
       );
       if (automationResponse) return automationResponse;
+      const discoveryResponse = await handleFeedDiscoveryRequest(
+        request,
+        env.DB,
+        catalogAuth,
+        url
+      );
+      if (discoveryResponse) return discoveryResponse;
       const catalogReadResponse = await handleCatalogReadRequest(request, env.DB, catalogAuth, url);
       if (catalogReadResponse) return catalogReadResponse;
       const catalogBatchResponse = await handleCatalogBatchRequest(request, env.DB, catalogAuth, url);
@@ -72,7 +80,14 @@ export default {
       throw new ApiError(404, "RESOURCE_NOT_FOUND", "接口不存在");
     } catch (error) {
       const apiError = error instanceof CatalogApiError
-        ? new ApiError(error.status, error.code, error.userMessage, undefined, error.details, error.isRetryable)
+        ? new ApiError(
+          error.status,
+          error.code,
+          error.userMessage,
+          error.retryAfterSeconds,
+          error.details,
+          error.isRetryable
+        )
         : error instanceof ApiError
         ? error
         : new ApiError(500, "INTERNAL_ERROR", "服务暂时不可用");

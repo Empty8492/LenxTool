@@ -10,7 +10,8 @@ export class CatalogApiError extends Error {
     public code: string,
     public userMessage: string,
     public details?: Record<string, unknown>,
-    public isRetryable = false
+    public isRetryable = false,
+    public retryAfterSeconds?: number
   ) {
     super(userMessage);
   }

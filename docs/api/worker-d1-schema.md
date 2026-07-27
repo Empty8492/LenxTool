@@ -1,10 +1,10 @@
 # Worker D1 Schema
 
-P2-02 新增的权威迁移：[0007_explicit_feed_view_kind.sql](../../cloud/LenxTool.Worker/migrations/0007_explicit_feed_view_kind.sql)。生产发布必须先对目标 D1 应用 0007，再部署读取 `view_kind_explicit` 的 Worker；顺序颠倒会使目录查询因字段尚不存在而失败。
+最新权威迁移：[0007_explicit_feed_view_kind.sql](../../cloud/LenxTool.Worker/migrations/0007_explicit_feed_view_kind.sql)、[0008_feed_discovery_index.sql](../../cloud/LenxTool.Worker/migrations/0008_feed_discovery_index.sql)。生产发布必须按序先应用迁移，再部署读取新列/表的 Worker；顺序颠倒会使目录或发现查询因 schema 尚不存在而失败。
 
-状态：P0 目录、P1 AI 策略和受限自动化规则 schema/读写均已实现
-最后核对：2026-07-27
-权威迁移：[0001_initial.sql](../../cloud/LenxTool.Worker/migrations/0001_initial.sql)、[0002_feed_catalog.sql](../../cloud/LenxTool.Worker/migrations/0002_feed_catalog.sql)、[0003_catalog_mutations.sql](../../cloud/LenxTool.Worker/migrations/0003_catalog_mutations.sql)、[0004_feed_full_text_policy.sql](../../cloud/LenxTool.Worker/migrations/0004_feed_full_text_policy.sql)、[0005_feed_ai_policy.sql](../../cloud/LenxTool.Worker/migrations/0005_feed_ai_policy.sql)、[0006_automation_rules.sql](../../cloud/LenxTool.Worker/migrations/0006_automation_rules.sql)、[0007_explicit_feed_view_kind.sql](../../cloud/LenxTool.Worker/migrations/0007_explicit_feed_view_kind.sql)
+状态：P0 目录、P1 AI 策略和受限自动化规则、DISC-02 已知目录发现 schema/读写均已实现
+最后核对：2026-07-28
+权威迁移：[0001_initial.sql](../../cloud/LenxTool.Worker/migrations/0001_initial.sql)、[0002_feed_catalog.sql](../../cloud/LenxTool.Worker/migrations/0002_feed_catalog.sql)、[0003_catalog_mutations.sql](../../cloud/LenxTool.Worker/migrations/0003_catalog_mutations.sql)、[0004_feed_full_text_policy.sql](../../cloud/LenxTool.Worker/migrations/0004_feed_full_text_policy.sql)、[0005_feed_ai_policy.sql](../../cloud/LenxTool.Worker/migrations/0005_feed_ai_policy.sql)、[0006_automation_rules.sql](../../cloud/LenxTool.Worker/migrations/0006_automation_rules.sql)、[0007_explicit_feed_view_kind.sql](../../cloud/LenxTool.Worker/migrations/0007_explicit_feed_view_kind.sql)、[0008_feed_discovery_index.sql](../../cloud/LenxTool.Worker/migrations/0008_feed_discovery_index.sql)
 接口语义：[Worker v1 API 契约](worker-v1.md)
 
 ## 1. 数据边界
@@ -26,6 +26,7 @@ D1 是账号和管理员发布的共享订阅配置/受限规则的权威来源�
 - `0004_feed_full_text_policy.sql` 增加受限的全文获取枚举；`0005_feed_ai_policy.sql` 为分类和 Feed 增加显式 AI 策略覆盖、目标语言、每日条目和并发上限，自动开关默认继承全局关闭值。
 - `0006_automation_rules.sql` 增加独立规则集状态、当前规则和不可变版本历史；只保存受限定义与发布元数据，不保存匹配条目或执行结果。
 - `0007_explicit_feed_view_kind.sql` 增加视图覆盖状态；历史非 `ARTICLE` 值回填为显式覆盖，历史 `ARTICLE` 因无法区分默认值与强制值而保持自动模式。
+- `0008_feed_discovery_index.sql` 从所有未删除 `managed_feeds` 原位回填发现字段白名单，并用 Feed/分类触发器持续同步；同时增加按用户、UTC 分钟分桶的发现限流状态。它不复制 `original_url`、AI 策略、删除时间、正文或私人状态。
 - 测试启动器先应用 0001、写入旧 schema 哨兵行，再应用全部迁移，从而验证带数据升级；再次调用迁移流程不会重复执行已记录文件。
 - Wrangler 应用某个迁移失败时会回滚该迁移，并保留之前成功的迁移。生产恢复遵循第 7 节，不提交手写“向下迁移”去伪造 `d1_migrations` 历史。
 
@@ -92,7 +93,21 @@ P0-04 的每个成功单项写入会在同一事务中比较并递增该版本�
 
 D1 默认在查询和迁移中强制外键。分类关系使用 `RESTRICT`，因此硬删除仍被任何历史 Feed 引用的分类会立即失败，不会级联丢失 Feed。依据：[Cloudflare D1 foreign keys](https://developers.cloudflare.com/d1/sql-api/foreign-keys/) 和 [SQLite partial unique indexes](https://www.sqlite.org/partialindex.html#unique_partial_indexes)。
 
-### 3.4 目录写入元数据
+### 3.4 `feed_discovery_index` 与 `feed_discovery_rate_limits`
+
+`feed_discovery_index` 是 `managed_feeds` 的只读查询投影，不是第二个写入真相源。它只包含：
+
+- Feed ID、规范 URL、显示名及仅供匹配的显示名规范值、公开站点 URL。
+- 可空的分类 ID/名称及仅供匹配的分类规范名、Feed/分类启用状态。
+- 公开视图类型与目录元数据更新时间。
+
+首次迁移从所有未删除 Feed 回填；之后 `managed_feeds` 的新增、更新、软/硬删除触发器维护 Feed 行，分类名称、启用状态或软删除变更触发器维护关联分类快照。发现查询从不直接写这个投影。唯一规范 URL 约束与主目录的活动唯一性一致，标题、分类和活动状态索引支持参数化关键词检索及“匹配等级降序、更新时间降序、Feed ID 升序”的稳定游标。
+
+该表明确不含 `original_url`、`deleted_at`、`view_kind_explicit`、刷新/排序策略、AI/全文策略、版本历史、文章、摘要、正文或用户状态。发现响应再使用更窄的公开字段映射，内部规范列也不出现在 JSON。
+
+`feed_discovery_rate_limits` 只保存 `actor_user_id`、16 字符 UTC 分钟桶和有界计数，主键为用户与分钟桶；用户删除时计数级联删除，过期桶由查询路径渐进清理。它不保存查询文本、URL、IP、响应或 token。
+
+### 3.5 目录写入元数据
 
 - `catalog_idempotency` 以操作者、HTTP 方法、规范路径和 key 为作用域，只保存规范请求 SHA-256、成功状态、成功响应和 24 小时有效期；不保存原始请求正文。账号删除时对应记录级联删除。
 - `audit_events.catalog_version` 记录成功目录操作对应的全局版本；审计仍只含操作者、目标、动作、请求 ID、脱敏 IP 摘要和时间。
@@ -115,6 +130,8 @@ D1 默认在查询和迁移中强制外键。分类关系使用 `RESTRICT`，因
 - AI 开关、目标语言、每日条目上限和并发上限均受 CHECK 约束；数据库不保存提示词、文章正文、摘要或译文。
 - 未删除分类规范名唯一、未删除 Feed 规范 URL 唯一。
 - Feed 只能引用存在的分类；分类硬删除不会级联删除 Feed。
+- 发现索引只接受字段白名单、HTTPS URL、视图枚举、布尔值和有界时间/名称；规范 Feed URL 唯一。
+- 发现限流按有效用户与 UTC 分钟唯一，计数保持在数据库约束范围内。
 - D1 batch 中后续约束失败会回滚该批次先前写入。
 
 P0-04 路由保证：
@@ -131,6 +148,8 @@ Schema 约束是最后防线，不替代 API 边界校验。
 - 分类和 Feed 的活动唯一索引同时承担重复检测。
 - `ix_*_catalog_order` 支持按分类、启用状态、排序号和 ID 生成确定性目录。
 - `ix_*_version` 支持版本相关诊断和后续增量逻辑。
+- `ix_feed_discovery_*` 支持标题/分类候选与活动状态过滤；排名和游标终局次序由参数化查询显式给出，不依赖索引的未指定顺序。
+- `ix_feed_discovery_rate_limit_bucket` 支持清理过期分钟桶。
 - P0 v1 返回有界原子快照，不为目录增加偏移量分页表或文章表。
 - P1 规则返回最多 100 条、4 MiB 的有界原子快照，不建立匹配条目或动作执行结果表。
 

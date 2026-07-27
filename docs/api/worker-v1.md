@@ -1,15 +1,15 @@
-# Worker v1 账号与共享订阅目录 API 契约
+# Worker v1 账号、共享订阅目录与发现 API 契约
 
-状态：v1 基线已冻结；P0 身份/目录、P1 AI 策略与受限自动化规则均已实现
-最后核对：2026-07-27
-适用范围：LenxTool 桌面端与 `cloud/LenxTool.Worker` 之间的账号、会话、管理员策展目录、AI 策略和自动化规则接口
+状态：v1 基线已冻结；P0 身份/目录、P1 AI 策略与受限自动化规则、DISC-02 已知目录发现均已实现
+最后核对：2026-07-28
+适用范围：LenxTool 桌面端与 `cloud/LenxTool.Worker` 之间的账号、会话、管理员策展目录、已知目录发现、AI 策略和自动化规则接口
 
 本文是 P0/P1 Worker 契约的真相源。实现顺序和验收见 [P0 详细计划](../plans/RSS_P0_ADMIN_CATALOG.md)与 [P1 详细计划](../plans/RSS_P1_READING_INTELLIGENCE.md)，安全边界见 [威胁模型](../THREAT_MODEL.md)，云端只保存共享目录配置的决策见 [ADR-001](../decisions/ADR-001-admin-curated-rss.md)。
 
 ## 1. 兼容性与通用约定
 
 - 基础路径固定为 `/v1`。v1 内只做向后兼容的字段新增；删除字段、改变字段类型/语义或收紧既有枚举必须另立迁移方案。
-- 只接受 HTTPS、UTF-8 JSON。账号成功响应、写入响应和所有错误响应均发送 `Cache-Control: no-store`。目录 GET 使用 `Cache-Control: private, no-cache`、`Vary: Authorization` 和 ETag，允许桌面端保存后强制重验证，但禁止公共代理共享认证响应。
+- 只接受 HTTPS、UTF-8 JSON。账号成功响应、写入响应和所有错误响应均发送 `Cache-Control: no-store`。目录 GET 使用 `Cache-Control: private, no-cache`，发现 GET 使用 `Cache-Control: private, max-age=60`；两者都发送 `Vary: Authorization` 和强 ETag，禁止公共代理共享认证响应。
 - 字段和查询参数使用 `camelCase`；枚举值使用 `UPPER_SNAKE_CASE`；时间使用 UTC ISO 8601，例如 `2026-07-21T08:30:00Z`。
 - 服务端生成的账号、分类和 Feed ID 是不透明 UUID。客户端只能原样保存和回传，不能从 ID 推断排序或时间。
 - 客户端可发送 `X-Request-Id`，长度 1～128，只允许可打印 ASCII；服务端不信任其唯一性。服务端始终在 `X-Request-Id` 响应头和错误体 `requestId` 中返回最终请求 ID。
@@ -78,7 +78,7 @@
 - 分类/Feed 的 `version` 表示该资源最后一次改变时的全局目录版本。
 - 目录响应 ETag 为强 ETag：`"catalog-active-42"` 或 `"catalog-all-42"`。客户端必须把目录内容和版本在同一 SQLite 事务中原子替换。
 - v1 目录是有界的原子快照，不分页：最多 200 个未删除分类、5,000 个未删除 Feed，序列化响应不超过 10 MiB。达到上限的新增返回 `409 CATALOG_CAPACITY_EXCEEDED`。避免分页是为了不在并发写入时组合出跨版本目录。
-- 将来出现无界列表时采用不透明 `cursor` 和 `pageSize`（默认 50，范围 1～200）；不得把偏移量分页混入当前目录快照。
+- 已知目录发现采用绑定查询和 scope 的不透明 `cursor`，`pageSize` 默认 20、范围 1～50；不得使用偏移量分页。完整目录快照仍不分页。
 
 ### 1.4 管理员目录写入的并发与幂等
 
@@ -179,6 +179,52 @@ Idempotency-Key: 018f87d4-0f7e-7ad0-9c06-b285e52e7664
 - 管理端只提交 `originalUrl`；`normalizedUrl` 由服务端生成并用于重复检测。目录写路由只做语法、方案和规范化校验，不发起网络请求。DNS、固定地址连接、重定向、响应/解压大小、MIME 和 XML 安全验证由桌面 P0-11 发现服务执行；P0-15 管理界面在提交写 API 前调用该服务。
 - 普通目录响应只含未删除、已启用且分类已启用的 Feed；它不含抓取结果、正文、健康详情或用户私人状态。
 
+### 2.4 已知目录发现页
+
+```json
+{
+  "catalogVersion": 42,
+  "query": "技术",
+  "scope": "ACTIVE",
+  "items": [
+    {
+      "normalizedFeedUrl": "https://example.com/feed.xml",
+      "title": "技术日报",
+      "siteUrl": "https://example.com/",
+      "documentKind": null,
+      "lastUpdatedAt": "2026-07-27T08:30:00Z",
+      "health": "UNKNOWN",
+      "evidence": [
+        {
+          "sourceId": "worker:known-catalog",
+          "sourceKind": "KNOWN_CATALOG",
+          "matchKind": "KEYWORD",
+          "confidence": "MEDIUM"
+        }
+      ],
+      "warnings": [],
+      "catalog": {
+        "feedId": "d889d0c8-...",
+        "categoryId": "4a5feea7-...",
+        "categoryName": "技术",
+        "viewKind": "ARTICLE",
+        "isEnabled": true
+      }
+    }
+  ],
+  "pagination": {
+    "pageSize": 20,
+    "totalItems": 1,
+    "nextCursor": null
+  }
+}
+```
+
+- `title` 是共享目录显示名，`lastUpdatedAt` 是目录元数据更新时间；DISC-02 不把它们伪装成最新文章标题或发布时间。
+- 已知目录没有经过桌面端内容探测，因此 `documentKind` 为 null、`health` 为 `UNKNOWN`、`warnings` 为空。后续发现协调器可与其他来源合并，但不得改变本端点的字段语义。
+- `catalog.isEnabled` 表示 Feed 及其分类当前是否整体可用。`ACTIVE` 只返回 true；admin 的 `ALL` 也可返回 false。
+- `matchKind` 为 `EXACT_FEED_URL`、`EXACT_SITE_URL`、`EXACT_TITLE` 或 `KEYWORD`；对应置信度分别为 `EXACT`、`EXACT`、`HIGH`、`MEDIUM`。
+
 ## 3. 端点总表
 
 “审计动作”为 D1 安全审计事件名；“无”表示仅有脱敏运维访问日志，不写逐次 D1 审计。
@@ -191,6 +237,7 @@ Idempotency-Key: 018f87d4-0f7e-7ad0-9c06-b285e52e7664
 | `GET /v1/me` | user/admin | 无请求体、无查询参数 | 200 `MeResponse` | 通用认证错误 | 无 |
 | `POST /v1/bootstrap/admin` | 临时 bootstrap secret，且 D1 无用户 | JSON 8 KiB；用户名 3～40；密码 12～128；secret ≥32 | 201 `PublicUser` | `BOOTSTRAP_AUTH_INVALID`、`BOOTSTRAP_ALREADY_COMPLETED` | `bootstrap.admin.created` / `bootstrap.admin.failed` |
 | `GET /v1/feeds/catalog` | user/admin | URL 2 KiB；`afterVersion` 0～2^53-1；`scope` 枚举 | 200 `CatalogSnapshot` 或 304 | `CATALOG_VERSION_AHEAD`、`ADMIN_REQUIRED` | 无 |
+| `GET /v1/feeds/discoveries` | user/admin | URL 2 KiB；`query` 1～200；`pageSize` 1～50；不透明 `cursor` | 200 `FeedDiscoveryPage` 或 304 | `VALIDATION_ERROR`、`ADMIN_REQUIRED`、`RATE_LIMITED` | 无 |
 | `POST /v1/admin/feed-categories` | admin | JSON 8 KiB；名称 1～80 | 201 `CatalogMutation<Category>` | 版本/幂等冲突、`DUPLICATE_CATEGORY`、容量超限 | `feed_category.created` |
 | `PATCH /v1/admin/feed-categories/{id}` | admin | JSON 8 KiB；ID 36；名称 1～80 | 200 `CatalogMutation<Category>` | 版本/幂等冲突、`RESOURCE_NOT_FOUND`、重复分类 | `feed_category.updated` |
 | `DELETE /v1/admin/feed-categories/{id}` | admin | 无请求体；ID 36 | 200 `CatalogDeletion` | 版本/幂等冲突、`RESOURCE_NOT_FOUND`、`CATEGORY_NOT_EMPTY` | `feed_category.deleted` |
@@ -331,6 +378,17 @@ Content-Type: application/json
 策略解析顺序为 Feed 覆盖 → 所属分类覆盖 → `aiPolicyDefaults`。自动摘要和自动翻译在全局默认中均关闭；Worker 只发布版本化配置，正文、摘要和译文不上传 D1，实际计算由桌面端在本机触发。
 
 排序是契约的一部分：分类按 `sortOrder`、`name`、`id`；Feed 按分类顺序、`sortOrder`、`displayName`、`id`，未分类 Feed 排在已分类 Feed 之后。即使客户端重新排序，也不能依赖 D1 的未指定行顺序。
+
+### 5.2 `GET /v1/feeds/discoveries?query=技术&pageSize=20&scope=ACTIVE`
+
+- `query` 必填；NFKC 规范化、去除首尾空白并合并空白后须为 1～200 个 Unicode 字符。控制/格式字符、重复参数、未知参数以及作为通配符的 `%`/`_` 都不会绕过校验或参数化查询；后两者按普通字面字符搜索。
+- `scope` 默认为 `ACTIVE`。user 只能请求 `ACTIVE`；admin 可请求 `ALL`，但目录写入仍只能走第 6～8 节的管理员端点。此发现路径不接受 POST/PATCH/DELETE。
+- `pageSize` 默认 20、范围 1～50；`cursor` 最长 1,024 个 base64url 字符，绑定规范化后的查询与 scope，客户端只能原样回传。游标分页按“匹配等级降序、目录更新时间降序、Feed ID 升序”继续，不使用偏移量。
+- 排名依次为：精确规范 Feed URL、精确站点 URL、精确标题、标题前缀、标题包含、精确分类、分类包含、其他 URL 包含。同等级使用上述稳定次序；响应以类型化 `evidence` 说明匹配，不返回内部数值分数。
+- `totalItems` 是当前查询/scope 的全部匹配数，与当前游标位置无关。空结果返回 200、空 `items`、`totalItems=0` 和 `nextCursor=null`。
+- 响应发送 `Cache-Control: private, max-age=60`、`Vary: Authorization` 和绑定目录版本、查询、scope、页大小、游标的强 ETag。完全匹配的 `If-None-Match` 返回 304。
+- 每个已认证用户每 UTC 分钟最多 60 次发现 GET；第 61 次返回 `429 RATE_LIMITED`、`Retry-After: 60` 和 `retryAfterSeconds=60`。限流计数不改变目录版本，也不写业务审计。
+- 响应只来自发现字段白名单：规范 Feed URL、显示名、站点 URL、分类公开元数据、视图类型、启用状态和目录更新时间。原始管理员 URL、规范名内部列、删除时间、AI 策略、文章/摘要/正文、token、密码和用户私人状态均不得返回。
 
 ## 6. 管理员分类端点
 
