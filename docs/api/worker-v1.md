@@ -1,10 +1,10 @@
 # Worker v1 账号与共享订阅目录 API 契约
 
-状态：v1 基线已冻结；P0 身份/目录已实现，P1-13 以向后兼容字段新增 AI 策略
-最后核对：2026-07-25
-适用范围：LenxTool 桌面端与 `cloud/LenxTool.Worker` 之间的账号、会话和管理员策展目录接口
+状态：v1 基线已冻结；P0 身份/目录、P1 AI 策略与受限自动化规则均已实现
+最后核对：2026-07-27
+适用范围：LenxTool 桌面端与 `cloud/LenxTool.Worker` 之间的账号、会话、管理员策展目录、AI 策略和自动化规则接口
 
-本文是 P0 的契约真相源。实现顺序和验收见 [P0 详细计划](../plans/RSS_P0_ADMIN_CATALOG.md)，安全边界见 [威胁模型](../THREAT_MODEL.md)，云端只保存共享目录配置的决策见 [ADR-001](../decisions/ADR-001-admin-curated-rss.md)。
+本文是 P0/P1 Worker 契约的真相源。实现顺序和验收见 [P0 详细计划](../plans/RSS_P0_ADMIN_CATALOG.md)与 [P1 详细计划](../plans/RSS_P1_READING_INTELLIGENCE.md)，安全边界见 [威胁模型](../THREAT_MODEL.md)，云端只保存共享目录配置的决策见 [ADR-001](../decisions/ADR-001-admin-curated-rss.md)。
 
 ## 1. 兼容性与通用约定
 
@@ -197,6 +197,9 @@ Idempotency-Key: 018f87d4-0f7e-7ad0-9c06-b285e52e7664
 | `PATCH /v1/admin/feeds/{id}` | admin | JSON 16 KiB；ID 36 | 200 `CatalogMutation<Feed>` | 版本/幂等冲突、`RESOURCE_NOT_FOUND`、`DUPLICATE_FEED` | `feed.updated` |
 | `DELETE /v1/admin/feeds/{id}` | admin | 无请求体；ID 36 | 200 `CatalogDeletion` | 版本/幂等冲突、`RESOURCE_NOT_FOUND` | `feed.deleted` |
 | `POST /v1/admin/feed-catalog-batches` | admin | JSON 256 KiB；1～100 个操作 | 200 `CatalogBatchResult` | 版本/幂等冲突、`BATCH_OPERATION_FAILED` | `feed_catalog.batch` + 各操作动作 |
+| `GET /v1/automation-rules` | user/admin | URL 2 KiB；`afterVersion` 0～2^53-1；`scope` 枚举 | 200 `AutomationRulesSnapshot` 或 304 | `AUTOMATION_VERSION_AHEAD`、`ADMIN_REQUIRED` | 无 |
+| `POST /v1/admin/automation-rules` | admin | JSON 64 KiB；规则/条件/动作受限 | 201 `AutomationMutation` | `AUTOMATION_VERSION_CONFLICT`、`AUTOMATION_RULE_LIMIT_REACHED` | `automation_rule.created` |
+| `PATCH /v1/admin/automation-rules/{id}` | admin | JSON 64 KiB；ID 36；规则/条件/动作受限 | 200 `AutomationMutation` | `AUTOMATION_VERSION_CONFLICT`、`RESOURCE_NOT_FOUND` | `automation_rule.updated` |
 
 所有端点还可能返回第 1.2 节的通用校验、认证、限流和服务不可用错误。
 
@@ -463,9 +466,9 @@ Content-Type: application/json
 
 `originalUrl`、`normalizedUrl`、`siteUrl`、分类和显示名属于管理员发布的共享配置，可以出现在目录；它们仍按不可信数据处理，客户端显示时编码且不会自动导航。
 
-## 10. 当前实现对照与后续任务
+## 10. 当前实现对照
 
-2026-07-23 对照 [Worker 路由](../../cloud/LenxTool.Worker/src/index.ts)、D1 迁移和桌面客户端后的实现状态如下。此表用于防止把“契约已冻结”误写成“功能已实现”。
+2026-07-27 对照 [Worker 路由](../../cloud/LenxTool.Worker/src/index.ts)、D1 迁移和桌面客户端后的实现状态如下。此表用于防止把“契约已冻结”误写成“功能已实现”。
 
 | 契约项 | 当前实现 | 后续归属 |
 |---|---|---|
@@ -477,5 +480,21 @@ Content-Type: application/json
 | 分类/Feed 管理员路由、幂等记录 | 已实现 6 个单项 CRUD 路由，以及 1～100 项、单版本增量、带逐项结果和父/子审计的原子批量路由 | P0-04/P0-16 已完成 |
 | 只读目录、ETag、RBAC/版本并发测试 | 已实现 ACTIVE/ALL 原子快照、强 ETag、304、超前版本拒绝和权限/排序/缓存测试 | P0-05 已完成 |
 | 桌面账号/目录 DTO | 已实现安全会话、ACTIVE/ALL 同步、单项管理客户端、批量客户端和 OPML 工作流 | P0-06～P0-10/P0-15/P0-16 已完成 |
+| AI 策略与自动化规则 | 分类/Feed 策略字段、ACTIVE/ALL 规则快照、POST/PATCH、独立版本/ETag、幂等、不可变版本和桌面管理/同步均已实现 | P1-13～P1-16 已完成 |
 
 实现不得为了迁就当前单文件 Worker 的偶然行为而改变本文语义。确需变更时，先更新契约、威胁模型和受影响测试，再修改服务端与桌面端。
+
+## 11. P1 自动化规则契约
+
+`GET /v1/automation-rules?scope=ACTIVE|ALL&afterVersion=n` 使用独立于目录的 `ruleSetVersion`。user 只能读取 ACTIVE，admin 可读取 ALL；强 ETag 为 `"automation-active-n"` 或 `"automation-all-n"`，当前版本返回 304，客户端版本超前返回 `409 AUTOMATION_VERSION_AHEAD`。响应最多 4 MiB，规则按优先级降序、冲突顺序和 ID 稳定排序，最多 100 条。
+
+管理员 POST/PATCH 必须同时发送 `If-Match: "automation-all-n"` 和 16～128 字符的 `Idempotency-Key`。成功只递增一次规则集版本，并分别返回 201/200；同 key/同请求重放原成功响应，同 key/不同请求或旧版本返回 409。更新会把规则自身 `version` 加 1，并把完整快照追加到不可变历史；v1 不提供删除端点，停用通过 PATCH `isEnabled=false` 完成。
+
+规则定义只允许：
+
+- 匹配模式 `ALL` / `ANY`；字段 `FEED`、`CATEGORY`、`TITLE`、`AUTHOR`、`CONTENT`、`LANGUAGE`、`PUBLISHED_AT`、`HAS_AUDIO`、`HAS_VIDEO`。
+- 操作符 `EQUALS`、`CONTAINS`、`REGEX`、`BEFORE`、`AFTER`、`EXISTS`，并按字段限制合法组合。
+- 动作 `ADD_TAG`、`HIDE`、`MARK_READ`、`GENERATE_SUMMARY`、`TRANSLATE`、`SEND_TO_MEDIA`、`NOTIFY`。
+- 每条 1～16 个条件、1～8 个动作；名称最长 120，普通文本最长 512，正则最长 256。除 `ADD_TAG` 外同类动作不能重复；动作顺序唯一。无参数动作拒绝任意值，翻译仅接受 `zh-Hans`、`en`、`ja`、`ko`。
+
+Worker 只验证、版本化和发布规则，不执行正文匹配，也不把命中条目、AI 结果、字幕或本地文件写入 D1。桌面端下载 ACTIVE 快照后再次通过 Core 验证器/解释器，并在本机 SQLite 中计划和执行受限动作。

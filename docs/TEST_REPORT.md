@@ -1,6 +1,6 @@
 # 测试报告
 
-测试日期：.NET 2026-07-27 / Worker 2026-07-25（Asia/Shanghai）
+测试日期：.NET / Worker 2026-07-27（Asia/Shanghai）
 版本：0.1.0  
 配置：Release / win-x64 / .NET SDK 10.0.302
 
@@ -9,14 +9,14 @@
 | 测试组 | 结果 |
 |---|---:|
 | LenxTool.Core.Tests | 96 passed |
-| LenxTool.Infrastructure.Tests | 353 passed |
+| LenxTool.Infrastructure.Tests | 354 passed |
 | LenxTool.App.Tests | 198 passed |
-| Cloudflare Worker Vitest | 50 passed |
+| Cloudflare Worker Vitest | 52 passed |
 | Worker TypeScript strict typecheck | passed |
 | .NET build warnings | 0 |
 | NuGet vulnerable packages | 0 detected |
 
-本轮执行三个 .NET 测试项目及 Debug/Release 构建；Core 96、Infrastructure 353、App 198，共 647/647 通过且无跳过，Release build 为 0 警告/0 错误。P1-20 新增 180 天严格边界、私人/活动任务引用保护、孤立图片、预取消、模拟磁盘满、10,001 条跨批次大库、两步确认 ViewModel 和设置页可访问性场景。Worker 严格 typecheck 和官方 workerd/D1 Vitest 50/50 沿用最近一次通过结果；本片未修改 Worker。
+本轮执行三个 .NET Release 测试项目：Core 96、Infrastructure 354、App/WPF 198，共 648/648 通过且无跳过；全解决方案 Release build 为 0 警告/0 错误。Worker 严格 typecheck 和官方 workerd/D1 Vitest 52/52 通过。P1 最终检查点新增大规模离线 SQLite 与 Worker/D1 权限/隐私两组端到端护栏；真实 WPF 运行测试在允许原生 GUI 消息循环的环境中通过。
 
 P0-08 覆盖 4 项 SQLite 集成场景并同步既有 schema 断言：新建库创建目录状态、分类、Feed、抓取状态、条目、索引和搜索映射；真实 schema v2 哨兵数据经 v3/v4 原位升级后仍可由现有仓储读取；迁移对象冲突时完整回滚且版本停留在 v3；相同外部 ID、URL 和内容哈希可存在于不同 Feed，同一 Feed 内重复外部 ID 被约束拒绝。既有包含未 checkpoint WAL 提交的一致性备份测试继续通过。
 
@@ -138,6 +138,8 @@ P1-16 规则管理和只读模拟新增 17 项发布客户端、模拟服务、V
 P1-19 统一搜索扩展新增 9 项直接场景并扩展 schema/DI/历史页回归：schema v17 为现有字幕、标签和收藏回填 FTS，字幕替换在同一事务重建任务搜索文档，收藏与标签触发器同步更新和删除；混合七类实体查询支持类型、日期、Feed、分类、标签和仅收藏组合筛选，稳定排序与 `limit + 1` 分页无重复，条件变化会废弃旧游标。历史页可清除筛选、加载后续页；Feed 结果通过应用内导航精确打开阅读器，字幕结果定位任务详情，外部地址仍只允许 HTTP/HTTPS。Debug/Release 完整 .NET 639/639（Core 96、Infrastructure 348、App 195）通过，Release build 0 警告/0 错误；实际 Release 已通过 UI Automation 切换到历史页，关键词、类型、起止日期、Feed 分类/来源、标签、仅收藏、清除筛选和任务历史控件均可访问，七类内容提示正确，主窗口标题为 `Lenx Tools` 且 `Responding=True`。
 
 P1-20 保留、清理与数据库维护新增/扩展 8 项直接场景：180 天截止点只清理严格更旧条目，favorites、tags、任意私人状态和全文/AI/规则/媒体活动任务均阻止删除；候选删除同时清理关联资源并保持 FTS 一致。孤立图片只按内容哈希删除数据库不再引用的文件，缓存写入、LRU 与清理串行。预取消保持候选不变，模拟空间不足会完成数据清理但跳过数据库压缩，10,001 条大库跨 5000 条批次完整处理。设置 ViewModel 覆盖预览后确认、取消不执行，XAML 锁定容量与两步操作的自动化名称。Debug/Release 完整 .NET 647/647（Core 96、Infrastructure 353、App 198）通过，Release build 0 警告/0 错误；实际 Release 中设置页显示数据库 2.3 MB、图片缓存 18.9 MB/44 个文件、模型 0 KB，预览返回 0 条并显示确认/取消，取消后提示本地内容未修改。
+
+P1 最终检查点新增 `P1FinalAcceptanceTests`：真实 schema v17 SQLite 写入 10,000 条 Feed、1,000 个收藏和同条目混合音频/视频/图片附件，关闭并重开数据库模拟离线启动；收藏分页和七类统一搜索分别受 2 秒预算约束，清理预览受 10 秒预算约束，8,996 个无保护旧条目的有界清理受 60 秒预算约束。定向用例总耗时约 13 秒，并确认清理后保留全部 1,000 个收藏，以及全文租约、AI 任务、规则动作和媒体投递各 1 个活动条目。新增 `p1-final-acceptance.test.ts` 在真实 workerd/D1 中验证管理员发布分类、Feed、AI 策略和规则，普通用户对目录/策略/规则写入均得到 403 且两个版本号不变；逐表列名白名单和哨兵扫描确认 D1 不保存文章正文、摘要、译文、字幕或本地路径。完整结果为 .NET 648/648、Worker 52/52、Worker strict typecheck 与 Release build 0 警告/0 错误；这关闭 P1 本地/自动化交付闸门，但不替代生产 Worker/D1、签名安装包和跨物理机发布验收。
 
 ## 本次已验证的异常路径
 

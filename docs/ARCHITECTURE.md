@@ -39,7 +39,7 @@ AI 报告使用自备 DeepSeek Key 经请求级 Bearer 授权调用 `deepseek-v4
   -> IAudioChunkPlanner（重叠分片）
   -> ISegmentMerger（交接、去重、置信过滤）
   -> 可选 ISubtitleTranslator
-  -> ISubtitleExporter -> 原文/双语 SRT/TXT
+  -> ISubtitleExporter -> 原文/译文/双语 SRT 与纯文本 TXT
 ```
 
 每个阶段更新数据库进度并观察同一个 `CancellationToken`。临时文件使用单任务目录，成功或失败后尽力清理；清理错误写脱敏日志。
@@ -106,7 +106,7 @@ P1-20 的保留候选由 `FeedRetentionSql` 统一投影，严格排除 favorite
 - `IAccountSessionService` 是桌面会话边界：短期 access token 只驻进程内存，refresh token 复用 `ISecretStore` 以 DPAPI CurrentUser 保存；启动恢复后必须通过 `/v1/me` 重新取得最小用户与额度快照。
 - `WorkerAccountSessionService` 用会话代次和单飞刷新协调并发 401；同一失效会话只轮换一次，每个原请求最多携带新 access token 重放一次。失败、重放或退出会先清除内存状态，再尽力更新 DPAPI 文件。
 - 日志过滤 Authorization、Cookie、password、api key、refresh token、音频 multipart 正文和大段模型内容。
-- Worker 中真实共享 Key 仅来自 Secret Binding。D1 保存密码摘要、邀请码摘要、角色、额度、聚合用量、刷新令牌摘要与审计元数据。
+- Worker 中真实共享 Key 仅来自 Secret Binding。D1 保存密码摘要、邀请码摘要、角色、额度、聚合用量、刷新令牌摘要、共享目录/AI 策略、受限规则定义/版本与审计元数据，不保存匹配条目或内容处理结果。
 - 额度使用“预留—结算—释放”状态机；D1 原子条件更新确保并发请求不能超过余额。
 
 ## 5. 统一错误
@@ -142,14 +142,18 @@ UI 错误卡根据能力显示重试、复制脱敏详情、打开设置、切�
 
 自包含发布不是单文件，以便 WebView2/native 依赖和差分下载可诊断。Inno Setup 使用固定 AppId，安装到 `{localappdata}\Programs\LenxTool`，覆盖升级前关闭应用；卸载器不删除用户数据。回滚采用重新安装上一个已签名版本，数据库只使用向前兼容迁移；破坏性迁移需另行 ADR。
 
-## 9. 分阶段实现中：管理员策展 RSS
+## 9. 管理员策展 RSS 的 P0/P1 架构
 
 后续资讯架构采用“Worker/D1 权威共享目录 + 桌面客户端本地抓取/缓存”：管理员通过服务端授权的写端点维护 Feed、分类和策略，普通用户只读同步目录；文章正文、AI 结果、字幕和本地文件仍不写入 D1。详细理由和备选方案见 [ADR-001](decisions/ADR-001-admin-curated-rss.md)，实施批次见 [RSS 集成总路线图](plans/RSS_MASTER_ROADMAP.md)。
 
-当前已完成 Worker v1 契约、身份生命周期、D1 共享目录 schema、管理员分类/Feed 单项与原子批量写 API、版本化只读目录、桌面安全会话与账号/角色/额度 UI、本地 schema v7、目录原子仓储、安全发现/解析、条件调度、条目 FTS/查询、P0-C 兼容安全检查点、P0-15 管理页、P0-16 OPML 管理、P0-17 普通用户 Feed 时间线、P0-18 管理员 Feed 健康诊断、P0-19 首页真实数据兼容、P0-20/P1-01 私人阅读状态、P1-02 收藏标签备注仓储、P1-03/P1-04 私人阅读交互与进度恢复，以及 P1-05 离线资源索引。目录写入以服务端 admin 角色为授权真相，使用 `If-Match` 单调版本、`Idempotency-Key`、参数化 SQL 和同一 D1 batch 内的资源写入/最小审计/幂等结果；OPML 批量使用内存模拟后约 12 条聚合语句原子提交，跨操作 `categoryRef` 可引用同批次较早创建的分类，成功只增加一次版本。桌面导入在写入前先执行有界 XXE-safe 解析、预览分类、用户选择、安全 Feed 发现和发现后重复复核，任一前置项失败不会提交；导出采用目录字段白名单。目录读取以同一 D1 batch 生成确定排序的原子快照，ACTIVE/ALL 由服务端角色隔离，并用强 ETag、304 和超前版本拒绝保护客户端缓存；本地仓储拒绝版本倒退并以读写事务维持完整快照，桌面角色只控制入口可见性且角色降级后清空管理员投影，D1 仍不保存文章正文。解析层的 20 个独立 RSS/Atom fixture 覆盖中文、ISO-8859-1 与 UTF-16 LE/BE，安全抓取测试覆盖单源隔离、缓存保留、SSRF、XXE、响应上限和重定向绕过。
+P0/P1 当前已完成 Worker 身份生命周期、D1 共享目录/AI 策略/自动化规则 schema、管理员单项与原子批量写 API、目录和规则 ACTIVE/ALL 快照，以及桌面安全会话、账号/角色/额度、订阅管理和规则管理 UI。本地 schema v17 已覆盖目录/抓取状态、Feed 条目与七类 FTS、私人阅读状态、离线资源/全文、AI 缓存与任务、规则快照/运行/动作租约、媒体投递和应用内通知。目录与规则写入均以服务端 admin 角色为授权真相，使用各自的 `If-Match` 单调版本、`Idempotency-Key`、参数化 SQL、不可变历史/最小审计和原子结果；ACTIVE/ALL 由服务端角色隔离，桌面角色只控制入口可见性，降权会清空管理员投影。OPML 在客户端完成有界 XXE-safe 解析、选择和逐项安全发现后，才由 Worker 原子批量提交；目录导出只使用公开字段。D1 不保存文章正文、AI 结果、字幕、本地文件或私人状态。
+
+P0 终验（2026-07-24）沿用上述边界并完成闭环证据：管理员登录后的目录写入、只读快照和审计在真实 workerd/D1 中串行验证；本地抓取/缓存层验证 OPML 安全处理、断网保留、单源故障隔离、schema v2→v7 原位迁移及 10k 条目分页虚拟化。终验不引入新的云端正文存储或客户端授权旁路。
 
 P1-A 已完成：私人状态写入与共享目录版本隔离，180 天清理保护有状态条目，时间线与历史页提供已读、收藏、标签、备注和阅读进度；隔离的真实 WPF 运行测试覆盖长文滚动、键盘焦点、进度写入和重建视图后的 SQLite 恢复。P1-06 已将阅读器图片统一接入 `IArticleImageDownloader`：先读取 `IEntryAssetStore`，未命中时逐跳复用 `FeedNetworkPolicy` 和共享固定-IP 连接工厂，限制 HTTPS/端口、DNS 结果、重定向、并发、单资源、每篇资源数与网络字节；只接受魔数与 MIME 一致的 PNG/JPEG/GIF/BMP/WebP，SVG 和伪装内容不会进入缓存。失败 URL 在短期内返回稳定占位，调用方取消不进入失败缓存。
 
 P1-07 以 Core `IArticleContentExtractor` 建立全文边界：调用方只提交 URL，取得最终 URL、元数据、类型化正文块、警告和提取版本。Infrastructure 下载阶段逐跳复用 `FeedNetworkPolicy`/固定-IP handler，并独立限制总超时、重定向、下载/解压大小、HTML MIME 和同主机并发；编码阶段按 BOM、HTTP charset、HTML meta 和有警告的兼容回退处理。`HtmlAgilityPack` 仅接收已经下载到内存的 HTML，不能访问网络，DOM 深度/节点、正文候选/规模限制和白名单净化由 LenxTool 控制；Core 契约不含第三方类型，P1-08 队列和未来替换实现不需要改变调用方。
 
-P0 终验（2026-07-24）沿用上述边界并完成闭环证据：管理员登录后的目录写入、只读快照和审计在真实 workerd/D1 中串行验证；本地抓取/缓存层验证 OPML 安全处理、断网保留、单源故障隔离、schema v2→v7 原位迁移及 10k 条目分页虚拟化。终验不引入新的云端正文存储或客户端授权旁路。
+P1-08～P1-20 在上述边界上形成闭环：全文、AI 和规则动作都先写可恢复本地任务/运行账本，再在 SQLite 事务外执行网络或模型调用；策略和 ACTIVE 规则使用独立版本快照，Feed 写入成功后才计算确定性计划。七类受限动作由显式处理器按类型领取，稳定幂等键、随机租约和终态阻止重放；`SendToMedia` 只接收经附件分类和逐跳 SSRF 校验的音视频，成功下载后原子登记来源与媒体任务；`Notify` 只写不含正文/URI 的本机收件箱。统一搜索通过 schema v17 的七类投影稳定分页，保留维护通过同一候选 SQL 和有界批次保护私人状态及活动工作。
+
+P1 终验（2026-07-27）以两条独立数据流验证架构边界：真实 schema v17 SQLite 在重开后的离线库中覆盖 10,000 条 Feed、1,000 个收藏、混合媒体和全文/AI/规则/媒体活动引用，查询、搜索、预览和清理均满足既定预算；真实 workerd/D1 覆盖管理员发布目录/AI 策略/规则、普通用户写入 403、版本不变及应用表/字段内容隐私白名单。Release 回归为 .NET 648/648、Worker 52/52、strict typecheck 和 0 警告构建。该记录关闭 P1 架构交付，不替代生产部署与正式签名发布。

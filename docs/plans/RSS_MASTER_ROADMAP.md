@@ -1,7 +1,7 @@
 # 管理员策展 RSS 集成总路线图
 
-状态：P0 已完成，P1 进行中（P1-01～P1-07 与 P1-A 已完成，下一项 P1-08）
-最后核对：2026-07-24
+状态：Gate 0、P0、P1 已完成；下一项 P2-01
+最后核对：2026-07-27
 参考基线：[RSSNext/Folo](https://github.com/RSSNext/Folo) `dev` 分支提交 [`773f1bfe`](https://github.com/RSSNext/Folo/commit/773f1bfe218ac349b9fb9b5cbd982c320f6b414f)
 
 ## 1. 目标与验收边界
@@ -46,12 +46,12 @@ flowchart LR
 
 ## 3. 计划文档与执行顺序
 
-| 顺序 | 文档 | 交付结果 | 开始条件 |
+| 顺序 | 文档 | 交付结果 | 状态 |
 |---:|---|---|---|
-| 0 | [现有未完成项对齐计划](EXISTING_BACKLOG_ALIGNMENT.md) | 收口字幕里程碑，明确旧欠账并入哪个阶段 | 立即开始 |
-| 1 | [P0：管理员订阅与只读目录](RSS_P0_ADMIN_CATALOG.md) | 管理员可管订阅，普通用户可同步、抓取、阅读 | 当前字幕闭环完成；P0 契约任务可提前进行 |
-| 2 | [P1：阅读增强、AI 与自动化](RSS_P1_READING_INTELLIGENCE.md) | 收藏/标签/备注、全文、图片缓存、AI、规则、媒体衔接 | P0 数据模型和权限稳定 |
-| 3 | [P2：内容视图、导出与定时摘要](RSS_P2_VIEWS_INTEGRATIONS.md) | 多内容视图、外部导出、通知和摘要 | P1 统一条目契约稳定 |
+| 0 | [现有未完成项对齐计划](EXISTING_BACKLOG_ALIGNMENT.md) | 收口字幕里程碑，明确旧欠账并入哪个阶段 | 已完成 |
+| 1 | [P0：管理员订阅与只读目录](RSS_P0_ADMIN_CATALOG.md) | 管理员可管订阅，普通用户可同步、抓取、阅读 | 已完成 |
+| 2 | [P1：阅读增强、AI 与自动化](RSS_P1_READING_INTELLIGENCE.md) | 收藏/标签/备注、全文、图片缓存、AI、规则、媒体衔接 | 已完成 |
+| 3 | [P2：内容视图、导出与定时摘要](RSS_P2_VIEWS_INTEGRATIONS.md) | 多内容视图、外部导出、Windows 通知和摘要 | 未开始；下一项 P2-01 |
 
 执行原则：
 
@@ -66,8 +66,9 @@ flowchart LR
 ### 4.1 Worker/D1 权威数据
 
 - `feed_categories`：共享分类、排序、启用状态。
-- `managed_feeds`：Feed URL、站点 URL、显示名、分类、视图类型、抓取间隔、启用状态、目录版本。
-- `automation_policies`：管理员发布的规则定义和版本；P1 才启用执行。
+- `managed_feeds`：Feed URL、站点 URL、显示名、分类、视图类型、全文/刷新/排序/启用策略和 AI 策略覆盖。
+- `feed_catalog_state`：共享目录的单调版本与最后变更。
+- `automation_rule_state`、`automation_rules`、`automation_rule_versions`：规则集版本、当前规则快照和不可变历史版本。
 - 现有 `users`、`refresh_tokens`、`audit_events`：身份、角色和管理员操作审计。
 
 D1 不在本路线默认保存文章正文、AI 结果、字幕、用户文件名或本地路径。
@@ -79,7 +80,10 @@ D1 不在本路线默认保存文章正文、AI 结果、字幕、用户文件�
 - `feed_entries`：Feed 内稳定 ID、规范化 URL、标题、作者、时间、摘要、净化正文、附件元数据和内容哈希。
 - `user_entry_states`：已读、收藏、阅读进度、私人备注。
 - `entry_assets`：图片/封面等离线资源索引。
-- `automation_rules`、`automation_runs`：规则镜像和本地执行记录。
+- `feed_full_text_content`、`feed_full_text_jobs`、`feed_full_text_host_state`：全文缓存、任务租约和主机退避。
+- `feed_ai_automation_jobs`、`feed_ai_automation_daily_entries`：AI 自动任务和每日不同条目计数。
+- `feed_automation_rule_state`、`feed_automation_rules`、`feed_automation_runs`、`feed_automation_action_runs`：ACTIVE 规则镜像、确定性计划、动作租约和执行账本。
+- `feed_media_deliveries`、`app_notifications`：Feed 媒体投递来源和应用内通知收件箱。
 
 不得直接把通用 Feed 塞进现有 `news_articles`：当前模型没有 Feed、分类、附件和阅读状态；`content_hash UNIQUE` 也会错误合并不同来源的转载。旧早报数据必须向后兼容读取或显式迁移，不能靠迁移失败后重建数据库。
 
@@ -109,7 +113,7 @@ D1 不在本路线默认保存文章正文、AI 结果、字幕、用户文件�
 - 文章、图片、音频、视频、通知等内容视图和智能视图。
 - Markdown/Obsidian/Eagle/Zotero/Readwise/Cubox/Readeck/Outline/qBittorrent 等适配器；按统一导出接口逐个交付。
 - 受控自定义 Webhook、目标健康检查、失败重试和审计。
-- 本地每日/每周摘要、定时 AI 任务、Windows 通知。
+- 本地每日/每周摘要、定时 AI 任务、勿扰策略和 Windows 系统通知；P1 已完成的应用内通知收件箱继续复用。
 - 服务端邮件摘要只作为独立隐私决策后的可选扩展，不混入默认路线。
 
 明确不做：Folo 社区/公开个人主页、钱包/打赏/支付、完整 AI Chat、移动端、依赖 Folo API、复制 Folo React/Electron 代码或图标。
@@ -139,7 +143,7 @@ Folo 只作为产品行为和数据流参考；Lenx Tools 使用 C#/.NET/WPF 独
 - 不引入 `@follow-app/client-sdk`，不调用 `api.folo.is`。Folo 的完整后端不在该公开仓库中，不能把客户端源码误当成可自托管服务端。
 - 实现每个外部适配器前单独核对其 API 条款、商标和许可证；本路线不是法律意见。
 
-## 8. 全局发布闸门
+## 8. RSS 阶段交付闸门
 
 每个阶段结束时必须满足：
 
@@ -151,11 +155,13 @@ Folo 只作为产品行为和数据流参考；Lenx Tools 使用 C#/.NET/WPF 独
 - 断网、坏 Feed、超时、429、畸形 XML、巨型响应和恶意 URL 都有自动化或手动证据。
 - 文档、威胁模型、用户指南和测试报告与实际行为同步后才可标记完成。
 
-## 9. 尚需在实现前确认的非阻塞选择
+P1 于 2026-07-27 通过上述本地/自动化闸门：.NET 648/648、Worker 52/52、Worker strict typecheck 和 Release 构建 0 警告/0 错误；真实 SQLite 验证 10,000 条 Feed、1,000 个收藏、混合媒体、离线重开和安全清理，真实 workerd/D1 验证管理员发布、普通用户 403 与内容不落 D1。此结论只关闭 RSS P1，不代表生产 Worker/D1、签名安装包和正式版本发布已完成。
 
-以下选择不阻止先做 P0 契约和数据模型，但必须在对应任务开始前记录：
+## 9. 已落地的实现选择
 
-- 纯展示模式是否禁止普通用户本地收藏/已读；当前推荐允许私人本地状态。
-- 管理员删除 Feed 是软删除保留历史，还是立即隐藏；当前推荐软删除并保留本地条目 30 天。
-- 内网 RSS 是否允许；当前推荐默认拒绝，仅管理员显式配置可信主机后放行。
-- 是否允许云端保存文章元数据/正文以实现完全一致的共享时间线；当前默认不允许。
+P0/P1 已按以下选择实现；未来若改变必须先更新规格与威胁模型：
+
+- 普通用户允许保存本机私人已读、收藏、标签、备注和进度，但不得改变共享目录/规则版本。
+- 管理员删除 Feed 使用软删除；本地条目按默认 180 天策略清理，并保护所有私人状态及活动任务引用。
+- 内网 RSS 默认拒绝；仅部署方显式配置精确可信主机后放行，HTTP 与私网权限独立。
+- 云端不保存文章正文、AI 结果、字幕或本地文件信息；共享 AI/语音内容最多只在请求生命周期中转。

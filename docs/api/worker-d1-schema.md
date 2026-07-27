@@ -1,13 +1,13 @@
 # Worker D1 Schema
 
-状态：P0 目录 schema/读写已实现，P1-13 Worker AI 策略字段已接入
-最后核对：2026-07-25
-权威迁移：[0001_initial.sql](../../cloud/LenxTool.Worker/migrations/0001_initial.sql)、[0002_feed_catalog.sql](../../cloud/LenxTool.Worker/migrations/0002_feed_catalog.sql)、[0003_catalog_mutations.sql](../../cloud/LenxTool.Worker/migrations/0003_catalog_mutations.sql)、[0004_feed_full_text_policy.sql](../../cloud/LenxTool.Worker/migrations/0004_feed_full_text_policy.sql)、[0005_feed_ai_policy.sql](../../cloud/LenxTool.Worker/migrations/0005_feed_ai_policy.sql)
+状态：P0 目录、P1 AI 策略和受限自动化规则 schema/读写均已实现
+最后核对：2026-07-27
+权威迁移：[0001_initial.sql](../../cloud/LenxTool.Worker/migrations/0001_initial.sql)、[0002_feed_catalog.sql](../../cloud/LenxTool.Worker/migrations/0002_feed_catalog.sql)、[0003_catalog_mutations.sql](../../cloud/LenxTool.Worker/migrations/0003_catalog_mutations.sql)、[0004_feed_full_text_policy.sql](../../cloud/LenxTool.Worker/migrations/0004_feed_full_text_policy.sql)、[0005_feed_ai_policy.sql](../../cloud/LenxTool.Worker/migrations/0005_feed_ai_policy.sql)、[0006_automation_rules.sql](../../cloud/LenxTool.Worker/migrations/0006_automation_rules.sql)
 接口语义：[Worker v1 API 契约](worker-v1.md)
 
 ## 1. 数据边界
 
-D1 是账号和管理员发布的共享订阅配置的权威来源。它保存账号、会话摘要、额度、审计、分类、Feed 配置和目录版本，但不保存：
+D1 是账号和管理员发布的共享订阅配置/受限规则的权威来源。它保存账号、会话摘要、额度、审计、分类、Feed/AI 策略、目录版本和自动化规则/版本，但不保存：
 
 - RSS/Atom/XML/HTML 响应或文章标题、摘要、正文、附件正文。
 - AI 结果、字幕、音视频、用户文件名、Windows 路径或 DPAPI 数据。
@@ -22,8 +22,9 @@ D1 是账号和管理员发布的共享订阅配置的权威来源。它保存�
 - `0002_feed_catalog.sql` 只做加法，创建目录状态、分类、Managed Feed 和索引，不改写 0001 数据。
 - `0003_catalog_mutations.sql` 增加条件目录写入标记、审计版本、幂等成功响应和事务 guard；不保存原始请求正文、凭据或文章内容。
 - `0004_feed_full_text_policy.sql` 增加受限的全文获取枚举；`0005_feed_ai_policy.sql` 为分类和 Feed 增加显式 AI 策略覆盖、目标语言、每日条目和并发上限，自动开关默认继承全局关闭值。
+- `0006_automation_rules.sql` 增加独立规则集状态、当前规则和不可变版本历史；只保存受限定义与发布元数据，不保存匹配条目或执行结果。
 - 测试启动器先应用 0001、写入旧 schema 哨兵行，再应用全部迁移，从而验证带数据升级；再次调用迁移流程不会重复执行已记录文件。
-- Wrangler 应用某个迁移失败时会回滚该迁移，并保留之前成功的迁移。生产恢复遵循第 6 节，不提交手写“向下迁移”去伪造 `d1_migrations` 历史。
+- Wrangler 应用某个迁移失败时会回滚该迁移，并保留之前成功的迁移。生产恢复遵循第 7 节，不提交手写“向下迁移”去伪造 `d1_migrations` 历史。
 
 依据：[Cloudflare D1 migrations](https://developers.cloudflare.com/d1/reference/migrations/)、[Wrangler D1 migration commands](https://developers.cloudflare.com/d1/wrangler-commands/#d1-migrations-apply)、[Workers D1 test API](https://developers.cloudflare.com/workers/testing/vitest-integration/test-apis/#d1)。
 
@@ -93,7 +94,16 @@ D1 默认在查询和迁移中强制外键。分类关系使用 `RESTRICT`，因
 - `audit_events.catalog_version` 记录成功目录操作对应的全局版本；审计仍只含操作者、目标、动作、请求 ID、脱敏 IP 摘要和时间。
 - `catalog_mutation_guards` 是事务内临时约束表。成功 batch 在提交前删除 guard 行；任何业务写入、审计或幂等结果缺失都会触发约束失败并回滚整个 batch，因此正常静态状态下该表为空。
 
-## 4. 数据库约束与应用约束
+## 4. 自动化规则表
+
+- `automation_rule_state` 只有 `singleton_id=1` 一行，保存非负 `rule_set_version`、更新时间和事务内 `last_mutation_id`；它与目录版本完全独立。
+- `automation_rules` 保存当前规则版本、名称、优先级、冲突顺序、启用状态、ALL/ANY、条件/动作 JSON、创建/更新管理员和时间。数据库限制名称 1～120、优先级/冲突顺序 0～1000、JSON 有效性和最大存储长度；应用层继续验证字段/操作符组合、数量、文本、正则和动作载荷。
+- `automation_rule_versions` 以 `(rule_id, version)` 为主键保存完整不可变快照、发布管理员与时间；规则删除会级联历史，但 v1 API 不提供删除，只允许发布停用版本。
+- 当前规则索引按 `is_enabled, priority DESC, conflict_order, id` 支持 ACTIVE/ALL 稳定快照；历史索引按发布时间、规则 ID 和版本支持审计诊断。
+
+每次成功 POST/PATCH 在同一 D1 batch 中比较并递增规则集版本、写当前规则、追加不可变版本、记录最小审计和幂等成功结果。失败、旧版本、普通用户 403 或幂等重放不会增加版本。条件/动作 JSON 仅保存管理员发布的有界规则配置，不会自动写入匹配文章、AI 结果、字幕或客户端路径；Worker 在落库前使用字段白名单和长度/数量上限重新规范化。
+
+## 5. 数据库约束与应用约束
 
 数据库直接保证：
 
@@ -112,14 +122,15 @@ P0-04 路由保证：
 
 Schema 约束是最后防线，不替代 API 边界校验。
 
-## 5. 索引与查询形状
+## 6. 索引与查询形状
 
 - 分类和 Feed 的活动唯一索引同时承担重复检测。
 - `ix_*_catalog_order` 支持按分类、启用状态、排序号和 ID 生成确定性目录。
 - `ix_*_version` 支持版本相关诊断和后续增量逻辑。
 - P0 v1 返回有界原子快照，不为目录增加偏移量分页表或文章表。
+- P1 规则返回最多 100 条、4 MiB 的有界原子快照，不建立匹配条目或动作执行结果表。
 
-## 6. 发布与恢复
+## 7. 发布与恢复
 
 在 `cloud/LenxTool.Worker` 中：
 
