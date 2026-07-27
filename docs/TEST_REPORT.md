@@ -8,15 +8,17 @@
 
 | 测试组 | 结果 |
 |---|---:|
-| LenxTool.Core.Tests | 96 passed |
+| LenxTool.Core.Tests | 116 passed |
 | LenxTool.Infrastructure.Tests | 354 passed |
-| LenxTool.App.Tests | 198 passed |
+| LenxTool.App.Tests | 197 passed / 1 environment-blocked |
 | Cloudflare Worker Vitest | 52 passed |
 | Worker TypeScript strict typecheck | passed |
 | .NET build warnings | 0 |
 | NuGet vulnerable packages | 0 detected |
 
-本轮执行三个 .NET Release 测试项目：Core 96、Infrastructure 354、App/WPF 198，共 648/648 通过且无跳过；全解决方案 Release build 为 0 警告/0 错误。Worker 严格 typecheck 和官方 workerd/D1 Vitest 52/52 通过。P1 最终检查点新增大规模离线 SQLite 与 Worker/D1 权限/隐私两组端到端护栏；真实 WPF 运行测试在允许原生 GUI 消息循环的环境中通过。
+本轮 P2-01 的聚焦测试 20/20、Core 116/116 和 Infrastructure 354/354 通过；全解决方案 Release build 为 0 警告/0 错误。App/WPF 为 197/198：唯一未通过项是既有 `LongArticleRestoresPrivateStateAcrossRealWpfViewRecreation` 在受限环境中等待真实 WPF 线程 20 秒后超时，同时后台日志写入 Windows Event Log 被系统拒绝；该测试不引用本次新增的 Core 分类器。Worker 严格 typecheck、官方 workerd/D1 Vitest 52/52 和 NuGet 漏洞扫描 0 项均为 P1 最终检查点的最近证据，本片未重跑。
+
+P2-01 新增 20 项 Core 参数化场景：`EntryViewKind` 覆盖 Article、Picture、Audio、Video 与 Notification；单独的可空显式覆盖优先于 enclosure 和正文主媒体，非法覆盖回退 Article。自动分类仅接受 URL 允许且 `Verified` 的既有附件分类结果，按规范化 Feed 声明顺序选择首个可信 enclosure，再读取正文提取层提供的可信主媒体；URL 扩展名或 MIME 单边证据、冲突/受阻/Unknown、空集合和缺失字段均回退 Article，同一输入重复调用保持一致。现有必填且默认 Article 的目录 `FeedViewKind` 没有被误用为 Auto 哨兵，也未发生数据库、Worker 或 UI 变更。
 
 P0-08 覆盖 4 项 SQLite 集成场景并同步既有 schema 断言：新建库创建目录状态、分类、Feed、抓取状态、条目、索引和搜索映射；真实 schema v2 哨兵数据经 v3/v4 原位升级后仍可由现有仓储读取；迁移对象冲突时完整回滚且版本停留在 v3；相同外部 ID、URL 和内容哈希可存在于不同 Feed，同一 Feed 内重复外部 ID 被约束拒绝。既有包含未 checkpoint WAL 提交的一致性备份测试继续通过。
 

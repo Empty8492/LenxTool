@@ -1,7 +1,7 @@
 # P2 详细计划：内容视图、导出与定时摘要
 
-状态：已规划，全部任务未开始
-最后核对：2026-07-21
+状态：P2-01 已完成；下一步为 P2-02
+最后核对：2026-07-27
 开始条件：P1 最终检查点通过，统一 `FeedEntry`、私人状态、规则和搜索契约稳定。
 参考项目：RSSNext/Folo（内容视图、条目动作、AI 定时任务的行为参考），LenxTool 当前 WPF/DPAPI/媒体/更新与审计基础
 
@@ -25,13 +25,15 @@ P2 不引入 Folo 社区、关注关系、钱包、支付、移动端或完整 A
 
 **验收：**
 
-- [ ] 支持 Article、Picture、Audio、Video、Notification；未知值回退 Article。
-- [ ] 不仅凭 URL 扩展名信任媒体类型。
-- [ ] 同一输入每次分类一致，可由 Feed 管理策略覆盖。
+- [x] 支持 Article、Picture、Audio、Video、Notification；未知值回退 Article。
+- [x] 不仅凭 URL 扩展名信任媒体类型。
+- [x] 同一输入每次分类一致，可由 Feed 管理策略覆盖。
 
 **验证：** 多附件、MIME 冲突、缺字段和管理员覆盖参数化测试。
 
 **参考：** Folo [`tabs.tsx`](https://github.com/RSSNext/Folo/blob/773f1bfe218ac349b9fb9b5cbd982c320f6b414f/packages/internal/constants/src/tabs.tsx) 的视图分类；LenxTool 采用更小集合。
+
+**完成记录（2026-07-27）：** Core 新增独立的 `EntryViewKind` 与纯函数 `EntryViewClassifier`。分类器只接受单独跟踪的可空显式覆盖；覆盖存在时五类值均可强制生效，非法枚举安全回退 Article。没有覆盖时，分类器按规范化 Feed 声明顺序选择首个 URL 允许且 MIME/扩展一致验证的 enclosure，随后才接受正文提取层提供的同等级结构化主媒体信号，最后回退 Article；仅 URL 扩展名、仅 MIME、冲突类型、受阻 URL 和 Unknown 都不能提升为媒体视图。此契约刻意不把既有必填、默认 `Article` 的 `FeedViewKind` 当作自动/显式哨兵，也不修改目录 schema；后续接入必须单独保存显式覆盖状态，不能把历史默认 `Article` 直接传入覆盖参数。参数化测试覆盖五类覆盖、非法值、三类媒体、多附件顺序、MIME/扩展单边证据、冲突/受阻/缺失输入、正文主媒体和重复调用确定性。聚焦 P2-01 为 20/20，Core 全量 116/116、Infrastructure 354/354 与 Release build 0 警告/0 错误通过；App/WPF 197/198，唯一未通过项是受限环境中既有真实 WPF 验收线程超时并伴随 Windows Event Log 写权限拒绝，与本次 Core-only 改动无调用关系。
 
 ### P2-02：图片流视图
 
