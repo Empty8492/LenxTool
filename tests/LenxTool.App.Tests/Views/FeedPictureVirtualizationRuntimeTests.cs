@@ -19,18 +19,13 @@ public sealed class FeedPictureVirtualizationRuntimeTests
     {
         Exception? failure = null;
         string stage = "starting";
-        var thread = new Thread(() =>
+        WpfRuntimeHost.Run(() =>
         {
-            LenxTool.App.App? application = null;
             Window? window = null;
             try
             {
-                application = new LenxTool.App.App();
-                application.InitializeComponent();
-                application.ShutdownMode = ShutdownMode.OnExplicitShutdown;
                 SynchronizationContext.SetSynchronizationContext(
                     new DispatcherSynchronizationContext(Dispatcher.CurrentDispatcher));
-
                 var pictureFeed = new PictureFeedData();
                 stage = "creating items";
                 FeedContentItem[] items = Enumerable.Range(0, 1000)
@@ -121,17 +116,12 @@ public sealed class FeedPictureVirtualizationRuntimeTests
             {
                 stage = "closing window";
                 window?.Close();
-                stage = "shutting down application";
-                application?.Shutdown();
                 SynchronizationContext.SetSynchronizationContext(null);
                 stage = "finished";
             }
-        });
-        thread.SetApartmentState(ApartmentState.STA);
-        thread.Start();
-        Assert.True(
-            thread.Join(TimeSpan.FromSeconds(30)),
-            $"Real picture-view virtualization acceptance thread timed out at stage: {stage}.");
+            },
+            TimeSpan.FromSeconds(30),
+            () => $"Real picture-view virtualization acceptance timed out at stage: {stage}.");
         if (failure is not null)
         {
             throw new Xunit.Sdk.XunitException(failure.ToString());

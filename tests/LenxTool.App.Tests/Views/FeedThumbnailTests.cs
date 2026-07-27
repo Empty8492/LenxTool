@@ -17,7 +17,7 @@ public sealed class FeedThumbnailTests
     public void RecycledThumbnailCancelsOldRequestAndUsesBoundedDecode()
     {
         Exception? failure = null;
-        var thread = new Thread(() =>
+        WpfRuntimeHost.Run(() =>
         {
             Window? window = null;
             try
@@ -77,10 +77,7 @@ public sealed class FeedThumbnailTests
             {
                 window?.Close();
             }
-        });
-        thread.SetApartmentState(ApartmentState.STA);
-        thread.Start();
-        Assert.True(thread.Join(TimeSpan.FromSeconds(8)), "Thumbnail WPF thread timed out.");
+        }, TimeSpan.FromSeconds(8));
         if (failure is not null)
         {
             throw new Xunit.Sdk.XunitException(failure.ToString());

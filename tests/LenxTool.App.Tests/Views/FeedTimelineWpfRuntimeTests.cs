@@ -21,6 +21,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace LenxTool.App.Tests.Views;
 
+[Collection(WpfRuntimeGroup.Name)]
 public sealed class FeedTimelineWpfRuntimeTests
 {
     [Fact]
@@ -31,9 +32,9 @@ public sealed class FeedTimelineWpfRuntimeTests
             "Lenx Tools WPF timeline tests",
             Guid.NewGuid().ToString("N"));
         Exception? failure = null;
-        var thread = new Thread(() =>
+        string stage = "starting";
+        WpfRuntimeHost.Run(() =>
         {
-            LenxTool.App.App? application = null;
             Window? window = null;
             Window? reopenedWindow = null;
             Window? cachedImageWindow = null;
@@ -43,6 +44,8 @@ public sealed class FeedTimelineWpfRuntimeTests
             NewsCenterViewModel? reopenedViewModel = null;
             try
             {
+                SynchronizationContext.SetSynchronizationContext(null);
+                stage = "initializing database";
                 var paths = new AppPaths(testRoot);
                 using var database = new SqliteDatabase(
                     paths,
@@ -97,12 +100,9 @@ public sealed class FeedTimelineWpfRuntimeTests
                     [tag.Id],
                     CancellationToken.None).GetAwaiter().GetResult();
 
-                application = new LenxTool.App.App();
-                application.InitializeComponent();
-                application.ShutdownMode = ShutdownMode.OnExplicitShutdown;
+                stage = "checking cached image";
                 SynchronizationContext.SetSynchronizationContext(
                     new DispatcherSynchronizationContext(Dispatcher.CurrentDispatcher));
-
                 var cachedArticleView = new RichArticleView
                 {
                     Article = CreateImageArticle(
@@ -185,6 +185,7 @@ public sealed class FeedTimelineWpfRuntimeTests
                 missingImageWindow.Close();
                 missingImageWindow = null;
 
+                stage = "checking filters";
                 viewModel = CreateViewModel(states, favorites);
                 var filtersView = new FeedTimelineFiltersView
                 {
@@ -216,6 +217,7 @@ public sealed class FeedTimelineWpfRuntimeTests
                 filtersWindow.Close();
                 filtersWindow = null;
 
+                stage = "opening timeline";
                 FeedTimelineItem item = new(
                     entry,
                     "Runtime Feed",
@@ -258,6 +260,7 @@ public sealed class FeedTimelineWpfRuntimeTests
                     TimeSpan.FromSeconds(5));
                 Assert.InRange(ReadProgress(scrollViewer), 50, 60);
 
+                stage = "writing reading progress";
                 TextBox noteEditor = FindDescendant<TextBox>(
                     view,
                     element => AutomationProperties.GetName(element) == "Feed 私人备注");
@@ -286,6 +289,7 @@ public sealed class FeedTimelineWpfRuntimeTests
                 viewModel = null;
                 PumpDispatcher();
 
+                stage = "reopening timeline";
                 FavoriteItem reopenedFavorite = Assert.IsType<FavoriteItem>(
                     favorites.GetAsync(
                         "feed_entry",
@@ -334,6 +338,7 @@ public sealed class FeedTimelineWpfRuntimeTests
                 Assert.Equal("重启后继续阅读", reopenedViewModel.SelectedTimelineNote);
                 Assert.Equal(tag.Id, Assert.Single(reopenedViewModel.SelectedTimelineTags).Id);
                 Assert.Equal(tag.Id, Assert.Single(reopenedTags).Id);
+                stage = "completed assertions";
             }
             catch (Exception exception)
             {
@@ -348,13 +353,11 @@ public sealed class FeedTimelineWpfRuntimeTests
                 window?.Close();
                 reopenedViewModel?.Dispose();
                 viewModel?.Dispose();
-                application?.Shutdown();
                 SynchronizationContext.SetSynchronizationContext(null);
             }
-        });
-        thread.SetApartmentState(ApartmentState.STA);
-        thread.Start();
-        Assert.True(thread.Join(TimeSpan.FromSeconds(20)), "WPF acceptance thread timed out.");
+            },
+            TimeSpan.FromSeconds(20),
+            () => $"WPF timeline acceptance timed out at stage: {stage}.");
 
         SqliteConnection.ClearAllPools();
         if (Directory.Exists(testRoot))
