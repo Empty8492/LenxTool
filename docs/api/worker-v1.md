@@ -155,6 +155,7 @@ Idempotency-Key: 018f87d4-0f7e-7ad0-9c06-b285e52e7664
   "siteUrl": "https://example.com/",
   "categoryId": "4a5feea7-...",
   "viewKind": "ARTICLE",
+  "isViewKindExplicit": false,
   "fullTextPolicy": "NONE",
   "refreshIntervalMinutes": 60,
   "sortOrder": 100,
@@ -173,7 +174,7 @@ Idempotency-Key: 018f87d4-0f7e-7ad0-9c06-b285e52e7664
 }
 ```
 
-- `viewKind` 的 v1 值为 `ARTICLE`、`PICTURE`、`AUDIO`、`VIDEO`、`NOTIFICATION`；旧桌面端遇到未知值必须回退 `ARTICLE`。
+- `viewKind` 的 v1 值为 `ARTICLE`、`PICTURE`、`AUDIO`、`VIDEO`、`NOTIFICATION`；`isViewKindExplicit=false` 表示由条目媒体自动识别，`true` 表示强制采用 `viewKind`，因此强制 `ARTICLE` 不再与自动模式混淆。缺失该布尔字段按 `false` 兼容。
 - `aiPolicy` 是分类或 Feed 对全局/上级策略的覆盖：三个开关只能是 `INHERIT`、`ENABLED`、`DISABLED`；目标语言可为 `zh-Hans`、`en`、`ja`、`ko` 或 null；每日条目上限可为 1～1,000 或 null，并发上限可为 1～4 或 null。null/`INHERIT` 表示继续向上解析，不表示自动启用。
 - 管理端只提交 `originalUrl`；`normalizedUrl` 由服务端生成并用于重复检测。目录写路由只做语法、方案和规范化校验，不发起网络请求。DNS、固定地址连接、重定向、响应/解压大小、MIME 和 XML 安全验证由桌面 P0-11 发现服务执行；P0-15 管理界面在提交写 API 前调用该服务。
 - 普通目录响应只含未删除、已启用且分类已启用的 Feed；它不含抓取结果、正文、健康详情或用户私人状态。
@@ -376,6 +377,7 @@ Content-Type: application/json
   "siteUrl": "https://example.com/",
   "categoryId": "4a5feea7-...",
   "viewKind": "ARTICLE",
+  "isViewKindExplicit": false,
   "refreshIntervalMinutes": 60,
   "sortOrder": 100,
   "isEnabled": true
@@ -385,7 +387,8 @@ Content-Type: application/json
 - `originalUrl` 必填，绝对 HTTPS URL，最长 2,048；默认拒绝userinfo、fragment、非 443 显式端口和控制字符。未来只有显式可信主机策略可允许 HTTP。
 - `displayName` 去除首尾空白后 1～160 个字符；`siteUrl` 可为 null，否则为最长 2,048 的绝对 HTTPS URL。
 - `categoryId` 可为 null；非 null 时必须指向未删除分类。不能启用位于停用分类下的 Feed。
-- `viewKind` 必须是第 2.3 节枚举；`refreshIntervalMinutes` 为 5～1,440；`sortOrder` 为 0～1,000,000。
+- `viewKind` 必须是第 2.3 节枚举；`isViewKindExplicit` 必须是布尔值；`refreshIntervalMinutes` 为 5～1,440；`sortOrder` 为 0～1,000,000。
+- 兼容旧 v1 客户端：显式提交 `isViewKindExplicit` 时严格采用该布尔值；字段缺失但提交了 `viewKind` 时按显式覆盖处理。创建时两者都缺失表示自动 `ARTICLE`；PATCH 两者都缺失则保持原状态。JSON `null` 不是合法布尔值。
 - `normalizedUrl` 在所有未删除 Feed 中唯一；冲突返回 `409 DUPLICATE_FEED`，不返回冲突 Feed 的私有信息。
 - 返回 201：`{ "catalogVersion": 42, "feed": { ... } }`。
 
@@ -423,6 +426,7 @@ Content-Type: application/json
         "displayName": "Example",
         "categoryRef": { "operationId": "category-1" },
         "viewKind": "ARTICLE",
+        "isViewKindExplicit": false,
         "refreshIntervalMinutes": 60,
         "sortOrder": 100,
         "isEnabled": true

@@ -10,7 +10,7 @@ public sealed partial class SqliteDatabase(
     AppPaths paths,
     ILogger<SqliteDatabase> logger) : IDisposable
 {
-    private const int CurrentSchemaVersion = 17;
+    private const int CurrentSchemaVersion = 18;
     private readonly SemaphoreSlim _initializationGate = new(1, 1);
     private bool _initialized;
     private bool _disposed;
@@ -350,6 +350,24 @@ public sealed partial class SqliteDatabase(
                 command.Parameters.AddWithValue(
                     "$checksum",
                     "lenx-schema-v17-unified-content-search");
+                await command.ExecuteNonQueryAsync(cancellationToken)
+                    .ConfigureAwait(false);
+                version = 17;
+            }
+
+            if (version < 18)
+            {
+                command.CommandText = MigrationEighteenSql;
+                command.Parameters.Clear();
+                await command.ExecuteNonQueryAsync(cancellationToken)
+                    .ConfigureAwait(false);
+                command.CommandText = "INSERT INTO schema_versions(version, applied_at, checksum) VALUES (18, $appliedAt, $checksum);";
+                command.Parameters.AddWithValue(
+                    "$appliedAt",
+                    DateTimeOffset.UtcNow.ToString("O"));
+                command.Parameters.AddWithValue(
+                    "$checksum",
+                    "lenx-schema-v18-explicit-feed-view-kind");
                 await command.ExecuteNonQueryAsync(cancellationToken)
                     .ConfigureAwait(false);
             }

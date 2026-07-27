@@ -10,7 +10,7 @@ namespace LenxTool.App.ViewModels;
 
 public sealed record FeedCategoryChoice(string? Id, string Name, bool IsEnabled);
 
-public sealed record FeedViewKindChoice(FeedViewKind Kind, string Label);
+public sealed record FeedViewKindChoice(FeedViewKind? Kind, string Label);
 public sealed record FeedFullTextPolicyChoice(FeedFullTextPolicy Policy, string Label);
 
 public sealed partial class FeedAdminViewModel : PageViewModel
@@ -81,6 +81,7 @@ public sealed partial class FeedAdminViewModel : PageViewModel
         CategoryChoices = [];
         ViewKindChoices =
         [
+            new(null, "自动识别"),
             new(FeedViewKind.Article, "文章"),
             new(FeedViewKind.Picture, "图片"),
             new(FeedViewKind.Audio, "音频"),

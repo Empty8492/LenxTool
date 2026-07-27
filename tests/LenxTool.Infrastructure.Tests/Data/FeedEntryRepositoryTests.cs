@@ -1,4 +1,5 @@
 using System.Text;
+using System.Diagnostics;
 using LenxTool.Core.Models;
 using LenxTool.Infrastructure.Data;
 using LenxTool.Infrastructure.Networking;
@@ -142,6 +143,203 @@ public sealed class FeedEntryRepositoryTests : IDisposable
             ["older", "other"],
             favorites.Items.Select(item => item.ExternalId).Order().ToArray());
         Assert.Equal(["older"], tagged.Items.Select(item => item.ExternalId));
+    }
+
+    [Fact]
+    public async Task ViewKindQueryFiltersInsidePagingAndReturnsRawContinuation()
+    {
+        using SqliteDatabase database = await CreateDatabaseAsync();
+        var repository = new FeedEntryRepository(database);
+        FeedEntry article = Entry("article", "Article", "article", Now);
+        FeedEntry newestPicture = Entry(
+            "picture-new",
+            "Newest picture",
+            "picture",
+            Now.AddMinutes(-1)) with
+        {
+            Enclosures =
+            [
+                new(
+                    "https://cdn.example/picture-new.jpg",
+                    "image/jpeg",
+                    128,
+                    "Newest picture")
+            ]
+        };
+        FeedEntry audio = Entry(
+            "audio",
+            "Audio",
+            "audio",
+            Now.AddMinutes(-2)) with
+        {
+            Enclosures =
+            [
+                new(
+                    "https://cdn.example/audio.mp3",
+                    "audio/mpeg",
+                    256,
+                    "Audio")
+            ]
+        };
+        FeedEntry olderPicture = Entry(
+            "picture-old",
+            "Older picture",
+            "picture",
+            Now.AddMinutes(-3)) with
+        {
+            Enclosures =
+            [
+                new(
+                    "https://cdn.example/picture-old.png",
+                    "image/png",
+                    512,
+                    "Older picture")
+            ]
+        };
+        FeedEntry oldestArticle = Entry(
+            "article-old",
+            "Old article",
+            "article",
+            Now.AddMinutes(-4));
+        await repository.UpsertAsync(
+            FeedId,
+            [article, newestPicture, audio, olderPicture, oldestArticle],
+            CancellationToken.None);
+
+        FeedEntryPage first = await repository.QueryAsync(
+            Query(limit: 1, viewKind: EntryViewKind.Picture),
+            CancellationToken.None);
+        FeedEntryPage second = await repository.QueryAsync(
+            Query(
+                offset: Assert.IsType<int>(first.NextOffset),
+                limit: 1,
+                viewKind: EntryViewKind.Picture),
+            CancellationToken.None);
+
+        Assert.Equal(["picture-new"], first.Items.Select(item => item.ExternalId));
+        Assert.True(first.HasMore);
+        Assert.Equal(3, first.NextOffset);
+        Assert.Equal(["picture-old"], second.Items.Select(item => item.ExternalId));
+        Assert.False(second.HasMore);
+        Assert.Equal(5, second.NextOffset);
+    }
+
+    [Fact]
+    public async Task NonArticleCatalogViewActsAsExplicitEntryViewOverride()
+    {
+        using SqliteDatabase database = await CreateDatabaseAsync();
+        var repository = new FeedEntryRepository(database);
+        await new FeedCatalogRepository(database).ReplaceAsync(new(
+            new(2, FeedCatalogScope.Active, Now, Now),
+            [
+                new(CategoryId, "Technology", "technology", 1, true, 2, Now, Now),
+                new(SecondCategoryId, "Science", "science", 2, true, 2, Now, Now)
+            ],
+            [
+                CatalogFeed(FeedId, CategoryId, 1),
+                CatalogFeed(SecondFeedId, SecondCategoryId, 2) with
+                {
+                    ViewKind = FeedViewKind.Picture,
+                    IsViewKindExplicit = true,
+                    Version = 2
+                }
+            ]), CancellationToken.None);
+        FeedEntry overridden = Entry(
+            "catalog-picture",
+            "Catalog picture",
+            "No enclosure is required for an explicit picture feed.",
+            Now,
+            SecondFeedId);
+        await repository.UpsertAsync(
+            SecondFeedId,
+            [overridden],
+            CancellationToken.None);
+
+        FeedEntryPage page = await repository.QueryAsync(
+            Query(viewKind: EntryViewKind.Picture),
+            CancellationToken.None);
+
+        Assert.Equal(["catalog-picture"], page.Items.Select(item => item.ExternalId));
+    }
+
+    [Fact]
+    public async Task ExplicitArticleOverridePreventsMediaPromotion()
+    {
+        using SqliteDatabase database = await CreateDatabaseAsync();
+        var repository = new FeedEntryRepository(database);
+        await new FeedCatalogRepository(database).ReplaceAsync(new(
+            new(2, FeedCatalogScope.Active, Now, Now),
+            [new(CategoryId, "Technology", "technology", 1, true, 2, Now, Now)],
+            [CatalogFeed(FeedId, CategoryId, 2) with
+            {
+                ViewKind = FeedViewKind.Article,
+                IsViewKindExplicit = true
+            }]), CancellationToken.None);
+        FeedEntry mediaEntry = Entry("forced-article", "Forced article", "article", Now) with
+        {
+            Enclosures = [new("https://cdn.example/forced.jpg", "image/jpeg", 128, "Image")]
+        };
+        await repository.UpsertAsync(FeedId, [mediaEntry], CancellationToken.None);
+
+        FeedEntryPage articles = await repository.QueryAsync(
+            Query(viewKind: EntryViewKind.Article),
+            CancellationToken.None);
+        FeedEntryPage pictures = await repository.QueryAsync(
+            Query(viewKind: EntryViewKind.Picture),
+            CancellationToken.None);
+
+        Assert.Contains(articles.Items, item => item.ExternalId == "forced-article");
+        Assert.DoesNotContain(pictures.Items, item => item.ExternalId == "forced-article");
+    }
+
+    [Fact]
+    public async Task ViewKindPagingScansOneThousandMixedEntriesWithoutDuplicates()
+    {
+        using SqliteDatabase database = await CreateDatabaseAsync();
+        var repository = new FeedEntryRepository(database);
+        FeedEntry[] mixed = Enumerable.Range(0, 1_000)
+            .Select(index => Entry(
+                $"mixed-{index:D4}",
+                $"Mixed {index:D4}",
+                "mixed",
+                Now.AddMinutes(-index)) with
+            {
+                Enclosures = index % 4 == 0
+                    ?
+                    [
+                        new(
+                            $"https://cdn.example/mixed-{index:D4}.jpg",
+                            "image/jpeg",
+                            128,
+                            $"Picture {index:D4}")
+                    ]
+                    : []
+            })
+            .ToArray();
+        await repository.UpsertAsync(FeedId, mixed, CancellationToken.None);
+
+        var stopwatch = Stopwatch.StartNew();
+        var ids = new List<string>();
+        int offset = 0;
+        while (true)
+        {
+            FeedEntryPage page = await repository.QueryAsync(
+                Query(
+                    offset: offset,
+                    limit: 50,
+                    viewKind: EntryViewKind.Picture),
+                CancellationToken.None);
+            ids.AddRange(page.Items.Select(item => item.Id));
+            if (!page.HasMore) break;
+            offset = Assert.IsType<int>(page.NextOffset);
+        }
+        stopwatch.Stop();
+
+        Assert.Equal(250, ids.Count);
+        Assert.Equal(250, ids.Distinct(StringComparer.Ordinal).Count());
+        Assert.True(
+            stopwatch.Elapsed < TimeSpan.FromSeconds(2),
+            $"Mixed view paging took {stopwatch.Elapsed}.");
     }
 
     [Fact]
@@ -473,7 +671,8 @@ public sealed class FeedEntryRepositoryTests : IDisposable
         bool favoritesOnly = false,
         string? tagId = null,
         string localProfile = "default",
-        bool includeHidden = false) => new(
+        bool includeHidden = false,
+        EntryViewKind? viewKind = null) => new(
             searchText,
             feedId,
             categoryId,
@@ -486,5 +685,6 @@ public sealed class FeedEntryRepositoryTests : IDisposable
             favoritesOnly,
             tagId,
             localProfile,
-            includeHidden);
+            includeHidden,
+            viewKind);
 }

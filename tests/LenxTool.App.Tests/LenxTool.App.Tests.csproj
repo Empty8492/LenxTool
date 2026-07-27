@@ -38,6 +38,12 @@
     <None Include="..\..\src\LenxTool.App\Views\FeedTimelineBrowserView.xaml"
           Link="Fixtures\FeedTimelineBrowserView.xaml"
           CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\src\LenxTool.App\Views\FeedTimelineView.xaml"
+          Link="Fixtures\FeedTimelineView.xaml"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\src\LenxTool.App\Views\FeedPictureView.xaml"
+          Link="Fixtures\FeedPictureView.xaml"
+          CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\src\LenxTool.App\Views\FeedHealthView.xaml"
           Link="Fixtures\FeedHealthView.xaml"
           CopyToOutputDirectory="PreserveNewest" />

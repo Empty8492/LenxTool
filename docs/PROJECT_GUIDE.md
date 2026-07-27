@@ -231,10 +231,11 @@ npm.cmd test -- --run
 - P0 最终验收第二片已完成：完整 .NET 310/310、Worker 39/39、typecheck 和 Release 0 警告/0 错误复核了 OPML 导入/导出、断网缓存、坏源隔离、schema v2 原位升级和 10k 条目首屏性能；五份终验文档已同步，P0 已关闭。
 - P1 最终检查点已完成：真实 schema v17 SQLite 在数据库重开后的离线场景中装载 10,000 条 Feed、1,000 个收藏和混合音频/视频/图片，收藏分页与七类统一搜索各自满足 2 秒预算；清理预览满足 10 秒预算，8,996 个无保护旧条目的有界清理满足 60 秒预算并保留 1,000 个收藏和 4 个全文/AI/规则/媒体活动条目。真实 workerd/D1 验证管理员发布目录、AI 策略与规则，普通用户三类写入均为 403 且版本不变，并逐表确认 D1 不含正文、AI 结果、字幕或本地路径字段/哨兵值。当前 Release 回归为 .NET 648/648（Core 96、Infrastructure 354、App/WPF 198）、Worker 52/52、Worker strict typecheck 和全解决方案构建 0 警告/0 错误。
 - P2-01 内容类型分类器已完成：Core 新增每条内容独立的 `EntryViewKind` 和确定性分类器，优先使用单独跟踪的管理员显式覆盖，再按 Feed 声明顺序选择首个 URL 允许且类型完整验证的 enclosure，随后接受正文提取层的结构化主媒体信号，最后回退 Article。仅 URL 扩展名、仅 MIME、冲突类型、受阻 URL、Unknown 和非法覆盖值都不能产生不可信媒体分类。既有目录 `FeedViewKind` 必填且历史默认 `Article`，不能区分“显式文章”与“自动分类”，因此本片不修改目录 schema，也不把该默认值直接当覆盖；后续目录/UI 接入必须新增单独的显式覆盖状态。
+- P2-02 图片流已完成：本地 schema v18 与 Worker/D1 0007 增加独立视图显式覆盖状态，迁移保留历史非 Article 覆盖并兼容旧 v1 客户端；管理页可选择自动识别或强制五类视图。图片页按首次切换懒加载，支持来源/分类/日期/收藏筛选、原始 continuation 分页、Enter 安全打开和三列虚拟化。缩略图沿安全下载边界流式写缓存、以有界缓冲校验后返回文件流并按 360 像素解码，容器复用会取消旧请求；真实图片页装载 1,000 张图片后，首尾滚动和 200% WPF 布局缩放仅实现可见行。
 
 ### 10.2 下一里程碑
 
-Gate 0 字幕闭环、P0“管理员策展 RSS”、P1“阅读增强、AI 与自动化”和 P2-01 内容类型分类器均已完成。下一里程碑为 P2-02 图片流视图；P1/P2 源码进度不等于正式签名发布完成。
+Gate 0 字幕闭环、P0“管理员策展 RSS”、P1“阅读增强、AI 与自动化”和 P2-01～P2-02 均已完成。下一里程碑为 P2-03 音频与播客视图；P1/P2 源码进度不等于正式签名发布完成。
 
 字幕闭环完成后的产品主路线已确定为“管理员策展 RSS”：管理员维护共享 RSS/Atom 目录，普通用户只能同步和阅读，不得修改共享订阅、分类、抓取策略或自动化规则。为保持现有“云端不存新闻正文”边界，首版采用 Worker/D1 保存权威目录、各桌面客户端本地抓取和 SQLite 缓存的模式。
 
@@ -243,7 +244,7 @@ Gate 0 字幕闭环、P0“管理员策展 RSS”、P1“阅读增强、AI 与�
 1. Gate 0 字幕闭环已完成；验收记录见 [`plans/EXISTING_BACKLOG_ALIGNMENT.md`](plans/EXISTING_BACKLOG_ALIGNMENT.md)。
 2. P0-01～P0-20、P0-B/P0-C 及最终检查点已完成；P0 关闭记录见 [`plans/RSS_P0_ADMIN_CATALOG.md`](plans/RSS_P0_ADMIN_CATALOG.md)。
 3. P1-01～P1-20、P1-A/P1-B/P1-C/P1-D 及最终检查点已完成；关闭记录见 [`plans/RSS_P1_READING_INTELLIGENCE.md`](plans/RSS_P1_READING_INTELLIGENCE.md)。
-4. P2-01 内容类型分类器已完成，下一步从 P2-02 图片流视图继续实现多内容视图、外部导出适配器、本地定时摘要和 Windows 系统通知；具体见 [`plans/RSS_P2_VIEWS_INTEGRATIONS.md`](plans/RSS_P2_VIEWS_INTEGRATIONS.md)。
+4. P2-01 内容类型分类器与 P2-02 图片流已完成，下一步从 P2-03 音频与播客视图继续实现多内容视图、外部导出适配器、本地定时摘要和 Windows 系统通知；具体见 [`plans/RSS_P2_VIEWS_INTEGRATIONS.md`](plans/RSS_P2_VIEWS_INTEGRATIONS.md)。
 
 总路线、参考项目和许可证边界见 [`plans/RSS_MASTER_ROADMAP.md`](plans/RSS_MASTER_ROADMAP.md)，架构决策见 [`decisions/ADR-001-admin-curated-rss.md`](decisions/ADR-001-admin-curated-rss.md) 与 [`decisions/ADR-002-article-content-extraction.md`](decisions/ADR-002-article-content-extraction.md)。P0 与 P1 可作为已验收基础；生产 Worker/D1、正式安装包、签名、升级和跨物理机矩阵仍按 10.5～10.7 节单独验收。
 

@@ -171,11 +171,51 @@ public sealed class EntryAssetStore : IEntryAssetStore, IDisposable
         ValidateContentHash(asset.ContentHash);
 
         string path = GetAssetPath(asset.ContentHash);
-        byte[] bytes;
+        FileStream? stream = null;
         try
         {
-            bytes = await File.ReadAllBytesAsync(path, cancellationToken)
-                .ConfigureAwait(false);
+            stream = new FileStream(
+                path,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.Read | FileShare.Delete,
+                BufferSize,
+                FileOptions.Asynchronous | FileOptions.SequentialScan);
+            if (stream.Length != asset.SizeBytes)
+            {
+                await RemoveCorruptAssetAsync(asset, path, stream, cancellationToken)
+                    .ConfigureAwait(false);
+                return null;
+            }
+
+            using IncrementalHash hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+            byte[] buffer = new byte[BufferSize];
+            while (true)
+            {
+                int read = await stream.ReadAsync(
+                    buffer.AsMemory(),
+                    cancellationToken).ConfigureAwait(false);
+                if (read == 0) break;
+                hash.AppendData(buffer, 0, read);
+            }
+
+            string actualHash = Convert.ToHexString(hash.GetHashAndReset())
+                .ToLowerInvariant();
+            if (!string.Equals(
+                    actualHash,
+                    asset.ContentHash,
+                    StringComparison.Ordinal))
+            {
+                await RemoveCorruptAssetAsync(asset, path, stream, cancellationToken)
+                    .ConfigureAwait(false);
+                return null;
+            }
+
+            stream.Position = 0;
+            await TouchAsync(asset, cancellationToken).ConfigureAwait(false);
+            FileStream result = stream;
+            stream = null;
+            return result;
         }
         catch (FileNotFoundException)
         {
@@ -191,18 +231,24 @@ public sealed class EntryAssetStore : IEntryAssetStore, IDisposable
         {
             return null;
         }
-
-        string actualHash = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
-        if (bytes.LongLength != asset.SizeBytes
-            || !string.Equals(actualHash, asset.ContentHash, StringComparison.Ordinal))
+        finally
         {
-            await RemoveRecordAsync(asset, cancellationToken).ConfigureAwait(false);
-            TryDelete(path);
-            return null;
+            if (stream is not null)
+            {
+                await stream.DisposeAsync().ConfigureAwait(false);
+            }
         }
+    }
 
-        await TouchAsync(asset, cancellationToken).ConfigureAwait(false);
-        return new MemoryStream(bytes, writable: false);
+    private async Task RemoveCorruptAssetAsync(
+        EntryAsset asset,
+        string path,
+        FileStream stream,
+        CancellationToken cancellationToken)
+    {
+        await stream.DisposeAsync().ConfigureAwait(false);
+        await RemoveRecordAsync(asset, cancellationToken).ConfigureAwait(false);
+        TryDelete(path);
     }
 
     public async Task<int> PruneAsync(

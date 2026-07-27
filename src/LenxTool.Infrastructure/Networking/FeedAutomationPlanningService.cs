@@ -103,13 +103,13 @@ public sealed class FeedAutomationPlanningService(
         IReadOnlyList<FeedEnclosure> enclosures =
             entry.Enclosures ?? Array.Empty<FeedEnclosure>();
         bool hasAudio =
-            feed.ViewKind == FeedViewKind.Audio
+            (feed.IsViewKindExplicit && feed.ViewKind == FeedViewKind.Audio)
             || enclosures.Any(
                 enclosure => IsMediaType(
                     enclosure.MediaType,
                     "audio/"));
         bool hasVideo =
-            feed.ViewKind == FeedViewKind.Video
+            (feed.IsViewKindExplicit && feed.ViewKind == FeedViewKind.Video)
             || enclosures.Any(
                 enclosure => IsMediaType(
                     enclosure.MediaType,

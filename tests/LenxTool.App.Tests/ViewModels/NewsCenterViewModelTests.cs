@@ -5,12 +5,33 @@ using LenxTool.App.ViewModels;
 using LenxTool.App.Services;
 using LenxTool.Core.Contracts;
 using LenxTool.Core.Errors;
+using LenxTool.Core.Feeds;
 using LenxTool.Core.Models;
 
 namespace LenxTool.App.Tests.ViewModels;
 
 public sealed class NewsCenterViewModelTests
 {
+    [Fact]
+    public async Task PictureFeedLoadsOnlyAfterSelectingItsTab()
+    {
+        var entries = new StubFeedEntryRepository([]);
+        using NewsCenterViewModel viewModel = CreateViewModel(
+            CreateSnapshot(),
+            feedEntries: entries);
+
+        await viewModel.InitializeAsync(CancellationToken.None);
+
+        Assert.Null(viewModel.PictureFeed);
+        Assert.DoesNotContain(entries.Queries, query => query.ViewKind == EntryViewKind.Picture);
+
+        viewModel.SelectedFeedViewIndex = 1;
+        await viewModel.PictureFeedInitialization.WaitAsync(TimeSpan.FromSeconds(1));
+
+        Assert.NotNull(viewModel.PictureFeed);
+        Assert.Contains(entries.Queries, query => query.ViewKind == EntryViewKind.Picture);
+    }
+
     private const string CategoryId = "10000000-0000-4000-8000-000000000001";
     private const string FeedId = "30000000-0000-4000-8000-000000000001";
     private static readonly DateTimeOffset TimelineNow = new(
@@ -261,7 +282,9 @@ public sealed class NewsCenterViewModelTests
         Assert.Equal(selected.Entry.Title, viewModel.SelectedFeedArticle?.Title);
         Assert.Equal(selected.Entry.SanitizedContent, viewModel.SelectedFeedArticle?.RichContent);
         Assert.Equal("Daily Feed", viewModel.SelectedFeedArticle?.Source);
-        FeedEntryQuery query = Assert.Single(entries.Queries);
+        FeedEntryQuery query = Assert.Single(
+            entries.Queries,
+            candidate => candidate.ViewKind is null);
         Assert.Equal(0, query.Offset);
         Assert.Equal(50, query.Limit);
     }
@@ -1067,7 +1090,12 @@ public sealed class NewsCenterViewModelTests
         Assert.Equal(75, viewModel.TimelineEntries.Count);
         Assert.Equal(75, viewModel.TimelineEntries.Select(item => item.Entry.Id).Distinct().Count());
         Assert.False(viewModel.HasMoreTimelineEntries);
-        Assert.Equal([0, 50], entries.Queries.Select(query => query.Offset).ToArray());
+        Assert.Equal(
+            [0, 50],
+            entries.Queries
+                .Where(query => query.ViewKind is null)
+                .Select(query => query.Offset)
+                .ToArray());
     }
 
     [Fact]
@@ -1134,7 +1162,6 @@ public sealed class NewsCenterViewModelTests
 
         sync.Publish(sync.Current with { Version = 8 });
         await refreshed.Task.WaitAsync(TimeSpan.FromSeconds(1));
-
         Assert.Equal(2, catalog.GetCatalogCallCount);
         Assert.Contains(viewModel.TimelineFeeds, option => option.Label == "Renamed Feed");
         Assert.Equal("Renamed Feed", viewModel.SelectedTimelineEntry?.FeedName);
@@ -1157,7 +1184,7 @@ public sealed class NewsCenterViewModelTests
         stopwatch.Stop();
         Assert.Equal(50, viewModel.TimelineEntries.Count);
         Assert.True(viewModel.HasMoreTimelineEntries);
-        Assert.Single(entries.Queries);
+        Assert.Single(entries.Queries, query => query.ViewKind is null);
         Assert.True(
             stopwatch.Elapsed < TimeSpan.FromSeconds(2),
             $"首屏加载耗时 {stopwatch.Elapsed.TotalMilliseconds:F0} ms。");
@@ -1546,6 +1573,18 @@ public sealed class NewsCenterViewModelTests
                 filtered = filtered.Where(entry => EntryTime(entry) >= query.PublishedFrom);
             if (query.PublishedBefore is not null)
                 filtered = filtered.Where(entry => EntryTime(entry) < query.PublishedBefore);
+            if (query.ViewKind is EntryViewKind viewKind)
+            {
+                filtered = filtered.Where(entry =>
+                    EntryViewClassifier.Classify(
+                        null,
+                        entry.Enclosures
+                            .Select(enclosure => FeedAttachmentClassifier.Classify(
+                                enclosure,
+                                entry.NormalizedUrl))
+                            .ToArray(),
+                        null) == viewKind);
+            }
 
             FeedEntry[] ordered = filtered
                 .OrderByDescending(EntryTime)
@@ -1555,7 +1594,8 @@ public sealed class NewsCenterViewModelTests
             return Task.FromResult(new FeedEntryPage(
                 page,
                 query.Offset,
-                ordered.Length > query.Offset + page.Length));
+                ordered.Length > query.Offset + page.Length,
+                query.Offset + page.Length));
         }
 
         public Task UpsertAsync(

@@ -446,6 +446,12 @@ public sealed partial class NewsCenterViewModel
                 ?? TimelineFeeds[0];
         }
         await ApplyTimelineFiltersAsync(cancellationToken);
+        if (PictureFeed is not null && _pictureFeedInitialized)
+        {
+            await PictureFeed.RefreshCatalogAsync(
+                preserveSelection,
+                cancellationToken);
+        }
     }
 
     private async Task ApplyTimelineFiltersAsync(CancellationToken cancellationToken)
@@ -568,7 +574,8 @@ public sealed partial class NewsCenterViewModel
         {
             return;
         }
-        _timelineNextOffset = checked(page.Offset + page.Items.Count);
+        _timelineNextOffset = page.NextOffset
+            ?? checked(page.Offset + page.Items.Count);
         foreach (FeedEntry entry in page.Items)
         {
             if (existingIds.Add(entry.Id))

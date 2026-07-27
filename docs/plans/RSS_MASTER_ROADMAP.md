@@ -1,6 +1,6 @@
 # 管理员策展 RSS 集成总路线图
 
-状态：Gate 0、P0、P1 与 P2-01 已完成；下一项 P2-02
+状态：Gate 0、P0、P1 与 P2-01～P2-02 已完成；下一项 P2-03
 最后核对：2026-07-27
 参考基线：[RSSNext/Folo](https://github.com/RSSNext/Folo) `dev` 分支提交 [`773f1bfe`](https://github.com/RSSNext/Folo/commit/773f1bfe218ac349b9fb9b5cbd982c320f6b414f)
 
@@ -51,7 +51,7 @@ flowchart LR
 | 0 | [现有未完成项对齐计划](EXISTING_BACKLOG_ALIGNMENT.md) | 收口字幕里程碑，明确旧欠账并入哪个阶段 | 已完成 |
 | 1 | [P0：管理员订阅与只读目录](RSS_P0_ADMIN_CATALOG.md) | 管理员可管订阅，普通用户可同步、抓取、阅读 | 已完成 |
 | 2 | [P1：阅读增强、AI 与自动化](RSS_P1_READING_INTELLIGENCE.md) | 收藏/标签/备注、全文、图片缓存、AI、规则、媒体衔接 | 已完成 |
-| 3 | [P2：内容视图、导出与定时摘要](RSS_P2_VIEWS_INTEGRATIONS.md) | 多内容视图、外部导出、Windows 通知和摘要 | 进行中；P2-01 已完成，下一项 P2-02 |
+| 3 | [P2：内容视图、导出与定时摘要](RSS_P2_VIEWS_INTEGRATIONS.md) | 多内容视图、外部导出、Windows 通知和摘要 | 进行中；P2-01～P2-02 已完成，下一项 P2-03 |
 
 执行原则：
 

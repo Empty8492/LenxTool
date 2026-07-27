@@ -1,0 +1,184 @@
+<UserControl x:Class="LenxTool.App.Views.FeedPictureView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:LenxTool.App.Controls">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="12" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <Border Padding="18,14" Style="{StaticResource BentoCardStyle}">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource SectionTitleStyle}" Text="图片流" />
+                        <TextBlock Margin="0,4,0,0"
+                                   Style="{StaticResource MetaTextStyle}"
+                                   Text="{Binding PictureFeed.Status}"
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Button Margin="0,0,8,0"
+                                Command="{Binding PictureFeed.ClearFiltersCommand}"
+                                AutomationProperties.Name="清除图片筛选"
+                                Content="清除筛选" />
+                        <Button Style="{StaticResource AccentButtonStyle}"
+                                Command="{Binding PictureFeed.ApplyFiltersCommand}"
+                                AutomationProperties.Name="应用图片筛选"
+                                Content="应用筛选" />
+                    </StackPanel>
+                </Grid>
+                <WrapPanel Grid.Row="1" Margin="0,12,0,0">
+                    <StackPanel Width="170" Margin="0,0,10,0">
+                        <TextBlock Margin="2,0,0,5" Style="{StaticResource MetaTextStyle}" Text="分类" />
+                        <ComboBox MinHeight="36"
+                                  Style="{StaticResource CompactComboBoxStyle}"
+                                  ItemsSource="{Binding PictureFeed.Categories}"
+                                  SelectedItem="{Binding PictureFeed.SelectedCategory}"
+                                  DisplayMemberPath="Label"
+                                  AutomationProperties.Name="图片分类筛选" />
+                    </StackPanel>
+                    <StackPanel Width="190" Margin="0,0,10,0">
+                        <TextBlock Margin="2,0,0,5" Style="{StaticResource MetaTextStyle}" Text="Feed" />
+                        <ComboBox MinHeight="36"
+                                  Style="{StaticResource CompactComboBoxStyle}"
+                                  ItemsSource="{Binding PictureFeed.Feeds}"
+                                  SelectedItem="{Binding PictureFeed.SelectedFeed}"
+                                  DisplayMemberPath="Label"
+                                  AutomationProperties.Name="图片来源筛选" />
+                    </StackPanel>
+                    <StackPanel Width="150" Margin="0,0,10,0">
+                        <TextBlock Margin="2,0,0,5" Style="{StaticResource MetaTextStyle}" Text="发布日期" />
+                        <DatePicker MinHeight="36"
+                                    SelectedDate="{Binding PictureFeed.SelectedDate}"
+                                    AutomationProperties.Name="图片日期筛选" />
+                    </StackPanel>
+                    <CheckBox MinHeight="36"
+                              Margin="4,19,0,0"
+                              VerticalContentAlignment="Center"
+                              IsChecked="{Binding PictureFeed.FavoritesOnly}"
+                              Content="仅看收藏"
+                              AutomationProperties.Name="仅看收藏图片" />
+                </WrapPanel>
+            </Grid>
+        </Border>
+
+        <Grid Grid.Row="2">
+            <controls:PagedListBox ItemsSource="{Binding PictureFeed.Rows}"
+                                   LoadMoreCommand="{Binding PictureFeed.LoadMoreCommand}"
+                                   Background="Transparent"
+                                   BorderThickness="0"
+                                   ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                   ScrollViewer.CanContentScroll="True"
+                                   VirtualizingPanel.IsVirtualizing="True"
+                                   VirtualizingPanel.VirtualizationMode="Recycling"
+                                   AutomationProperties.Name="虚拟化图片流">
+                <ListBox.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <VirtualizingStackPanel />
+                    </ItemsPanelTemplate>
+                </ListBox.ItemsPanel>
+                <ListBox.ItemContainerStyle>
+                    <Style TargetType="ListBoxItem">
+                        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                        <Setter Property="Padding" Value="0" />
+                        <Setter Property="Margin" Value="0,0,0,12" />
+                    </Style>
+                </ListBox.ItemContainerStyle>
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+                        <ItemsControl ItemsSource="{Binding Items}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <UniformGrid Columns="3" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Button Margin="0,0,12,0"
+                                            Padding="0"
+                                            HorizontalContentAlignment="Stretch"
+                                            VerticalContentAlignment="Stretch"
+                                            Background="Transparent"
+                                            BorderThickness="0"
+                                            Command="{Binding DataContext.PictureFeed.OpenItemCommand, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}"
+                                            CommandParameter="{Binding}"
+                                            AutomationProperties.Name="{Binding Title, StringFormat=打开图片条目：{0}}">
+                                        <Button.InputBindings>
+                                            <KeyBinding Key="Enter"
+                                                        Command="{Binding DataContext.PictureFeed.OpenItemCommand, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}"
+                                                        CommandParameter="{Binding}" />
+                                        </Button.InputBindings>
+                                        <Border Padding="10"
+                                                Style="{StaticResource BentoCardStyle}">
+                                            <Grid>
+                                                <Grid.RowDefinitions>
+                                                    <RowDefinition Height="160" />
+                                                    <RowDefinition Height="Auto" />
+                                                </Grid.RowDefinitions>
+                                                <controls:FeedThumbnail EntryId="{Binding Entry.Id}"
+                                                                        SourceUrl="{Binding PrimaryImageUrl}"
+                                                                        Referrer="{Binding SafeOriginalUrl}"
+                                                                        AltText="{Binding Title}" />
+                                                <StackPanel Grid.Row="1" Margin="2,10,2,2">
+                                                    <TextBlock FontWeight="SemiBold"
+                                                               Text="{Binding Title}"
+                                                               TextWrapping="Wrap"
+                                                               MaxHeight="42" />
+                                                    <TextBlock Margin="0,6,0,0"
+                                                               Style="{StaticResource MetaTextStyle}"
+                                                               Text="{Binding FeedName}"
+                                                               TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock Margin="0,3,0,0"
+                                                               Style="{StaticResource MetaTextStyle}"
+                                                               Text="{Binding DisplayTime, StringFormat={}{0:yyyy-MM-dd HH:mm}}" />
+                                                </StackPanel>
+                                            </Grid>
+                                        </Border>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </controls:PagedListBox>
+
+            <Border Padding="24"
+                    Background="{DynamicResource Brush.SurfaceRaised}"
+                    BorderBrush="{DynamicResource Brush.Border}"
+                    BorderThickness="1"
+                    CornerRadius="12"
+                    Panel.ZIndex="10">
+                <Border.Style>
+                    <Style TargetType="Border">
+                        <Setter Property="Visibility" Value="Collapsed" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding PictureFeed.Rows.Count}" Value="0">
+                                <Setter Property="Visibility" Value="Visible" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
+                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <TextBlock HorizontalAlignment="Center"
+                               Style="{StaticResource SectionTitleStyle}"
+                               Text="当前没有可显示的图片" />
+                    <TextBlock Margin="0,6,0,0"
+                               HorizontalAlignment="Center"
+                               Style="{StaticResource MetaTextStyle}"
+                               Text="可调整来源、分类、日期或收藏筛选；离线时仍会读取本地缩略图缓存。"
+                               TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+        </Grid>
+    </Grid>
+</UserControl>

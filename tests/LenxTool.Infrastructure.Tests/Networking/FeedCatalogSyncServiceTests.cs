@@ -46,6 +46,25 @@ public sealed class FeedCatalogSyncServiceTests
     }
 
     [Fact]
+    public async Task LegacyNonArticleResponseWithoutExplicitFlagKeepsOverride()
+    {
+        var handler = new StubHandler((request, cancellationToken) => Task.FromResult(
+            request.RequestUri?.AbsolutePath == "/v1/auth/login"
+                ? LoginResponse("USER")
+                : LegacyPictureCatalogResponse()));
+        var repository = new FakeFeedCatalogRepository();
+        using WorkerAccountSessionService account = CreateAccount(handler);
+        await account.LoginAsync("reader", "password", CancellationToken.None);
+        using var service = CreateService(account, repository);
+
+        await service.SyncAsync(CancellationToken.None);
+
+        FeedCatalogItem feed = Assert.Single(repository.Snapshot!.Feeds);
+        Assert.Equal(FeedViewKind.Picture, feed.ViewKind);
+        Assert.True(feed.IsViewKindExplicit);
+    }
+
+    [Fact]
     public async Task SyncMapsVersionedAiPolicyDefaultsAndResourceOverrides()
     {
         var handler = new StubHandler((request, cancellationToken) => Task.FromResult(
@@ -471,6 +490,47 @@ public sealed class FeedCatalogSyncServiceTests
         createdAt = "2026-07-20T08:00:00Z",
         updatedAt = "2026-07-22T08:00:00Z"
     };
+
+    private static HttpResponseMessage LegacyPictureCatalogResponse() =>
+        JsonResponse(HttpStatusCode.OK, new
+        {
+            catalogVersion = 1,
+            scope = "ACTIVE",
+            generatedAt = "2026-07-22T08:00:00Z",
+            categories = new[]
+            {
+                new
+                {
+                    id = "20000000-0000-4000-8000-000000000001",
+                    name = "Technology",
+                    sortOrder = 10,
+                    isEnabled = true,
+                    version = 1,
+                    createdAt = "2026-07-20T08:00:00Z",
+                    updatedAt = "2026-07-22T08:00:00Z"
+                }
+            },
+            feeds = new[]
+            {
+                new
+                {
+                    id = "30000000-0000-4000-8000-000000000001",
+                    originalUrl = "https://feeds.example/picture.xml",
+                    normalizedUrl = "https://feeds.example/picture.xml",
+                    displayName = "Legacy Picture Feed",
+                    siteUrl = "https://feeds.example/",
+                    categoryId = "20000000-0000-4000-8000-000000000001",
+                    viewKind = "PICTURE",
+                    fullTextPolicy = "NONE",
+                    refreshIntervalMinutes = 60,
+                    sortOrder = 10,
+                    isEnabled = true,
+                    version = 1,
+                    createdAt = "2026-07-20T08:00:00Z",
+                    updatedAt = "2026-07-22T08:00:00Z"
+                }
+            }
+        });
 
     private static HttpResponseMessage PolicyCatalogResponse(string autoSummary) =>
         JsonResponse(HttpStatusCode.OK, new

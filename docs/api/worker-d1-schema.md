@@ -1,8 +1,10 @@
 # Worker D1 Schema
 
+P2-02 新增的权威迁移：[0007_explicit_feed_view_kind.sql](../../cloud/LenxTool.Worker/migrations/0007_explicit_feed_view_kind.sql)。生产发布必须先对目标 D1 应用 0007，再部署读取 `view_kind_explicit` 的 Worker；顺序颠倒会使目录查询因字段尚不存在而失败。
+
 状态：P0 目录、P1 AI 策略和受限自动化规则 schema/读写均已实现
 最后核对：2026-07-27
-权威迁移：[0001_initial.sql](../../cloud/LenxTool.Worker/migrations/0001_initial.sql)、[0002_feed_catalog.sql](../../cloud/LenxTool.Worker/migrations/0002_feed_catalog.sql)、[0003_catalog_mutations.sql](../../cloud/LenxTool.Worker/migrations/0003_catalog_mutations.sql)、[0004_feed_full_text_policy.sql](../../cloud/LenxTool.Worker/migrations/0004_feed_full_text_policy.sql)、[0005_feed_ai_policy.sql](../../cloud/LenxTool.Worker/migrations/0005_feed_ai_policy.sql)、[0006_automation_rules.sql](../../cloud/LenxTool.Worker/migrations/0006_automation_rules.sql)
+权威迁移：[0001_initial.sql](../../cloud/LenxTool.Worker/migrations/0001_initial.sql)、[0002_feed_catalog.sql](../../cloud/LenxTool.Worker/migrations/0002_feed_catalog.sql)、[0003_catalog_mutations.sql](../../cloud/LenxTool.Worker/migrations/0003_catalog_mutations.sql)、[0004_feed_full_text_policy.sql](../../cloud/LenxTool.Worker/migrations/0004_feed_full_text_policy.sql)、[0005_feed_ai_policy.sql](../../cloud/LenxTool.Worker/migrations/0005_feed_ai_policy.sql)、[0006_automation_rules.sql](../../cloud/LenxTool.Worker/migrations/0006_automation_rules.sql)、[0007_explicit_feed_view_kind.sql](../../cloud/LenxTool.Worker/migrations/0007_explicit_feed_view_kind.sql)
 接口语义：[Worker v1 API 契约](worker-v1.md)
 
 ## 1. 数据边界
@@ -23,6 +25,7 @@ D1 是账号和管理员发布的共享订阅配置/受限规则的权威来源�
 - `0003_catalog_mutations.sql` 增加条件目录写入标记、审计版本、幂等成功响应和事务 guard；不保存原始请求正文、凭据或文章内容。
 - `0004_feed_full_text_policy.sql` 增加受限的全文获取枚举；`0005_feed_ai_policy.sql` 为分类和 Feed 增加显式 AI 策略覆盖、目标语言、每日条目和并发上限，自动开关默认继承全局关闭值。
 - `0006_automation_rules.sql` 增加独立规则集状态、当前规则和不可变版本历史；只保存受限定义与发布元数据，不保存匹配条目或执行结果。
+- `0007_explicit_feed_view_kind.sql` 增加视图覆盖状态；历史非 `ARTICLE` 值回填为显式覆盖，历史 `ARTICLE` 因无法区分默认值与强制值而保持自动模式。
 - 测试启动器先应用 0001、写入旧 schema 哨兵行，再应用全部迁移，从而验证带数据升级；再次调用迁移流程不会重复执行已记录文件。
 - Wrangler 应用某个迁移失败时会回滚该迁移，并保留之前成功的迁移。生产恢复遵循第 7 节，不提交手写“向下迁移”去伪造 `d1_migrations` 历史。
 
@@ -73,6 +76,7 @@ P0-04 的每个成功单项写入会在同一事务中比较并递增该版本�
 | `site_url` | null 或 1～2,048 字符 HTTPS URL |
 | `category_id` | 可空；外键指向 `feed_categories.id`，`ON DELETE RESTRICT` |
 | `view_kind` | `ARTICLE`、`PICTURE`、`AUDIO`、`VIDEO`、`NOTIFICATION` |
+| `view_kind_explicit` | 整数布尔值 0/1；0 表示自动识别，1 表示强制采用 `view_kind`（包括强制 `ARTICLE`） |
 | `refresh_interval_minutes` | 整数 5～1,440 |
 | `sort_order` | 整数 0～1,000,000 |
 | `is_enabled` | 整数布尔值 0/1 |

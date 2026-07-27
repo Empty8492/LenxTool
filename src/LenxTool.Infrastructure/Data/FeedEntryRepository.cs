@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using LenxTool.Core.Contracts;
+using LenxTool.Core.Feeds;
 using LenxTool.Core.Models;
 using Microsoft.Data.Sqlite;
 
@@ -58,6 +59,14 @@ public sealed class FeedEntryRepository(SqliteDatabase database) : IFeedEntryRep
         CancellationToken cancellationToken)
     {
         ValidateQuery(query);
+
+        if (query.ViewKind is EntryViewKind viewKind)
+        {
+            return await QueryByViewKindAsync(
+                query,
+                viewKind,
+                cancellationToken).ConfigureAwait(false);
+        }
 
         string? search = string.IsNullOrWhiteSpace(query.SearchText)
             ? null
@@ -146,7 +155,104 @@ public sealed class FeedEntryRepository(SqliteDatabase database) : IFeedEntryRep
         }
         bool hasMore = items.Count > query.Limit;
         if (hasMore) items.RemoveAt(items.Count - 1);
-        return new(items, query.Offset, hasMore);
+        return new(
+            items,
+            query.Offset,
+            hasMore,
+            checked(query.Offset + items.Count));
+    }
+
+    private async Task<FeedEntryPage> QueryByViewKindAsync(
+        FeedEntryQuery query,
+        EntryViewKind viewKind,
+        CancellationToken cancellationToken)
+    {
+        const int scanBatchSize = 200;
+        IReadOnlyDictionary<string, EntryViewKind> explicitOverrides =
+            await ReadExplicitViewOverridesAsync(cancellationToken)
+                .ConfigureAwait(false);
+        int rawOffset = query.Offset;
+        var items = new List<FeedEntry>(query.Limit);
+        while (true)
+        {
+            FeedEntryPage rawPage = await QueryAsync(
+                query with
+                {
+                    Offset = rawOffset,
+                    Limit = scanBatchSize,
+                    ViewKind = null
+                },
+                cancellationToken).ConfigureAwait(false);
+
+            for (int index = 0; index < rawPage.Items.Count; index++)
+            {
+                FeedEntry entry = rawPage.Items[index];
+                EntryViewKind? explicitOverride = explicitOverrides.TryGetValue(
+                    entry.FeedId,
+                    out EntryViewKind configuredView)
+                        ? configuredView
+                        : null;
+                if (EntryViewClassifier.Classify(
+                        explicitOverride,
+                        entry.Enclosures
+                            .Select(enclosure => FeedAttachmentClassifier.Classify(
+                                enclosure,
+                                entry.NormalizedUrl))
+                            .ToArray(),
+                        primaryContentMedia: null) != viewKind)
+                {
+                    continue;
+                }
+
+                int entryRawOffset = checked(rawOffset + index);
+                if (items.Count == query.Limit)
+                {
+                    return new(items, query.Offset, HasMore: true, entryRawOffset);
+                }
+                items.Add(entry);
+            }
+
+            rawOffset = rawPage.NextOffset
+                ?? checked(rawOffset + rawPage.Items.Count);
+            if (!rawPage.HasMore)
+            {
+                return new(items, query.Offset, HasMore: false, rawOffset);
+            }
+        }
+    }
+
+    private async Task<IReadOnlyDictionary<string, EntryViewKind>>
+        ReadExplicitViewOverridesAsync(CancellationToken cancellationToken)
+    {
+        await using SqliteConnection connection =
+            await database.OpenConnectionAsync(cancellationToken)
+                .ConfigureAwait(false);
+        await using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT id, view_kind
+            FROM feed_catalog
+            WHERE view_kind_explicit = 1;
+            """;
+        var overrides = new Dictionary<string, EntryViewKind>(StringComparer.Ordinal);
+        await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken)
+            .ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            EntryViewKind? viewKind = reader.GetString(1) switch
+            {
+                "ARTICLE" => EntryViewKind.Article,
+                "PICTURE" => EntryViewKind.Picture,
+                "AUDIO" => EntryViewKind.Audio,
+                "VIDEO" => EntryViewKind.Video,
+                "NOTIFICATION" => EntryViewKind.Notification,
+                _ => null
+            };
+            if (viewKind is not null)
+            {
+                overrides[reader.GetString(0)] = viewKind.Value;
+            }
+        }
+        return overrides;
     }
 
     public async Task<int> DeleteExpiredUnprotectedAsync(
@@ -311,6 +417,8 @@ public sealed class FeedEntryRepository(SqliteDatabase database) : IFeedEntryRep
         ValidateOptionalIdentifier(query.TagId, nameof(query.TagId));
         ValidateProfile(query.LocalProfile);
         if (!Enum.IsDefined(query.ReadFilter)
+            || (query.ViewKind is not null
+                && !Enum.IsDefined(query.ViewKind.Value))
             || query.Offset is < 0 or > 1_000_000
             || query.Limit is < 1 or > 200
             || (query.PublishedFrom is not null

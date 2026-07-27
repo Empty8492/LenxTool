@@ -73,12 +73,13 @@ public sealed partial class FeedAdminViewModel
             FeedDisplayNameInput.Trim(),
             NullIfWhiteSpace(FeedSiteUrlInput),
             SelectedCategoryId,
-            SelectedViewKind.Kind,
+            SelectedViewKind.Kind ?? FeedViewKind.Article,
             SelectedFullTextPolicy.Policy,
             FeedRefreshIntervalMinutes,
             FeedSortOrder,
             FeedIsEnabled,
-            CreateFeedAiPolicy());
+            CreateFeedAiPolicy(),
+            SelectedViewKind.Kind is not null);
         return ExecuteMutationAsync(
             (version, token) => SelectedFeed is null
                 ? _adminService.CreateFeedAsync(input, version, token)

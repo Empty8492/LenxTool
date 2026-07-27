@@ -28,6 +28,7 @@ interface FeedMutation {
     displayName: string;
     categoryId: string | null;
     viewKind: string;
+    isViewKindExplicit: boolean;
     refreshIntervalMinutes: number;
     sortOrder: number;
     isEnabled: boolean;
@@ -267,6 +268,7 @@ describe("Worker v1 administrator feed catalog routes", () => {
         siteUrl: "https://example.com/",
         categoryId: category.category.id,
         viewKind: "ARTICLE",
+        isViewKindExplicit: true,
         fullTextPolicy: "BACKGROUND",
         refreshIntervalMinutes: 60,
         sortOrder: 100,
@@ -282,6 +284,7 @@ describe("Worker v1 administrator feed catalog routes", () => {
         normalizedUrl: "https://example.com/feed.xml?lang=zh&edition=full",
         categoryId: category.category.id,
         viewKind: "ARTICLE",
+        isViewKindExplicit: true,
         fullTextPolicy: "BACKGROUND",
         refreshIntervalMinutes: 60,
         version: 2
@@ -661,6 +664,177 @@ describe("Worker v1 administrator feed catalog routes", () => {
     expect(await scalar("SELECT COUNT(*) AS value FROM managed_feeds WHERE deleted_at IS NOT NULL AND version=3")).toBe(1);
     expect(await scalar("SELECT COUNT(*) AS value FROM feed_categories WHERE deleted_at IS NOT NULL AND version=3")).toBe(1);
     expect(await scalar("SELECT COUNT(*) AS value FROM audit_events WHERE catalog_version=3")).toBe(5);
+  });
+
+  it("keeps legacy direct-client viewKind overrides and rejects a null explicit flag", async () => {
+    const admin = await seedSession("admin");
+    const createdResponse = await mutationRequest(
+      "/v1/admin/feeds",
+      admin,
+      0,
+      "legacy-direct-create",
+      {
+        method: "POST",
+        body: {
+          originalUrl: "https://example.com/legacy-picture.xml",
+          displayName: "Legacy picture",
+          viewKind: "PICTURE"
+        }
+      }
+    );
+    const created = await createdResponse.json<FeedMutation>();
+    expect(createdResponse.status).toBe(201);
+    expect(created.feed).toMatchObject({
+      viewKind: "PICTURE",
+      isViewKindExplicit: true
+    });
+
+    const patchedResponse = await mutationRequest(
+      `/v1/admin/feeds/${created.feed.id}`,
+      admin,
+      1,
+      "legacy-direct-patch",
+      {
+        method: "PATCH",
+        body: { viewKind: "AUDIO" }
+      }
+    );
+    const patched = await patchedResponse.json<FeedMutation>();
+    expect(patchedResponse.status).toBe(200);
+    expect(patched.feed).toMatchObject({
+      viewKind: "AUDIO",
+      isViewKindExplicit: true
+    });
+
+    const automaticResponse = await mutationRequest(
+      `/v1/admin/feeds/${created.feed.id}`,
+      admin,
+      2,
+      "modern-direct-auto",
+      {
+        method: "PATCH",
+        body: { viewKind: "VIDEO", isViewKindExplicit: false }
+      }
+    );
+    const automatic = await automaticResponse.json<FeedMutation>();
+    expect(automaticResponse.status).toBe(200);
+    expect(automatic.feed).toMatchObject({
+      viewKind: "VIDEO",
+      isViewKindExplicit: false
+    });
+
+    const invalid = await mutationRequest(
+      "/v1/admin/feeds",
+      admin,
+      3,
+      "direct-null-explicit",
+      {
+        method: "POST",
+        body: {
+          originalUrl: "https://example.com/null-explicit.xml",
+          displayName: "Invalid",
+          isViewKindExplicit: null
+        }
+      }
+    );
+    expect(invalid.status).toBe(400);
+    await expect(errorBody(invalid)).resolves.toMatchObject({ code: "VALIDATION_ERROR" });
+  });
+
+  it("keeps legacy batch-client viewKind overrides and rejects a null explicit flag", async () => {
+    const admin = await seedSession("admin");
+    const seedResponse = await mutationRequest(
+      "/v1/admin/feeds",
+      admin,
+      0,
+      "batch-legacy-seed",
+      {
+        method: "POST",
+        body: {
+          originalUrl: "https://example.com/batch-seed.xml",
+          displayName: "Batch seed"
+        }
+      }
+    );
+    const seed = await seedResponse.json<FeedMutation>();
+    expect(seed.feed.isViewKindExplicit).toBe(false);
+
+    const response = await mutationRequest(
+      "/v1/admin/feed-catalog-batches",
+      admin,
+      1,
+      "batch-legacy-view-kind",
+      {
+        method: "POST",
+        body: {
+          operations: [
+            {
+              operationId: "legacy-patch",
+              type: "PATCH_FEED",
+              feedId: seed.feed.id,
+              input: { viewKind: "VIDEO" }
+            },
+            {
+              operationId: "legacy-create",
+              type: "CREATE_FEED",
+              input: {
+                originalUrl: "https://example.com/batch-picture.xml",
+                displayName: "Batch picture",
+                viewKind: "PICTURE"
+              }
+            }
+          ]
+        }
+      }
+    );
+    expect(response.status).toBe(200);
+    const stored = await env.DB.prepare(
+      "SELECT display_name,view_kind,view_kind_explicit FROM managed_feeds ORDER BY display_name"
+    ).all<{
+      display_name: string;
+      view_kind: string;
+      view_kind_explicit: number;
+    }>();
+    expect(stored.results).toEqual([
+      {
+        display_name: "Batch picture",
+        view_kind: "PICTURE",
+        view_kind_explicit: 1
+      },
+      {
+        display_name: "Batch seed",
+        view_kind: "VIDEO",
+        view_kind_explicit: 1
+      }
+    ]);
+
+    const invalid = await mutationRequest(
+      "/v1/admin/feed-catalog-batches",
+      admin,
+      2,
+      "batch-null-explicit",
+      {
+        method: "POST",
+        body: {
+          operations: [
+            {
+              operationId: "invalid-create",
+              type: "CREATE_FEED",
+              input: {
+                originalUrl: "https://example.com/batch-null.xml",
+                displayName: "Invalid",
+                isViewKindExplicit: null
+              }
+            }
+          ]
+        }
+      }
+    );
+    expect(invalid.status).toBe(409);
+    await expect(errorBody(invalid)).resolves.toMatchObject({
+      code: "BATCH_OPERATION_FAILED",
+      details: { operationId: "invalid-create", innerCode: "VALIDATION_ERROR" }
+    });
   });
 
   it("rejects non-admin batches and operation counts above the contract limit", async () => {

@@ -60,7 +60,8 @@ public sealed record FeedCatalogItem(
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
     FeedFullTextPolicy FullTextPolicy = FeedFullTextPolicy.None,
-    FeedAiPolicy? AiPolicy = null);
+    FeedAiPolicy? AiPolicy = null,
+    bool IsViewKindExplicit = false);
 
 public sealed record FeedFetchState(
     string FeedId,

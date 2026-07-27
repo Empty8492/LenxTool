@@ -188,6 +188,60 @@ public sealed class NewsCenterLayoutTests
     }
 
     [Fact]
+    public void PictureFeedUsesCachedThumbnailsVirtualizedRowsAndKeyboardOpen()
+    {
+        XElement host = LoadFixture("FeedTimelineView.xaml");
+        XElement viewTabs = Assert.Single(
+            host.Descendants(),
+            element => element.Name.LocalName == "TabControl");
+        Assert.Equal(
+            "{Binding SelectedFeedViewIndex, Mode=TwoWay}",
+            viewTabs.Attribute("SelectedIndex")?.Value);
+        Assert.Contains(
+            host.Descendants(),
+            element => element.Name.LocalName == "TabItem"
+                && element.Attribute("Header")?.Value == "图片");
+
+        XElement picture = LoadFixture("FeedPictureView.xaml");
+        XElement list = Assert.Single(
+            picture.Descendants(),
+            element => element.Name.LocalName == "PagedListBox");
+        Assert.Equal("{Binding PictureFeed.Rows}", list.Attribute("ItemsSource")?.Value);
+        Assert.Equal(
+            "{Binding PictureFeed.LoadMoreCommand}",
+            list.Attribute("LoadMoreCommand")?.Value);
+        Assert.Equal("True", list.Attribute("VirtualizingPanel.IsVirtualizing")?.Value);
+        Assert.Equal("Recycling", list.Attribute("VirtualizingPanel.VirtualizationMode")?.Value);
+        Assert.Equal("True", list.Attribute("ScrollViewer.CanContentScroll")?.Value);
+        Assert.Contains(
+            picture.Descendants(),
+            element => element.Name.LocalName == "FeedThumbnail"
+                && element.Attribute("SourceUrl")?.Value == "{Binding PrimaryImageUrl}");
+        Assert.DoesNotContain(
+            picture.Descendants(),
+            element => element.Name.LocalName == "Image"
+                && element.Attribute("Source")?.Value?.Contains("PrimaryImageUrl", StringComparison.Ordinal) == true);
+        Assert.Contains(
+            picture.Descendants(),
+            element => element.Name.LocalName == "KeyBinding"
+                && element.Attribute("Key")?.Value == "Enter"
+                && element.Attribute("Command")?.Value.Contains("OpenItemCommand", StringComparison.Ordinal) == true);
+
+        string[] filterNames =
+        [
+            "图片分类筛选",
+            "图片来源筛选",
+            "图片日期筛选",
+            "仅看收藏图片"
+        ];
+        Assert.All(
+            filterNames,
+            name => Assert.Contains(
+                picture.Descendants(),
+                element => element.Attribute("AutomationProperties.Name")?.Value == name));
+    }
+
+    [Fact]
     public void FeedTimelineProvidesReadOnlyFiltersAndNativeReader()
     {
         XElement template = LoadNewsCenterTemplate();

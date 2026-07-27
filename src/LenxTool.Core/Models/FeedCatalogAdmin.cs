@@ -16,4 +16,5 @@ public sealed record FeedCatalogItemInput(
     int SortOrder,
     bool IsEnabled,
     FeedFullTextPolicy FullTextPolicy = FeedFullTextPolicy.None,
-    FeedAiPolicy? AiPolicy = null);
+    FeedAiPolicy? AiPolicy = null,
+    bool IsViewKindExplicit = false);

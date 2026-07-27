@@ -41,6 +41,7 @@ export interface FeedRow {
   site_url: string | null;
   category_id: string | null;
   view_kind: ViewKind;
+  view_kind_explicit: number;
   full_text_policy: FullTextPolicy;
   refresh_interval_minutes: number;
   sort_order: number;
@@ -155,7 +156,7 @@ export async function handleCatalogReadRequest(
     (activeOnly ? " AND is_enabled=1" : "") +
     " ORDER BY sort_order,name COLLATE BINARY,id";
   const feedSql =
-    "SELECT f.id,f.original_url,f.normalized_url,f.display_name,f.site_url,f.category_id,f.view_kind,f.full_text_policy," +
+    "SELECT f.id,f.original_url,f.normalized_url,f.display_name,f.site_url,f.category_id,f.view_kind,f.view_kind_explicit,f.full_text_policy," +
     "f.refresh_interval_minutes,f.sort_order,f.is_enabled,f.ai_manual_summary_policy,f.ai_auto_summary_policy," +
     "f.ai_auto_translation_policy,f.ai_translation_target_language,f.ai_daily_entry_limit,f.ai_max_concurrency," +
     "f.version,f.created_at,f.updated_at " +
@@ -325,6 +326,7 @@ function toCatalogFeed(row: FeedRow) {
     siteUrl: row.site_url,
     categoryId: row.category_id,
     viewKind: row.view_kind,
+    isViewKindExplicit: row.view_kind_explicit === 1,
     fullTextPolicy: row.full_text_policy,
     refreshIntervalMinutes: row.refresh_interval_minutes,
     sortOrder: row.sort_order,
@@ -526,7 +528,7 @@ async function createFeed(
   const prepared = await prepareMutation(request, db, auth, path, body);
   if (prepared instanceof Response) return prepared;
   assertOnlyFields(body, [
-    "originalUrl", "displayName", "siteUrl", "categoryId", "viewKind", "fullTextPolicy",
+    "originalUrl", "displayName", "siteUrl", "categoryId", "viewKind", "isViewKindExplicit", "fullTextPolicy",
     "refreshIntervalMinutes", "sortOrder", "isEnabled", "aiPolicy"
   ]);
   const originalUrl = requireOriginalFeedUrl(body.originalUrl);
@@ -538,7 +540,12 @@ async function createFeed(
   const categoryId = body.categoryId === undefined || body.categoryId === null
     ? null
     : requireUuid(body.categoryId, "分类 ID");
-  const viewKind = requireViewKind(body.viewKind ?? "ARTICLE");
+  const viewKind = body.viewKind === undefined
+    ? "ARTICLE"
+    : requireViewKind(body.viewKind);
+  const isViewKindExplicit = body.isViewKindExplicit === undefined
+    ? body.viewKind !== undefined
+    : requireBoolean(body.isViewKindExplicit, "Feed 视图覆盖状态");
   const fullTextPolicy = requireFullTextPolicy(body.fullTextPolicy ?? "NONE");
   const refreshIntervalMinutes = requireInteger(body.refreshIntervalMinutes ?? 60, 5, 1440, "刷新间隔");
   const sortOrder = requireInteger(body.sortOrder ?? 0, 0, 1_000_000, "Feed 排序");
@@ -568,6 +575,7 @@ async function createFeed(
     siteUrl,
     categoryId,
     viewKind,
+    isViewKindExplicit,
     fullTextPolicy,
     refreshIntervalMinutes,
     sortOrder,
@@ -589,13 +597,13 @@ async function createFeed(
     successTable: "managed_feeds",
     duplicateCode: "DUPLICATE_FEED",
     businessStatement: mutationId => db.prepare(
-      "INSERT INTO managed_feeds(id,original_url,normalized_url,display_name,site_url,category_id,view_kind,full_text_policy," +
+      "INSERT INTO managed_feeds(id,original_url,normalized_url,display_name,site_url,category_id,view_kind,view_kind_explicit,full_text_policy," +
       "refresh_interval_minutes,sort_order,is_enabled,ai_manual_summary_policy,ai_auto_summary_policy," +
       "ai_auto_translation_policy,ai_translation_target_language,ai_daily_entry_limit,ai_max_concurrency," +
-      "version,created_at,updated_at) SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,? WHERE EXISTS " +
+      "version,created_at,updated_at) SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,? WHERE EXISTS " +
       "(SELECT 1 FROM feed_catalog_state WHERE singleton_id=1 AND last_mutation_id=?)"
     ).bind(
-      id, originalUrl, normalizedUrl, displayName, siteUrl, categoryId, viewKind, fullTextPolicy,
+      id, originalUrl, normalizedUrl, displayName, siteUrl, categoryId, viewKind, isViewKindExplicit ? 1 : 0, fullTextPolicy,
       refreshIntervalMinutes, sortOrder, isEnabled ? 1 : 0, ...aiPolicyDatabaseValues(aiPolicy),
       prepared.newVersion, now, now, mutationId
     )
@@ -613,7 +621,7 @@ async function patchFeed(
   const prepared = await prepareMutation(request, db, auth, path, body);
   if (prepared instanceof Response) return prepared;
   assertOnlyFields(body, [
-    "originalUrl", "displayName", "siteUrl", "categoryId", "viewKind", "fullTextPolicy",
+    "originalUrl", "displayName", "siteUrl", "categoryId", "viewKind", "isViewKindExplicit", "fullTextPolicy",
     "refreshIntervalMinutes", "sortOrder", "isEnabled", "aiPolicy"
   ]);
   assertHasFields(body, "Feed 更新至少需要一个字段");
@@ -638,6 +646,11 @@ async function patchFeed(
       ? null
       : requireUuid(body.categoryId, "分类 ID");
   const viewKind = body.viewKind === undefined ? current.view_kind : requireViewKind(body.viewKind);
+  const isViewKindExplicit = body.isViewKindExplicit !== undefined
+    ? requireBoolean(body.isViewKindExplicit, "Feed 视图覆盖状态")
+    : body.viewKind !== undefined
+      ? true
+      : current.view_kind_explicit === 1;
   const fullTextPolicy = body.fullTextPolicy === undefined
     ? current.full_text_policy
     : requireFullTextPolicy(body.fullTextPolicy);
@@ -671,6 +684,7 @@ async function patchFeed(
     siteUrl,
     categoryId,
     viewKind,
+    isViewKindExplicit,
     fullTextPolicy,
     refreshIntervalMinutes,
     sortOrder,
@@ -692,14 +706,14 @@ async function patchFeed(
     successTable: "managed_feeds",
     duplicateCode: "DUPLICATE_FEED",
     businessStatement: mutationId => db.prepare(
-      "UPDATE managed_feeds SET original_url=?,normalized_url=?,display_name=?,site_url=?,category_id=?,view_kind=?,full_text_policy=?," +
+      "UPDATE managed_feeds SET original_url=?,normalized_url=?,display_name=?,site_url=?,category_id=?,view_kind=?,view_kind_explicit=?,full_text_policy=?," +
       "refresh_interval_minutes=?,sort_order=?,is_enabled=?,ai_manual_summary_policy=?,ai_auto_summary_policy=?," +
       "ai_auto_translation_policy=?,ai_translation_target_language=?,ai_daily_entry_limit=?,ai_max_concurrency=?," +
       "version=?,updated_at=? " +
       "WHERE id=? AND deleted_at IS NULL AND EXISTS " +
       "(SELECT 1 FROM feed_catalog_state WHERE singleton_id=1 AND last_mutation_id=?)"
     ).bind(
-      originalUrl, normalizedUrl, displayName, siteUrl, categoryId, viewKind, fullTextPolicy,
+      originalUrl, normalizedUrl, displayName, siteUrl, categoryId, viewKind, isViewKindExplicit ? 1 : 0, fullTextPolicy,
       refreshIntervalMinutes, sortOrder, isEnabled ? 1 : 0, ...aiPolicyDatabaseValues(aiPolicy),
       prepared.newVersion, now, feedId, mutationId
     )
@@ -904,7 +918,7 @@ async function getCategory(db: D1Database, categoryId: string): Promise<Category
 
 async function getFeed(db: D1Database, feedId: string): Promise<FeedRow> {
   const row = await db.prepare(
-    "SELECT id,original_url,normalized_url,display_name,site_url,category_id,view_kind,full_text_policy," +
+    "SELECT id,original_url,normalized_url,display_name,site_url,category_id,view_kind,view_kind_explicit,full_text_policy," +
     "refresh_interval_minutes,sort_order,is_enabled,ai_manual_summary_policy,ai_auto_summary_policy," +
     "ai_auto_translation_policy,ai_translation_target_language,ai_daily_entry_limit,ai_max_concurrency," +
     "version,created_at,updated_at " +

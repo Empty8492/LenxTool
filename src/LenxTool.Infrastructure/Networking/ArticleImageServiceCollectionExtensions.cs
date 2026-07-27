@@ -13,7 +13,11 @@ public static class ArticleImageServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(options);
         services.AddSingleton(options);
         services.AddSingleton<IArticleImageTransport, PinnedArticleImageTransport>();
-        services.AddSingleton<IArticleImageDownloader, CachedArticleImageDownloader>();
+        services.AddSingleton<CachedArticleImageDownloader>();
+        services.AddSingleton<IArticleImageDownloader>(static services =>
+            services.GetRequiredService<CachedArticleImageDownloader>());
+        services.AddSingleton<IArticleImageStreamDownloader>(static services =>
+            services.GetRequiredService<CachedArticleImageDownloader>());
         return services;
     }
 }

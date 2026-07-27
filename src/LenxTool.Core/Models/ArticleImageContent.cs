@@ -5,6 +5,22 @@ public sealed record ArticleImageContent(
     string MimeType,
     bool FromCache);
 
+public sealed class ArticleImageStreamContent(
+    Stream stream,
+    string mimeType,
+    bool fromCache) : IAsyncDisposable, IDisposable
+{
+    public Stream Stream { get; } = stream ?? throw new ArgumentNullException(nameof(stream));
+    public string MimeType { get; } = string.IsNullOrWhiteSpace(mimeType)
+        ? throw new ArgumentException("MIME 类型不能为空。", nameof(mimeType))
+        : mimeType;
+    public bool FromCache { get; } = fromCache;
+
+    public void Dispose() => Stream.Dispose();
+
+    public ValueTask DisposeAsync() => Stream.DisposeAsync();
+}
+
 public sealed class ArticleImageDownloadBudget
 {
     private readonly object _gate = new();

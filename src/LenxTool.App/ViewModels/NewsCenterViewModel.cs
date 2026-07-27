@@ -27,6 +27,9 @@ public sealed partial class NewsCenterViewModel
     private string _keyword = string.Empty;
     private bool _suppressSourceFilterChanges;
     private int _selectedSectionIndex;
+    private int _selectedFeedViewIndex;
+    private bool _pictureFeedInitialized;
+    private Task _pictureFeedInitialization = Task.CompletedTask;
 
     public NewsCenterViewModel(
         INewsCenterService newsCenterService,
@@ -81,6 +84,8 @@ public sealed partial class NewsCenterViewModel
     public ObservableCollection<TrendPlatformGroup> TrendGroups { get; } = [];
     public ObservableCollection<TrendSourceFilter> SourceFilters { get; } = [];
     public ObservableCollection<AiReport> Reports { get; } = [];
+    public FeedContentCollectionViewModel? PictureFeed { get; private set; }
+    public Task PictureFeedInitialization => _pictureFeedInitialization;
     public AsyncRelayCommand RefreshCommand { get; }
     public AsyncRelayCommand GenerateArticleReportCommand { get; }
     public AsyncRelayCommand GenerateDailyTrendReportCommand { get; }
@@ -104,6 +109,24 @@ public sealed partial class NewsCenterViewModel
 
     public string ActiveSectionTitle => SectionTitles[SelectedSectionIndex];
     public double WheelScrollMultiplier => SelectedSectionIndex == 1 ? 1.45d : 1d;
+    public int SelectedFeedViewIndex
+    {
+        get => _selectedFeedViewIndex;
+        set
+        {
+            if (value < 0 || value > 4
+                || !SetProperty(ref _selectedFeedViewIndex, value))
+            {
+                return;
+            }
+
+            if (value == 1)
+            {
+                _pictureFeedInitialization = StartPictureFeedInitialization();
+                OnPropertyChanged(nameof(PictureFeedInitialization));
+            }
+        }
+    }
     public string SelectedSourceSummary =>
         $"已显示 {SourceFilters.Count(filter => filter.IsSelected)}/{SourceFilters.Count} 个来源";
 
@@ -190,6 +213,7 @@ public sealed partial class NewsCenterViewModel
         RefreshCommand.Dispose();
         GenerateArticleReportCommand.Dispose();
         GenerateDailyTrendReportCommand.Dispose();
+        PictureFeed?.Dispose();
         DisposeTimeline();
     }
 
@@ -199,6 +223,45 @@ public sealed partial class NewsCenterViewModel
         NewsCenterSnapshot snapshot = await _newsCenterService.RefreshAsync(cancellationToken);
         ApplySnapshot(snapshot);
         await ReloadTimelineCatalogAsync(preserveSelection: true, cancellationToken);
+    }
+
+    private void OpenFeedContentUri(string uri) => _dialogs.OpenUri(uri);
+
+    private Task StartPictureFeedInitialization()
+    {
+        if (_pictureFeedInitialized)
+        {
+            return Task.CompletedTask;
+        }
+        if (!_pictureFeedInitialization.IsCompleted)
+        {
+            return _pictureFeedInitialization;
+        }
+
+        PictureFeed ??= new(
+            EntryViewKind.Picture,
+            "图片",
+            _feedEntryRepository,
+            _feedCatalogRepository,
+            _entryStateRepository,
+            _favoriteRepository,
+            OpenFeedContentUri);
+        OnPropertyChanged(nameof(PictureFeed));
+        return InitializePictureFeedCoreAsync(PictureFeed);
+    }
+
+    private async Task InitializePictureFeedCoreAsync(
+        FeedContentCollectionViewModel pictureFeed)
+    {
+        try
+        {
+            await pictureFeed.InitializeAsync(CancellationToken.None);
+            _pictureFeedInitialized = true;
+        }
+        catch (Exception exception)
+        {
+            pictureFeed.ReportLoadFailure(exception);
+        }
     }
 
     private async Task GenerateArticleReportAsync(CancellationToken cancellationToken)

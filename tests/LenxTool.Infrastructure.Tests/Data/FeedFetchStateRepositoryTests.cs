@@ -115,6 +115,24 @@ public sealed class FeedFetchStateRepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task RefreshTargetPreservesExplicitViewKindOverride()
+    {
+        FeedCatalogItem picture = Feed(FeedId, true, CategoryId) with
+        {
+            ViewKind = FeedViewKind.Picture,
+            IsViewKindExplicit = true
+        };
+        using SqliteDatabase database = await CreatePopulatedDatabaseAsync(picture);
+        var repository = new FeedFetchStateRepository(database);
+
+        FeedRefreshTarget stored = Assert.IsType<FeedRefreshTarget>(
+            await repository.GetTargetAsync(FeedId, CancellationToken.None));
+
+        Assert.Equal(FeedViewKind.Picture, stored.Feed.ViewKind);
+        Assert.True(stored.Feed.IsViewKindExplicit);
+    }
+
+    [Fact]
     public async Task SavingAfterCatalogRemovalReturnsFalseWithoutOrphanState()
     {
         using SqliteDatabase database = await CreatePopulatedDatabaseAsync(Feed(FeedId, true, CategoryId));

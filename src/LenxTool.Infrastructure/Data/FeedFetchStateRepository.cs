@@ -115,7 +115,8 @@ public sealed class FeedFetchStateRepository(SqliteDatabase database) : IFeedFet
         command.CommandText = """
             SELECT
                 f.id, f.original_url, f.normalized_url, f.display_name, f.site_url,
-                f.category_id, f.view_kind, f.refresh_interval_minutes, f.sort_order,
+                f.category_id, f.view_kind, f.view_kind_explicit,
+                f.refresh_interval_minutes, f.sort_order,
                 f.is_enabled, f.version, f.created_at, f.updated_at,
                 fs.feed_id, fs.etag, fs.last_modified, fs.next_fetch_at, fs.last_success_at,
                 fs.last_failure_at, fs.consecutive_failures, fs.error_code, fs.updated_at
@@ -142,24 +143,25 @@ public sealed class FeedFetchStateRepository(SqliteDatabase database) : IFeedFet
             reader.IsDBNull(4) ? null : reader.GetString(4),
             reader.IsDBNull(5) ? null : reader.GetString(5),
             ParseViewKind(reader.GetString(6)),
-            reader.GetInt32(7),
             reader.GetInt32(8),
-            reader.GetBoolean(9),
-            reader.GetInt64(10),
-            ReadTimestamp(reader, 11),
-            ReadTimestamp(reader, 12));
-        FeedFetchState? state = reader.IsDBNull(13)
+            reader.GetInt32(9),
+            reader.GetBoolean(10),
+            reader.GetInt64(11),
+            ReadTimestamp(reader, 12),
+            ReadTimestamp(reader, 13),
+            IsViewKindExplicit: reader.GetBoolean(7));
+        FeedFetchState? state = reader.IsDBNull(14)
             ? null
             : new(
-                reader.GetString(13),
-                reader.IsDBNull(14) ? null : reader.GetString(14),
+                reader.GetString(14),
                 reader.IsDBNull(15) ? null : reader.GetString(15),
-                ReadNullableTimestamp(reader, 16),
+                reader.IsDBNull(16) ? null : reader.GetString(16),
                 ReadNullableTimestamp(reader, 17),
                 ReadNullableTimestamp(reader, 18),
-                reader.GetInt32(19),
-                reader.IsDBNull(20) ? null : reader.GetString(20),
-                ReadTimestamp(reader, 21));
+                ReadNullableTimestamp(reader, 19),
+                reader.GetInt32(20),
+                reader.IsDBNull(21) ? null : reader.GetString(21),
+                ReadTimestamp(reader, 22));
         return new(feed, state);
     }
 

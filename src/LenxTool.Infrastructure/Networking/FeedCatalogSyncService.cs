@@ -467,7 +467,8 @@ public sealed class FeedCatalogSyncService : IFeedCatalogSyncService, IDisposabl
                 fullTextPolicy,
                 feed.AiPolicy is null
                     ? null
-                    : MapAiPolicy(feed.AiPolicy, requireResolved: false)));
+                    : MapAiPolicy(feed.AiPolicy, requireResolved: false),
+                feed.IsViewKindExplicit ?? viewKind != FeedViewKind.Article));
         }
 
         return new(
@@ -644,6 +645,7 @@ public sealed class FeedCatalogSyncService : IFeedCatalogSyncService, IDisposabl
         public string? SiteUrl { get; init; }
         public string? CategoryId { get; init; }
         public string? ViewKind { get; init; }
+        public bool? IsViewKindExplicit { get; init; }
         public string? FullTextPolicy { get; init; }
         public int RefreshIntervalMinutes { get; init; }
         public int SortOrder { get; init; }

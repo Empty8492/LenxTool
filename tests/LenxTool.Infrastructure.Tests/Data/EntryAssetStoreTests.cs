@@ -41,10 +41,11 @@ public sealed class EntryAssetStoreTests : IDisposable
             asset.SourceUrl,
             CancellationToken.None);
         Assert.Equal(asset, storedBeforeRead);
-        Assert.Equal(
-            content,
-            await ReadAllAsync(
-                await store.OpenReadAsync(asset, CancellationToken.None)));
+        Stream? cachedStream = await store.OpenReadAsync(
+            asset,
+            CancellationToken.None);
+        Assert.IsType<FileStream>(cachedStream);
+        Assert.Equal(content, await ReadAllAsync(cachedStream));
         EntryAsset? storedAfterRead = await store.GetAsync(
             asset.EntryId,
             asset.SourceUrl,

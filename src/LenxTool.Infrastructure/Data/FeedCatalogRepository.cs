@@ -189,13 +189,13 @@ public sealed class FeedCatalogRepository(SqliteDatabase database) : IFeedCatalo
         command.CommandText = """
             INSERT INTO feed_catalog(
                 id, original_url, normalized_url, display_name, site_url, category_id,
-                view_kind, refresh_interval_minutes, sort_order, is_enabled, version,
+                view_kind, view_kind_explicit, refresh_interval_minutes, sort_order, is_enabled, version,
                 created_at, updated_at, full_text_policy,
                 ai_manual_summary_policy, ai_auto_summary_policy, ai_auto_translation_policy,
                 ai_translation_target_language, ai_daily_entry_limit, ai_max_concurrency)
             VALUES(
                 $id, $originalUrl, $normalizedUrl, $displayName, $siteUrl, $categoryId,
-                $viewKind, $refreshIntervalMinutes, $sortOrder, $isEnabled, $version,
+                $viewKind, $viewKindExplicit, $refreshIntervalMinutes, $sortOrder, $isEnabled, $version,
                 $createdAt, $updatedAt, $fullTextPolicy,
                 $manualSummary, $autoSummary, $autoTranslation,
                 $translationTargetLanguage, $dailyEntryLimit, $maxConcurrency);
@@ -208,6 +208,7 @@ public sealed class FeedCatalogRepository(SqliteDatabase database) : IFeedCatalo
         command.Parameters.AddWithValue("$siteUrl", (object?)feed.SiteUrl ?? DBNull.Value);
         command.Parameters.AddWithValue("$categoryId", (object?)feed.CategoryId ?? DBNull.Value);
         command.Parameters.AddWithValue("$viewKind", ToStorageValue(feed.ViewKind));
+        command.Parameters.AddWithValue("$viewKindExplicit", feed.IsViewKindExplicit);
         command.Parameters.AddWithValue("$refreshIntervalMinutes", feed.RefreshIntervalMinutes);
         command.Parameters.AddWithValue("$sortOrder", feed.SortOrder);
         command.Parameters.AddWithValue("$isEnabled", feed.IsEnabled);
@@ -377,7 +378,7 @@ public sealed class FeedCatalogRepository(SqliteDatabase database) : IFeedCatalo
         command.Transaction = transaction;
         command.CommandText = """
             SELECT f.id, f.original_url, f.normalized_url, f.display_name, f.site_url,
-                   f.category_id, f.view_kind, f.refresh_interval_minutes, f.sort_order,
+                   f.category_id, f.view_kind, f.view_kind_explicit, f.refresh_interval_minutes, f.sort_order,
                    f.is_enabled, f.version, f.created_at, f.updated_at, f.full_text_policy,
                    f.ai_manual_summary_policy, f.ai_auto_summary_policy, f.ai_auto_translation_policy,
                    f.ai_translation_target_language, f.ai_daily_entry_limit, f.ai_max_concurrency
@@ -408,14 +409,15 @@ public sealed class FeedCatalogRepository(SqliteDatabase database) : IFeedCatalo
                 reader.IsDBNull(4) ? null : reader.GetString(4),
                 reader.IsDBNull(5) ? null : reader.GetString(5),
                 ParseViewKind(reader.GetString(6)),
-                reader.GetInt32(7),
                 reader.GetInt32(8),
-                reader.GetBoolean(9),
-                reader.GetInt64(10),
-                ReadTimestamp(reader, 11),
+                reader.GetInt32(9),
+                reader.GetBoolean(10),
+                reader.GetInt64(11),
                 ReadTimestamp(reader, 12),
-                ParseFullTextPolicy(reader.GetString(13)),
-                ReadAiPolicyOverride(reader, 14)));
+                ReadTimestamp(reader, 13),
+                ParseFullTextPolicy(reader.GetString(14)),
+                ReadAiPolicyOverride(reader, 15),
+                reader.GetBoolean(7)));
         }
 
         return feeds;

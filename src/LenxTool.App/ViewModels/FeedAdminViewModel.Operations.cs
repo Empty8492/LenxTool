@@ -120,7 +120,9 @@ public sealed partial class FeedAdminViewModel
         FeedDisplayNameInput = feed.DisplayName;
         FeedSiteUrlInput = feed.SiteUrl ?? string.Empty;
         SelectedCategoryId = feed.CategoryId;
-        SelectedViewKind = ViewKindChoices.First(choice => choice.Kind == feed.ViewKind);
+        SelectedViewKind = feed.IsViewKindExplicit
+            ? ViewKindChoices.First(choice => choice.Kind == feed.ViewKind)
+            : ViewKindChoices[0];
         SelectedFullTextPolicy = FullTextPolicyChoices.First(
             choice => choice.Policy == feed.FullTextPolicy);
         FeedRefreshIntervalMinutes = feed.RefreshIntervalMinutes;
@@ -254,7 +256,8 @@ public sealed partial class FeedAdminViewModel
             feed.RefreshIntervalMinutes,
             sortOrder ?? feed.SortOrder,
             isEnabled ?? feed.IsEnabled,
-            feed.AiPolicy);
+            feed.AiPolicy,
+            feed.IsViewKindExplicit);
 
     private static FeedCatalogItemInput CreateFeedInput(
         string originalUrl,
@@ -266,7 +269,8 @@ public sealed partial class FeedAdminViewModel
         int refreshIntervalMinutes,
         int sortOrder,
         bool isEnabled,
-        FeedAiPolicy? aiPolicy) => new(
+        FeedAiPolicy? aiPolicy,
+        bool isViewKindExplicit) => new(
             originalUrl,
             displayName,
             siteUrl,
@@ -276,7 +280,8 @@ public sealed partial class FeedAdminViewModel
             sortOrder,
             isEnabled,
             fullTextPolicy,
-            aiPolicy);
+            aiPolicy,
+            isViewKindExplicit);
 
     private static bool IsCatalogVersionConflict(AppException exception) =>
         exception.Error.Code == AppErrorCode.Conflict

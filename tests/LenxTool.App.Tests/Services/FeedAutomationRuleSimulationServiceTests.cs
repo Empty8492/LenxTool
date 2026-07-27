@@ -89,6 +89,41 @@ public sealed class FeedAutomationRuleSimulationServiceTests
             Assert.Single(Assert.Single(audio.Entries).Actions).Type);
     }
 
+    [Fact]
+    public async Task AutomaticAudioViewDoesNotOverrideAttachmentClassification()
+    {
+        var entries = new FakeEntryRepository(
+            [Entry("entry-1", "No enclosure", null)]);
+        FeedAutomationRuleDefinition definition = Definition(
+            new(
+                FeedAutomationField.HasAudio,
+                FeedAutomationOperator.Equals,
+                "true"),
+            new(FeedAutomationActionType.SendToMedia, 0, null));
+        var automatic = new FeedAutomationRuleSimulationService(
+            entries,
+            new FakeCatalogRepository(Catalog(
+                FeedViewKind.Audio,
+                isViewKindExplicit: false)));
+        var explicitOverride = new FeedAutomationRuleSimulationService(
+            entries,
+            new FakeCatalogRepository(Catalog(
+                FeedViewKind.Audio,
+                isViewKindExplicit: true)));
+
+        FeedAutomationSimulationResult automaticResult = await automatic.SimulateAsync(
+            definition,
+            10,
+            CancellationToken.None);
+        FeedAutomationSimulationResult explicitResult = await explicitOverride.SimulateAsync(
+            definition,
+            10,
+            CancellationToken.None);
+
+        Assert.Equal(0, automaticResult.MatchedCount);
+        Assert.Equal(1, explicitResult.MatchedCount);
+    }
+
     [Theory]
     [InlineData(0)]
     [InlineData(51)]
@@ -145,7 +180,9 @@ public sealed class FeedAutomationRuleSimulationServiceTests
             $"hash-{id}",
             new DateTimeOffset(2026, 7, 26, 8, 5, 0, TimeSpan.Zero));
 
-    private static FeedCatalogSnapshot Catalog()
+    private static FeedCatalogSnapshot Catalog(
+        FeedViewKind viewKind = FeedViewKind.Article,
+        bool isViewKindExplicit = false)
     {
         DateTimeOffset now = new(2026, 7, 26, 8, 0, 0, TimeSpan.Zero);
         return new(
@@ -158,13 +195,14 @@ public sealed class FeedAutomationRuleSimulationServiceTests
                 "示例源",
                 "https://example.com/",
                 CategoryId,
-                FeedViewKind.Article,
+                viewKind,
                 60,
                 0,
                 true,
                 1,
                 now,
-                now)]);
+                now,
+                IsViewKindExplicit: isViewKindExplicit)]);
     }
 
     private sealed class FakeEntryRepository(IReadOnlyList<FeedEntry> items)

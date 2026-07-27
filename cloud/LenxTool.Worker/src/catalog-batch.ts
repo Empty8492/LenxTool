@@ -292,7 +292,7 @@ function prepareCreateFeed(
   assertOnlyFields(operation, ["operationId", "type", "input"]);
   const input = requireRecord(operation.input, "Feed 输入");
   assertOnlyFields(input, [
-    "originalUrl", "displayName", "siteUrl", "categoryId", "categoryRef", "viewKind", "fullTextPolicy",
+    "originalUrl", "displayName", "siteUrl", "categoryId", "categoryRef", "viewKind", "isViewKindExplicit", "fullTextPolicy",
     "refreshIntervalMinutes", "sortOrder", "isEnabled", "aiPolicy"
   ]);
   const originalUrl = requireOriginalFeedUrl(input.originalUrl);
@@ -302,7 +302,12 @@ function prepareCreateFeed(
     ? null
     : normalizeHttpsUrl(requireTrimmedString(input.siteUrl, "站点 URL", 2048), "站点 URL");
   const categoryId = resolveCreateCategoryId(catalog, input);
-  const viewKind = requireViewKind(input.viewKind ?? "ARTICLE");
+  const viewKind = input.viewKind === undefined
+    ? "ARTICLE"
+    : requireViewKind(input.viewKind);
+  const isViewKindExplicit = input.isViewKindExplicit === undefined
+    ? input.viewKind !== undefined
+    : requireBoolean(input.isViewKindExplicit, "Feed 视图覆盖状态");
   const fullTextPolicy = requireFullTextPolicy(input.fullTextPolicy ?? "NONE");
   const refreshIntervalMinutes = requireInteger(input.refreshIntervalMinutes ?? 60, 5, 1440, "刷新间隔");
   const sortOrder = requireInteger(input.sortOrder ?? 0, 0, 1_000_000, "Feed 排序");
@@ -331,6 +336,7 @@ function prepareCreateFeed(
     site_url: siteUrl,
     category_id: categoryId,
     view_kind: viewKind,
+    view_kind_explicit: isViewKindExplicit ? 1 : 0,
     full_text_policy: fullTextPolicy,
     refresh_interval_minutes: refreshIntervalMinutes,
     sort_order: sortOrder,
@@ -353,7 +359,7 @@ function prepareCreateFeed(
     "feed.created",
     "feed",
     {
-      id, originalUrl, normalizedUrl, displayName, siteUrl, categoryId, viewKind, fullTextPolicy,
+      id, originalUrl, normalizedUrl, displayName, siteUrl, categoryId, viewKind, isViewKindExplicit, fullTextPolicy,
       refreshIntervalMinutes, sortOrder, isEnabled, aiPolicy, version: newVersion, createdAt: now, updatedAt: now
     }
   );
@@ -370,7 +376,7 @@ function preparePatchFeed(
   const current = requireFeed(catalog, feedId);
   const input = requireRecord(operation.input, "Feed 输入");
   assertOnlyFields(input, [
-    "originalUrl", "displayName", "siteUrl", "categoryId", "viewKind", "fullTextPolicy",
+    "originalUrl", "displayName", "siteUrl", "categoryId", "viewKind", "isViewKindExplicit", "fullTextPolicy",
     "refreshIntervalMinutes", "sortOrder", "isEnabled", "aiPolicy"
   ]);
   assertHasFields(input, "Feed 更新至少需要一个字段");
@@ -394,6 +400,11 @@ function preparePatchFeed(
       ? null
       : requireUuid(input.categoryId, "分类 ID");
   const viewKind = input.viewKind === undefined ? current.view_kind : requireViewKind(input.viewKind);
+  const isViewKindExplicit = input.isViewKindExplicit !== undefined
+    ? requireBoolean(input.isViewKindExplicit, "Feed 视图覆盖状态")
+    : input.viewKind !== undefined
+      ? true
+      : current.view_kind_explicit === 1;
   const fullTextPolicy = input.fullTextPolicy === undefined
     ? current.full_text_policy
     : requireFullTextPolicy(input.fullTextPolicy);
@@ -425,6 +436,7 @@ function preparePatchFeed(
     site_url: siteUrl,
     category_id: categoryId,
     view_kind: viewKind,
+    view_kind_explicit: isViewKindExplicit ? 1 : 0,
     full_text_policy: fullTextPolicy,
     refresh_interval_minutes: refreshIntervalMinutes,
     sort_order: sortOrder,
@@ -446,7 +458,7 @@ function preparePatchFeed(
     "feed.updated",
     "feed",
     {
-      id: feedId, originalUrl, normalizedUrl, displayName, siteUrl, categoryId, viewKind, fullTextPolicy,
+      id: feedId, originalUrl, normalizedUrl, displayName, siteUrl, categoryId, viewKind, isViewKindExplicit, fullTextPolicy,
       refreshIntervalMinutes, sortOrder, isEnabled, aiPolicy, version: newVersion, updatedAt: now
     }
   );
@@ -670,7 +682,8 @@ function buildBusinessStatements(
     "SELECT json_extract(value,'$.id') AS id,json_extract(value,'$.originalUrl') AS original_url," +
     "json_extract(value,'$.normalizedUrl') AS normalized_url,json_extract(value,'$.displayName') AS display_name," +
     "json_extract(value,'$.siteUrl') AS site_url,json_extract(value,'$.categoryId') AS category_id," +
-    "json_extract(value,'$.viewKind') AS view_kind,json_extract(value,'$.fullTextPolicy') AS full_text_policy," +
+    "json_extract(value,'$.viewKind') AS view_kind,json_extract(value,'$.isViewKindExplicit') AS view_kind_explicit," +
+    "json_extract(value,'$.fullTextPolicy') AS full_text_policy," +
     "json_extract(value,'$.refreshIntervalMinutes') AS refresh_interval_minutes," +
     "json_extract(value,'$.sortOrder') AS sort_order,json_extract(value,'$.isEnabled') AS is_enabled," +
     "json_extract(value,'$.aiPolicy.manualSummary') AS ai_manual_summary_policy," +
@@ -687,6 +700,7 @@ function buildBusinessStatements(
     "site_url=(SELECT site_url FROM changes WHERE changes.id=managed_feeds.id)," +
     "category_id=(SELECT category_id FROM changes WHERE changes.id=managed_feeds.id)," +
     "view_kind=(SELECT view_kind FROM changes WHERE changes.id=managed_feeds.id)," +
+    "view_kind_explicit=(SELECT view_kind_explicit FROM changes WHERE changes.id=managed_feeds.id)," +
     "full_text_policy=(SELECT full_text_policy FROM changes WHERE changes.id=managed_feeds.id)," +
     "refresh_interval_minutes=(SELECT refresh_interval_minutes FROM changes WHERE changes.id=managed_feeds.id)," +
     "sort_order=(SELECT sort_order FROM changes WHERE changes.id=managed_feeds.id)," +
@@ -703,13 +717,13 @@ function buildBusinessStatements(
     "(SELECT 1 FROM feed_catalog_state WHERE singleton_id=1 AND last_mutation_id=?)"
   ).bind(rows, mutationId));
   appendJsonStatement(statements, operations, "CREATE_FEED", rows => db.prepare(
-    "INSERT INTO managed_feeds(id,original_url,normalized_url,display_name,site_url,category_id,view_kind,full_text_policy," +
+    "INSERT INTO managed_feeds(id,original_url,normalized_url,display_name,site_url,category_id,view_kind,view_kind_explicit,full_text_policy," +
     "refresh_interval_minutes,sort_order,is_enabled,ai_manual_summary_policy,ai_auto_summary_policy," +
     "ai_auto_translation_policy,ai_translation_target_language,ai_daily_entry_limit,ai_max_concurrency," +
     "version,created_at,updated_at) " +
     "SELECT json_extract(value,'$.id'),json_extract(value,'$.originalUrl'),json_extract(value,'$.normalizedUrl')," +
     "json_extract(value,'$.displayName'),json_extract(value,'$.siteUrl'),json_extract(value,'$.categoryId')," +
-    "json_extract(value,'$.viewKind'),json_extract(value,'$.fullTextPolicy'),json_extract(value,'$.refreshIntervalMinutes')," +
+    "json_extract(value,'$.viewKind'),json_extract(value,'$.isViewKindExplicit'),json_extract(value,'$.fullTextPolicy'),json_extract(value,'$.refreshIntervalMinutes')," +
     "json_extract(value,'$.sortOrder'),json_extract(value,'$.isEnabled')," +
     "json_extract(value,'$.aiPolicy.manualSummary'),json_extract(value,'$.aiPolicy.autoSummary')," +
     "json_extract(value,'$.aiPolicy.autoTranslation'),json_extract(value,'$.aiPolicy.translationTargetLanguage')," +
@@ -740,7 +754,7 @@ async function loadCatalog(db: D1Database): Promise<MutableCatalog> {
       "FROM feed_categories WHERE deleted_at IS NULL"
     ),
     db.prepare(
-      "SELECT id,original_url,normalized_url,display_name,site_url,category_id,view_kind,full_text_policy," +
+      "SELECT id,original_url,normalized_url,display_name,site_url,category_id,view_kind,view_kind_explicit,full_text_policy," +
       "refresh_interval_minutes,sort_order,is_enabled,ai_manual_summary_policy,ai_auto_summary_policy," +
       "ai_auto_translation_policy,ai_translation_target_language,ai_daily_entry_limit,ai_max_concurrency," +
       "version,created_at,updated_at " +

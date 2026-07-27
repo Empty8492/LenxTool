@@ -117,11 +117,11 @@ public sealed class FeedAutomationRuleSimulationService(
         IReadOnlyList<FeedEnclosure> enclosures =
             entry.Enclosures ?? Array.Empty<FeedEnclosure>();
         bool hasAudio =
-            feed?.ViewKind == FeedViewKind.Audio
+            (feed is { IsViewKindExplicit: true, ViewKind: FeedViewKind.Audio })
             || enclosures.Any(enclosure =>
                 IsMediaType(enclosure.MediaType, "audio/"));
         bool hasVideo =
-            feed?.ViewKind == FeedViewKind.Video
+            (feed is { IsViewKindExplicit: true, ViewKind: FeedViewKind.Video })
             || enclosures.Any(enclosure =>
                 IsMediaType(enclosure.MediaType, "video/"));
         return new(

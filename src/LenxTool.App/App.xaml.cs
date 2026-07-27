@@ -39,8 +39,11 @@ public partial class App : Application
             ConfigureServices(builder.Services);
             _host = builder.Build();
             await _host.StartAsync().ConfigureAwait(true);
-            ArticleImageBlockFactory.Configure(
-                _host.Services.GetRequiredService<IArticleImageDownloader>());
+            IArticleImageDownloader imageDownloader =
+                _host.Services.GetRequiredService<IArticleImageDownloader>();
+            ArticleImageBlockFactory.Configure(imageDownloader);
+            FeedThumbnail.Configure(
+                _host.Services.GetRequiredService<IArticleImageStreamDownloader>());
 
             SqliteDatabase database = _host.Services.GetRequiredService<SqliteDatabase>();
             await database.InitializeAsync(CancellationToken.None).ConfigureAwait(true);

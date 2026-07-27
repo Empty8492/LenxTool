@@ -9,14 +9,16 @@
 | 测试组 | 结果 |
 |---|---:|
 | LenxTool.Core.Tests | 116 passed |
-| LenxTool.Infrastructure.Tests | 354 passed |
-| LenxTool.App.Tests | 197 passed / 1 environment-blocked |
-| Cloudflare Worker Vitest | 52 passed |
+| LenxTool.Infrastructure.Tests | 361 passed |
+| LenxTool.App.Tests | 204 passed / 1 environment-blocked |
+| Cloudflare Worker Vitest | 55 passed |
 | Worker TypeScript strict typecheck | passed |
 | .NET build warnings | 0 |
 | NuGet vulnerable packages | 0 detected |
 
-本轮 P2-01 的聚焦测试 20/20、Core 116/116 和 Infrastructure 354/354 通过；全解决方案 Release build 为 0 警告/0 错误。App/WPF 为 197/198：唯一未通过项是既有 `LongArticleRestoresPrivateStateAcrossRealWpfViewRecreation` 在受限环境中等待真实 WPF 线程 20 秒后超时，同时后台日志写入 Windows Event Log 被系统拒绝；该测试不引用本次新增的 Core 分类器。Worker 严格 typecheck、官方 workerd/D1 Vitest 52/52 和 NuGet 漏洞扫描 0 项均为 P1 最终检查点的最近证据，本片未重跑。
+本轮 P2-02 的完整 Release 结果为 Core 116/116、Infrastructure 361/361、App/WPF 204/205、Worker workerd/D1 Vitest 55/55、Worker strict typecheck 与全解决方案 build 0 警告/0 错误。App 唯一未通过项仍是既有 `LongArticleRestoresPrivateStateAcrossRealWpfViewRecreation` 在当前受限环境等待真实 WPF 线程 20 秒后超时；排除该环境项后的 204 项全部通过，新图片流真实 WPF 测试独立通过。
+
+P2-02 新增视图内分页分类、图片页 ViewModel/WPF、流式缩略图接口、本地 schema v18 和 Worker/D1 0007。查询在原始稳定顺序中分块扫描并返回原始 continuation，显式覆盖状态可区分自动模式和强制 Article；图片页首次选择才加载，并以不可变筛选快照、取消代次和只重建末尾不完整行避免分页竞态与滚动扰动。缩略图不先物化完整响应或缓存文件，而是在既有 SSRF、逐跳重定向、MIME/签名、大小、带宽和并发边界内流式写入缓存，并以有界缓冲校验文件哈希后返回文件流，再按 360 像素解码。1,000 条混合 SQLite 数据跨页无重复；真实图片页装载 1,000 张图片、334 行和缩略图控件，在首屏、200% WPF 布局缩放和滚动到底部时只实现 1～40 个行容器且实际缩略图请求少于总量四分之一。离线/损坏占位、旧请求取消、键盘打开、来源/分类/日期/收藏筛选、旧目录升级和旧 v1 客户端视图覆盖语义均有回归。
 
 P2-01 新增 20 项 Core 参数化场景：`EntryViewKind` 覆盖 Article、Picture、Audio、Video 与 Notification；单独的可空显式覆盖优先于 enclosure 和正文主媒体，非法覆盖回退 Article。自动分类仅接受 URL 允许且 `Verified` 的既有附件分类结果，按规范化 Feed 声明顺序选择首个可信 enclosure，再读取正文提取层提供的可信主媒体；URL 扩展名或 MIME 单边证据、冲突/受阻/Unknown、空集合和缺失字段均回退 Article，同一输入重复调用保持一致。现有必填且默认 Article 的目录 `FeedViewKind` 没有被误用为 Auto 哨兵，也未发生数据库、Worker 或 UI 变更。
 

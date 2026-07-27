@@ -39,8 +39,32 @@ describe("feed catalog migrations", () => {
       "0003_catalog_mutations.sql",
       "0004_feed_full_text_policy.sql",
       "0005_feed_ai_policy.sql",
-      "0006_automation_rules.sql"
+      "0006_automation_rules.sql",
+      "0007_explicit_feed_view_kind.sql"
     ]);
+  });
+
+  it("preserves legacy non-article view overrides when applying 0007", async () => {
+    const feedId = crypto.randomUUID();
+    await insertFeed({
+      id: feedId,
+      normalizedUrl: "https://example.com/legacy-picture.xml",
+      viewKind: "PICTURE"
+    });
+    await env.DB.prepare("ALTER TABLE managed_feeds DROP COLUMN view_kind_explicit").run();
+    await env.DB.prepare(
+      "DELETE FROM d1_migrations WHERE name='0007_explicit_feed_view_kind.sql'"
+    ).run();
+
+    await applyD1Migrations(env.DB, env.TEST_MIGRATIONS);
+
+    const migrated = await env.DB.prepare(
+      "SELECT view_kind,view_kind_explicit FROM managed_feeds WHERE id=?"
+    ).bind(feedId).first<{ view_kind: string; view_kind_explicit: number }>();
+    expect(migrated).toEqual({
+      view_kind: "PICTURE",
+      view_kind_explicit: 1
+    });
   });
 
   it("keeps meaningful query parameters and prevents duplicate active normalized URLs", async () => {
@@ -221,7 +245,7 @@ describe("feed catalog migrations", () => {
       "id", "original_url", "normalized_url", "display_name", "site_url", "category_id", "view_kind",
       "refresh_interval_minutes", "sort_order", "is_enabled", "deleted_at", "version", "created_at", "updated_at",
       "full_text_policy", "ai_manual_summary_policy", "ai_auto_summary_policy", "ai_auto_translation_policy",
-      "ai_translation_target_language", "ai_daily_entry_limit", "ai_max_concurrency"
+      "ai_translation_target_language", "ai_daily_entry_limit", "ai_max_concurrency", "view_kind_explicit"
     ]);
     expect(stateColumns).toEqual(["singleton_id", "catalog_version", "updated_at", "last_mutation_id"]);
     expect(idempotencyColumns).toEqual([

@@ -157,6 +157,46 @@ public sealed class FeedAutomationPlanningServiceTests
         Assert.Empty(Assert.Single(runs.Plans).Actions);
     }
 
+    [Fact]
+    public async Task AutomaticAudioViewDoesNotOverrideAttachmentClassification()
+    {
+        var rules = new FakeRuleRepository(
+            Snapshot(
+                Rule(
+                    [
+                        new(
+                            FeedAutomationField.HasAudio,
+                            FeedAutomationOperator.Equals,
+                            "true")
+                    ])));
+        var automaticRuns = new FakeRunRepository();
+        var automaticService = new FeedAutomationPlanningService(
+            rules,
+            automaticRuns,
+            new FixedTimeProvider(Now));
+        var explicitRuns = new FakeRunRepository();
+        var explicitService = new FeedAutomationPlanningService(
+            rules,
+            explicitRuns,
+            new FixedTimeProvider(Now));
+
+        await automaticService.StageAsync(
+            Feed(FeedViewKind.Audio, isViewKindExplicit: false),
+            [Entry()],
+            CancellationToken.None);
+        await explicitService.StageAsync(
+            Feed(FeedViewKind.Audio, isViewKindExplicit: true),
+            [Entry()],
+            CancellationToken.None);
+
+        Assert.Equal(
+            FeedAutomationRuleEvaluationOutcome.NotMatched,
+            Assert.Single(Assert.Single(automaticRuns.Plans).RuleEvaluations).Outcome);
+        Assert.Equal(
+            FeedAutomationRuleEvaluationOutcome.Matched,
+            Assert.Single(Assert.Single(explicitRuns.Plans).RuleEvaluations).Outcome);
+    }
+
     private static FeedAutomationRuleSnapshot Snapshot(
         params FeedAutomationRule[] rules) => new(
         4,
@@ -188,20 +228,23 @@ public sealed class FeedAutomationPlanningServiceTests
                 null)
         ]);
 
-    private static FeedCatalogItem Feed() => new(
+    private static FeedCatalogItem Feed(
+        FeedViewKind viewKind = FeedViewKind.Article,
+        bool isViewKindExplicit = false) => new(
         FeedId,
         "https://feeds.example/daily.xml",
         "https://feeds.example/daily.xml",
         "Daily",
         "https://feeds.example/",
         CategoryId,
-        FeedViewKind.Article,
+        viewKind,
         60,
         10,
         true,
         1,
         Now.AddDays(-1),
-        Now.AddDays(-1));
+        Now.AddDays(-1),
+        IsViewKindExplicit: isViewKindExplicit);
 
     private static FeedEntry Entry(
         string sanitizedContent = "Entry content",
