@@ -233,10 +233,11 @@ npm.cmd test -- --run
 - P2-01 内容类型分类器已完成：Core 新增每条内容独立的 `EntryViewKind` 和确定性分类器，优先使用单独跟踪的管理员显式覆盖，再按 Feed 声明顺序选择首个 URL 允许且类型完整验证的 enclosure，随后接受正文提取层的结构化主媒体信号，最后回退 Article。仅 URL 扩展名、仅 MIME、冲突类型、受阻 URL、Unknown 和非法覆盖值都不能产生不可信媒体分类。既有目录 `FeedViewKind` 必填且历史默认 `Article`，不能区分“显式文章”与“自动分类”，因此本片不修改目录 schema，也不把该默认值直接当覆盖；后续目录/UI 接入必须新增单独的显式覆盖状态。
 - P2-02 图片流已完成：本地 schema v18 与 Worker/D1 0007 增加独立视图显式覆盖状态，迁移保留历史非 Article 覆盖并兼容旧 v1 客户端；管理页可选择自动识别或强制五类视图。图片页按首次切换懒加载，支持来源/分类/日期/收藏筛选、原始 continuation 分页、Enter 安全打开和三列虚拟化。缩略图沿安全下载边界流式写缓存、以有界缓冲校验后返回文件流并按 360 像素解码，容器复用会取消旧请求；真实图片页装载 1,000 张图片后，首尾滚动和 200% WPF 布局缩放仅实现可见行。
 - DISC-01～DISC-03 统一发现基础已完成：Core 提供 URL/RSSHub/关键词分类、规范候选和来源证据合并；Worker/D1 提供认证后的已知目录索引；桌面统一协调器聚合 Worker 已知目录与既有安全 direct URL 探测，并按来源隔离超时、并发、成功缓存、熔断和脱敏状态。provider 契约可替换，但 RSSHub/外部平台在官方接口和条款审核前不注册。定向测试覆盖 429、畸形响应、证据伪造、取消、部分失败、全源不可用和完整 SSRF/DNS 重绑定边界。
+- UX-03 原生控件视觉基础已完成：资讯时间线/图片使用保留原生选择语义的分段页签，日期/日历、复选框和下拉框共享语义主题与完整交互状态；日期模板保留 WPF 自有 Calendar 实例和回写链路。结构测试与真实 WPF 运行时测试覆盖模板部件、键盘、Automation Peer、弹层选择、900×620 窄窗、等效 200% 缩放和深浅主题，历史/管理/设置页的同类迁移另行拆片。
 
 ### 10.2 下一里程碑
 
-Gate 0 字幕闭环、P0“管理员策展 RSS”、P1“阅读增强、AI 与自动化”、P2-01～P2-02，以及插入计划 DISC-01～DISC-03 均已完成。下一项是 [统一发现与原生控件视觉插入计划](plans/RSS_DISCOVERY_AND_CONTROL_UX.md) 的 UX-03：修复资讯页默认 Tab、日期、复选框和下拉框视觉，再进入 DISC-04 管理员统一发现页面；插入计划关闭后恢复 P2-03 音频与播客视图。P1/P2 源码进度不等于正式签名发布完成。
+Gate 0 字幕闭环、P0“管理员策展 RSS”、P1“阅读增强、AI 与自动化”、P2-01～P2-02，以及插入计划 DISC-01～DISC-03、UX-03 均已完成。下一项是 [统一发现与原生控件视觉插入计划](plans/RSS_DISCOVERY_AND_CONTROL_UX.md) 的 DISC-04：使用共享原生控件交付管理员统一发现页面；插入计划关闭后恢复 P2-03 音频与播客视图。P1/P2 源码进度不等于正式签名发布完成。
 
 字幕闭环完成后的产品主路线已确定为“管理员策展 RSS”：管理员维护共享 RSS/Atom 目录，普通用户只能同步和阅读，不得修改共享订阅、分类、抓取策略或自动化规则。为保持现有“云端不存新闻正文”边界，首版采用 Worker/D1 保存权威目录、各桌面客户端本地抓取和 SQLite 缓存的模式。
 
@@ -245,7 +246,7 @@ Gate 0 字幕闭环、P0“管理员策展 RSS”、P1“阅读增强、AI 与�
 1. Gate 0 字幕闭环已完成；验收记录见 [`plans/EXISTING_BACKLOG_ALIGNMENT.md`](plans/EXISTING_BACKLOG_ALIGNMENT.md)。
 2. P0-01～P0-20、P0-B/P0-C 及最终检查点已完成；P0 关闭记录见 [`plans/RSS_P0_ADMIN_CATALOG.md`](plans/RSS_P0_ADMIN_CATALOG.md)。
 3. P1-01～P1-20、P1-A/P1-B/P1-C/P1-D 及最终检查点已完成；关闭记录见 [`plans/RSS_P1_READING_INTELLIGENCE.md`](plans/RSS_P1_READING_INTELLIGENCE.md)。
-4. P2-01 内容类型分类器与 P2-02 图片流已完成；[`plans/RSS_DISCOVERY_AND_CONTROL_UX.md`](plans/RSS_DISCOVERY_AND_CONTROL_UX.md) 的 DISC-01～DISC-03 已交付独立发现索引和安全可替换 provider，当前从 UX-03 原生 WPF 共享控件模板继续，不依赖 Folo 私有 API 或复制其源码。
+4. P2-01 内容类型分类器与 P2-02 图片流已完成；[`plans/RSS_DISCOVERY_AND_CONTROL_UX.md`](plans/RSS_DISCOVERY_AND_CONTROL_UX.md) 的 DISC-01～DISC-03 已交付独立发现索引和安全可替换 provider，UX-03 已交付原生 WPF 共享控件模板，当前从 DISC-04 管理员统一发现页面继续，不依赖 Folo 私有 API 或复制其源码。
 5. 插入计划检查点关闭后，从 P2-03 音频与播客视图继续实现多内容视图、外部导出适配器、本地定时摘要和 Windows 系统通知；具体见 [`plans/RSS_P2_VIEWS_INTEGRATIONS.md`](plans/RSS_P2_VIEWS_INTEGRATIONS.md)。
 
 总路线、参考项目和许可证边界见 [`plans/RSS_MASTER_ROADMAP.md`](plans/RSS_MASTER_ROADMAP.md)，架构决策见 [`decisions/ADR-001-admin-curated-rss.md`](decisions/ADR-001-admin-curated-rss.md) 与 [`decisions/ADR-002-article-content-extraction.md`](decisions/ADR-002-article-content-extraction.md)。P0 与 P1 可作为已验收基础；生产 Worker/D1、正式安装包、签名、升级和跨物理机矩阵仍按 10.5～10.7 节单独验收。

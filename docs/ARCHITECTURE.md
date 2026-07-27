@@ -167,3 +167,9 @@ DISC-01～DISC-03 建立不依赖 UI 的统一发现边界。Core 将输入确�
 默认注册只有两条数据流：Worker 已知目录使用现有授权会话读取 `/v1/feeds/discoveries`，对 JSON 大小、HTTPS 元数据、分页、枚举、目录 ID、来源证据和警告逐字段验证；direct provider 复用原 `IFeedDiscoveryService`，因此继续执行公网地址分类、完整 DNS 答案验证、固定 IP 连接、逐跳重定向复核、响应/解压大小、MIME、XML DTD/实体和总超时限制。RSSHub 与外部平台仅保留公开 provider 扩展契约，在官方 API、速率限制、许可和隐私条款完成审核前不注册。
 
 每个 provider 拥有独立并发门闩、总等待/执行超时、成功结果内存缓存和进程内熔断状态；策略上限在协调器构造时验证，缓存条目数、候选数和 TTL 均有硬上限。调用方取消始终传播，不写失败缓存；provider 结果必须让全部证据和具名警告归属于该 provider，不能伪造其他来源。超时使用 .NET 的 [`CancellationTokenSource.CancelAfter`](https://learn.microsoft.com/en-us/dotnet/api/system.threading.cancellationtokensource.cancelafter?view=net-10.0)，多 provider 组合沿用内建 DI 的 [`IEnumerable<T>` 注册顺序语义](https://learn.microsoft.com/en-us/dotnet/core/extensions/dependency-injection/service-registration)，缓存和熔断时钟通过 [`TimeProvider`](https://learn.microsoft.com/en-us/dotnet/standard/datetime/) 注入以保持可测试性。
+
+## 11. 原生 WPF 共享选择控件
+
+UX-03 保留 WPF 原生控件类型与自动化 Peer，不以无语义容器模拟交互。`Controls.xaml` 提供分段 `TabControl/TabItem`、`CheckBox` 与 `ComboBox`；日期体系独立在 `DateControls.xaml`，避免继续扩大通用资源字典。DatePicker 模板只声明框架要求的 `PART_Root`、`PART_TextBox`、`PART_Button` 和空 `PART_Popup`，由 WPF 在 `OnApplyTemplate` 时把其内部 Calendar 放入 Popup；`CalendarStyle` 再统一弹层、月份/年份和日期按钮。这样既能自定义视觉，也不会切断日期选择回写、键盘焦点、BlackoutDates 和辅助功能链路。
+
+所有颜色使用运行时 `DynamicResource` 语义令牌，主题字典替换后现有控件即时更新；固定尺寸只用于最小命中区和矢量图标，内容区域继续由 WrapPanel、星号列和滚动容器适配窄窗与 DPI。资讯页显式引用共享样式，避免全局隐式 TabControl 模板影响应用内部用于路由的无页签容器。

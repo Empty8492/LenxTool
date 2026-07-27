@@ -59,10 +59,12 @@
                     <StackPanel Width="150" Margin="0,0,10,0">
                         <TextBlock Margin="2,0,0,5" Style="{StaticResource MetaTextStyle}" Text="发布日期" />
                         <DatePicker MinHeight="36"
+                                    Style="{StaticResource CompactDatePickerStyle}"
                                     SelectedDate="{Binding PictureFeed.SelectedDate}"
                                     AutomationProperties.Name="图片日期筛选" />
                     </StackPanel>
                     <CheckBox MinHeight="36"
+                              Style="{StaticResource CompactCheckBoxStyle}"
                               Margin="4,19,0,0"
                               VerticalContentAlignment="Center"
                               IsChecked="{Binding PictureFeed.FavoritesOnly}"

@@ -1,4 +1,4 @@
-using System.Xml.Linq;
+﻿using System.Xml.Linq;
 
 namespace LenxTool.App.Tests.Views;
 
@@ -239,6 +239,56 @@ public sealed class NewsCenterLayoutTests
             name => Assert.Contains(
                 picture.Descendants(),
                 element => element.Attribute("AutomationProperties.Name")?.Value == name));
+    }
+
+    [Fact]
+    public void FeedViewsUseSharedNativeSelectionControlStyles()
+    {
+        XElement host = LoadFixture("FeedTimelineView.xaml");
+        XElement tabs = Assert.Single(
+            host.Descendants(),
+            element => element.Name.LocalName == "TabControl");
+        Assert.Equal(
+            "{StaticResource SegmentedTabControlStyle}",
+            tabs.Attribute("Style")?.Value);
+        Assert.Equal(
+            "Feed 视图切换",
+            tabs.Attribute("AutomationProperties.Name")?.Value);
+        Assert.All(
+            host.Descendants().Where(element =>
+                element.Name.LocalName == "TabItem"),
+            tab => Assert.Equal(
+                "{StaticResource SegmentedTabItemStyle}",
+                tab.Attribute("Style")?.Value));
+
+        XElement timelineFilters = LoadFixture("FeedTimelineFiltersView.xaml");
+        XElement picture = LoadFixture("FeedPictureView.xaml");
+        XElement timelineBrowser = LoadFixture("FeedTimelineBrowserView.xaml");
+        XElement[] controls = timelineFilters
+            .Descendants()
+            .Concat(picture.Descendants())
+            .Concat(timelineBrowser.Descendants())
+            .Where(element =>
+                element.Name.LocalName is
+                    "ComboBox" or
+                    "DatePicker" or
+                    "CheckBox")
+            .ToArray();
+
+        Assert.NotEmpty(controls);
+        Assert.All(controls, control =>
+        {
+            string expectedStyle = control.Name.LocalName switch
+            {
+                "ComboBox" => "{StaticResource CompactComboBoxStyle}",
+                "DatePicker" => "{StaticResource CompactDatePickerStyle}",
+                "CheckBox" => "{StaticResource CompactCheckBoxStyle}",
+                _ => throw new InvalidOperationException()
+            };
+            Assert.Equal(expectedStyle, control.Attribute("Style")?.Value);
+            Assert.False(string.IsNullOrWhiteSpace(
+                control.Attribute("AutomationProperties.Name")?.Value));
+        });
     }
 
     [Fact]

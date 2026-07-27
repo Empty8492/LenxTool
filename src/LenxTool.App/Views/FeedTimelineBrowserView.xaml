@@ -288,6 +288,7 @@
                                        Text="正文来源" />
                             <ComboBox Width="126"
                                       Margin="0,0,14,0"
+                                      Style="{StaticResource CompactComboBoxStyle}"
                                       ItemsSource="{Binding FeedReaderSourceOptions}"
                                       DisplayMemberPath="Label"
                                       SelectedItem="{Binding SelectedFeedReaderSource}"
@@ -298,6 +299,7 @@
                                        Text="阅读模式" />
                             <ComboBox Width="92"
                                       Margin="0,0,14,0"
+                                      Style="{StaticResource CompactComboBoxStyle}"
                                       ItemsSource="{Binding FeedReaderLanguageOptions}"
                                       DisplayMemberPath="Label"
                                       SelectedItem="{Binding SelectedFeedReaderLanguage}"
@@ -308,6 +310,7 @@
                                        Text="译为" />
                             <ComboBox Width="104"
                                       Margin="0,0,14,0"
+                                      Style="{StaticResource CompactComboBoxStyle}"
                                       ItemsSource="{Binding FeedTranslationTargetLanguages}"
                                       SelectedItem="{Binding SelectedFeedTranslationTargetLanguage}"
                                       AutomationProperties.Name="Feed 译文目标语言" />

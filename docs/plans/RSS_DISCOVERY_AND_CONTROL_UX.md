@@ -1,6 +1,6 @@
 # 插入式计划：统一发现与原生控件视觉体系
 
-状态：进行中；DISC-01～DISC-03 已完成，下一项 UX-03
+状态：进行中；DISC-01～DISC-03、UX-03 已完成，下一项 DISC-04
 插入位置：P2-02 之后、P2-03 之前
 最后核对：2026-07-28
 产品参考：RSSNext/Folo 的统一发现交互；实现边界仍以 [RSS 总路线图](RSS_MASTER_ROADMAP.md) 为准
@@ -138,16 +138,16 @@ flowchart LR
 
 **依赖：** 现有主题资源和 `CompactComboBoxStyle`。
 
-**主要文件：** `Themes/Controls.xaml`、`FeedTimelineView.xaml`、`FeedTimelineFiltersView.xaml`、`FeedPictureView.xaml` 及 App 结构/运行时测试。
+**主要文件：** `Themes/Controls.xaml`、`Themes/DateControls.xaml`、`FeedTimelineView.xaml`、`FeedTimelineFiltersView.xaml`、`FeedPictureView.xaml`、`FeedTimelineBrowserView.xaml` 及 App 结构/运行时测试。
 
 **验收：**
 
-- [ ] 时间线/图片使用分段页签；日期、复选框和下拉框使用统一样式。
-- [ ] 普通、悬停、按下、选中、聚焦、禁用和校验错误状态完整。
-- [ ] 100%～200% DPI、窄窗口、浅色/深色主题下无裁切、错位或低对比。
-- [ ] 键盘、屏幕阅读器语义、日历弹层和现有绑定行为不回退。
+- [x] 时间线/图片使用分段页签；日期、复选框和下拉框使用统一样式。
+- [x] 普通、悬停、按下、选中、聚焦、禁用和校验错误状态完整。
+- [x] 100%～200% DPI、窄窗口、浅色/深色主题下无裁切、错位或低对比。
+- [x] 键盘、屏幕阅读器语义、日历弹层和现有绑定行为不回退。
 
-**验证：** 先补结构/运行时失败测试，再运行 App/WPF 测试；使用 Release 应用在 1366×768、900×620 和 4K/200% 下人工检查资讯页。随后审计历史、管理和设置页的同类默认控件，另行拆片替换，避免一次大范围 XAML 重写。
+**验证：** 2026-07-28 已先以 3 项结构测试冻结共享样式、模板部件、完整交互状态、资讯页接线和 UI Automation 名称，再交付分段页签、复选框、增强下拉框及独立日期/日历资源字典。真实 WPF 运行时测试覆盖方向键切换、原生 Automation Peer、日历弹层选择回写、日期水印/文本、900×620 窄窗、等效 200% 布局缩放和运行中深浅主题切换；浅色/深色 Release 离屏渲染经人工检查无裁切、错位或低对比。完整门禁为 .NET Release 726/726（App/WPF 209/209）、Worker 63/63、strict typecheck、NuGet/npm 0 漏洞和构建 0 警告/0 错误。历史、管理和设置页的同类控件保留为后续独立迁移片，避免扩大本任务范围。
 
 ### DISC-04：管理员统一发现页面
 

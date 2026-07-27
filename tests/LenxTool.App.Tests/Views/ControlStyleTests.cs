@@ -1,4 +1,4 @@
-using System.Xml.Linq;
+﻿using System.Xml.Linq;
 
 namespace LenxTool.App.Tests.Views;
 
@@ -80,5 +80,115 @@ public sealed class ControlStyleTests
             element => element.Name.LocalName == "Setter"
                 && element.Attribute("TargetName")?.Value == "Chrome"
                 && element.Attribute("Property")?.Value == "BorderBrush");
+    }
+
+    [Fact]
+    public void SharedSelectionControlsKeepRequiredTemplateParts()
+    {
+        XDocument controls = LoadFixture("Controls.xaml");
+        XDocument dateControls = LoadFixture("DateControls.xaml");
+        XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
+
+        XElement tabControl = FindStyle(controls, x, "SegmentedTabControlStyle");
+        XElement datePicker = FindStyle(dateControls, x, "CompactDatePickerStyle");
+        XElement dateTextBox = FindStyle(
+            dateControls,
+            x,
+            "CompactDatePickerTextBoxStyle");
+
+        AssertNamedParts(tabControl, x, "PART_SelectedContentHost");
+        AssertNamedParts(
+            datePicker,
+            x,
+            "PART_Root",
+            "PART_TextBox",
+            "PART_Button",
+            "PART_Popup");
+        AssertNamedParts(
+            dateTextBox,
+            x,
+            "PART_ContentElement",
+            "PART_Watermark");
+        Assert.NotNull(FindStyle(dateControls, x, "CompactCalendarStyle"));
+        Assert.NotNull(FindStyle(dateControls, x, "CompactCalendarDayButtonStyle"));
+        Assert.NotNull(FindStyle(dateControls, x, "CompactCalendarButtonStyle"));
+    }
+
+    [Fact]
+    public void SharedSelectionControlsExposeCompleteInteractionFeedback()
+    {
+        XDocument controls = LoadFixture("Controls.xaml");
+        XDocument dateControls = LoadFixture("DateControls.xaml");
+        XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
+
+        AssertTriggers(
+            FindStyle(controls, x, "SegmentedTabItemStyle"),
+            "IsMouseOver",
+            "IsMouseCaptureWithin",
+            "IsSelected",
+            "IsKeyboardFocused",
+            "IsEnabled");
+        AssertTriggers(
+            FindStyle(dateControls, x, "CompactDatePickerStyle"),
+            "IsMouseOver",
+            "IsKeyboardFocusWithin",
+            "IsDropDownOpen",
+            "Validation.HasError",
+            "IsEnabled");
+        AssertTriggers(
+            FindStyle(controls, x, "CompactCheckBoxStyle"),
+            "IsMouseOver",
+            "IsPressed",
+            "IsChecked",
+            "IsKeyboardFocused",
+            "Validation.HasError",
+            "IsEnabled");
+        AssertTriggers(
+            FindStyle(controls, x, "CompactComboBoxStyle"),
+            "IsMouseOver",
+            "IsMouseCaptureWithin",
+            "IsDropDownOpen",
+            "IsKeyboardFocusWithin",
+            "Validation.HasError",
+            "IsEnabled");
+    }
+
+    private static XElement FindStyle(
+        XDocument document,
+        XNamespace x,
+        string key) =>
+        Assert.Single(
+            document.Descendants(),
+            element => element.Name.LocalName == "Style"
+                && element.Attribute(x + "Key")?.Value == key);
+
+    private static XDocument LoadFixture(string fileName) =>
+        XDocument.Load(Path.Combine(
+            AppContext.BaseDirectory,
+            "Fixtures",
+            fileName));
+
+    private static void AssertNamedParts(
+        XElement style,
+        XNamespace x,
+        params string[] names)
+    {
+        Assert.All(
+            names,
+            name => Assert.Contains(
+                style.Descendants(),
+                element => element.Attribute(x + "Name")?.Value == name));
+    }
+
+    private static void AssertTriggers(
+        XElement style,
+        params string[] properties)
+    {
+        Assert.All(
+            properties,
+            property => Assert.Contains(
+                style.Descendants(),
+                element => element.Name.LocalName == "Trigger"
+                    && element.Attribute("Property")?.Value == property));
     }
 }

@@ -4,9 +4,13 @@
              xmlns:views="clr-namespace:LenxTool.App.Views">
     <TabControl Height="680"
                 Margin="0,8,0,0"
+                Style="{StaticResource SegmentedTabControlStyle}"
+                AutomationProperties.Name="Feed 视图切换"
                 SelectedIndex="{Binding SelectedFeedViewIndex, Mode=TwoWay}">
-        <TabItem Header="时间线">
-            <Grid Margin="0,8,0,0">
+        <TabItem Header="时间线"
+                 Style="{StaticResource SegmentedTabItemStyle}"
+                 AutomationProperties.Name="时间线视图">
+            <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="12" />
@@ -16,8 +20,10 @@
                 <views:FeedTimelineBrowserView Grid.Row="2" />
             </Grid>
         </TabItem>
-        <TabItem Header="图片">
-            <views:FeedPictureView Margin="0,8,0,0" />
+        <TabItem Header="图片"
+                 Style="{StaticResource SegmentedTabItemStyle}"
+                 AutomationProperties.Name="图片视图">
+            <views:FeedPictureView />
         </TabItem>
     </TabControl>
 </UserControl>

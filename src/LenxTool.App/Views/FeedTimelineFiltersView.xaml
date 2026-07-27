@@ -71,6 +71,7 @@
                                Style="{StaticResource MetaTextStyle}"
                                Text="发布日期" />
                     <DatePicker MinHeight="36"
+                                Style="{StaticResource CompactDatePickerStyle}"
                                 SelectedDate="{Binding SelectedTimelineDate}"
                                 AutomationProperties.Name="Feed 日期筛选" />
                 </StackPanel>
@@ -90,6 +91,7 @@
                                Style="{StaticResource MetaTextStyle}"
                                Text="收藏" />
                     <CheckBox MinHeight="36"
+                              Style="{StaticResource CompactCheckBoxStyle}"
                               VerticalContentAlignment="Center"
                               IsChecked="{Binding TimelineFavoritesOnly}"
                               Content="仅看收藏"

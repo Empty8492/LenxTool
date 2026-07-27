@@ -10,14 +10,16 @@
 |---|---:|
 | LenxTool.Core.Tests | 140 passed |
 | LenxTool.Infrastructure.Tests | 377 passed |
-| LenxTool.App.Tests | 205 passed |
+| LenxTool.App.Tests | 209 passed |
 | Cloudflare Worker Vitest | 63 passed |
 | Worker TypeScript strict typecheck | passed |
 | .NET build warnings | 0 |
 | NuGet vulnerable packages | 0 detected |
 | npm audit vulnerabilities | 0 detected |
 
-本轮 DISC-03 的完整 Release 结果为 Core 140/140、Infrastructure 377/377、App/WPF 205/205、Worker workerd/D1 Vitest 63/63、Worker strict typecheck、npm audit 0 漏洞与全解决方案 build 0 警告/0 错误。
+本轮 UX-03 的完整 Release 结果为 Core 140/140、Infrastructure 377/377、App/WPF 209/209、Worker workerd/D1 Vitest 63/63、Worker strict typecheck、NuGet/npm audit 0 漏洞与全解决方案 build 0 警告/0 错误。
+
+UX-03 新增共享分段页签、复选框和增强下拉框样式，并以独立 `DateControls.xaml` 封装 DatePicker、DatePickerTextBox、Calendar、CalendarItem、CalendarButton 与 CalendarDayButton 模板。3 项结构测试冻结官方命名部件、普通/悬停/按下/选中/聚焦/禁用/校验错误状态、资讯页显式样式接线和 UI Automation 名称；1 项真实 WPF 运行时测试覆盖方向键切换、原生 Automation Peer、内部 Calendar 弹层选择回写、日期水印/文本、900×620 窄窗、等效 200% 布局缩放及运行中深浅主题切换。浅色/深色 Release 离屏渲染经人工检查未发现裁切、错位或低对比。
 
 DISC-03 新增统一发现协调器、Worker 已知目录 provider、复用既有 SSRF 防护的 direct provider 和默认 DI 组合。16 项新增测试与既有 31 项安全探测回归共同覆盖 provider 独立超时/并发、成功缓存、熔断恢复、429、畸形和空目录项、重复候选、来源证据/警告伪造、provider 集合快照、调用方取消、部分成功、全源不可用、私网/环回/混合 DNS/重绑定、逐跳重定向复核与固定 IP。外部 RSSHub/平台 provider 默认未注册；完整结果对象只包含类型化来源状态，不包含上游异常或响应正文。
 

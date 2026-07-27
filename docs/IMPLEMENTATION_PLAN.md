@@ -4,7 +4,7 @@
 
 ## 状态说明
 
-状态最后核对日期为 **2026-07-27**。本文件用于保存任务拆分和完整验收条件：`[x]` 表示该项已满足全部验收条件，`[ ]` 表示未完成或仅部分完成。部分实现会直接写在任务后的括号中，不能仅凭复选框推断代码完全不存在。当前可交付能力、下一里程碑、运行配置和发布阻塞项以 [PROJECT_GUIDE.md 第 10 节](PROJECT_GUIDE.md#10-当前版本边界与交付状态)为准。
+状态最后核对日期为 **2026-07-28**。本文件用于保存任务拆分和完整验收条件：`[x]` 表示该项已满足全部验收条件，`[ ]` 表示未完成或仅部分完成。部分实现会直接写在任务后的括号中，不能仅凭复选框推断代码完全不存在。当前可交付能力、下一里程碑、运行配置和发布阻塞项以 [PROJECT_GUIDE.md 第 10 节](PROJECT_GUIDE.md#10-当前版本边界与交付状态)为准。
 
 ## 2026-07-21 路线扩展：管理员策展 RSS
 
@@ -17,7 +17,7 @@
 | 0 | [现有未完成项与 RSS 路线对齐](plans/EXISTING_BACKLOG_ALIGNMENT.md) | [x] Gate 0 已完成 |
 | 1 | [P0：管理员订阅与普通用户只读目录](plans/RSS_P0_ADMIN_CATALOG.md) | [x] 已完成：P0-01～P0-20/P0-B/P0-C 及最终终验检查点通过 |
 | 2 | [P1：阅读增强、AI 与自动化](plans/RSS_P1_READING_INTELLIGENCE.md) | [x] 已完成：P1-01～P1-20、P1-A/P1-B/P1-C/P1-D 及最终检查点通过 |
-| 3 | [统一发现与原生控件视觉体系](plans/RSS_DISCOVERY_AND_CONTROL_UX.md) | [ ] 已规划：下一项 DISC-01 |
+| 3 | [统一发现与原生控件视觉体系](plans/RSS_DISCOVERY_AND_CONTROL_UX.md) | [ ] 进行中：DISC-01～DISC-03、UX-03 已完成，下一项 DISC-04 |
 | 4 | [P2：内容视图、导出与定时摘要](plans/RSS_P2_VIEWS_INTEGRATIONS.md) | [ ] 进行中：P2-01～P2-02 已完成，插入计划后恢复 P2-03 |
 
 总体目标、架构、来源溯源、Folo 许可证边界和 RSS 阶段交付闸门见 [RSS 集成总路线图](plans/RSS_MASTER_ROADMAP.md)，管理员策展决策见 [ADR-001](decisions/ADR-001-admin-curated-rss.md)。Folo 仅作为行为参考，LenxTool 不依赖其未开源后端、`api.folo.is` 或客户端 SDK，也不复制其 AGPL 源码和受限图标。
