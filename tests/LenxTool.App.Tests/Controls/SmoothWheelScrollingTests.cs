@@ -77,11 +77,83 @@ public sealed class SmoothWheelScrollingTests
     }
 
     [Fact]
+    public void ContinuousFrameEnginePreservesMomentumWhenWheelTargetExpands()
+    {
+        TimeSpan frameInterval = TimeSpan.FromMilliseconds(16d);
+        TimeSpan responseDuration = TimeSpan.FromMilliseconds(180d);
+        WheelAnimationFrame first = SmoothWheelScrolling.AdvanceFrame(
+            currentOffset: 0d,
+            targetOffset: 69.6d,
+            currentVelocity: 0d,
+            frameInterval,
+            responseDuration);
+        WheelAnimationFrame second = SmoothWheelScrolling.AdvanceFrame(
+            first.Offset,
+            targetOffset: 69.6d,
+            first.Velocity,
+            frameInterval,
+            responseDuration);
+        WheelAnimationFrame afterRetarget = SmoothWheelScrolling.AdvanceFrame(
+            second.Offset,
+            targetOffset: 139.2d,
+            second.Velocity,
+            frameInterval,
+            responseDuration);
+
+        Assert.True(first.Offset > 0d);
+        Assert.True(second.Offset > first.Offset);
+        Assert.True(afterRetarget.Offset > second.Offset);
+        Assert.True(afterRetarget.Velocity >= second.Velocity);
+    }
+
+    [Fact]
+    public void ContinuousFrameEngineIsStableAcrossDifferentRenderIntervals()
+    {
+        TimeSpan responseDuration = TimeSpan.FromMilliseconds(180d);
+        WheelAnimationFrame sixtyHertz = AdvanceFrames(
+            frameCount: 10,
+            TimeSpan.FromMilliseconds(16d),
+            responseDuration);
+        WheelAnimationFrame oneHundredTwentyHertz = AdvanceFrames(
+            frameCount: 20,
+            TimeSpan.FromMilliseconds(8d),
+            responseDuration);
+
+        Assert.InRange(
+            Math.Abs(sixtyHertz.Offset - oneHundredTwentyHertz.Offset),
+            0d,
+            0.5d);
+        Assert.InRange(
+            Math.Abs(sixtyHertz.Velocity - oneHundredTwentyHertz.Velocity),
+            0d,
+            5d);
+    }
+
+    [Fact]
     public void PagedListKeepsAPrefetchBufferAfterSwitchingToPixelUnits()
     {
         Assert.InRange(
             PagedListBox.DefaultLoadMoreThreshold,
             160d,
             320d);
+    }
+
+    private static WheelAnimationFrame AdvanceFrames(
+        int frameCount,
+        TimeSpan frameInterval,
+        TimeSpan responseDuration)
+    {
+        var frame = new WheelAnimationFrame(0d, 0d);
+        for (int index = 0; index < frameCount; index++)
+        {
+            frame = SmoothWheelScrolling.AdvanceFrame(
+                frame.Offset,
+                targetOffset: 300d,
+                frame.Velocity,
+                frameInterval,
+                responseDuration);
+        }
+
+        return frame;
     }
 }

@@ -1,8 +1,8 @@
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
-using System.Windows.Media.Animation;
 
 namespace LenxTool.App.Controls;
 
@@ -13,14 +13,16 @@ internal static class SmoothWheelScrolling
 {
     internal const double DailyBriefingWheelMultiplier = 1.45d;
     private const double PhysicalLineHeight = 16d;
+    private const double SettleTimeFactor = 3.3d;
+    private const double MaximumFrameIntervalSeconds = 0.05d;
     private static int _initialized;
 
-    private static readonly DependencyProperty AnimatedVerticalOffsetProperty =
+    private static readonly DependencyProperty AnimationStateProperty =
         DependencyProperty.RegisterAttached(
-            "AnimatedVerticalOffset",
-            typeof(double),
+            "AnimationState",
+            typeof(WheelAnimationState),
             typeof(SmoothWheelScrolling),
-            new PropertyMetadata(0d, OnAnimatedVerticalOffsetChanged));
+            new PropertyMetadata(null));
 
     private static readonly DependencyProperty TargetVerticalOffsetProperty =
         DependencyProperty.RegisterAttached(
@@ -35,13 +37,6 @@ internal static class SmoothWheelScrolling
             typeof(bool),
             typeof(SmoothWheelScrolling),
             new PropertyMetadata(false));
-
-    private static readonly DependencyProperty AnimationGenerationProperty =
-        DependencyProperty.RegisterAttached(
-            "AnimationGeneration",
-            typeof(int),
-            typeof(SmoothWheelScrolling),
-            new PropertyMetadata(0));
 
     /// <summary>
     /// 注册一次 ScrollViewer 类级事件，让显式控件和模板内部滚动区使用同一行为。
@@ -120,6 +115,56 @@ internal static class SmoothWheelScrolling
     }
 
     /// <summary>
+    /// Advances the persistent wheel animation by one rendered frame.
+    /// A critically damped response keeps velocity continuous when burst input extends the target.
+    /// </summary>
+    internal static WheelAnimationFrame AdvanceFrame(
+        double currentOffset,
+        double targetOffset,
+        double currentVelocity,
+        TimeSpan frameInterval,
+        TimeSpan responseDuration)
+    {
+        double current = double.IsFinite(currentOffset) ? currentOffset : 0d;
+        double target = double.IsFinite(targetOffset) ? targetOffset : current;
+        double velocity = double.IsFinite(currentVelocity) ? currentVelocity : 0d;
+        double deltaSeconds = Math.Clamp(
+            frameInterval.TotalSeconds,
+            0d,
+            MaximumFrameIntervalSeconds);
+        if (deltaSeconds <= 0d || Math.Abs(target - current) < 0.001d)
+        {
+            return new(
+                Math.Abs(target - current) < 0.001d ? target : current,
+                Math.Abs(target - current) < 0.001d ? 0d : velocity);
+        }
+
+        double durationSeconds = Math.Max(
+            responseDuration.TotalSeconds,
+            0.001d);
+        double smoothTime = durationSeconds / SettleTimeFactor;
+        double omega = 2d / smoothTime;
+        double scaledInterval = omega * deltaSeconds;
+        double decay = 1d
+                       / (1d
+                          + scaledInterval
+                          + 0.48d * scaledInterval * scaledInterval
+                          + 0.235d * scaledInterval * scaledInterval
+                          * scaledInterval);
+        double displacement = current - target;
+        double momentum = (velocity + omega * displacement) * deltaSeconds;
+        double nextVelocity = (velocity - omega * momentum) * decay;
+        double nextOffset = target + (displacement + momentum) * decay;
+
+        bool crossedTarget = target > current
+            ? nextOffset > target
+            : nextOffset < target;
+        return crossedTarget
+            ? new(target, 0d)
+            : new(nextOffset, nextVelocity);
+    }
+
+    /// <summary>
     /// 供带“回到顶部”能力的派生控件复用全局滚轮处理。
     /// </summary>
     internal static bool TryHandleWheel(
@@ -164,13 +209,9 @@ internal static class SmoothWheelScrolling
     {
         ArgumentNullException.ThrowIfNull(viewer);
         double currentOffset = viewer.VerticalOffset;
-        viewer.BeginAnimation(AnimatedVerticalOffsetProperty, null);
-        SetAnimatedVerticalOffset(viewer, currentOffset);
+        GetAnimationState(viewer)?.Stop();
         SetTargetVerticalOffset(viewer, currentOffset);
         SetIsAnimationActive(viewer, false);
-        SetAnimationGeneration(
-            viewer,
-            unchecked(GetAnimationGeneration(viewer) + 1));
     }
 
     /// <summary>
@@ -186,7 +227,6 @@ internal static class SmoothWheelScrolling
             NormalizeNonNegative(targetOffset),
             0d,
             NormalizeNonNegative(viewer.ScrollableHeight));
-        SetAnimatedVerticalOffset(viewer, normalizedTarget);
         SetTargetVerticalOffset(viewer, normalizedTarget);
         viewer.ScrollToVerticalOffset(normalizedTarget);
     }
@@ -198,6 +238,17 @@ internal static class SmoothWheelScrolling
     {
         ArgumentNullException.ThrowIfNull(viewer);
         return GetIsAnimationActive(viewer);
+    }
+
+    /// <summary>
+    /// Returns the active state identity used by runtime acceptance tests to verify burst coalescing.
+    /// </summary>
+    internal static object? GetActiveAnimationSession(ScrollViewer viewer)
+    {
+        ArgumentNullException.ThrowIfNull(viewer);
+        return GetIsAnimationActive(viewer)
+            ? GetAnimationState(viewer)
+            : null;
     }
 
     private static void OnPreviewMouseWheel(
@@ -228,42 +279,18 @@ internal static class SmoothWheelScrolling
         ScrollViewer viewer,
         WheelScrollPlan plan)
     {
-        Cancel(viewer);
-        int animationGeneration = GetAnimationGeneration(viewer);
         SetTargetVerticalOffset(viewer, plan.TargetOffset);
         if (!plan.ShouldAnimate)
         {
-            SetAnimatedVerticalOffset(viewer, plan.TargetOffset);
+            GetAnimationState(viewer)?.Stop();
+            SetIsAnimationActive(viewer, false);
             viewer.ScrollToVerticalOffset(plan.TargetOffset);
             return;
         }
 
+        WheelAnimationState state = GetOrCreateAnimationState(viewer);
         SetIsAnimationActive(viewer, true);
-        SetAnimatedVerticalOffset(viewer, viewer.VerticalOffset);
-        var animation = new DoubleAnimation
-        {
-            From = viewer.VerticalOffset,
-            To = plan.TargetOffset,
-            Duration = new Duration(plan.Duration),
-            EasingFunction = new CubicEase
-            {
-                EasingMode = EasingMode.EaseOut
-            },
-            FillBehavior = FillBehavior.Stop
-        };
-        animation.Completed += (_, _) =>
-        {
-            // 被取消的旧时钟即使已排队触发 Completed，也不能覆盖新的程序化位置。
-            if (GetAnimationGeneration(viewer) != animationGeneration) return;
-            viewer.BeginAnimation(AnimatedVerticalOffsetProperty, null);
-            SetAnimatedVerticalOffset(viewer, plan.TargetOffset);
-            viewer.ScrollToVerticalOffset(plan.TargetOffset);
-            SetIsAnimationActive(viewer, false);
-        };
-        viewer.BeginAnimation(
-            AnimatedVerticalOffsetProperty,
-            animation,
-            HandoffBehavior.SnapshotAndReplace);
+        state.StartOrRetarget(plan.TargetOffset, plan.Duration);
     }
 
     private static ScrollViewer? FindScrollTarget(
@@ -336,17 +363,6 @@ internal static class SmoothWheelScrolling
     private static double NormalizeNonNegative(double value) =>
         double.IsFinite(value) ? Math.Max(0d, value) : 0d;
 
-    private static void OnAnimatedVerticalOffsetChanged(
-        DependencyObject dependencyObject,
-        DependencyPropertyChangedEventArgs eventArgs)
-    {
-        if (dependencyObject is ScrollViewer viewer
-            && eventArgs.NewValue is double offset)
-        {
-            viewer.ScrollToVerticalOffset(offset);
-        }
-    }
-
     private static double GetTargetVerticalOffset(DependencyObject target) =>
         (double)target.GetValue(TargetVerticalOffsetProperty);
 
@@ -363,18 +379,131 @@ internal static class SmoothWheelScrolling
         bool value) =>
         target.SetValue(IsAnimationActiveProperty, value);
 
-    private static int GetAnimationGeneration(DependencyObject target) =>
-        (int)target.GetValue(AnimationGenerationProperty);
+    private static WheelAnimationState? GetAnimationState(
+        DependencyObject target) =>
+        (WheelAnimationState?)target.GetValue(AnimationStateProperty);
 
-    private static void SetAnimationGeneration(
-        DependencyObject target,
-        int value) =>
-        target.SetValue(AnimationGenerationProperty, value);
+    private static WheelAnimationState GetOrCreateAnimationState(
+        ScrollViewer viewer)
+    {
+        WheelAnimationState? state = GetAnimationState(viewer);
+        if (state is not null) return state;
 
-    private static void SetAnimatedVerticalOffset(
-        DependencyObject target,
-        double value) =>
-        target.SetValue(AnimatedVerticalOffsetProperty, value);
+        state = new WheelAnimationState(viewer);
+        viewer.SetValue(AnimationStateProperty, state);
+        return state;
+    }
+
+    private sealed class WheelAnimationState
+    {
+        private readonly ScrollViewer _viewer;
+        private readonly EventHandler _renderingHandler;
+        private bool _isRunning;
+        private long _lastFrameTimestamp;
+        private long _completionTimestamp;
+        private double _targetOffset;
+        private double _velocity;
+        private TimeSpan _responseDuration;
+
+        internal WheelAnimationState(ScrollViewer viewer)
+        {
+            _viewer = viewer;
+            _renderingHandler = OnRendering;
+            _viewer.Unloaded += OnViewerUnloaded;
+        }
+
+        internal void StartOrRetarget(
+            double targetOffset,
+            TimeSpan responseDuration)
+        {
+            long now = Stopwatch.GetTimestamp();
+            double currentOffset = _viewer.VerticalOffset;
+            if (_isRunning
+                && (targetOffset - currentOffset) * _velocity < 0d)
+            {
+                // A direction reversal should respond immediately instead of
+                // carrying momentum away from the user's new target.
+                _velocity = 0d;
+            }
+
+            _targetOffset = targetOffset;
+            _responseDuration = responseDuration;
+            _completionTimestamp = now
+                                   + (long)(responseDuration.TotalSeconds
+                                            * Stopwatch.Frequency);
+            if (_isRunning) return;
+
+            _velocity = 0d;
+            _lastFrameTimestamp = now;
+            _isRunning = true;
+            CompositionTarget.Rendering += _renderingHandler;
+        }
+
+        internal void Stop()
+        {
+            if (_isRunning)
+            {
+                CompositionTarget.Rendering -= _renderingHandler;
+                _isRunning = false;
+            }
+
+            _velocity = 0d;
+        }
+
+        private void OnRendering(object? sender, EventArgs eventArgs)
+        {
+            if (!_isRunning) return;
+
+            long now = Stopwatch.GetTimestamp();
+            if (now >= _completionTimestamp)
+            {
+                Complete();
+                return;
+            }
+
+            TimeSpan elapsed = Stopwatch.GetElapsedTime(
+                _lastFrameTimestamp,
+                now);
+            _lastFrameTimestamp = now;
+            double maximumOffset = NormalizeNonNegative(
+                _viewer.ScrollableHeight);
+            _targetOffset = Math.Clamp(
+                _targetOffset,
+                0d,
+                maximumOffset);
+            WheelAnimationFrame frame = AdvanceFrame(
+                _viewer.VerticalOffset,
+                _targetOffset,
+                _velocity,
+                elapsed,
+                _responseDuration);
+            _velocity = frame.Velocity;
+            double nextOffset = Math.Clamp(
+                frame.Offset,
+                0d,
+                maximumOffset);
+            _viewer.ScrollToVerticalOffset(nextOffset);
+            if (Math.Abs(nextOffset - _targetOffset) < 0.05d)
+            {
+                Complete();
+            }
+        }
+
+        private void OnViewerUnloaded(
+            object sender,
+            RoutedEventArgs eventArgs)
+        {
+            Cancel(_viewer);
+        }
+
+        private void Complete()
+        {
+            Stop();
+            _viewer.ScrollToVerticalOffset(_targetOffset);
+            SetTargetVerticalOffset(_viewer, _targetOffset);
+            SetIsAnimationActive(_viewer, false);
+        }
+    }
 }
 
 /// <summary>
@@ -386,3 +515,10 @@ internal readonly record struct WheelScrollPlan(
 {
     public bool ShouldAnimate => Duration > TimeSpan.Zero;
 }
+
+/// <summary>
+/// Describes the offset and velocity produced for a single rendered frame.
+/// </summary>
+internal readonly record struct WheelAnimationFrame(
+    double Offset,
+    double Velocity);

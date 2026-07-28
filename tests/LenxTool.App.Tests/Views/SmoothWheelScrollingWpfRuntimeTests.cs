@@ -94,6 +94,25 @@ public sealed class SmoothWheelScrollingWpfRuntimeTests
                         () => $"普通滚动区实际偏移 {plain.VerticalOffset:F2}，"
                               + $"期望累计偏移 {expectedAccumulated:F2}。");
 
+                    stage = "checking burst input reuses one animation session";
+                    SmoothWheelScrolling.ScrollToImmediately(plain, 0d);
+                    PumpDispatcher();
+                    RaiseWheel(plainContent);
+                    object? animationSession =
+                        SmoothWheelScrolling.GetActiveAnimationSession(plain);
+                    Assert.NotNull(animationSession);
+                    PumpFor(TimeSpan.FromMilliseconds(32d));
+                    double offsetBeforeRetarget = plain.VerticalOffset;
+                    RaiseWheel(plainContent);
+                    Assert.Same(
+                        animationSession,
+                        SmoothWheelScrolling.GetActiveAnimationSession(plain));
+                    PumpFor(TimeSpan.FromMilliseconds(32d));
+                    Assert.True(
+                        plain.VerticalOffset > offsetBeforeRetarget,
+                        $"连续滚轮更新目标后偏移应继续前进；更新前 {offsetBeforeRetarget:F2}，"
+                        + $"更新后 {plain.VerticalOffset:F2}。");
+
                     stage = "checking immediate direction reversal";
                     SmoothWheelScrolling.ScrollToImmediately(plain, 0d);
                     PumpDispatcher();
@@ -160,6 +179,17 @@ public sealed class SmoothWheelScrollingWpfRuntimeTests
                         reducedMotionDifference <= 0.01d,
                         $"减少动画后的实际偏移 {plain.VerticalOffset:F2}，"
                         + $"期望偏移 {expectedPlain:F2}。");
+
+                    stage = "checking unload releases the render session";
+                    themeService.ApplyReduceMotion(reduceMotion: false);
+                    RaiseWheel(plainContent);
+                    Assert.True(
+                        SmoothWheelScrolling.HasActiveAnimation(plain));
+                    window.Close();
+                    window = null;
+                    PumpDispatcher();
+                    Assert.False(
+                        SmoothWheelScrolling.HasActiveAnimation(plain));
                     stage = "completed assertions";
                 }
                 catch (Exception exception)
