@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using LenxTool.App.Mvvm;
 using LenxTool.Core.Contracts;
+using LenxTool.Core.Feeds;
 using LenxTool.Core.Models;
 
 namespace LenxTool.App.ViewModels;
@@ -19,6 +20,9 @@ public sealed partial class NewsCenterViewModel
     private readonly IFeedCatalogSyncService _feedCatalogSync;
     private readonly IEntryStateRepository _entryStateRepository;
     private readonly IFavoriteRepository _favoriteRepository;
+    private readonly IFeedSmartViewRepository? _feedSmartViewRepository;
+    private readonly IFeedSmartViewSyncService? _feedSmartViewSync;
+    private readonly TimeProvider _timelineTimeProvider;
     private readonly SynchronizationContext? _timelineSynchronizationContext;
     private FeedCatalogSnapshot? _timelineCatalog;
     private CancellationTokenSource? _timelineProgressCancellation;
@@ -28,12 +32,15 @@ public sealed partial class NewsCenterViewModel
     private FeedTimelineReadFilterOption? _selectedTimelineReadFilter;
     private FeedTimelineFilterOption? _selectedTimelineTag;
     private FeedTimelineItem? _selectedTimelineEntry;
+    private FeedSmartView? _selectedTimelineSmartView;
+    private FeedSmartView? _appliedTimelineSmartView;
     private NewsArticle? _selectedFeedArticle;
     private DateTime? _selectedTimelineDate;
     private DateTimeOffset? _lastTimelineRefreshAt;
     private DateTimeOffset? _catalogLastSynchronizedAt;
     private string _timelineKeyword = string.Empty;
     private string _timelineStatus = "正在读取本地 Feed 缓存…";
+    private string _timelineSmartViewStatus = "共享智能视图尚未同步。";
     private string _selectedTimelineNote = string.Empty;
     private string _selectedTimelineSavedNote = string.Empty;
     private string _timelineTagInput = string.Empty;
@@ -57,10 +64,12 @@ public sealed partial class NewsCenterViewModel
         new(FeedEntryReadFilter.Read, "已读")
     ];
     public ObservableCollection<FeedTimelineFilterOption> TimelineTags { get; } = [];
+    public ObservableCollection<FeedSmartView> TimelineSmartViews { get; } = [];
     public ObservableCollection<TagItem> SelectedTimelineTags { get; } = [];
     public AsyncRelayCommand ApplyTimelineFiltersCommand { get; private set; } = null!;
     public AsyncRelayCommand LoadMoreTimelineCommand { get; private set; } = null!;
     public AsyncRelayCommand ClearTimelineFiltersCommand { get; private set; } = null!;
+    public AsyncRelayCommand ApplyTimelineSmartViewCommand { get; private set; } = null!;
     public AsyncRelayCommand<FeedTimelineItem> ToggleTimelineReadCommand { get; private set; } = null!;
     public AsyncRelayCommand<FeedTimelineItem> ToggleTimelineStarCommand { get; private set; } = null!;
     public AsyncRelayCommand SaveTimelineNoteCommand { get; private set; } = null!;
@@ -112,6 +121,27 @@ public sealed partial class NewsCenterViewModel
                 ResetTimelineProgressCommand.NotifyCanExecuteChanged();
             }
         }
+    }
+
+    public FeedSmartView? SelectedTimelineSmartView
+    {
+        get => _selectedTimelineSmartView;
+        set
+        {
+            if (SetProperty(ref _selectedTimelineSmartView, value))
+            {
+                ApplyTimelineSmartViewCommand.NotifyCanExecuteChanged();
+            }
+        }
+    }
+
+    public bool IsTimelineSmartViewApplied =>
+        _appliedTimelineSmartView is not null;
+
+    public string TimelineSmartViewStatus
+    {
+        get => _timelineSmartViewStatus;
+        private set => SetProperty(ref _timelineSmartViewStatus, value);
     }
 
     public NewsArticle? SelectedFeedArticle
@@ -307,6 +337,9 @@ public sealed partial class NewsCenterViewModel
             LoadMoreTimelineAsync,
             () => HasMoreTimelineEntries);
         ClearTimelineFiltersCommand = new(ClearTimelineFiltersAsync);
+        ApplyTimelineSmartViewCommand = new(
+            ApplyTimelineSmartViewAsync,
+            () => SelectedTimelineSmartView is not null);
         ToggleTimelineReadCommand = new(ToggleTimelineReadAsync, item => item is not null);
         ToggleTimelineStarCommand = new(ToggleTimelineStarAsync, item => item is not null);
         SaveTimelineNoteCommand = new(
@@ -384,6 +417,7 @@ public sealed partial class NewsCenterViewModel
     {
         await ReloadTimelineTagChoicesAsync(cancellationToken);
         await ReloadTimelineCatalogAsync(preserveSelection: false, cancellationToken);
+        _ = await LoadTimelineSmartViewsAsync(cancellationToken);
     }
 
     private async Task ReloadTimelineTagChoicesAsync(CancellationToken cancellationToken)
@@ -445,7 +479,7 @@ public sealed partial class NewsCenterViewModel
                 option => string.Equals(option.Id, selectedFeedId, StringComparison.Ordinal))
                 ?? TimelineFeeds[0];
         }
-        await ApplyTimelineFiltersAsync(cancellationToken);
+        await ApplyTimelineQueryAsync(cancellationToken);
         if (PictureFeed is not null && _pictureFeedInitialized)
         {
             await PictureFeed.RefreshCatalogAsync(
@@ -467,6 +501,45 @@ public sealed partial class NewsCenterViewModel
     }
 
     private async Task ApplyTimelineFiltersAsync(CancellationToken cancellationToken)
+    {
+        SetAppliedTimelineSmartView(null);
+        await ApplyTimelineQueryAsync(cancellationToken);
+    }
+
+    private async Task ApplyTimelineSmartViewAsync(
+        CancellationToken cancellationToken)
+    {
+        if (SelectedTimelineSmartView is not { } selectedView)
+        {
+            return;
+        }
+        string selectedId = selectedView.Id;
+        if (!await LoadTimelineSmartViewsAsync(cancellationToken))
+        {
+            SetAppliedTimelineSmartView(null);
+            return;
+        }
+        FeedSmartView? selected = TimelineSmartViews.FirstOrDefault(
+            view => string.Equals(
+                view.Id,
+                selectedId,
+                StringComparison.Ordinal));
+        if (selected is null)
+        {
+            SetAppliedTimelineSmartView(null);
+            TimelineSmartViewStatus =
+                "该共享智能视图已被管理员移除，请选择其他视图。";
+            return;
+        }
+        SelectedTimelineSmartView = selected;
+        SetAppliedTimelineSmartView(selected);
+        await ApplyTimelineQueryAsync(cancellationToken);
+        TimelineSmartViewStatus =
+            $"正在使用“{selected.Name}”；已读与收藏仍只从本机读取。";
+    }
+
+    private async Task ApplyTimelineQueryAsync(
+        CancellationToken cancellationToken)
     {
         int generation = Interlocked.Increment(ref _timelineQueryGeneration);
         LoadMoreTimelineCommand.Cancel();
@@ -520,6 +593,7 @@ public sealed partial class NewsCenterViewModel
 
     private async Task ClearTimelineFiltersAsync(CancellationToken cancellationToken)
     {
+        SetAppliedTimelineSmartView(null);
         SelectedTimelineCategory = TimelineCategories.FirstOrDefault();
         SelectedTimelineFeed = TimelineFeeds.FirstOrDefault();
         SelectedTimelineReadFilter = TimelineReadFilters[0];
@@ -527,11 +601,20 @@ public sealed partial class NewsCenterViewModel
         SelectedTimelineTag = TimelineTags.FirstOrDefault();
         SelectedTimelineDate = null;
         TimelineKeyword = string.Empty;
-        await ApplyTimelineFiltersAsync(cancellationToken);
+        await ApplyTimelineQueryAsync(cancellationToken);
     }
 
     private FeedEntryQuery CreateTimelineQuery(int offset)
     {
+        if (_appliedTimelineSmartView is { } smartView)
+        {
+            return FeedSmartViewValidator.Apply(
+                smartView,
+                _timelineTimeProvider.GetUtcNow(),
+                offset,
+                TimelinePageSize,
+                DefaultTimelineProfile);
+        }
         DateTimeOffset? publishedFrom = SelectedTimelineDate is null
             ? null
             : ToTimelineBoundary(SelectedTimelineDate.Value);
@@ -1194,11 +1277,105 @@ public sealed partial class NewsCenterViewModel
         ApplyTimelineFiltersCommand.Dispose();
         LoadMoreTimelineCommand.Dispose();
         ClearTimelineFiltersCommand.Dispose();
+        ApplyTimelineSmartViewCommand.Dispose();
         ToggleTimelineReadCommand.Dispose();
         ToggleTimelineStarCommand.Dispose();
         SaveTimelineNoteCommand.Dispose();
         AddTimelineTagCommand.Dispose();
         RemoveTimelineTagCommand.Dispose();
+    }
+
+    private async Task RefreshTimelineSmartViewsAsync(
+        CancellationToken cancellationToken)
+    {
+        bool shouldReapply =
+            _appliedTimelineSmartView is not null;
+        bool synchronizationFailed = false;
+        if (_feedSmartViewSync is not null)
+        {
+            try
+            {
+                await _feedSmartViewSync.SyncAsync(cancellationToken);
+            }
+            catch (Exception) when (!cancellationToken.IsCancellationRequested)
+            {
+                synchronizationFailed = true;
+            }
+        }
+        bool cacheLoaded =
+            await LoadTimelineSmartViewsAsync(cancellationToken);
+        if (synchronizationFailed)
+        {
+            TimelineSmartViewStatus =
+                $"同步失败，继续使用最后有效的离线版本。{TimelineSmartViewStatus}";
+        }
+        if (cacheLoaded &&
+            shouldReapply &&
+            _appliedTimelineSmartView is not null)
+        {
+            await ApplyTimelineQueryAsync(cancellationToken);
+        }
+    }
+
+    private async Task<bool> LoadTimelineSmartViewsAsync(
+        CancellationToken cancellationToken)
+    {
+        if (_feedSmartViewRepository is null)
+        {
+            TimelineSmartViews.Clear();
+            SelectedTimelineSmartView = null;
+            SetAppliedTimelineSmartView(null);
+            TimelineSmartViewStatus = "当前未启用共享智能视图。";
+            return false;
+        }
+
+        string? selectedId = SelectedTimelineSmartView?.Id;
+        string? appliedId = _appliedTimelineSmartView?.Id;
+        try
+        {
+            FeedSmartViewSnapshot snapshot =
+                await _feedSmartViewRepository.GetAsync(cancellationToken);
+            TimelineSmartViews.Clear();
+            foreach (FeedSmartView view in snapshot.Views
+                         .OrderBy(item => item.SortOrder)
+                         .ThenBy(item => item.Name, StringComparer.CurrentCulture)
+                         .ThenBy(item => item.Id, StringComparer.Ordinal))
+            {
+                TimelineSmartViews.Add(view);
+            }
+            SelectedTimelineSmartView = selectedId is null
+                ? TimelineSmartViews.FirstOrDefault()
+                : TimelineSmartViews.FirstOrDefault(view =>
+                    string.Equals(view.Id, selectedId, StringComparison.Ordinal))
+                    ?? TimelineSmartViews.FirstOrDefault();
+            FeedSmartView? updatedApplied = appliedId is null
+                ? null
+                : TimelineSmartViews.FirstOrDefault(view =>
+                    string.Equals(view.Id, appliedId, StringComparison.Ordinal));
+            SetAppliedTimelineSmartView(updatedApplied);
+            string synchronized = snapshot.LastSyncedAt is { } synchronizedAt
+                ? $" · 同步 {synchronizedAt.ToLocalTime():MM-dd HH:mm}"
+                : string.Empty;
+            TimelineSmartViewStatus =
+                $"共享视图 v{snapshot.ViewSetVersion} · {TimelineSmartViews.Count} 个{synchronized}";
+            return true;
+        }
+        catch (Exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            TimelineSmartViewStatus =
+                "读取共享智能视图失败；临时筛选仍可使用。";
+            return false;
+        }
+    }
+
+    private void SetAppliedTimelineSmartView(FeedSmartView? value)
+    {
+        if (Equals(_appliedTimelineSmartView, value))
+        {
+            return;
+        }
+        _appliedTimelineSmartView = value;
+        OnPropertyChanged(nameof(IsTimelineSmartViewApplied));
     }
 
     private static DateTimeOffset ToTimelineBoundary(DateTime value)

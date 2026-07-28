@@ -98,6 +98,238 @@ public sealed class NewsCenterViewModelTests
         30,
         0,
         TimeSpan.Zero);
+    private const string SmartViewId =
+        "40000000-0000-4000-8000-000000000001";
+
+    [Fact]
+    public async Task PublishedSmartViewLoadsFromLocalCacheWithoutApplyingIt()
+    {
+        var entries = new StubFeedEntryRepository([CreateFeedEntry(0)]);
+        var smartViews = new StubFeedSmartViewRepository(
+            CreateSmartViewSnapshot());
+        using NewsCenterViewModel viewModel = CreateViewModel(
+            CreateSnapshot(),
+            feedEntries: entries,
+            smartViews: smartViews,
+            timeProvider: new FixedTimeProvider(TimelineNow));
+
+        await viewModel.InitializeAsync(CancellationToken.None);
+
+        FeedSmartView selected = Assert.Single(
+            viewModel.TimelineSmartViews);
+        Assert.Same(selected, viewModel.SelectedTimelineSmartView);
+        Assert.False(viewModel.IsTimelineSmartViewApplied);
+        Assert.Equal(1, smartViews.GetCount);
+        Assert.Null(entries.Queries[^1].ViewKind);
+        Assert.Contains("v9", viewModel.TimelineSmartViewStatus);
+    }
+
+    [Fact]
+    public async Task ApplyingPublishedSmartViewUsesPrivateFiltersOnlyInLocalQuery()
+    {
+        var entries = new StubFeedEntryRepository([CreateFeedEntry(0)]);
+        using NewsCenterViewModel viewModel = CreateViewModel(
+            CreateSnapshot(),
+            feedEntries: entries,
+            smartViews: new StubFeedSmartViewRepository(
+                CreateSmartViewSnapshot()),
+            timeProvider: new FixedTimeProvider(TimelineNow));
+        await viewModel.InitializeAsync(CancellationToken.None);
+
+        await viewModel.ApplyTimelineSmartViewCommand.ExecuteAsync();
+
+        FeedEntryQuery query = entries.Queries[^1];
+        Assert.True(viewModel.IsTimelineSmartViewApplied);
+        Assert.Equal(FeedId, query.FeedId);
+        Assert.Equal(CategoryId, query.CategoryId);
+        Assert.Equal(EntryViewKind.Video, query.ViewKind);
+        Assert.Equal(FeedEntryReadFilter.Unread, query.ReadFilter);
+        Assert.True(query.FavoritesOnly);
+        Assert.Equal("release", query.SearchText);
+        Assert.Equal(TimelineNow.AddDays(-30), query.PublishedFrom);
+        Assert.Null(query.PublishedBefore);
+        Assert.Equal("default", query.LocalProfile);
+
+        viewModel.TimelineKeyword = "temporary";
+        await viewModel.ApplyTimelineFiltersCommand.ExecuteAsync();
+
+        FeedEntryQuery temporary = entries.Queries[^1];
+        Assert.False(viewModel.IsTimelineSmartViewApplied);
+        Assert.Null(temporary.ViewKind);
+        Assert.False(temporary.FavoritesOnly);
+        Assert.Equal("temporary", temporary.SearchText);
+    }
+
+    [Fact]
+    public async Task ApplyingViewReloadsLatestBackgroundSnapshotBeforeQuery()
+    {
+        var entries = new StubFeedEntryRepository([CreateFeedEntry(0)]);
+        var repository = new StubFeedSmartViewRepository(
+            CreateSmartViewSnapshot());
+        using NewsCenterViewModel viewModel = CreateViewModel(
+            CreateSnapshot(),
+            feedEntries: entries,
+            smartViews: repository,
+            timeProvider: new FixedTimeProvider(TimelineNow));
+        await viewModel.InitializeAsync(CancellationToken.None);
+        FeedSmartView updated = CreateSmartViewSnapshot().Views[0] with
+        {
+            Version = 4,
+            Name = "最近七天",
+            Filter = CreateSmartViewSnapshot().Views[0].Filter with
+            {
+                PublishedWithinDays = 7
+            }
+        };
+        repository.Snapshot = CreateSmartViewSnapshot() with
+        {
+            ViewSetVersion = 10,
+            Views = [updated]
+        };
+
+        await viewModel.ApplyTimelineSmartViewCommand.ExecuteAsync();
+
+        Assert.True(viewModel.IsTimelineSmartViewApplied);
+        Assert.Equal(
+            "最近七天",
+            viewModel.SelectedTimelineSmartView?.Name);
+        Assert.Equal(
+            TimelineNow.AddDays(-7),
+            entries.Queries[^1].PublishedFrom);
+        Assert.Equal(2, repository.GetCount);
+    }
+
+    [Fact]
+    public async Task RefreshSynchronizesAndReappliesUpdatedPublishedView()
+    {
+        var entries = new StubFeedEntryRepository([CreateFeedEntry(0)]);
+        var repository = new StubFeedSmartViewRepository(
+            CreateSmartViewSnapshot());
+        var sync = new StubFeedSmartViewSyncService(() =>
+        {
+            FeedSmartView updated =
+                CreateSmartViewSnapshot().Views[0] with
+                {
+                    Version = 4,
+                    Name = "最近七天",
+                    Filter = CreateSmartViewSnapshot().Views[0].Filter with
+                    {
+                        PublishedWithinDays = 7
+                    }
+                };
+            repository.Snapshot =
+                CreateSmartViewSnapshot() with
+                {
+                    ViewSetVersion = 10,
+                    Views = [updated]
+                };
+        });
+        using NewsCenterViewModel viewModel = CreateViewModel(
+            CreateSnapshot(),
+            feedEntries: entries,
+            smartViews: repository,
+            smartViewSync: sync,
+            timeProvider: new FixedTimeProvider(TimelineNow));
+        await viewModel.InitializeAsync(CancellationToken.None);
+        await viewModel.ApplyTimelineSmartViewCommand.ExecuteAsync();
+
+        await viewModel.RefreshCommand.ExecuteAsync();
+
+        Assert.Equal(1, sync.Count);
+        Assert.True(viewModel.IsTimelineSmartViewApplied);
+        Assert.Equal(
+            "最近七天",
+            viewModel.SelectedTimelineSmartView?.Name);
+        Assert.Equal(
+            TimelineNow.AddDays(-7),
+            entries.Queries[^1].PublishedFrom);
+    }
+
+    [Fact]
+    public async Task RefreshKeepsLastValidViewsWhenSynchronizationFails()
+    {
+        var repository = new StubFeedSmartViewRepository(
+            CreateSmartViewSnapshot());
+        var sync = new StubFeedSmartViewSyncService(
+            static () => { })
+        {
+            ThrowOnSync = true
+        };
+        using NewsCenterViewModel viewModel = CreateViewModel(
+            CreateSnapshot(),
+            smartViews: repository,
+            smartViewSync: sync,
+            timeProvider: new FixedTimeProvider(TimelineNow));
+        await viewModel.InitializeAsync(CancellationToken.None);
+
+        await viewModel.RefreshCommand.ExecuteAsync();
+
+        Assert.Single(viewModel.TimelineSmartViews);
+        Assert.Equal(1, sync.Count);
+        Assert.Contains(
+            "同步失败",
+            viewModel.TimelineSmartViewStatus,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "离线版本",
+            viewModel.TimelineSmartViewStatus,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RemovedPublishedViewCannotBeAppliedFromStaleMemory()
+    {
+        var entries = new StubFeedEntryRepository([CreateFeedEntry(0)]);
+        var repository = new StubFeedSmartViewRepository(
+            CreateSmartViewSnapshot());
+        using NewsCenterViewModel viewModel = CreateViewModel(
+            CreateSnapshot(),
+            feedEntries: entries,
+            smartViews: repository,
+            timeProvider: new FixedTimeProvider(TimelineNow));
+        await viewModel.InitializeAsync(CancellationToken.None);
+        int queryCount = entries.Queries.Count;
+        repository.Snapshot = CreateSmartViewSnapshot() with
+        {
+            ViewSetVersion = 10,
+            Views = []
+        };
+
+        await viewModel.ApplyTimelineSmartViewCommand.ExecuteAsync();
+
+        Assert.False(viewModel.IsTimelineSmartViewApplied);
+        Assert.Empty(viewModel.TimelineSmartViews);
+        Assert.Equal(queryCount, entries.Queries.Count);
+        Assert.Contains(
+            "已被管理员移除",
+            viewModel.TimelineSmartViewStatus,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task CacheReadFailureRefusesToApplyStaleMemoryDefinition()
+    {
+        var entries = new StubFeedEntryRepository([CreateFeedEntry(0)]);
+        var repository = new StubFeedSmartViewRepository(
+            CreateSmartViewSnapshot());
+        using NewsCenterViewModel viewModel = CreateViewModel(
+            CreateSnapshot(),
+            feedEntries: entries,
+            smartViews: repository,
+            timeProvider: new FixedTimeProvider(TimelineNow));
+        await viewModel.InitializeAsync(CancellationToken.None);
+        int queryCount = entries.Queries.Count;
+        repository.ThrowOnGet = true;
+
+        await viewModel.ApplyTimelineSmartViewCommand.ExecuteAsync();
+
+        Assert.False(viewModel.IsTimelineSmartViewApplied);
+        Assert.Equal(queryCount, entries.Queries.Count);
+        Assert.Contains(
+            "读取",
+            viewModel.TimelineSmartViewStatus,
+            StringComparison.Ordinal);
+    }
 
     [Fact]
     public void TopLevelRoutesSelectSectionTitles()
@@ -1277,7 +1509,10 @@ public sealed class NewsCenterViewModelTests
         IFeedAudioPlaybackService? audioPlayback = null,
         IFeedMediaDeliveryService? mediaDelivery = null,
         IAppNavigationService? navigation = null,
-        IFeedVideoDeliveryPlanningService? videoPlanner = null) =>
+        IFeedVideoDeliveryPlanningService? videoPlanner = null,
+        IFeedSmartViewRepository? smartViews = null,
+        IFeedSmartViewSyncService? smartViewSync = null,
+        TimeProvider? timeProvider = null) =>
         new(
             new StubNewsCenterService(snapshot),
             new StubAiReportService(null),
@@ -1297,7 +1532,10 @@ public sealed class NewsCenterViewModelTests
                 ? null
                 : new MediaJobInbox(),
             navigation,
-            videoPlanner);
+            videoPlanner,
+            smartViews,
+            smartViewSync,
+            timeProvider);
 
     private static NewsCenterSnapshot CreateSnapshot(params NewsArticle[] articles) =>
         new(articles, [], true, DateTimeOffset.Now, null);
@@ -1336,6 +1574,28 @@ public sealed class NewsCenterViewModelTests
                 7,
                 TimelineNow.AddDays(-2),
                 TimelineNow.AddDays(-1))
+        ]);
+
+    private static FeedSmartViewSnapshot CreateSmartViewSnapshot() => new(
+        9,
+        FeedSmartViewScope.Active,
+        TimelineNow.AddMinutes(-10),
+        TimelineNow.AddMinutes(-5),
+        [
+            new(
+                SmartViewId,
+                3,
+                "近期未读视频",
+                20,
+                true,
+                new(
+                    FeedId,
+                    CategoryId,
+                    EntryViewKind.Video,
+                    FeedEntryReadFilter.Unread,
+                    true,
+                    "release",
+                    30))
         ]);
 
     private static FeedEntry CreateFeedEntry(int index) => new(
@@ -1989,6 +2249,70 @@ public sealed class NewsCenterViewModelTests
         public (string Source, string Destination)? PickWordConversion() => null;
         public void OpenFolder(string path) { }
         public void OpenUri(string uri) => OpenedUri = uri;
+    }
+
+    private sealed class StubFeedSmartViewRepository(
+        FeedSmartViewSnapshot snapshot)
+        : IFeedSmartViewRepository
+    {
+        public int GetCount { get; private set; }
+        public FeedSmartViewSnapshot Snapshot { get; set; } = snapshot;
+        public bool ThrowOnGet { get; set; }
+
+        public Task<FeedSmartViewSnapshot> GetAsync(
+            CancellationToken cancellationToken)
+        {
+            GetCount++;
+            if (ThrowOnGet)
+            {
+                throw new InvalidOperationException(
+                    "Simulated smart-view cache failure.");
+            }
+            return Task.FromResult(Snapshot);
+        }
+
+        public Task ReplaceAsync(
+            FeedSmartViewSnapshot value,
+            CancellationToken cancellationToken)
+        {
+            Snapshot = value;
+            return Task.CompletedTask;
+        }
+
+        public Task<bool> MarkSynchronizedAsync(
+            long expectedVersion,
+            DateTimeOffset synchronizedAt,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(false);
+    }
+
+    private sealed class StubFeedSmartViewSyncService(Action onSync)
+        : IFeedSmartViewSyncService
+    {
+        public int Count { get; private set; }
+        public bool ThrowOnSync { get; init; }
+
+        public Task<FeedSmartViewSyncResult> SyncAsync(
+            CancellationToken cancellationToken)
+        {
+            Count++;
+            if (ThrowOnSync)
+            {
+                throw new InvalidOperationException(
+                    "Simulated smart-view sync failure.");
+            }
+            onSync();
+            return Task.FromResult(new FeedSmartViewSyncResult(
+                FeedSmartViewSyncOutcome.Updated,
+                10,
+                TimelineNow));
+        }
+    }
+
+    private sealed class FixedTimeProvider(DateTimeOffset now)
+        : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => now;
     }
 
     private sealed class StubFeedAudioPlaybackService :

@@ -59,7 +59,10 @@ public sealed partial class NewsCenterViewModel
         IMediaJobInbox? mediaJobInbox = null,
         IAppNavigationService? appNavigation = null,
         IFeedVideoDeliveryPlanningService?
-            feedVideoDeliveryPlanning = null)
+            feedVideoDeliveryPlanning = null,
+        IFeedSmartViewRepository? feedSmartViewRepository = null,
+        IFeedSmartViewSyncService? feedSmartViewSync = null,
+        TimeProvider? timeProvider = null)
         : base("资讯列表", "订阅资讯、每日早报、热点趋势与 AI 报告")
     {
         bool hasSharedMediaDependency =
@@ -100,6 +103,9 @@ public sealed partial class NewsCenterViewModel
         _appNavigation = appNavigation;
         _feedVideoDeliveryPlanning =
             feedVideoDeliveryPlanning;
+        _feedSmartViewRepository = feedSmartViewRepository;
+        _feedSmartViewSync = feedSmartViewSync;
+        _timelineTimeProvider = timeProvider ?? TimeProvider.System;
         _timelineSynchronizationContext =
             SynchronizationContext.Current is System.Windows.Threading.DispatcherSynchronizationContext dispatcherContext
             && System.Windows.Application.Current is not null
@@ -280,6 +286,7 @@ public sealed partial class NewsCenterViewModel
         NewsCenterSnapshot snapshot = await _newsCenterService.RefreshAsync(cancellationToken);
         ApplySnapshot(snapshot);
         await ReloadTimelineCatalogAsync(preserveSelection: true, cancellationToken);
+        await RefreshTimelineSmartViewsAsync(cancellationToken);
     }
 
     private void OpenFeedContentUri(string uri) => _dialogs.OpenUri(uri);

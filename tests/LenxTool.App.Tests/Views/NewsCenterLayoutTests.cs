@@ -556,8 +556,16 @@ public sealed class NewsCenterLayoutTests
                 && element.Attribute("Text")?.Value == "资讯列表");
         Assert.All(
             filters.Descendants()
-                .Where(element => element.Name.LocalName == "ComboBox"),
+                .Where(element => element.Name.LocalName == "ComboBox"
+                    && element.Attribute("AutomationProperties.Name")?.Value
+                        != "选择已发布智能视图"),
             comboBox => Assert.Equal("Label", comboBox.Attribute("DisplayMemberPath")?.Value));
+        Assert.Contains(
+            filters.Descendants(),
+            element => element.Name.LocalName == "ComboBox"
+                && element.Attribute("AutomationProperties.Name")?.Value
+                    == "选择已发布智能视图"
+                && element.Attribute("DisplayMemberPath")?.Value == "Name");
 
         XElement browser = LoadFixture("FeedTimelineBrowserView.xaml");
         XElement[] emptyStates = browser.Descendants()
