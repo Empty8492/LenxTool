@@ -1565,6 +1565,101 @@ public sealed class NewsCenterViewModelTests
     }
 
     [Fact]
+    public async Task TenThousandMixedEntriesKeepFiveViewsPagedAndReuseContexts()
+    {
+        EntryViewKind[] viewKinds =
+            Enum.GetValues<EntryViewKind>();
+        FeedEntry[] mixedEntries = Enumerable.Range(0, 10_000)
+            .Select(index =>
+            {
+                EntryViewKind kind =
+                    viewKinds[index % viewKinds.Length];
+                return CreateFeedEntry(index) with
+                {
+                    FeedId = FeedIdFor(kind)
+                };
+            })
+            .ToArray();
+        var entries = new StubFeedEntryRepository(mixedEntries);
+        foreach (EntryViewKind kind in viewKinds)
+        {
+            entries.ExplicitViewKinds[FeedIdFor(kind)] = kind;
+        }
+        using NewsCenterViewModel viewModel = CreateViewModel(
+            CreateSnapshot(),
+            feedEntries: entries,
+            audioPlayback: new StubFeedAudioPlaybackService(),
+            mediaDelivery: new StubFeedMediaDeliveryService(),
+            navigation: new StubAppNavigationService(),
+            videoPlanner:
+                new StubFeedVideoDeliveryPlanningService());
+        var stopwatch = Stopwatch.StartNew();
+
+        await viewModel.InitializeAsync(CancellationToken.None);
+        viewModel.SelectedFeedViewIndex = 1;
+        await viewModel.PictureFeedInitialization;
+        viewModel.SelectedFeedViewIndex = 2;
+        await viewModel.AudioFeedInitialization;
+        viewModel.SelectedFeedViewIndex = 3;
+        await viewModel.VideoFeedInitialization;
+        viewModel.SelectedFeedViewIndex = 4;
+        await viewModel.NotificationFeedInitialization;
+        stopwatch.Stop();
+
+        Assert.Equal(50, viewModel.TimelineEntries.Count);
+        Assert.Equal(50, viewModel.PictureFeed?.Items.Count);
+        Assert.Equal(50, viewModel.AudioFeed?.Items.Count);
+        Assert.Equal(50, viewModel.VideoFeed?.Items.Count);
+        Assert.Equal(50, viewModel.NotificationFeed?.Items.Count);
+        Assert.Equal(5, entries.Queries.Count);
+        Assert.All(
+            entries.Queries,
+            query =>
+            {
+                Assert.Equal(0, query.Offset);
+                Assert.Equal(50, query.Limit);
+            });
+        Assert.True(
+            stopwatch.Elapsed < TimeSpan.FromSeconds(2),
+            $"五视图首屏加载耗时 "
+            + $"{stopwatch.Elapsed.TotalMilliseconds:F0} ms。");
+
+        FeedContentCollectionViewModel picture =
+            Assert.IsType<FeedContentCollectionViewModel>(
+                viewModel.PictureFeed);
+        FeedContentCollectionViewModel audio =
+            Assert.IsType<FeedAudioViewModel>(
+                viewModel.AudioFeed).Feed;
+        FeedContentCollectionViewModel video =
+            Assert.IsType<FeedVideoViewModel>(
+                viewModel.VideoFeed).Feed;
+        FeedContentCollectionViewModel notification =
+            Assert.IsType<FeedContentCollectionViewModel>(
+                viewModel.NotificationFeed);
+        picture.FavoritesOnly = true;
+        audio.SelectedDate = new DateTime(2026, 7, 18);
+        video.FavoritesOnly = true;
+        notification.SelectedDate =
+            new DateTime(2026, 7, 19);
+        int queryCount = entries.Queries.Count;
+
+        foreach (int index in Enumerable.Range(0, 5))
+        {
+            viewModel.SelectedFeedViewIndex = index;
+        }
+
+        Assert.True(picture.FavoritesOnly);
+        Assert.Equal(
+            new DateTime(2026, 7, 18),
+            audio.SelectedDate);
+        Assert.True(video.FavoritesOnly);
+        Assert.Equal(
+            new DateTime(2026, 7, 19),
+            notification.SelectedDate);
+        Assert.Equal(queryCount, entries.Queries.Count);
+    }
+
+    [Fact]
     public async Task EntityNavigationOpensFeedEntryInTheReader()
     {
         FeedEntry entry = CreateFeedEntry(42);
@@ -1701,6 +1796,9 @@ public sealed class NewsCenterViewModelTests
         [],
         index.ToString("x64", CultureInfo.InvariantCulture),
         TimelineNow);
+
+    private static string FeedIdFor(EntryViewKind kind) =>
+        $"30000000-0000-4000-8000-{(int)kind + 1:D12}";
 
     private static FeedFullTextContent CreateFullTextContent(FeedEntry entry, string body) => new(
         entry.Id,
@@ -1962,6 +2060,10 @@ public sealed class NewsCenterViewModelTests
         private int _delayNextQuery;
 
         public List<FeedEntryQuery> Queries { get; } = [];
+        public Dictionary<string, EntryViewKind> ExplicitViewKinds
+        {
+            get;
+        } = new(StringComparer.Ordinal);
         public TaskCompletionSource DelayedQueryStarted { get; } =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource DelayedQueryCancelled { get; } =
@@ -2016,7 +2118,8 @@ public sealed class NewsCenterViewModelTests
             {
                 filtered = filtered.Where(entry =>
                     EntryViewClassifier.Classify(
-                        null,
+                        ExplicitViewKinds.GetValueOrDefault(
+                            entry.FeedId),
                         entry.Enclosures
                             .Select(enclosure => FeedAttachmentClassifier.Classify(
                                 enclosure,

@@ -10,14 +10,16 @@
 |---|---:|
 | LenxTool.Core.Tests | 147 passed |
 | LenxTool.Infrastructure.Tests | 390 passed |
-| LenxTool.App.Tests | 286 passed |
+| LenxTool.App.Tests | 292 passed |
 | Cloudflare Worker Vitest | 70 passed |
 | Worker TypeScript strict typecheck | passed |
 | .NET build warnings | 0 |
 | NuGet vulnerable packages | 0 detected |
 | npm audit vulnerabilities | 0 detected |
 
-当前完整 Release 结果为 Core 147/147、Infrastructure 390/390、App/WPF 286/286、Worker workerd/D1 Vitest 70/70、Worker strict typecheck 与全解决方案 build 0 警告/0 错误。本轮未修改 NuGet/npm 依赖；NuGet 在线漏洞扫描与 `npm audit` 均为 0 漏洞。
+当前完整 Release 结果为 Core 147/147、Infrastructure 390/390、App/WPF 292/292、Worker workerd/D1 Vitest 70/70、Worker strict typecheck 与全解决方案 build 0 警告/0 错误。本轮未修改 NuGet/npm 依赖；最近一次 NuGet 在线漏洞扫描与 `npm audit` 均为 0 漏洞。
+
+P2-06 新增 6 项 App/WPF 场景并完成 P2-A 检查点。第五个通知页签复用统一 `FeedEntry`/`EntryViewKind.Notification`、50 条分页、私人状态和既有安全原文打开契约，与顶部本机应用通知收件箱保持独立；时间线的新查询会主动取消旧查询，迟到结果不能覆盖最新筛选。10,000 条五类混合条目仅发出 5 次 `offset=0/limit=50` 首屏查询，五视图重复切换不会重查且各自筛选保持不变。真实 WPF 在每类 300 条数据上验证五个页签滚动到底并返回后仍复用列表实例与滚动偏移，容器数稳定在 1～40；900×620、等效 200% 缩放、方向键和减少动画均通过。完整 .NET 829/829、Worker 70/70、strict typecheck 与 Release build 0 警告/0 错误通过；本项无 schema、云端字段或依赖变更。
 
 P2-05 智能视图 UI 新增 18 项 App/WPF 场景。普通用户侧覆盖离线 ACTIVE 列表只读加载、显式套用、私人未读/收藏档案、本地时间窗口、临时筛选退出、分页查询、后台快照更新、视图删除、缓存读取失败关闭、同步失败保留最后有效缓存及刷新后重套用；选择本身不发起内容查询或云端写入。管理员侧覆盖 ALL 图形编辑器、封闭目录/内容/已读选择、普通用户命令禁用、创建/更新/确认删除、ACTIVE 缓存刷新、版本冲突只刷新不重放，以及远端写入和缓存同步两个飞行阶段撤销角色后均不回填管理状态。XAML/DI 结构测试确认普通用户没有发布/删除入口，管理员页没有 URL、脚本、正文或任意 JSON 编辑面。完整 .NET 821/821、Worker 70/70、strict typecheck 与 Release build 0 警告/0 错误通过，P2-05 验收完成。
 
