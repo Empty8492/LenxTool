@@ -296,6 +296,29 @@ describe("Worker v1 known feed discovery route", () => {
     expect(await scalar("SELECT COUNT(*) AS value FROM managed_feeds")).toBe(8);
   });
 
+  it("returns the first keyword page within budget at the catalog capacity limit", async () => {
+    const user = await seedSession("user");
+    await seedCapacityCatalog();
+
+    const startedAt = performance.now();
+    const response = await discoveryRequest(
+      user,
+      "query=checkpoint&pageSize=50"
+    );
+    const page = await response.json<DiscoveryPage>();
+    const elapsedMilliseconds = performance.now() - startedAt;
+
+    expect(response.status).toBe(200);
+    expect(page.pagination).toMatchObject({
+      pageSize: 50,
+      totalItems: 5000
+    });
+    expect(page.items).toHaveLength(50);
+    expect(page.items.every(item => item.title.startsWith("Checkpoint Feed ")))
+      .toBe(true);
+    expect(elapsedMilliseconds).toBeLessThan(2000);
+  });
+
   it("returns only the explicit discovery metadata allowlist", async () => {
     const user = await seedSession("user");
     await seedDiscoveryCatalog();
@@ -335,6 +358,31 @@ async function seedDiscoveryCatalog(): Promise<void> {
       "UPDATE feed_catalog_state SET catalog_version=12,updated_at=?,last_mutation_id=NULL WHERE singleton_id=1"
     ).bind(generatedAt)
   ]);
+}
+
+async function seedCapacityCatalog(): Promise<void> {
+  await env.DB.prepare(
+    "WITH digits(d) AS (VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9)), " +
+      "numbers(n) AS (" +
+      "SELECT ones.d + tens.d*10 + hundreds.d*100 + thousands.d*1000 + 1 " +
+      "FROM digits ones CROSS JOIN digits tens CROSS JOIN digits hundreds CROSS JOIN digits thousands" +
+      ") " +
+      "INSERT INTO managed_feeds(" +
+      "id,original_url,normalized_url,display_name,site_url,category_id,view_kind," +
+      "refresh_interval_minutes,sort_order,is_enabled,deleted_at,version,created_at,updated_at" +
+      ") " +
+      "SELECT " +
+      "'73000000-0000-4000-8000-' || printf('%012d', n)," +
+      "'https://checkpoint-' || n || '.example/rss'," +
+      "'https://checkpoint-' || n || '.example/rss'," +
+      "'Checkpoint Feed ' || printf('%04d', n)," +
+      "'https://checkpoint-' || n || '.example/'," +
+      "NULL,'ARTICLE',60,n,1,NULL,1,?,? " +
+      "FROM numbers WHERE n<=5000"
+  ).bind(generatedAt, generatedAt).run();
+  await env.DB.prepare(
+    "UPDATE feed_catalog_state SET catalog_version=1,updated_at=?,last_mutation_id=NULL WHERE singleton_id=1"
+  ).bind(generatedAt).run();
 }
 
 function categoryStatement(

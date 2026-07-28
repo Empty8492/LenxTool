@@ -95,6 +95,52 @@ public sealed class FeedDiscoveryPreviewRepositoryTests : IDisposable
             item => item.FeedId == SecondFeedId);
     }
 
+    [Fact]
+    public async Task MaximumCandidateWindowStaysWithinPreviewBudget()
+    {
+        using SqliteDatabase database = await CreateDatabaseAsync();
+        string[] feedIds = Enumerable.Range(1, 100)
+            .Select(index =>
+                $"31000000-0000-4000-8000-{index:D12}")
+            .ToArray();
+        var catalog = new FeedCatalogRepository(database);
+        await catalog.ReplaceAsync(
+            new(
+                new(2, FeedCatalogScope.Active, Now, Now),
+                [],
+                feedIds.Select((id, index) =>
+                    Feed(id, $"budget-{index:D3}")).ToArray()),
+            CancellationToken.None);
+        var entries = new FeedEntryRepository(database);
+        foreach (string feedId in feedIds)
+        {
+            await entries.UpsertAsync(
+                feedId,
+                Enumerable.Range(1, 25)
+                    .Select(index => Entry(feedId, index))
+                    .ToArray(),
+                CancellationToken.None);
+        }
+
+        var repository = new FeedDiscoveryPreviewRepository(database);
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        IReadOnlyList<FeedDiscoveryPreviewItem> result =
+            await repository.GetRecentAsync(
+                feedIds,
+                4,
+                "default",
+                CancellationToken.None);
+        stopwatch.Stop();
+        Console.WriteLine(
+            $"DISCOVERY_PREVIEW_ELAPSED_MS={stopwatch.Elapsed.TotalMilliseconds:F0}");
+
+        Assert.Equal(400, result.Count);
+        Assert.Equal(100, result.Select(item => item.FeedId).Distinct().Count());
+        Assert.True(
+            stopwatch.Elapsed < TimeSpan.FromSeconds(2),
+            $"发现预览最大候选窗口耗时 {stopwatch.Elapsed.TotalMilliseconds:F0} ms，超过 2 秒预算。");
+    }
+
     private async Task<SqliteDatabase> CreateDatabaseAsync()
     {
         var database = new SqliteDatabase(

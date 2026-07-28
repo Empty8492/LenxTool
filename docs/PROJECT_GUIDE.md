@@ -237,10 +237,11 @@ npm.cmd test -- --run
 - 全局滚动体验已补强：类级事件处理覆盖显式与控件模板内部的 `ScrollViewer`，嵌套滚动区优先消费最内层仍可滚动的容器，到达边界后交还外层；统一 1.45 倍滚轮距离、目标累计和 Ease-Out 过渡。ListBox、ListView、PagedListBox 与下拉列表使用像素单位并继续虚拟化，键盘、横向滚动和系统“减少动画”语义保持原生行为。
 - DISC-04 管理员统一发现页已完成：入口位于订阅管理内部，统一支持关键词、URL 与 RSSHub 路由识别、450 ms 防抖、显式提交/取消、请求代次和重试；输入变化或会话降权立即取消旧请求。候选卡显示来源、健康、警告、类型和更新时间，并用一次批量 SQLite 投影读取匹配 Feed 的本地标题/时间预览，过滤隐藏条目且每 Feed 最多 4 条，不读取或上传正文。加载、部分成功、空结果、离线、限流、非法输入和取消状态互不混淆；本片无目录发布写命令，普通用户继续无法进入管理员管理页。
 - DISC-05 管理员发布闭环已完成：候选先按 ALL 管理目录的规范化 URL 标记为“加入共享目录”或“查看现有项”；发布面板完整显示规范化地址、分类、刷新、视图与全文策略，只有管理员显式勾选确认后才可提交。写入复用现有 `If-Match`、同次令牌刷新幂等键、Worker RBAC 与审计；版本冲突会刷新目录且不自动重放，网络中断或写后刷新失败会锁住后续发布并要求先确认目录状态。成功刷新到新版本后，当前候选立即转成现有项。
+- DISC-06 最终检查点已完成：已知目录关键词来源和直接探测的默认预算分别锁定为 8 秒与 20 秒，真实 5,000 条 workerd/D1 目录首批 50 条测试用例耗时 188 ms，100 个候选/2,500 条本地条目的 SQLite 预览投影实测 55 ms。全源不可用显示可重试离线状态，慢源超时不丢健康来源；D1/响应字段白名单和发现日志静态审计确认正文、私人状态、令牌、敏感查询和本地路径不进入云端或日志。普通用户写入 403、管理员并发冲突、恶意 URL/重定向/XXE/压缩炸弹均由真实传输或 workerd/D1 测试覆盖。最终门禁为 .NET Release 755/755、Worker 64/64、strict typecheck、依赖 0 漏洞与构建 0 警告/0 错误。
 
 ### 10.2 下一里程碑
 
-Gate 0 字幕闭环、P0“管理员策展 RSS”、P1“阅读增强、AI 与自动化”、P2-01～P2-02，以及插入计划 DISC-01～DISC-05、UX-03 均已完成。下一项是 [统一发现与原生控件视觉插入计划](plans/RSS_DISCOVERY_AND_CONTROL_UX.md) 的 DISC-06：关闭功能、安全、性能、可访问性和文档检查点；插入计划关闭后恢复 P2-03 音频与播客视图。P1/P2 源码进度不等于正式签名发布完成。
+Gate 0 字幕闭环、P0“管理员策展 RSS”、P1“阅读增强、AI 与自动化”、P2-01～P2-02，以及插入计划 DISC-01～DISC-06、UX-03 均已完成。下一项是 [P2 内容视图与集成计划](plans/RSS_P2_VIEWS_INTEGRATIONS.md) 的 P2-03 音频与播客视图。P1/P2 源码进度不等于正式签名发布完成。
 
 字幕闭环完成后的产品主路线已确定为“管理员策展 RSS”：管理员维护共享 RSS/Atom 目录，普通用户只能同步和阅读，不得修改共享订阅、分类、抓取策略或自动化规则。为保持现有“云端不存新闻正文”边界，首版采用 Worker/D1 保存权威目录、各桌面客户端本地抓取和 SQLite 缓存的模式。
 
@@ -249,8 +250,8 @@ Gate 0 字幕闭环、P0“管理员策展 RSS”、P1“阅读增强、AI 与�
 1. Gate 0 字幕闭环已完成；验收记录见 [`plans/EXISTING_BACKLOG_ALIGNMENT.md`](plans/EXISTING_BACKLOG_ALIGNMENT.md)。
 2. P0-01～P0-20、P0-B/P0-C 及最终检查点已完成；P0 关闭记录见 [`plans/RSS_P0_ADMIN_CATALOG.md`](plans/RSS_P0_ADMIN_CATALOG.md)。
 3. P1-01～P1-20、P1-A/P1-B/P1-C/P1-D 及最终检查点已完成；关闭记录见 [`plans/RSS_P1_READING_INTELLIGENCE.md`](plans/RSS_P1_READING_INTELLIGENCE.md)。
-4. P2-01 内容类型分类器与 P2-02 图片流已完成；[`plans/RSS_DISCOVERY_AND_CONTROL_UX.md`](plans/RSS_DISCOVERY_AND_CONTROL_UX.md) 的 DISC-01～DISC-05 已交付独立发现索引、安全可替换 provider、管理员统一发现页和确认发布闭环，UX-03 已交付原生 WPF 共享控件模板，当前执行 DISC-06 最终检查点，不依赖 Folo 私有 API 或复制其源码。
-5. 插入计划检查点关闭后，从 P2-03 音频与播客视图继续实现多内容视图、外部导出适配器、本地定时摘要和 Windows 系统通知；具体见 [`plans/RSS_P2_VIEWS_INTEGRATIONS.md`](plans/RSS_P2_VIEWS_INTEGRATIONS.md)。
+4. P2-01 内容类型分类器与 P2-02 图片流已完成；[`plans/RSS_DISCOVERY_AND_CONTROL_UX.md`](plans/RSS_DISCOVERY_AND_CONTROL_UX.md) 的 DISC-01～DISC-06 已交付独立发现索引、安全可替换 provider、管理员统一发现页、确认发布闭环和最终检查点，UX-03 已交付原生 WPF 共享控件模板，不依赖 Folo 私有 API 或复制其源码。
+5. 当前从 P2-03 音频与播客视图继续实现多内容视图、外部导出适配器、本地定时摘要和 Windows 系统通知；具体见 [`plans/RSS_P2_VIEWS_INTEGRATIONS.md`](plans/RSS_P2_VIEWS_INTEGRATIONS.md)。
 
 总路线、参考项目和许可证边界见 [`plans/RSS_MASTER_ROADMAP.md`](plans/RSS_MASTER_ROADMAP.md)，架构决策见 [`decisions/ADR-001-admin-curated-rss.md`](decisions/ADR-001-admin-curated-rss.md) 与 [`decisions/ADR-002-article-content-extraction.md`](decisions/ADR-002-article-content-extraction.md)。P0 与 P1 可作为已验收基础；生产 Worker/D1、正式安装包、签名、升级和跨物理机矩阵仍按 10.5～10.7 节单独验收。
 

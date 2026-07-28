@@ -142,6 +142,38 @@ public sealed class FeedDiscoveryViewModelTests
     }
 
     [Fact]
+    public async Task UnavailableSourcesMapToOfflineAndRemainRetryable()
+    {
+        var discovery = new FakeUnifiedDiscoveryService();
+        discovery.Results.Enqueue(new(
+            ValidQuery("offline"),
+            [],
+            [
+                new(
+                    "worker:known-catalog",
+                    FeedDiscoverySourceKind.KnownCatalog,
+                    FeedDiscoverySourceStatus.Unavailable,
+                    0,
+                    false,
+                    false)
+            ],
+            FeedDiscoveryCompletionStatus.Unavailable));
+        using var viewModel = CreateViewModel(
+            discovery,
+            new FakePreviewRepository([]),
+            AccountRole.Admin,
+            TimeSpan.FromHours(1));
+        viewModel.Input = "offline";
+
+        await viewModel.SearchCommand.ExecuteAsync();
+
+        Assert.Equal(FeedDiscoveryPageState.Offline, viewModel.State);
+        Assert.Contains("无法连接", viewModel.Status, StringComparison.Ordinal);
+        Assert.Empty(viewModel.Candidates);
+        Assert.True(viewModel.RetryCommand.CanExecute(null));
+    }
+
+    [Fact]
     public async Task LocalPreviewFailureDoesNotHideValidDiscoveryCandidates()
     {
         var discovery = new FakeUnifiedDiscoveryService();

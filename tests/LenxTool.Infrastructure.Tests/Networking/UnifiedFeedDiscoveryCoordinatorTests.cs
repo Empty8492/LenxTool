@@ -8,6 +8,23 @@ namespace LenxTool.Infrastructure.Tests.Networking;
 public sealed class UnifiedFeedDiscoveryCoordinatorTests
 {
     [Fact]
+    public void DefaultPoliciesFreezeKeywordAndDirectProbeBudgets()
+    {
+        Assert.Equal(
+            TimeSpan.FromSeconds(8),
+            UnifiedFeedDiscoveryOptions.Default.KnownCatalog.Timeout);
+        Assert.Equal(
+            TimeSpan.FromSeconds(20),
+            UnifiedFeedDiscoveryOptions.Default.DirectProbe.Timeout);
+        Assert.Equal(
+            TimeSpan.FromSeconds(20),
+            FeedDiscoveryOptions.Default.TotalTimeout);
+        Assert.Equal(
+            FeedDiscoveryOptions.Default.TotalTimeout,
+            UnifiedFeedDiscoveryOptions.Default.DirectProbe.Timeout);
+    }
+
+    [Fact]
     public async Task DuplicateCandidatesMergeWithoutLosingSourceEvidence()
     {
         var catalog = Provider(

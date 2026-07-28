@@ -9,15 +9,17 @@
 | 测试组 | 结果 |
 |---|---:|
 | LenxTool.Core.Tests | 140 passed |
-| LenxTool.Infrastructure.Tests | 378 passed |
-| LenxTool.App.Tests | 234 passed |
-| Cloudflare Worker Vitest | 63 passed |
+| LenxTool.Infrastructure.Tests | 380 passed |
+| LenxTool.App.Tests | 235 passed |
+| Cloudflare Worker Vitest | 64 passed |
 | Worker TypeScript strict typecheck | passed |
 | .NET build warnings | 0 |
 | NuGet vulnerable packages | 0 detected |
 | npm audit vulnerabilities | 0 detected |
 
-当前完整 Release 结果为 Core 140/140、Infrastructure 378/378、App/WPF 234/234、Worker workerd/D1 Vitest 63/63、Worker strict typecheck 与全解决方案 build 0 警告/0 错误。本轮未修改 NuGet/npm 依赖；NuGet 在线漏洞扫描与 `npm audit` 均为 0 漏洞。
+当前完整 Release 结果为 Core 140/140、Infrastructure 380/380、App/WPF 235/235、Worker workerd/D1 Vitest 64/64、Worker strict typecheck 与全解决方案 build 0 警告/0 错误。本轮未修改 NuGet/npm 依赖；NuGet 在线漏洞扫描与 `npm audit` 均为 0 漏洞。
+
+DISC-06 最终检查点新增 2 项 Infrastructure、1 项 App 和 1 项 Worker 证据。默认策略测试把已知目录关键词来源锁定为 8 秒、直接 URL 探测和底层安全抓取锁定为 20 秒，并复用慢 provider 超时仍返回健康候选的部分成功测试。真实 workerd/D1 在目录容量上限 5,000 条 Feed 下查询首批 50 条结果，完整测试用例耗时 188 ms；真实 schema v18 SQLite 在 100 个候选、2,500 条含大正文条目上一次投影 400 条标题/时间预览实测 55 ms，受 2 秒门禁保护且 DTO 不存在正文字段。App 新增全源不可用映射为可重试离线状态的场景。既有真实 Worker/传输测试继续证明普通用户写入 403、管理员同版本并发单赢家、409 不重放、响应/D1 无正文或私人状态，以及私网/环回/混合 DNS/重绑定、恶意重定向、XXE、压缩炸弹和超限地址输入均被阻断；静态审计确认发现路径没有日志调用，令牌、查询内容和本地路径不进入日志。最终全量为 .NET 755/755、Worker 64/64、strict typecheck、Release 0 警告/0 错误和 NuGet/npm 0 漏洞。
 
 DISC-05 新增 7 项发布 ViewModel 场景，并把既有 2 项结构场景和 1 项真实 WPF 场景扩展到确认发布。覆盖未勾选不能写入、规范化 URL 与四类策略可见、ALL 目录重复项只查看、快速双击只到达管理员服务一次、成功写入只调用一次并刷新到新版本、双管理员版本冲突刷新且不自动重放、网络中断锁住后续写入、服务端 403 保持权威，以及成功后候选同步变为现有项。真实 WPF 运行时继续覆盖原生 Button/CheckBox/ComboBox Automation Peer、Tab 焦点、900×620 窄窗、等效 200% 缩放和深浅主题。既有 Infrastructure 测试同时证明目录写入携带 `If-Match` 和幂等键、401 刷新只重放同一幂等键、普通用户直调得到 403、冲突只发送一次。
 
