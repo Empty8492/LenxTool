@@ -26,6 +26,7 @@ public sealed partial class NewsCenterViewModel
     private readonly SynchronizationContext? _timelineSynchronizationContext;
     private FeedCatalogSnapshot? _timelineCatalog;
     private CancellationTokenSource? _timelineProgressCancellation;
+    private CancellationTokenSource? _timelineQueryCancellation;
     private Task _timelineProgressWrite = Task.CompletedTask;
     private FeedTimelineFilterOption? _selectedTimelineCategory;
     private FeedTimelineFilterOption? _selectedTimelineFeed;
@@ -551,27 +552,59 @@ public sealed partial class NewsCenterViewModel
         int generation = Interlocked.Increment(ref _timelineQueryGeneration);
         LoadMoreTimelineCommand.Cancel();
         GenerateVisibleFeedSummariesCommand.Cancel();
+        var queryCancellation =
+            CancellationTokenSource.CreateLinkedTokenSource(
+                cancellationToken);
+        CancellationTokenSource? previousCancellation =
+            Interlocked.Exchange(
+                ref _timelineQueryCancellation,
+                queryCancellation);
+        previousCancellation?.Cancel();
+        previousCancellation?.Dispose();
+        CancellationToken queryToken = queryCancellation.Token;
         TimelineStatus = "正在筛选本地 Feed 缓存…";
-        FeedEntryPage page = await _feedEntryRepository
-            .QueryAsync(CreateTimelineQuery(0), cancellationToken);
-        if (_timelineDisposed
-            || generation != Volatile.Read(ref _timelineQueryGeneration))
+        try
         {
-            return;
-        }
+            FeedEntryPage page = await _feedEntryRepository
+                .QueryAsync(CreateTimelineQuery(0), queryToken);
+            if (_timelineDisposed
+                || generation != Volatile.Read(
+                    ref _timelineQueryGeneration))
+            {
+                return;
+            }
 
-        TimelineEntries.Clear();
-        await AppendTimelinePageAsync(
-            page,
-            generation,
-            cancellationToken: cancellationToken);
-        if (_timelineDisposed
-            || generation != Volatile.Read(ref _timelineQueryGeneration))
-        {
-            return;
+            TimelineEntries.Clear();
+            await AppendTimelinePageAsync(
+                page,
+                generation,
+                cancellationToken: queryToken);
+            if (_timelineDisposed
+                || generation != Volatile.Read(
+                    ref _timelineQueryGeneration))
+            {
+                return;
+            }
+            SelectedTimelineEntry =
+                TimelineEntries.FirstOrDefault();
+            OnPropertyChanged(nameof(TimelineEntrySummary));
         }
-        SelectedTimelineEntry = TimelineEntries.FirstOrDefault();
-        OnPropertyChanged(nameof(TimelineEntrySummary));
+        catch (OperationCanceledException)
+            when (queryToken.IsCancellationRequested)
+        {
+        }
+        finally
+        {
+            if (ReferenceEquals(
+                    Interlocked.CompareExchange(
+                        ref _timelineQueryCancellation,
+                        null,
+                        queryCancellation),
+                    queryCancellation))
+            {
+                queryCancellation.Dispose();
+            }
+        }
     }
 
     private async Task LoadMoreTimelineAsync(CancellationToken cancellationToken)
@@ -1277,6 +1310,12 @@ public sealed partial class NewsCenterViewModel
         _timelineProgressCancellation?.Cancel();
         _timelineProgressCancellation?.Dispose();
         _timelineProgressCancellation = null;
+        CancellationTokenSource? queryCancellation =
+            Interlocked.Exchange(
+                ref _timelineQueryCancellation,
+                null);
+        queryCancellation?.Cancel();
+        queryCancellation?.Dispose();
         Interlocked.Increment(ref _timelineCatalogGeneration);
         Interlocked.Increment(ref _timelineQueryGeneration);
         Interlocked.Increment(ref _timelineEditorGeneration);

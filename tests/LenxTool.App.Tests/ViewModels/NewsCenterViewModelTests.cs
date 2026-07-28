@@ -1420,6 +1420,34 @@ public sealed class NewsCenterViewModelTests
     }
 
     [Fact]
+    public async Task NewTimelineQueryCancelsOldRequestAndKeepsLatestResults()
+    {
+        var entries = new StubFeedEntryRepository([CreateFeedEntry(0)]);
+        using NewsCenterViewModel viewModel = CreateViewModel(
+            CreateSnapshot(),
+            feedEntries: entries);
+        await viewModel.InitializeAsync(CancellationToken.None);
+        entries.DelayNextQuery();
+        viewModel.TimelineKeyword = "stale query";
+
+        Task staleQuery =
+            viewModel.ApplyTimelineFiltersCommand.ExecuteAsync();
+        await entries.DelayedQueryStarted.Task.WaitAsync(
+            TimeSpan.FromSeconds(1));
+        Task latestQuery =
+            viewModel.ClearTimelineFiltersCommand.ExecuteAsync();
+
+        await entries.DelayedQueryCancelled.Task.WaitAsync(
+            TimeSpan.FromSeconds(1));
+        await Task.WhenAll(staleQuery, latestQuery).WaitAsync(
+            TimeSpan.FromSeconds(1));
+
+        Assert.Equal(string.Empty, viewModel.TimelineKeyword);
+        Assert.Single(viewModel.TimelineEntries);
+        Assert.Null(entries.Queries[^1].SearchText);
+    }
+
+    [Fact]
     public async Task LoadMoreTimelineCommandAppendsStablePagesWithoutDuplicates()
     {
         var entries = new StubFeedEntryRepository(
@@ -1931,19 +1959,45 @@ public sealed class NewsCenterViewModelTests
 
     private sealed class StubFeedEntryRepository(IReadOnlyList<FeedEntry> entries) : IFeedEntryRepository
     {
+        private int _delayNextQuery;
+
         public List<FeedEntryQuery> Queries { get; } = [];
+        public TaskCompletionSource DelayedQueryStarted { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource DelayedQueryCancelled { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public void DelayNextQuery() =>
+            Interlocked.Exchange(ref _delayNextQuery, 1);
 
         public Task<FeedEntry?> GetByIdAsync(
             string entryId,
             CancellationToken cancellationToken) =>
             Task.FromResult(entries.FirstOrDefault(entry => entry.Id == entryId));
 
-        public Task<FeedEntryPage> QueryAsync(
+        public async Task<FeedEntryPage> QueryAsync(
             FeedEntryQuery query,
             CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
             Queries.Add(query);
+            if (Interlocked.Exchange(ref _delayNextQuery, 0) == 1)
+            {
+                DelayedQueryStarted.TrySetResult();
+                try
+                {
+                    await Task.Delay(
+                        Timeout.InfiniteTimeSpan,
+                        cancellationToken);
+                }
+                catch (OperationCanceledException)
+                    when (cancellationToken.IsCancellationRequested)
+                {
+                    DelayedQueryCancelled.TrySetResult();
+                    throw;
+                }
+            }
+
             IEnumerable<FeedEntry> filtered = entries;
             if (!string.IsNullOrWhiteSpace(query.FeedId))
                 filtered = filtered.Where(entry => entry.FeedId == query.FeedId);
@@ -1976,11 +2030,11 @@ public sealed class NewsCenterViewModelTests
                 .ThenBy(entry => entry.Id, StringComparer.Ordinal)
                 .ToArray();
             FeedEntry[] page = ordered.Skip(query.Offset).Take(query.Limit).ToArray();
-            return Task.FromResult(new FeedEntryPage(
+            return new FeedEntryPage(
                 page,
                 query.Offset,
                 ordered.Length > query.Offset + page.Length,
-                query.Offset + page.Length));
+                query.Offset + page.Length);
         }
 
         public Task UpsertAsync(
