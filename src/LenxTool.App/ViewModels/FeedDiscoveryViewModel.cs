@@ -47,9 +47,16 @@ public sealed record FeedDiscoveryCandidateViewModel(
     string SourceText,
     string WarningText,
     string UpdatedText,
-    IReadOnlyList<FeedDiscoveryPreviewEntryViewModel> RecentEntries)
+    IReadOnlyList<FeedDiscoveryPreviewEntryViewModel> RecentEntries,
+    string? SiteUrl = null,
+    FeedCatalogItem? ExistingFeed = null)
 {
     public bool HasRecentEntries => RecentEntries.Count > 0;
+
+    public bool IsExisting => ExistingFeed is not null;
+
+    public string PrimaryActionLabel =>
+        IsExisting ? "查看现有项" : "加入共享目录";
 
     public string PreviewStatus => HasRecentEntries
         ? $"本机缓存中的最近 {RecentEntries.Count} 条"
@@ -57,9 +64,9 @@ public sealed record FeedDiscoveryCandidateViewModel(
 }
 
 /// <summary>
-/// DISC-04 管理员统一发现页。它只读取候选和本地预览，不执行共享目录写入。
+/// 管理员统一发现页。搜索保持只读，发布必须经过独立确认并复用目录写入保护。
 /// </summary>
-public sealed class FeedDiscoveryViewModel : PageViewModel, IDisposable
+public sealed partial class FeedDiscoveryViewModel : PageViewModel, IDisposable
 {
     private static readonly TimeSpan DefaultDebounceDelay =
         TimeSpan.FromMilliseconds(450);
@@ -68,6 +75,8 @@ public sealed class FeedDiscoveryViewModel : PageViewModel, IDisposable
     private readonly IFeedCatalogRepository _catalogRepository;
     private readonly IFeedDiscoveryPreviewRepository _previewRepository;
     private readonly IAccountSessionService _accountSession;
+    private readonly IFeedCatalogAdminService? _adminService;
+    private readonly IFeedCatalogSyncService? _catalogSync;
     private readonly TimeSpan _debounceDelay;
     private readonly SynchronizationContext? _synchronizationContext;
     private CancellationTokenSource? _debounceCancellation;
@@ -87,12 +96,16 @@ public sealed class FeedDiscoveryViewModel : PageViewModel, IDisposable
         IUnifiedFeedDiscoveryService discoveryService,
         IFeedCatalogRepository catalogRepository,
         IFeedDiscoveryPreviewRepository previewRepository,
-        IAccountSessionService accountSession)
+        IAccountSessionService accountSession,
+        IFeedCatalogAdminService adminService,
+        IFeedCatalogSyncService catalogSync)
         : this(
             discoveryService,
             catalogRepository,
             previewRepository,
             accountSession,
+            adminService,
+            catalogSync,
             DefaultDebounceDelay)
     {
     }
@@ -103,14 +116,35 @@ public sealed class FeedDiscoveryViewModel : PageViewModel, IDisposable
         IFeedDiscoveryPreviewRepository previewRepository,
         IAccountSessionService accountSession,
         TimeSpan debounceDelay)
+        : this(
+            discoveryService,
+            catalogRepository,
+            previewRepository,
+            accountSession,
+            null,
+            null,
+            debounceDelay)
+    {
+    }
+
+    internal FeedDiscoveryViewModel(
+        IUnifiedFeedDiscoveryService discoveryService,
+        IFeedCatalogRepository catalogRepository,
+        IFeedDiscoveryPreviewRepository previewRepository,
+        IAccountSessionService accountSession,
+        IFeedCatalogAdminService? adminService,
+        IFeedCatalogSyncService? catalogSync,
+        TimeSpan debounceDelay)
         : base(
             "发现订阅",
-            "统一搜索已知目录与安全直连来源；本页只读，发布将在确认页单独完成")
+            "统一搜索已知目录与安全直连来源；加入共享目录前会显示完整策略并要求确认")
     {
         _discoveryService = discoveryService;
         _catalogRepository = catalogRepository;
         _previewRepository = previewRepository;
         _accountSession = accountSession;
+        _adminService = adminService;
+        _catalogSync = catalogSync;
         _debounceDelay = debounceDelay >= TimeSpan.Zero
             ? debounceDelay
             : throw new ArgumentOutOfRangeException(nameof(debounceDelay));
@@ -119,6 +153,7 @@ public sealed class FeedDiscoveryViewModel : PageViewModel, IDisposable
         SearchCommand = new(SearchImmediatelyAsync, CanSearch);
         RetryCommand = new(SearchImmediatelyAsync, CanRetry);
         CancelCommand = new(CancelSearch, CanCancel);
+        InitializePublishing();
 
         _accountSession.SessionChanged += OnSessionChanged;
         ApplySession(_accountSession.Current);
@@ -208,6 +243,7 @@ public sealed class FeedDiscoveryViewModel : PageViewModel, IDisposable
     private bool CanSearch() =>
         IsAdmin
         && !IsBusy
+        && !IsPublishing
         && FeedDiscoveryQueryClassifier.Classify(Input).IsValid;
 
     private bool CanRetry() =>
@@ -376,7 +412,7 @@ public sealed class FeedDiscoveryViewModel : PageViewModel, IDisposable
         try
         {
             catalog = await _catalogRepository
-                .GetCatalogAsync(FeedCatalogScope.Active, cancellationToken)
+                .GetCatalogAsync(FeedCatalogScope.All, cancellationToken)
                 .ConfigureAwait(true);
         }
         catch (OperationCanceledException)
@@ -386,15 +422,21 @@ public sealed class FeedDiscoveryViewModel : PageViewModel, IDisposable
         catch (Exception)
         {
             // 本地预览是附加信息；数据库读取失败不能吞掉已经验证的发现候选。
+            ClearPublishingCatalog();
             return candidates
-                .Select(candidate => MapCandidate(candidate, []))
+                .Select(candidate => MapCandidate(candidate, [], null))
                 .ToArray();
         }
+        ApplyPublishingCatalog(catalog);
         Dictionary<string, FeedCatalogItem> localFeeds =
             catalog?.Feeds.ToDictionary(
                 feed => feed.NormalizedUrl,
                 StringComparer.Ordinal)
             ?? new(StringComparer.Ordinal);
+        Dictionary<string, FeedCatalogItem> existingFeeds =
+            catalog?.State.Scope == FeedCatalogScope.All
+                ? localFeeds
+                : new(StringComparer.Ordinal);
         string[] previewFeedIds = candidates
             .Select(candidate => localFeeds.GetValueOrDefault(
                 candidate.NormalizedFeedUrl)?.Id)
@@ -419,7 +461,11 @@ public sealed class FeedDiscoveryViewModel : PageViewModel, IDisposable
                 && previews.TryGetValue(feed.Id, out var items)
                     ? items
                     : [];
-            result.Add(MapCandidate(candidate, preview));
+            result.Add(MapCandidate(
+                candidate,
+                preview,
+                existingFeeds.GetValueOrDefault(
+                    candidate.NormalizedFeedUrl)));
         }
         return result;
     }
@@ -473,7 +519,8 @@ public sealed class FeedDiscoveryViewModel : PageViewModel, IDisposable
 
     private static FeedDiscoveryCandidateViewModel MapCandidate(
         FeedDiscoveryCandidate candidate,
-        IReadOnlyList<FeedDiscoveryPreviewEntryViewModel> preview) =>
+        IReadOnlyList<FeedDiscoveryPreviewEntryViewModel> preview,
+        FeedCatalogItem? existingFeed) =>
         new(
             candidate.Title ?? candidate.NormalizedFeedUrl,
             candidate.NormalizedFeedUrl,
@@ -496,7 +543,9 @@ public sealed class FeedDiscoveryViewModel : PageViewModel, IDisposable
             candidate.LastUpdatedAt is DateTimeOffset updated
                 ? FormatTimestamp(updated)
                 : "更新时间未知",
-            preview);
+            preview,
+            candidate.SiteUrl,
+            existingFeed);
 
     private static string FormatSources(
         IReadOnlyList<FeedDiscoveryEvidence> evidence) =>
@@ -668,8 +717,10 @@ public sealed class FeedDiscoveryViewModel : PageViewModel, IDisposable
             SetProperty(ref _isAdmin, isAdmin, nameof(IsAdmin));
         if (!isAdmin)
         {
+            PublishCommand.Cancel();
             CancelSearch();
             ClearCandidates();
+            ResetPublishingSelection();
             State = FeedDiscoveryPageState.Forbidden;
             Status = "需要管理员账号才能使用统一发现。";
         }
@@ -683,6 +734,7 @@ public sealed class FeedDiscoveryViewModel : PageViewModel, IDisposable
 
     private void ClearCandidates()
     {
+        ResetPublishingSelection();
         Candidates.Clear();
         NotifyCandidateState();
     }
@@ -698,6 +750,7 @@ public sealed class FeedDiscoveryViewModel : PageViewModel, IDisposable
         SearchCommand.NotifyCanExecuteChanged();
         RetryCommand.NotifyCanExecuteChanged();
         CancelCommand.NotifyCanExecuteChanged();
+        NotifyPublishingCommands();
     }
 
     public void Dispose()
@@ -708,5 +761,7 @@ public sealed class FeedDiscoveryViewModel : PageViewModel, IDisposable
         CancelSearch();
         SearchCommand.Dispose();
         RetryCommand.Dispose();
+        PublishCommand.Dispose();
+        RefreshCatalogCommand.Dispose();
     }
 }

@@ -280,7 +280,7 @@ public partial class App : Application
         services.AddSingleton<HistoryViewModel>();
         services.AddSingleton<ToolsViewModel>();
         services.AddSingleton<SettingsViewModel>();
-        // DISC-04 只注册只读发现页；共享目录写入仍由后续发布闭环负责。
+        // 发现页发布复用现有目录管理员服务、版本同步和服务端 RBAC。
         services.AddSingleton<FeedDiscoveryViewModel>();
         services.AddSingleton<FeedAdminViewModel>();
         services.AddSingleton<AutomationAdminViewModel>();

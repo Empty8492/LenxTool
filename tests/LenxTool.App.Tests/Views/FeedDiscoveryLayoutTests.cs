@@ -3,12 +3,12 @@ using System.Xml.Linq;
 namespace LenxTool.App.Tests.Views;
 
 /// <summary>
-/// 用结构测试冻结 DISC-04 的可访问性、窄窗布局和只读边界。
+/// 用结构测试冻结发现页的可访问性、窄窗布局和发布确认边界。
 /// </summary>
 public sealed class FeedDiscoveryLayoutTests
 {
     [Fact]
-    public void DiscoveryTemplateExposesAccessibleReadOnlySearchStates()
+    public void DiscoveryTemplateExposesAccessibleSearchAndPublishStates()
     {
         XDocument app = XDocument.Load(
             Path.Combine(AppContext.BaseDirectory, "Fixtures", "App.xaml"));
@@ -40,7 +40,17 @@ public sealed class FeedDiscoveryLayoutTests
             "取消统一发现",
             "重试统一发现",
             "统一发现空状态",
-            "统一发现候选列表"
+            "统一发现候选列表",
+            "准备加入共享目录",
+            "发布确认面板",
+            "发布分类",
+            "发布刷新策略",
+            "发布视图策略",
+            "发布全文策略",
+            "确认发布设置",
+            "确认加入共享目录",
+            "取消发布确认",
+            "刷新发布目录"
         })
         {
             Assert.Contains(view.Descendants(), element =>
@@ -69,14 +79,25 @@ public sealed class FeedDiscoveryLayoutTests
                     StringComparison.Ordinal) == true);
         }
 
-        // DISC-05 才能增加发布写命令，DISC-04 视图中不得提前出现。
-        Assert.DoesNotContain(view.Descendants(), element =>
-            element.Attribute("Command")?.Value.Contains(
-                "Publish",
-                StringComparison.OrdinalIgnoreCase) == true
-            || element.Attribute("Command")?.Value.Contains(
-                "Save",
-                StringComparison.OrdinalIgnoreCase) == true);
+        foreach (string command in new[]
+        {
+            "PreparePublishCommand",
+            "PublishCommand",
+            "CancelPublishCommand",
+            "RefreshCatalogCommand"
+        })
+        {
+            Assert.Contains(view.Descendants(), element =>
+                element.Attribute("Command")?.Value.Contains(
+                    command,
+                    StringComparison.Ordinal) == true);
+        }
+
+        Assert.Contains(view.Descendants(), element =>
+            element.Name.LocalName == "CheckBox"
+            && element.Attribute("IsChecked")?.Value.Contains(
+                "IsPublishConfirmed",
+                StringComparison.Ordinal) == true);
     }
 
     [Fact]

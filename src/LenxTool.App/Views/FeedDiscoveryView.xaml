@@ -2,7 +2,7 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              Focusable="False">
-    <!-- DISC-04 只呈现发现结果；候选发布入口将在 DISC-05 接入服务端写入保护后再增加。 -->
+    <!-- 搜索与发布保持两步：候选先预览，目录写入必须在独立面板显式确认。 -->
     <ScrollViewer HorizontalScrollBarVisibility="Auto"
                   VerticalScrollBarVisibility="Auto"
                   Focusable="False">
@@ -10,6 +10,8 @@
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="16" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="14" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="14" />
                 <RowDefinition Height="Auto" />
@@ -66,6 +68,7 @@
                         </Grid.ColumnDefinitions>
                         <TextBox AutomationProperties.Name="统一发现输入"
                                  MaxLength="2048"
+                                 IsEnabled="{Binding CanEditDiscoveryInput}"
                                  Text="{Binding Input, UpdateSourceTrigger=PropertyChanged}">
                             <TextBox.InputBindings>
                                 <KeyBinding Key="Enter"
@@ -190,6 +193,14 @@
                                                Foreground="{DynamicResource Brush.Warning}"
                                                Text="{Binding WarningText}"
                                                TextWrapping="Wrap" />
+                                    <Button Margin="0,14,0,0"
+                                            MinWidth="132"
+                                            HorizontalAlignment="Left"
+                                            Style="{StaticResource AccentButtonStyle}"
+                                            AutomationProperties.Name="准备加入共享目录"
+                                            Command="{Binding DataContext.PreparePublishCommand, RelativeSource={RelativeSource AncestorType={x:Type ItemsControl}}}"
+                                            CommandParameter="{Binding}"
+                                            Content="{Binding PrimaryActionLabel}" />
                                 </StackPanel>
 
                                 <StackPanel Grid.Column="2">
@@ -223,6 +234,136 @@
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
+
+            <Border Grid.Row="8"
+                    Style="{StaticResource BentoCardStyle}"
+                    AutomationProperties.Name="发布确认面板"
+                    Visibility="{Binding HasPublishSelection, Converter={StaticResource BooleanToVisibilityConverter}}">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="12" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="14" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="12" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="14" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <DockPanel LastChildFill="False">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource SectionTitleStyle}"
+                                       Text="{Binding PublishPanelTitle}" />
+                            <TextBlock Margin="0,4,0,0"
+                                       Style="{StaticResource MetaTextStyle}"
+                                       Text="{Binding PublishValidationText}"
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
+                        <TextBlock DockPanel.Dock="Right"
+                                   Margin="18,0,0,0"
+                                   VerticalAlignment="Top"
+                                   Foreground="{DynamicResource Brush.Accent}"
+                                   FontWeight="SemiBold"
+                                   Text="{Binding CatalogVersion, StringFormat=目录 v{0}}" />
+                    </DockPanel>
+
+                    <StackPanel Grid.Row="2">
+                        <TextBlock FontWeight="SemiBold"
+                                   Text="规范化 Feed 地址" />
+                        <Border Margin="0,6,0,0"
+                                Padding="12,9"
+                                Background="{DynamicResource Brush.SurfaceMuted}"
+                                CornerRadius="7">
+                            <TextBlock Text="{Binding PublishNormalizedUrl}"
+                                       TextWrapping="Wrap" />
+                        </Border>
+                    </StackPanel>
+
+                    <Grid Grid.Row="4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="14" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock FontWeight="SemiBold" Text="分类" />
+                            <ComboBox Margin="0,6,0,0"
+                                      AutomationProperties.Name="发布分类"
+                                      ItemsSource="{Binding PublishCategories}"
+                                      DisplayMemberPath="Label"
+                                      SelectedItem="{Binding SelectedPublishCategory}"
+                                      IsEnabled="{Binding CanEditPublishPolicy}" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="2">
+                            <TextBlock FontWeight="SemiBold" Text="刷新策略" />
+                            <ComboBox Margin="0,6,0,0"
+                                      AutomationProperties.Name="发布刷新策略"
+                                      ItemsSource="{Binding PublishRefreshChoices}"
+                                      SelectedItem="{Binding SelectedPublishRefreshMinutes}"
+                                      IsEnabled="{Binding CanEditPublishPolicy}" />
+                        </StackPanel>
+                    </Grid>
+
+                    <Grid Grid.Row="6">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="14" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock FontWeight="SemiBold" Text="视图策略" />
+                            <ComboBox Margin="0,6,0,0"
+                                      AutomationProperties.Name="发布视图策略"
+                                      ItemsSource="{Binding PublishViewChoices}"
+                                      DisplayMemberPath="Label"
+                                      SelectedItem="{Binding SelectedPublishView}"
+                                      IsEnabled="{Binding CanEditPublishPolicy}" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="2">
+                            <TextBlock FontWeight="SemiBold" Text="全文策略" />
+                            <ComboBox Margin="0,6,0,0"
+                                      AutomationProperties.Name="发布全文策略"
+                                      ItemsSource="{Binding PublishFullTextChoices}"
+                                      DisplayMemberPath="Label"
+                                      SelectedItem="{Binding SelectedPublishFullText}"
+                                      IsEnabled="{Binding CanEditPublishPolicy}" />
+                        </StackPanel>
+                    </Grid>
+
+                    <Grid Grid.Row="8">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="12" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <CheckBox AutomationProperties.Name="确认发布设置"
+                                  IsChecked="{Binding IsPublishConfirmed}"
+                                  IsEnabled="{Binding CanEditPublishPolicy}"
+                                  Visibility="{Binding ShowPublishConfirmation, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                  Content="我已核对规范化地址、分类、刷新、视图与全文策略。" />
+                        <WrapPanel Grid.Row="2">
+                            <Button MinWidth="142"
+                                    Style="{StaticResource AccentButtonStyle}"
+                                    AutomationProperties.Name="确认加入共享目录"
+                                    Command="{Binding PublishCommand}"
+                                    Content="确认加入共享目录"
+                                    Visibility="{Binding ShowPublishConfirmation, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                            <Button MinWidth="92"
+                                    Margin="10,0,0,0"
+                                    AutomationProperties.Name="取消发布确认"
+                                    Command="{Binding CancelPublishCommand}"
+                                    Content="关闭" />
+                            <Button MinWidth="112"
+                                    Margin="10,0,0,0"
+                                    AutomationProperties.Name="刷新发布目录"
+                                    Command="{Binding RefreshCatalogCommand}"
+                                    Content="刷新目录" />
+                        </WrapPanel>
+                    </Grid>
+                </Grid>
+            </Border>
         </Grid>
     </ScrollViewer>
 </UserControl>

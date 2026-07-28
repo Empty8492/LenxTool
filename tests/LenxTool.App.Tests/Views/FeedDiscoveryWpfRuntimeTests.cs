@@ -8,6 +8,7 @@ using LenxTool.App.Mvvm;
 using LenxTool.App.Services;
 using LenxTool.App.ViewModels;
 using LenxTool.App.Views;
+using LenxTool.Core.Models;
 
 namespace LenxTool.App.Tests.Views;
 
@@ -53,6 +54,23 @@ public sealed class FeedDiscoveryWpfRuntimeTests
                         view,
                         element => AutomationProperties.GetName(element)
                             == "提交统一发现");
+                    Button preparePublish = FindDescendant<Button>(
+                        view,
+                        element => AutomationProperties.GetName(element)
+                            == "准备加入共享目录");
+                    CheckBox publishConfirmation =
+                        FindDescendant<CheckBox>(
+                            view,
+                            element => AutomationProperties.GetName(element)
+                                == "确认发布设置");
+                    ComboBox publishCategory = FindDescendant<ComboBox>(
+                        view,
+                        element => AutomationProperties.GetName(element)
+                            == "发布分类");
+                    Button publish = FindDescendant<Button>(
+                        view,
+                        element => AutomationProperties.GetName(element)
+                            == "确认加入共享目录");
                     ItemsControl candidates = FindDescendant<ItemsControl>(
                         view,
                         element => AutomationProperties.GetName(element)
@@ -64,10 +82,29 @@ public sealed class FeedDiscoveryWpfRuntimeTests
                     Assert.Equal(
                         AutomationControlType.Button,
                         CreatePeer(submit).GetAutomationControlType());
+                    Assert.Equal(
+                        AutomationControlType.Button,
+                        CreatePeer(preparePublish)
+                            .GetAutomationControlType());
+                    Assert.Equal(
+                        AutomationControlType.CheckBox,
+                        CreatePeer(publishConfirmation)
+                            .GetAutomationControlType());
+                    Assert.Equal(
+                        AutomationControlType.ComboBox,
+                        CreatePeer(publishCategory)
+                            .GetAutomationControlType());
+                    Assert.Equal(
+                        AutomationControlType.Button,
+                        CreatePeer(publish).GetAutomationControlType());
                     Assert.Single(candidates.Items);
                     Assert.True(input.Focus());
                     Assert.True(input.ActualHeight >= 36);
                     Assert.True(submit.ActualHeight >= 36);
+                    Assert.True(preparePublish.Focus());
+                    Assert.True(publishConfirmation.Focus());
+                    Assert.True(publishCategory.Focus());
+                    Assert.True(publish.IsEnabled);
 
                     string lightBackground = input.Background.ToString(
                         CultureInfo.InvariantCulture);
@@ -109,22 +146,35 @@ public sealed class FeedDiscoveryWpfRuntimeTests
         var search = new RelayCommand(() => { });
         var cancel = new RelayCommand(() => { });
         var retry = new RelayCommand(() => { });
-        return new(
-            "发现订阅",
-            "只读候选预览",
-            "reader",
-            "关键词",
-            "已找到 1 个候选。",
-            false,
-            true,
-            false,
-            false,
-            search,
-            cancel,
-            retry,
-            new[]
+        var preparePublish =
+            new RelayCommand<FeedDiscoveryCandidateViewModel>(_ => { });
+        var publish = new RelayCommand(() => { });
+        var cancelPublish = new RelayCommand(() => { });
+        var refreshCatalog = new RelayCommand(() => { });
+        var category = new FeedPublishCategoryChoice(null, "未分类");
+        var viewChoice =
+            new FeedPublishViewChoice(null, "自动识别（默认文章）");
+        var fullText = new FeedPublishFullTextChoice(
+            FeedFullTextPolicy.None,
+            "不抓取全文");
+        return new RuntimeDiscoveryModel
+        {
+            SearchCommand = search,
+            CancelCommand = cancel,
+            RetryCommand = retry,
+            PreparePublishCommand = preparePublish,
+            PublishCommand = publish,
+            CancelPublishCommand = cancelPublish,
+            RefreshCatalogCommand = refreshCatalog,
+            PublishCategories = [category],
+            SelectedPublishCategory = category,
+            PublishViewChoices = [viewChoice],
+            SelectedPublishView = viewChoice,
+            PublishFullTextChoices = [fullText],
+            SelectedPublishFullText = fullText,
+            Candidates =
             {
-                new FeedDiscoveryCandidateViewModel(
+                new(
                     "示例订阅",
                     "https://feeds.example/feed.xml",
                     "https://feeds.example/",
@@ -138,28 +188,60 @@ public sealed class FeedDiscoveryWpfRuntimeTests
                             "最近条目",
                             "2026-07-28 15:30")
                     ])
-            });
+            }
+        };
     }
 
     /// <summary>
     /// 运行时夹具保留可写输入属性，以符合 TextBox 默认双向绑定契约。
     /// </summary>
-    private sealed record RuntimeDiscoveryModel(
-        string Title,
-        string Subtitle,
-        string InputValue,
-        string QueryKindLabel,
-        string Status,
-        bool IsBusy,
-        bool HasCandidates,
-        bool ShowEmptyState,
-        bool CanShowRetry,
-        RelayCommand SearchCommand,
-        RelayCommand CancelCommand,
-        RelayCommand RetryCommand,
-        IReadOnlyList<FeedDiscoveryCandidateViewModel> Candidates)
+    private sealed class RuntimeDiscoveryModel
     {
-        public string Input { get; set; } = InputValue;
+        public string Title { get; init; } = "发现订阅";
+        public string Subtitle { get; init; } = "候选预览与发布确认";
+        public string Input { get; set; } = "reader";
+        public string QueryKindLabel { get; init; } = "关键词";
+        public string Status { get; init; } = "已找到 1 个候选。";
+        public bool IsBusy { get; init; }
+        public bool HasCandidates { get; init; } = true;
+        public bool ShowEmptyState { get; init; }
+        public bool CanShowRetry { get; init; }
+        public bool HasPublishSelection { get; init; } = true;
+        public bool ShowPublishConfirmation { get; init; } = true;
+        public bool CanEditPublishPolicy { get; init; } = true;
+        public bool CanEditDiscoveryInput { get; init; } = true;
+        public string PublishPanelTitle { get; init; } =
+            "确认加入共享目录";
+        public string PublishValidationText { get; init; } =
+            "请核对全部策略。";
+        public string PublishNormalizedUrl { get; init; } =
+            "https://feeds.example/feed.xml";
+        public long CatalogVersion { get; init; } = 7;
+        public IReadOnlyList<int> PublishRefreshChoices { get; } =
+            [15, 30, 60, 120];
+        public int SelectedPublishRefreshMinutes { get; set; } = 60;
+        public IReadOnlyList<FeedPublishCategoryChoice>
+            PublishCategories { get; init; } = [];
+        public FeedPublishCategoryChoice?
+            SelectedPublishCategory { get; set; }
+        public IReadOnlyList<FeedPublishViewChoice>
+            PublishViewChoices { get; init; } = [];
+        public FeedPublishViewChoice? SelectedPublishView { get; set; }
+        public IReadOnlyList<FeedPublishFullTextChoice>
+            PublishFullTextChoices { get; init; } = [];
+        public FeedPublishFullTextChoice?
+            SelectedPublishFullText { get; set; }
+        public bool IsPublishConfirmed { get; set; } = true;
+        public RelayCommand SearchCommand { get; init; } = null!;
+        public RelayCommand CancelCommand { get; init; } = null!;
+        public RelayCommand RetryCommand { get; init; } = null!;
+        public RelayCommand<FeedDiscoveryCandidateViewModel>
+            PreparePublishCommand { get; init; } = null!;
+        public RelayCommand PublishCommand { get; init; } = null!;
+        public RelayCommand CancelPublishCommand { get; init; } = null!;
+        public RelayCommand RefreshCatalogCommand { get; init; } = null!;
+        public List<FeedDiscoveryCandidateViewModel> Candidates { get; } =
+            [];
     }
 
     private static AutomationPeer CreatePeer(UIElement element) =>

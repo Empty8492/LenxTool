@@ -10,18 +10,20 @@
 |---|---:|
 | LenxTool.Core.Tests | 140 passed |
 | LenxTool.Infrastructure.Tests | 378 passed |
-| LenxTool.App.Tests | 227 passed |
+| LenxTool.App.Tests | 234 passed |
 | Cloudflare Worker Vitest | 63 passed |
 | Worker TypeScript strict typecheck | passed |
 | .NET build warnings | 0 |
 | NuGet vulnerable packages | 0 detected |
 | npm audit vulnerabilities | 0 detected |
 
-当前完整 Release 结果为 Core 140/140、Infrastructure 378/378、App/WPF 227/227、Worker workerd/D1 Vitest 63/63、Worker strict typecheck 与全解决方案 build 0 警告/0 错误。本轮未修改 NuGet/npm 依赖；同步基线记录的两类 audit 均为 0 漏洞，当前受限环境中的 NuGet 在线复查因系统 TLS 凭据不可用而未形成新的扫描结果。
+当前完整 Release 结果为 Core 140/140、Infrastructure 378/378、App/WPF 234/234、Worker workerd/D1 Vitest 63/63、Worker strict typecheck 与全解决方案 build 0 警告/0 错误。本轮未修改 NuGet/npm 依赖；NuGet 在线漏洞扫描与 `npm audit` 均为 0 漏洞。
+
+DISC-05 新增 7 项发布 ViewModel 场景，并把既有 2 项结构场景和 1 项真实 WPF 场景扩展到确认发布。覆盖未勾选不能写入、规范化 URL 与四类策略可见、ALL 目录重复项只查看、快速双击只到达管理员服务一次、成功写入只调用一次并刷新到新版本、双管理员版本冲突刷新且不自动重放、网络中断锁住后续写入、服务端 403 保持权威，以及成功后候选同步变为现有项。真实 WPF 运行时继续覆盖原生 Button/CheckBox/ComboBox Automation Peer、Tab 焦点、900×620 窄窗、等效 200% 缩放和深浅主题。既有 Infrastructure 测试同时证明目录写入携带 `If-Match` 和幂等键、401 刷新只重放同一幂等键、普通用户直调得到 403、冲突只发送一次。
 
 全局滚轮体验补强新增 5 项纯逻辑测试、1 项 XAML 结构测试和 1 项真实 WPF 运行时测试。所有显式或模板内部的原生 `ScrollViewer` 统一采用每日早报既有的 1.45 倍灵敏度，连续滚轮输入从未完成目标继续累积，并以 160～220 ms 的 Ease-Out 过渡到最终位置；反向输入可撤销待定目标，拖动、键盘/触控和程序化阅读进度恢复会先废弃旧动画。开启“减少动画”后保持相同距离但取消过渡。真实运行时验证普通滚动区、每日早报控件、连续/反向输入、直接输入中断、程序化定位、滚轮与回顶交接和减少动画；结构测试冻结 ListBox、ListView、PagedListBox 与普通/增强下拉列表的虚拟化像素滚动接线。分页列表同步保留 240 px 预取缓冲，避免整项跳跃或触底后才加载。
 
-DISC-04 新增管理员订阅管理内的只读发现页、请求状态机和专用本地预览投影。8 项 ViewModel 场景覆盖识别/防抖/提交/取消、旧 provider 忽略取消、手动取消及时释放命令、非法输入立即终止、部分成功零候选、限流、角色降权和预览故障隔离；2 项结构场景冻结管理页签、Automation 名称、实时状态、窄窗滚动和无发布命令；1 项真实 WPF 运行时场景覆盖原生 Automation Peer、键盘焦点、900×620、等效 200% 缩放和深浅主题。真实 SQLite 场景以单次窗口查询验证多 Feed 稳定排序、隐藏过滤和每 Feed 4 条上限；查询只读取标题和时间，不物化摘要、正文或附件。
+DISC-04 新增管理员订阅管理内的只读发现基础、请求状态机和专用本地预览投影。8 项 ViewModel 场景覆盖识别/防抖/提交/取消、旧 provider 忽略取消、手动取消及时释放命令、非法输入立即终止、部分成功零候选、限流、角色降权和预览故障隔离；结构与真实 WPF 场景冻结管理页签、Automation 名称、实时状态、窄窗滚动、原生 Automation Peer、键盘焦点、900×620、等效 200% 缩放和深浅主题。真实 SQLite 场景以单次窗口查询验证多 Feed 稳定排序、隐藏过滤和每 Feed 4 条上限；查询只读取标题和时间，不物化摘要、正文或附件。
 
 UX-03 新增共享分段页签、复选框和增强下拉框样式，并以独立 `DateControls.xaml` 封装 DatePicker、DatePickerTextBox、Calendar、CalendarItem、CalendarButton 与 CalendarDayButton 模板。3 项结构测试冻结官方命名部件、普通/悬停/按下/选中/聚焦/禁用/校验错误状态、资讯页显式样式接线和 UI Automation 名称；1 项真实 WPF 运行时测试覆盖方向键切换、原生 Automation Peer、内部 Calendar 弹层选择回写、日期水印/文本、900×620 窄窗、等效 200% 布局缩放及运行中深浅主题切换。浅色/深色 Release 离屏渲染经人工检查未发现裁切、错位或低对比。
 
