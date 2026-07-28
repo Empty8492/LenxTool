@@ -21,13 +21,6 @@ public sealed class AnimatedScrollViewer : ScrollViewer
             typeof(AnimatedScrollViewer),
             new PropertyMetadata(0d, OnAnimatedVerticalOffsetChanged));
 
-    public static readonly DependencyProperty WheelScrollMultiplierProperty =
-        DependencyProperty.Register(
-            nameof(WheelScrollMultiplier),
-            typeof(double),
-            typeof(AnimatedScrollViewer),
-            new FrameworkPropertyMetadata(1d));
-
     public static readonly DependencyProperty ScrollResetKeyProperty =
         DependencyProperty.Register(
             nameof(ScrollResetKey),
@@ -55,15 +48,6 @@ public sealed class AnimatedScrollViewer : ScrollViewer
 
     public bool IsBackToTopVisible => (bool)GetValue(IsBackToTopVisibleProperty);
 
-    public double WheelScrollMultiplier
-    {
-        get => NormalizeWheelScrollMultiplier(
-            (double)GetValue(WheelScrollMultiplierProperty));
-        set => SetValue(
-            WheelScrollMultiplierProperty,
-            NormalizeWheelScrollMultiplier(value));
-    }
-
     public object? ScrollResetKey
     {
         get => GetValue(ScrollResetKeyProperty);
@@ -87,24 +71,9 @@ public sealed class AnimatedScrollViewer : ScrollViewer
 
     protected override void OnPreviewMouseWheel(MouseWheelEventArgs e)
     {
+        // 每日早报也复用全局滚轮计划，确保所有页面拥有同一灵敏度与过渡。
         CancelScrollAnimation();
-        if (!e.Handled && WheelScrollMultiplier > 1d)
-        {
-            double systemLines = SystemParameters.WheelScrollLines;
-            if (systemLines == 0)
-            {
-                base.OnPreviewMouseWheel(e);
-                return;
-            }
-            double baseDistance = systemLines < 0
-                ? Math.Max(1d, ViewportHeight)
-                : Math.Max(1d, systemLines) * 16d;
-            double requestedOffset = VerticalOffset
-                - e.Delta / 120d * baseDistance * WheelScrollMultiplier;
-            ScrollToVerticalOffset(Math.Clamp(requestedOffset, 0d, ScrollableHeight));
-            e.Handled = true;
-            return;
-        }
+        if (SmoothWheelScrolling.TryHandleWheel(this, e)) return;
         base.OnPreviewMouseWheel(e);
     }
 
@@ -118,6 +87,8 @@ public sealed class AnimatedScrollViewer : ScrollViewer
         }
 
         CancelScrollAnimation();
+        // 回顶与滚轮只能保留一个动画时钟，避免两个偏移源互相拉扯。
+        SmoothWheelScrolling.Cancel(this);
         AnimatedVerticalOffset = VerticalOffset;
         var animation = new DoubleAnimation
         {
@@ -152,11 +123,6 @@ public sealed class AnimatedScrollViewer : ScrollViewer
         }
     }
 
-    private static double NormalizeWheelScrollMultiplier(double multiplier) =>
-        double.IsFinite(multiplier)
-            ? Math.Clamp(multiplier, 1d, 3d)
-            : 1d;
-
     private static void OnScrollResetKeyChanged(
         DependencyObject dependencyObject,
         DependencyPropertyChangedEventArgs e)
@@ -168,6 +134,7 @@ public sealed class AnimatedScrollViewer : ScrollViewer
         }
 
         viewer.CancelScrollAnimation();
+        SmoothWheelScrolling.Cancel(viewer);
         viewer.ScrollToTop();
     }
 

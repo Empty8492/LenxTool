@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
+using LenxTool.App.Controls;
 using LenxTool.App.ViewModels;
 
 namespace LenxTool.App.Views;
@@ -82,7 +83,9 @@ public partial class FeedTimelineBrowserView : UserControl
         _restoringProgress = true;
         try
         {
-            ArticleScrollViewer.ScrollToVerticalOffset(
+            // 切换文章时先清除上一条内容的滚轮目标，避免旧动画污染新阅读进度。
+            SmoothWheelScrolling.ScrollToImmediately(
+                ArticleScrollViewer,
                 maximumOffset * Math.Clamp(item.Progress, 0, 100) / 100d);
         }
         finally
@@ -109,6 +112,9 @@ public partial class FeedTimelineBrowserView : UserControl
         _viewModel.QueueTimelineProgress(item, progress);
     }
 
-    private void ResetTimelineProgressClick(object sender, RoutedEventArgs e) =>
-        ArticleScrollViewer.ScrollToTop();
+    private void ResetTimelineProgressClick(object sender, RoutedEventArgs e)
+    {
+        // 从头阅读属于显式定位，不能继续执行先前尚未结束的滚轮动画。
+        SmoothWheelScrolling.ScrollToImmediately(ArticleScrollViewer, 0d);
+    }
 }

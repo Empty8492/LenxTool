@@ -13,6 +13,22 @@
                 <ResourceDictionary Source="Themes/DateControls.xaml" />
             </ResourceDictionary.MergedDictionaries>
 
+            <!-- 列表继续使用虚拟化，但改为像素单位，才能获得连续滚动而不是整项跳动。 -->
+            <Style x:Key="PixelVirtualizedListStyle" TargetType="{x:Type ListBox}">
+                <Setter Property="VirtualizingPanel.IsVirtualizing" Value="True" />
+                <Setter Property="VirtualizingPanel.ScrollUnit" Value="Pixel" />
+            </Style>
+            <Style TargetType="{x:Type ListBox}"
+                   BasedOn="{StaticResource PixelVirtualizedListStyle}" />
+            <Style TargetType="{x:Type ListView}"
+                   BasedOn="{StaticResource PixelVirtualizedListStyle}" />
+            <Style TargetType="{x:Type controls:PagedListBox}"
+                   BasedOn="{StaticResource PixelVirtualizedListStyle}" />
+            <Style TargetType="{x:Type ComboBox}">
+                <Setter Property="VirtualizingPanel.IsVirtualizing" Value="True" />
+                <Setter Property="VirtualizingPanel.ScrollUnit" Value="Pixel" />
+            </Style>
+
             <DataTemplate DataType="{x:Type vm:AutomationAdminViewModel}">
                 <views:AutomationAdminView />
             </DataTemplate>
@@ -1469,12 +1485,12 @@
 
             <DataTemplate DataType="{x:Type vm:NewsCenterViewModel}">
                 <Grid>
+                    <!-- 滚轮灵敏度与缓动由全局 ScrollViewer 类处理，此处只保留早报页的回顶能力。 -->
                     <controls:AnimatedScrollViewer x:Name="NewsPageScrollViewer"
                                                    VerticalScrollBarVisibility="Visible"
                                                    HorizontalScrollBarVisibility="Disabled"
                                                    PanningMode="VerticalOnly"
                                                    IsDeferredScrollingEnabled="False"
-                                                   WheelScrollMultiplier="{Binding WheelScrollMultiplier}"
                                                    ScrollResetKey="{Binding SelectedSectionIndex}">
                 <Grid Margin="28,10,28,28">
                     <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="6" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>

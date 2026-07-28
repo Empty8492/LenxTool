@@ -7,6 +7,9 @@ namespace LenxTool.App.Controls;
 
 public sealed class PagedListBox : ListBox
 {
+    // 像素滚动下提前约一个卡片区加载，避免到达底部后才开始等待下一页。
+    internal const double DefaultLoadMoreThreshold = 240d;
+
     public static readonly DependencyProperty LoadMoreCommandProperty = DependencyProperty.Register(
         nameof(LoadMoreCommand),
         typeof(ICommand),
@@ -17,7 +20,7 @@ public sealed class PagedListBox : ListBox
         nameof(LoadMoreThreshold),
         typeof(double),
         typeof(PagedListBox),
-        new PropertyMetadata(4d));
+        new PropertyMetadata(DefaultLoadMoreThreshold));
 
     private ScrollViewer? _scrollViewer;
 

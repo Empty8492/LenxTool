@@ -51,7 +51,7 @@ public sealed class NewsCenterLayoutTests
     }
 
     [Fact]
-    public void NewsPageUsesRoutedSectionsAndDailyScrollBoost()
+    public void NewsPageUsesRoutedSectionsAndSharedSmoothScrolling()
     {
         XElement template = LoadNewsCenterTemplate();
         XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
@@ -62,9 +62,8 @@ public sealed class NewsCenterLayoutTests
                 && element.Attribute(x + "Name")?.Value == "NewsPageScrollViewer");
         Assert.Equal("Visible", pageScroller.Attribute("VerticalScrollBarVisibility")?.Value);
         Assert.Equal("Disabled", pageScroller.Attribute("HorizontalScrollBarVisibility")?.Value);
-        Assert.Equal(
-            "{Binding WheelScrollMultiplier}",
-            pageScroller.Attribute("WheelScrollMultiplier")?.Value);
+        // 页面不再携带私有倍率，所有滚动区由共享类级行为统一处理。
+        Assert.Null(pageScroller.Attribute("WheelScrollMultiplier"));
         Assert.Equal(
             "{Binding SelectedSectionIndex}",
             pageScroller.Attribute("ScrollResetKey")?.Value);

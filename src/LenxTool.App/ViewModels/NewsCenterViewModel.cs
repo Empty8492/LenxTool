@@ -102,13 +102,12 @@ public sealed partial class NewsCenterViewModel
                 return;
             }
 
+            // 滚轮手感已下沉到全局 ScrollViewer，栏目切换只更新页面语义。
             OnPropertyChanged(nameof(ActiveSectionTitle));
-            OnPropertyChanged(nameof(WheelScrollMultiplier));
         }
     }
 
     public string ActiveSectionTitle => SectionTitles[SelectedSectionIndex];
-    public double WheelScrollMultiplier => SelectedSectionIndex == 1 ? 1.45d : 1d;
     public int SelectedFeedViewIndex
     {
         get => _selectedFeedViewIndex;

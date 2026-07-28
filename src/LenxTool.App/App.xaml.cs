@@ -26,6 +26,8 @@ public partial class App : Application
 
     public App()
     {
+        // 类级注册覆盖显式控件与模板内部滚动区，避免各页面拥有不同滚轮手感。
+        SmoothWheelScrolling.Initialize();
         DispatcherUnhandledException += OnDispatcherUnhandledException;
     }
 

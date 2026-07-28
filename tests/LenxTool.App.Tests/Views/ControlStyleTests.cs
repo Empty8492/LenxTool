@@ -4,6 +4,14 @@ namespace LenxTool.App.Tests.Views;
 
 public sealed class ControlStyleTests
 {
+    // 共享列表样式必须覆盖普通、ListView 与分页派生控件。
+    private static readonly string[] PixelVirtualizedListTargetTypes =
+    [
+        "{x:Type ListBox}",
+        "{x:Type ListView}",
+        "{x:Type controls:PagedListBox}"
+    ];
+
     [Fact]
     public void DefaultButtonsUseCompactNonStretchingLayout()
     {
@@ -153,6 +161,44 @@ public sealed class ControlStyleTests
             "IsEnabled");
     }
 
+    [Fact]
+    public void VirtualizedListsAndDropdownsUsePixelScrollUnits()
+    {
+        XDocument app = LoadFixture("App.xaml");
+        XDocument controls = LoadFixture("Controls.xaml");
+        XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
+
+        // 主列表、分页列表和下拉框都必须显式保留虚拟化与像素滚动。
+        XElement sharedListStyle = Assert.Single(
+            app.Descendants(),
+            element => element.Name.LocalName == "Style"
+                && element.Attribute(x + "Key")?.Value
+                    == "PixelVirtualizedListStyle");
+        AssertPixelVirtualization(sharedListStyle);
+        Assert.All(
+            PixelVirtualizedListTargetTypes,
+            targetType =>
+            {
+                XElement style = Assert.Single(
+                    app.Descendants(),
+                    element => element.Name.LocalName == "Style"
+                        && element.Attribute("TargetType")?.Value
+                            == targetType
+                        && element.Attribute(x + "Key") is null);
+                Assert.Equal(
+                    "{StaticResource PixelVirtualizedListStyle}",
+                    style.Attribute("BasedOn")?.Value);
+            });
+        XElement defaultComboBox = Assert.Single(
+            app.Descendants(),
+            element => element.Name.LocalName == "Style"
+                && element.Attribute("TargetType")?.Value
+                    == "{x:Type ComboBox}");
+        AssertPixelVirtualization(defaultComboBox);
+        AssertPixelVirtualization(
+            FindStyle(controls, x, "CompactComboBoxStyle"));
+    }
+
     private static XElement FindStyle(
         XDocument document,
         XNamespace x,
@@ -190,5 +236,21 @@ public sealed class ControlStyleTests
                 style.Descendants(),
                 element => element.Name.LocalName == "Trigger"
                     && element.Attribute("Property")?.Value == property));
+    }
+
+    private static void AssertPixelVirtualization(XElement style)
+    {
+        Assert.Contains(
+            style.Elements(),
+            element => element.Name.LocalName == "Setter"
+                && element.Attribute("Property")?.Value
+                    == "VirtualizingPanel.IsVirtualizing"
+                && element.Attribute("Value")?.Value == "True");
+        Assert.Contains(
+            style.Elements(),
+            element => element.Name.LocalName == "Setter"
+                && element.Attribute("Property")?.Value
+                    == "VirtualizingPanel.ScrollUnit"
+                && element.Attribute("Value")?.Value == "Pixel");
     }
 }

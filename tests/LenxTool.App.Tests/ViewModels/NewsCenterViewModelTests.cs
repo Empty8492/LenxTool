@@ -44,24 +44,22 @@ public sealed class NewsCenterViewModelTests
         TimeSpan.Zero);
 
     [Fact]
-    public void TopLevelRoutesSelectSectionTitleAndDailyScrollSensitivity()
+    public void TopLevelRoutesSelectSectionTitles()
     {
         using NewsCenterViewModel viewModel = CreateViewModel(CreateSnapshot());
 
+        // 一级入口只负责选择栏目，滚轮手感由共享控件层统一验证。
         Assert.Equal("资讯列表", viewModel.ActiveSectionTitle);
         Assert.Equal(0, viewModel.SelectedSectionIndex);
-        Assert.Equal(1d, viewModel.WheelScrollMultiplier);
 
         viewModel.OnNavigated("daily-briefing");
 
         Assert.Equal("每日早报", viewModel.ActiveSectionTitle);
         Assert.Equal(1, viewModel.SelectedSectionIndex);
-        Assert.Equal(1.45d, viewModel.WheelScrollMultiplier);
 
         viewModel.OnNavigated("trends");
         Assert.Equal("热点趋势", viewModel.ActiveSectionTitle);
         Assert.Equal(2, viewModel.SelectedSectionIndex);
-        Assert.Equal(1d, viewModel.WheelScrollMultiplier);
 
         viewModel.OnNavigated("ai-reports");
         Assert.Equal("AI 报告", viewModel.ActiveSectionTitle);
