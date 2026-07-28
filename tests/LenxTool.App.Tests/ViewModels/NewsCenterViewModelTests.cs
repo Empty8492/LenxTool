@@ -32,6 +32,34 @@ public sealed class NewsCenterViewModelTests
         Assert.Contains(entries.Queries, query => query.ViewKind == EntryViewKind.Picture);
     }
 
+    [Fact]
+    public async Task AudioFeedLoadsOnlyAfterSelectingItsTab()
+    {
+        var entries = new StubFeedEntryRepository([]);
+        using NewsCenterViewModel viewModel = CreateViewModel(
+            CreateSnapshot(),
+            feedEntries: entries,
+            audioPlayback: new StubFeedAudioPlaybackService(),
+            mediaDelivery: new StubFeedMediaDeliveryService(),
+            navigation: new StubAppNavigationService());
+
+        await viewModel.InitializeAsync(CancellationToken.None);
+
+        Assert.Null(viewModel.AudioFeed);
+        Assert.DoesNotContain(
+            entries.Queries,
+            query => query.ViewKind == EntryViewKind.Audio);
+
+        viewModel.SelectedFeedViewIndex = 2;
+        await viewModel.AudioFeedInitialization.WaitAsync(
+            TimeSpan.FromSeconds(1));
+
+        Assert.NotNull(viewModel.AudioFeed);
+        Assert.Contains(
+            entries.Queries,
+            query => query.ViewKind == EntryViewKind.Audio);
+    }
+
     private const string CategoryId = "10000000-0000-4000-8000-000000000001";
     private const string FeedId = "30000000-0000-4000-8000-000000000001";
     private static readonly DateTimeOffset TimelineNow = new(
@@ -1217,7 +1245,10 @@ public sealed class NewsCenterViewModelTests
         StubFavoriteRepository? favorites = null,
         StubFeedFullTextQueueService? fullText = null,
         StubFeedAiSummaryService? summaries = null,
-        StubFeedAiTranslationService? translations = null) =>
+        StubFeedAiTranslationService? translations = null,
+        IFeedAudioPlaybackService? audioPlayback = null,
+        IFeedMediaDeliveryService? mediaDelivery = null,
+        IAppNavigationService? navigation = null) =>
         new(
             new StubNewsCenterService(snapshot),
             new StubAiReportService(null),
@@ -1230,7 +1261,11 @@ public sealed class NewsCenterViewModelTests
             favorites ?? new StubFavoriteRepository(),
             fullText ?? new StubFeedFullTextQueueService(),
             summaries ?? new StubFeedAiSummaryService(),
-            translations ?? new StubFeedAiTranslationService());
+            translations ?? new StubFeedAiTranslationService(),
+            audioPlayback,
+            mediaDelivery,
+            audioPlayback is null ? null : new MediaJobInbox(),
+            navigation);
 
     private static NewsCenterSnapshot CreateSnapshot(params NewsArticle[] articles) =>
         new(articles, [], true, DateTimeOffset.Now, null);
@@ -1922,5 +1957,61 @@ public sealed class NewsCenterViewModelTests
         public (string Source, string Destination)? PickWordConversion() => null;
         public void OpenFolder(string path) { }
         public void OpenUri(string uri) => OpenedUri = uri;
+    }
+
+    private sealed class StubFeedAudioPlaybackService :
+        IFeedAudioPlaybackService
+    {
+        public event EventHandler<FeedAudioPlaybackChangedEventArgs>? Changed;
+        public FeedAudioPlaybackSnapshot Snapshot { get; private set; } =
+            FeedAudioPlaybackSnapshot.Idle;
+
+        public void Play(FeedAudioPlaybackRequest request)
+        {
+            Snapshot = new(
+                request.SourceUrl,
+                FeedAudioPlaybackStatus.Playing,
+                TimeSpan.Zero,
+                null);
+            Changed?.Invoke(
+                this,
+                new FeedAudioPlaybackChangedEventArgs(Snapshot));
+        }
+
+        public void Pause()
+        {
+        }
+
+        public void Seek(TimeSpan position)
+        {
+        }
+
+        public void StopPlayback()
+        {
+            Snapshot = FeedAudioPlaybackSnapshot.Idle;
+        }
+
+        public void Dispose()
+        {
+        }
+    }
+
+    private sealed class StubFeedMediaDeliveryService :
+        IFeedMediaDeliveryService
+    {
+        public Task<FeedMediaDeliveryRegistration> DeliverAsync(
+            FeedEntry entry,
+            FeedEnclosure enclosure,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+    }
+
+    private sealed class StubAppNavigationService :
+        IAppNavigationService
+    {
+        public Task NavigateAsync(
+            AppNavigationRequest request,
+            CancellationToken cancellationToken) =>
+            Task.CompletedTask;
     }
 }

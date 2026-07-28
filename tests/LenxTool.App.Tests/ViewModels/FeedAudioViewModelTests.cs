@@ -40,6 +40,7 @@ public sealed class FeedAudioViewModelTests
         FeedAudioPlaybackRequest request = Assert.Single(
             playback.PlayRequests);
         Assert.Equal("https://cdn.example/episode-1.mp3", request.SourceUrl);
+        Assert.Equal("audio/mpeg", request.MediaType);
         Assert.Equal(42d, request.ResumeProgress);
 
         playback.Publish(new(
@@ -121,6 +122,33 @@ public sealed class FeedAudioViewModelTests
     }
 
     [Fact]
+    public async Task ReservedOriginalCannotBecomeAudioFallback()
+    {
+        FeedEntry entry = AudioEntry("unsafe") with
+        {
+            NormalizedUrl = "http://127.0.0.1/private",
+            Enclosures =
+            [
+                new(
+                    "https://cdn.example/unsupported.bin",
+                    "application/octet-stream",
+                    256,
+                    "Unsupported")
+            ]
+        };
+        using FeedAudioViewModel viewModel = CreateViewModel(
+            [entry],
+            new StubEntryStateRepository(),
+            new StubFeedAudioPlaybackService());
+
+        await viewModel.InitializeAsync(CancellationToken.None);
+
+        Assert.Null(viewModel.SelectedItem?.SafeOriginalUrl);
+        Assert.False(
+            viewModel.RequestExternalOpenCommand.CanExecute(null));
+    }
+
+    [Fact]
     public async Task TranscriptionPublishesExistingIdempotentJobAndNavigates()
     {
         FeedEntry entry = AudioEntry("episode-1");
@@ -178,6 +206,80 @@ public sealed class FeedAudioViewModelTests
         Assert.Equal("media_job", request.EntityType);
         Assert.Equal(job.Id, request.EntityId);
         Assert.Contains("已有", viewModel.Status, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task InterruptedStreamPersistsPositionAndEnablesSafeFallback()
+    {
+        FeedEntry entry = AudioEntry("episode-1");
+        var states = new StubEntryStateRepository();
+        var playback = new StubFeedAudioPlaybackService();
+        var opened = new List<string>();
+        using FeedAudioViewModel viewModel = CreateViewModel(
+            [entry],
+            states,
+            playback,
+            opened: opened);
+        await viewModel.InitializeAsync(CancellationToken.None);
+        viewModel.PlayPauseCommand.Execute(null);
+        string source = Assert.Single(playback.PlayRequests).SourceUrl;
+        playback.Publish(new(
+            source,
+            FeedAudioPlaybackStatus.Playing,
+            TimeSpan.FromSeconds(25),
+            TimeSpan.FromSeconds(100)));
+
+        playback.Publish(new(
+            source,
+            FeedAudioPlaybackStatus.Failed,
+            TimeSpan.FromSeconds(25),
+            TimeSpan.FromSeconds(100),
+            "音频流已中断。"));
+        await viewModel.ProgressPersistence;
+
+        Assert.Equal(
+            25d,
+            Assert.Single(states.Patches).Patch.Progress);
+        Assert.True(viewModel.RequestExternalOpenCommand.CanExecute(null));
+        viewModel.RequestExternalOpenCommand.Execute(null);
+        Assert.Empty(opened);
+        viewModel.ConfirmExternalOpenCommand.Execute(null);
+        Assert.Equal(entry.NormalizedUrl, Assert.Single(opened));
+    }
+
+    [Fact]
+    public async Task CancelledTranscriptionDoesNotPublishOrNavigate()
+    {
+        FeedEntry entry = AudioEntry("episode-1");
+        var delivery = new StubFeedMediaDeliveryService(
+            waitForCancellation: true);
+        var inbox = new MediaJobInbox();
+        var published = new List<MediaJob>();
+        inbox.JobQueued += published.Add;
+        var navigation = new StubNavigationService();
+        using FeedAudioViewModel viewModel = CreateViewModel(
+            [entry],
+            new StubEntryStateRepository(),
+            new StubFeedAudioPlaybackService(),
+            delivery,
+            inbox,
+            navigation);
+        await viewModel.InitializeAsync(CancellationToken.None);
+
+        Task execution =
+            viewModel.QueueTranscriptionCommand.ExecuteAsync();
+        await delivery.Started.Task.WaitAsync(
+            TimeSpan.FromSeconds(1));
+        viewModel.QueueTranscriptionCommand.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => execution);
+        Assert.Empty(published);
+        Assert.Null(navigation.Request);
+        Assert.Contains(
+            "已取消",
+            viewModel.Status,
+            StringComparison.Ordinal);
     }
 
     private static FeedAudioViewModel CreateViewModel(
@@ -487,22 +589,32 @@ public sealed class FeedAudioViewModelTests
     }
 
     private sealed class StubFeedMediaDeliveryService(
-        FeedMediaDeliveryRegistration? registration = null)
+        FeedMediaDeliveryRegistration? registration = null,
+        bool waitForCancellation = false)
         : IFeedMediaDeliveryService
     {
         public FeedEntry? Entry { get; private set; }
         public FeedEnclosure? Enclosure { get; private set; }
+        public TaskCompletionSource Started { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        public Task<FeedMediaDeliveryRegistration> DeliverAsync(
+        public async Task<FeedMediaDeliveryRegistration> DeliverAsync(
             FeedEntry entry,
             FeedEnclosure enclosure,
             CancellationToken cancellationToken)
         {
             Entry = entry;
             Enclosure = enclosure;
-            return Task.FromResult(registration
+            Started.TrySetResult();
+            if (waitForCancellation)
+            {
+                await Task.Delay(
+                    Timeout.InfiniteTimeSpan,
+                    cancellationToken);
+            }
+            return registration
                 ?? throw new InvalidOperationException(
-                    "No delivery registration configured."));
+                    "No delivery registration configured.");
         }
     }
 

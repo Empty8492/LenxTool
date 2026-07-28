@@ -62,6 +62,8 @@ public sealed class DependencyInjectionTests
         Assert.IsType<FeedMediaDeliveryRepository>(
             provider.GetRequiredService<IFeedMediaDeliveryRepository>());
         Assert.NotNull(provider.GetRequiredService<IFeedMediaDeliveryService>());
+        Assert.IsType<WpfFeedAudioPlaybackService>(
+            provider.GetRequiredService<IFeedAudioPlaybackService>());
         Assert.IsType<MediaJobInbox>(
             provider.GetRequiredService<IMediaJobInbox>());
         Assert.NotNull(provider.GetRequiredService<IArticleContentExtractor>());

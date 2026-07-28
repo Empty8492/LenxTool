@@ -17,6 +17,7 @@ public sealed class FeedAudioItem
         Content = content;
         (AudioEnclosure, AudioAttachment) =
             FindPlayableAudio(content.Entry);
+        SafeOriginalUrl = ValidateExternalUrl(content.SafeOriginalUrl);
     }
 
     public FeedContentItem Content { get; }
@@ -27,7 +28,7 @@ public sealed class FeedAudioItem
     public string Summary => Content.Summary;
     public DateTimeOffset DisplayTime => Content.DisplayTime;
     public bool IsStarred => Content.IsStarred;
-    public string? SafeOriginalUrl => Content.SafeOriginalUrl;
+    public string? SafeOriginalUrl { get; }
     public FeedEnclosure? AudioEnclosure { get; }
     public FeedAttachmentClassification? AudioAttachment { get; }
     public bool CanPlay => AudioAttachment is not null;
@@ -69,6 +70,21 @@ public sealed class FeedAudioItem
             }
         }
         return (null, null);
+    }
+
+    private static string? ValidateExternalUrl(string? value)
+    {
+        if (value is null)
+        {
+            return null;
+        }
+        FeedAttachmentClassification classification =
+            FeedAttachmentClassifier.Classify(
+                new(value, null, null, null),
+                baseUrl: null);
+        return classification.UrlStatus == FeedAttachmentUrlStatus.Allowed
+            ? classification.SafeUrl
+            : null;
     }
 
     private static string FormatLength(long? length)
@@ -342,6 +358,7 @@ public sealed class FeedAudioViewModel : ObservableObject, IDisposable
         ConfirmExternalOpenCommand.NotifyCanExecuteChanged();
         _playback.Play(new(
             sourceUrl,
+            item.AudioAttachment!.NormalizedMediaType!,
             NormalizeResumeProgress(GetKnownProgress(item))));
     }
 
@@ -371,7 +388,7 @@ public sealed class FeedAudioViewModel : ObservableObject, IDisposable
                     "media",
                     "media_job",
                     registration.Job.Id),
-                cancellationToken);
+                CancellationToken.None);
             Status = registration.Created
                 ? "转写任务已创建，并已进入媒体工作台。"
                 : "已有同源转写任务，已在媒体工作台中定位。";
@@ -405,7 +422,9 @@ public sealed class FeedAudioViewModel : ObservableObject, IDisposable
 
     private bool CanRequestExternalOpen() =>
         !_disposed
-        && SelectedItem is { CanPlay: false, SafeOriginalUrl: not null };
+        && SelectedItem is { SafeOriginalUrl: not null }
+        && (SelectedItem.CanPlay == false
+            || PlaybackStatus == FeedAudioPlaybackStatus.Failed);
 
     private void ConfirmExternalOpen()
     {

@@ -10,14 +10,16 @@
 |---|---:|
 | LenxTool.Core.Tests | 140 passed |
 | LenxTool.Infrastructure.Tests | 380 passed |
-| LenxTool.App.Tests | 235 passed |
+| LenxTool.App.Tests | 245 passed |
 | Cloudflare Worker Vitest | 64 passed |
 | Worker TypeScript strict typecheck | passed |
 | .NET build warnings | 0 |
 | NuGet vulnerable packages | 0 detected |
 | npm audit vulnerabilities | 0 detected |
 
-当前完整 Release 结果为 Core 140/140、Infrastructure 380/380、App/WPF 235/235、Worker workerd/D1 Vitest 64/64、Worker strict typecheck 与全解决方案 build 0 警告/0 错误。本轮未修改 NuGet/npm 依赖；NuGet 在线漏洞扫描与 `npm audit` 均为 0 漏洞。
+当前完整 Release 结果为 Core 140/140、Infrastructure 380/380、App/WPF 245/245、Worker workerd/D1 Vitest 64/64、Worker strict typecheck 与全解决方案 build 0 警告/0 错误。本轮未修改 NuGet/npm 依赖；NuGet 在线漏洞扫描与 `npm audit` 均为 0 漏洞。
+
+P2-03 新增 10 项 App/WPF 证据。7 项音频 ViewModel 场景覆盖选择/进入页签不触网、42% 本地进度恢复、暂停与断流最终落盘、切换条目停止旧源且忽略迟到事件、强制 Audio 不支持格式与播放失败的两步浏览器回退、保留地址原文阻断、同源转写复用既有任务并导航媒体工作台，以及下载取消后不发布任务或导航。惰性接入和 DI 场景确认只有选择音频页签才发出 `EntryViewKind.Audio` 查询，结构测试冻结来源/分类/日期/收藏筛选、回收虚拟化、原生可访问操作和无内嵌 `MediaElement`；真实 WPF 运行时装载 1,000 条音频，在 900×620 和等效 200% 缩放下无横向溢出，只实现 1～40 个列表容器且所有主要按钮未裁切。播放适配器在入口重新验证 URL 与 MIME/扩展组合，不在选择时打开来源、不持久化媒体文件、不隐式创建转写任务；转写继续复用既有 Feed-media SSRF/MIME/签名/大小/超时/取消与幂等测试。本片无数据库、Worker 或依赖变更，完整结果为 .NET 765/765、Worker 64/64、strict typecheck、Release 0 警告/0 错误及 NuGet/npm 0 漏洞。
 
 DISC-06 最终检查点新增 2 项 Infrastructure、1 项 App 和 1 项 Worker 证据。默认策略测试把已知目录关键词来源锁定为 8 秒、直接 URL 探测和底层安全抓取锁定为 20 秒，并复用慢 provider 超时仍返回健康候选的部分成功测试。真实 workerd/D1 在目录容量上限 5,000 条 Feed 下查询首批 50 条结果，完整测试用例耗时 188 ms；真实 schema v18 SQLite 在 100 个候选、2,500 条含大正文条目上一次投影 400 条标题/时间预览实测 55 ms，受 2 秒门禁保护且 DTO 不存在正文字段。App 新增全源不可用映射为可重试离线状态的场景。既有真实 Worker/传输测试继续证明普通用户写入 403、管理员同版本并发单赢家、409 不重放、响应/D1 无正文或私人状态，以及私网/环回/混合 DNS/重绑定、恶意重定向、XXE、压缩炸弹和超限地址输入均被阻断；静态审计确认发现路径没有日志调用，令牌、查询内容和本地路径不进入日志。最终全量为 .NET 755/755、Worker 64/64、strict typecheck、Release 0 警告/0 错误和 NuGet/npm 0 漏洞。
 

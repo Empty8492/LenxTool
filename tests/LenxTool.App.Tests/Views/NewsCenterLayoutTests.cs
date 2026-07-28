@@ -241,6 +241,71 @@ public sealed class NewsCenterLayoutTests
     }
 
     [Fact]
+    public void AudioFeedUsesExplicitPlaybackVirtualizationAndAccessibleControls()
+    {
+        XElement host = LoadFixture("FeedTimelineView.xaml");
+        Assert.Contains(
+            host.Descendants(),
+            element => element.Name.LocalName == "TabItem"
+                && element.Attribute("Header")?.Value == "音频");
+
+        XElement audio = LoadFixture("FeedAudioView.xaml");
+        XElement list = Assert.Single(
+            audio.Descendants(),
+            element => element.Name.LocalName == "PagedListBox");
+        Assert.Equal(
+            "{Binding AudioFeed.Items}",
+            list.Attribute("ItemsSource")?.Value);
+        Assert.Equal(
+            "{Binding AudioFeed.Feed.LoadMoreCommand}",
+            list.Attribute("LoadMoreCommand")?.Value);
+        Assert.Equal(
+            "{Binding AudioFeed.SelectedItem, Mode=TwoWay}",
+            list.Attribute("SelectedItem")?.Value);
+        Assert.Equal(
+            "True",
+            list.Attribute("VirtualizingPanel.IsVirtualizing")?.Value);
+        Assert.Equal(
+            "Recycling",
+            list.Attribute("VirtualizingPanel.VirtualizationMode")?.Value);
+        Assert.DoesNotContain(
+            audio.Descendants(),
+            element => element.Name.LocalName == "MediaElement");
+
+        string[] accessibleActions =
+        [
+            "播放或暂停所选音频",
+            "将所选音频送入转写",
+            "请求在浏览器打开音频原文",
+            "确认在浏览器打开音频原文",
+            "取消在浏览器打开音频原文",
+            "音频播放进度"
+        ];
+        Assert.All(
+            accessibleActions,
+            name => Assert.Contains(
+                audio.Descendants(),
+                element =>
+                    element.Attribute("AutomationProperties.Name")?.Value
+                    == name));
+
+        string[] filterNames =
+        [
+            "音频分类筛选",
+            "音频来源筛选",
+            "音频日期筛选",
+            "仅看收藏音频"
+        ];
+        Assert.All(
+            filterNames,
+            name => Assert.Contains(
+                audio.Descendants(),
+                element =>
+                    element.Attribute("AutomationProperties.Name")?.Value
+                    == name));
+    }
+
+    [Fact]
     public void FeedViewsUseSharedNativeSelectionControlStyles()
     {
         XElement host = LoadFixture("FeedTimelineView.xaml");
@@ -262,10 +327,12 @@ public sealed class NewsCenterLayoutTests
 
         XElement timelineFilters = LoadFixture("FeedTimelineFiltersView.xaml");
         XElement picture = LoadFixture("FeedPictureView.xaml");
+        XElement audio = LoadFixture("FeedAudioView.xaml");
         XElement timelineBrowser = LoadFixture("FeedTimelineBrowserView.xaml");
         XElement[] controls = timelineFilters
             .Descendants()
             .Concat(picture.Descendants())
+            .Concat(audio.Descendants())
             .Concat(timelineBrowser.Descendants())
             .Where(element =>
                 element.Name.LocalName is

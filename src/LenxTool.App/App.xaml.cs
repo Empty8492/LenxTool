@@ -231,6 +231,9 @@ public partial class App : Application
         services.AddSingleton<IFeedMediaDeliveryRepository>(static services =>
             services.GetRequiredService<FeedMediaDeliveryRepository>());
         services.AddFeedMediaDelivery(FeedMediaDeliveryOptions.Default);
+        services.AddSingleton<
+            IFeedAudioPlaybackService,
+            WpfFeedAudioPlaybackService>();
         services.AddSingleton<MediaJobInbox>();
         services.AddSingleton<IMediaJobInbox>(static services =>
             services.GetRequiredService<MediaJobInbox>());

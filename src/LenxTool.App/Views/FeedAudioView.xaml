@@ -1,0 +1,300 @@
+<UserControl x:Class="LenxTool.App.Views.FeedAudioView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:LenxTool.App.Controls">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="12" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <Border Padding="18,14" Style="{StaticResource BentoCardStyle}">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource SectionTitleStyle}"
+                                   Text="音频与播客" />
+                        <TextBlock Margin="0,4,0,0"
+                                   Style="{StaticResource MetaTextStyle}"
+                                   Text="{Binding AudioFeed.Status}"
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="1"
+                                Orientation="Horizontal"
+                                VerticalAlignment="Center">
+                        <Button Margin="0,0,8,0"
+                                Command="{Binding AudioFeed.Feed.ClearFiltersCommand}"
+                                AutomationProperties.Name="清除音频筛选"
+                                Content="清除筛选" />
+                        <Button Style="{StaticResource AccentButtonStyle}"
+                                Command="{Binding AudioFeed.Feed.ApplyFiltersCommand}"
+                                AutomationProperties.Name="应用音频筛选"
+                                Content="应用筛选" />
+                    </StackPanel>
+                </Grid>
+                <WrapPanel Grid.Row="1" Margin="0,12,0,0">
+                    <StackPanel Width="170" Margin="0,0,10,0">
+                        <TextBlock Margin="2,0,0,5"
+                                   Style="{StaticResource MetaTextStyle}"
+                                   Text="分类" />
+                        <ComboBox MinHeight="36"
+                                  Style="{StaticResource CompactComboBoxStyle}"
+                                  ItemsSource="{Binding AudioFeed.Feed.Categories}"
+                                  SelectedItem="{Binding AudioFeed.Feed.SelectedCategory}"
+                                  DisplayMemberPath="Label"
+                                  AutomationProperties.Name="音频分类筛选" />
+                    </StackPanel>
+                    <StackPanel Width="190" Margin="0,0,10,0">
+                        <TextBlock Margin="2,0,0,5"
+                                   Style="{StaticResource MetaTextStyle}"
+                                   Text="Feed" />
+                        <ComboBox MinHeight="36"
+                                  Style="{StaticResource CompactComboBoxStyle}"
+                                  ItemsSource="{Binding AudioFeed.Feed.Feeds}"
+                                  SelectedItem="{Binding AudioFeed.Feed.SelectedFeed}"
+                                  DisplayMemberPath="Label"
+                                  AutomationProperties.Name="音频来源筛选" />
+                    </StackPanel>
+                    <StackPanel Width="150" Margin="0,0,10,0">
+                        <TextBlock Margin="2,0,0,5"
+                                   Style="{StaticResource MetaTextStyle}"
+                                   Text="发布日期" />
+                        <DatePicker MinHeight="36"
+                                    Style="{StaticResource CompactDatePickerStyle}"
+                                    SelectedDate="{Binding AudioFeed.Feed.SelectedDate}"
+                                    AutomationProperties.Name="音频日期筛选" />
+                    </StackPanel>
+                    <CheckBox MinHeight="36"
+                              Margin="4,19,0,0"
+                              VerticalContentAlignment="Center"
+                              Style="{StaticResource CompactCheckBoxStyle}"
+                              IsChecked="{Binding AudioFeed.Feed.FavoritesOnly}"
+                              Content="仅看收藏"
+                              AutomationProperties.Name="仅看收藏音频" />
+                </WrapPanel>
+            </Grid>
+        </Border>
+
+        <Grid Grid.Row="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="2*" MinWidth="300" />
+                <ColumnDefinition Width="12" />
+                <ColumnDefinition Width="3*" MinWidth="380" />
+            </Grid.ColumnDefinitions>
+
+            <Grid>
+                <controls:PagedListBox
+                    ItemsSource="{Binding AudioFeed.Items}"
+                    SelectedItem="{Binding AudioFeed.SelectedItem, Mode=TwoWay}"
+                    LoadMoreCommand="{Binding AudioFeed.Feed.LoadMoreCommand}"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                    ScrollViewer.CanContentScroll="True"
+                    VirtualizingPanel.IsVirtualizing="True"
+                    VirtualizingPanel.VirtualizationMode="Recycling"
+                    AutomationProperties.Name="虚拟化音频列表">
+                    <ListBox.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <VirtualizingStackPanel />
+                        </ItemsPanelTemplate>
+                    </ListBox.ItemsPanel>
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem">
+                            <Setter Property="HorizontalContentAlignment"
+                                    Value="Stretch" />
+                            <Setter Property="Padding" Value="0" />
+                            <Setter Property="Margin" Value="0,0,0,10" />
+                            <Setter Property="AutomationProperties.Name"
+                                    Value="{Binding Title, StringFormat=音频条目：{0}}" />
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <Border Padding="14"
+                                    Style="{StaticResource BentoCardStyle}">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="42" />
+                                        <ColumnDefinition Width="10" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Border Width="42"
+                                            Height="42"
+                                            CornerRadius="21"
+                                            Background="{DynamicResource Brush.AccentSoft}">
+                                        <TextBlock HorizontalAlignment="Center"
+                                                   VerticalAlignment="Center"
+                                                   FontSize="18"
+                                                   Foreground="{DynamicResource Brush.Accent}"
+                                                   Text="♪" />
+                                    </Border>
+                                    <StackPanel Grid.Column="2">
+                                        <TextBlock FontWeight="SemiBold"
+                                                   Text="{Binding Title}"
+                                                   TextWrapping="Wrap"
+                                                   MaxHeight="42" />
+                                        <TextBlock Margin="0,5,0,0"
+                                                   Style="{StaticResource MetaTextStyle}"
+                                                   Text="{Binding FeedName}"
+                                                   TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Margin="0,3,0,0"
+                                                   Style="{StaticResource MetaTextStyle}">
+                                            <Run Text="{Binding MediaDetails, Mode=OneWay}" />
+                                            <Run Text=" · " />
+                                            <Run Text="{Binding DisplayTime, Mode=OneWay, StringFormat={}{0:MM-dd HH:mm}}" />
+                                        </TextBlock>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </controls:PagedListBox>
+
+                <Border Padding="22"
+                        Background="{DynamicResource Brush.SurfaceRaised}"
+                        BorderBrush="{DynamicResource Brush.Border}"
+                        BorderThickness="1"
+                        CornerRadius="12"
+                        Panel.ZIndex="10">
+                    <Border.Style>
+                        <Style TargetType="Border">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding AudioFeed.Items.Count}"
+                                             Value="0">
+                                    <Setter Property="Visibility"
+                                            Value="Visible" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Border.Style>
+                    <StackPanel HorizontalAlignment="Center"
+                                VerticalAlignment="Center">
+                        <TextBlock HorizontalAlignment="Center"
+                                   Style="{StaticResource SectionTitleStyle}"
+                                   Text="当前没有可播放的音频" />
+                        <TextBlock Margin="0,6,0,0"
+                                   HorizontalAlignment="Center"
+                                   Style="{StaticResource MetaTextStyle}"
+                                   Text="可调整筛选；离线时仍会读取本地条目与播放进度。"
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <Border Grid.Column="2"
+                    Padding="22"
+                    Style="{StaticResource BentoCardStyle}">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource MetaTextStyle}"
+                                   Text="正在查看" />
+                        <TextBlock Margin="0,7,0,0"
+                                   FontSize="22"
+                                   FontWeight="SemiBold"
+                                   Text="{Binding AudioFeed.SelectedItem.Title}"
+                                   TextWrapping="Wrap" />
+                        <TextBlock Margin="0,8,0,0"
+                                   Style="{StaticResource MetaTextStyle}">
+                            <Run Text="{Binding AudioFeed.SelectedItem.FeedName, Mode=OneWay}" />
+                            <Run Text=" · " />
+                            <Run Text="{Binding AudioFeed.SelectedItem.SourceHost, Mode=OneWay}" />
+                        </TextBlock>
+                        <TextBlock Margin="0,4,0,0"
+                                   Style="{StaticResource MetaTextStyle}"
+                                   Text="{Binding AudioFeed.SelectedItem.MediaDetails}"
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
+
+                    <StackPanel Grid.Row="1"
+                                Margin="0,24,0,18"
+                                VerticalAlignment="Center">
+                        <TextBlock HorizontalAlignment="Center"
+                                   FontSize="42"
+                                   Foreground="{DynamicResource Brush.Accent}"
+                                   Text="♪" />
+                        <Slider Margin="0,20,0,0"
+                                Minimum="0"
+                                Maximum="{Binding AudioFeed.DurationSeconds}"
+                                Value="{Binding AudioFeed.SeekPositionSeconds, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                IsEnabled="{Binding AudioFeed.CanSeek}"
+                                AutomationProperties.Name="音频播放进度" />
+                        <Grid Margin="0,7,0,0">
+                            <TextBlock Style="{StaticResource MetaTextStyle}"
+                                       Text="{Binding AudioFeed.PositionText}" />
+                            <TextBlock HorizontalAlignment="Right"
+                                       Style="{StaticResource MetaTextStyle}"
+                                       Text="{Binding AudioFeed.DurationText}" />
+                        </Grid>
+                        <TextBlock Margin="0,18,0,0"
+                                   HorizontalAlignment="Center"
+                                   Style="{StaticResource MetaTextStyle}"
+                                   Text="{Binding AudioFeed.Status}"
+                                   TextAlignment="Center"
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
+
+                    <StackPanel Grid.Row="2">
+                        <WrapPanel HorizontalAlignment="Center">
+                            <Button MinWidth="104"
+                                    Margin="0,0,8,0"
+                                    Style="{StaticResource AccentButtonStyle}"
+                                    Command="{Binding AudioFeed.PlayPauseCommand}"
+                                    AutomationProperties.Name="播放或暂停所选音频"
+                                    Content="{Binding AudioFeed.PlayPauseLabel}" />
+                            <Button MinWidth="104"
+                                    Margin="0,0,8,0"
+                                    Command="{Binding AudioFeed.QueueTranscriptionCommand}"
+                                    AutomationProperties.Name="将所选音频送入转写"
+                                    Content="转写" />
+                            <Button MinWidth="104"
+                                    Command="{Binding AudioFeed.RequestExternalOpenCommand}"
+                                    AutomationProperties.Name="请求在浏览器打开音频原文"
+                                    Content="打开原文" />
+                        </WrapPanel>
+
+                        <Border Margin="0,14,0,0"
+                                Padding="12"
+                                Background="{DynamicResource Brush.SurfaceRaised}"
+                                BorderBrush="{DynamicResource Brush.Border}"
+                                BorderThickness="1"
+                                CornerRadius="10"
+                                Visibility="{Binding AudioFeed.HasPendingExternalConfirmation, Converter={StaticResource BooleanToVisibilityConverter}}">
+                            <StackPanel>
+                                <TextBlock Text="此格式不进入内置播放器。是否在默认浏览器打开原文？"
+                                           TextWrapping="Wrap" />
+                                <StackPanel Margin="0,10,0,0"
+                                            HorizontalAlignment="Right"
+                                            Orientation="Horizontal">
+                                    <Button Margin="0,0,8,0"
+                                            Command="{Binding AudioFeed.CancelExternalOpenCommand}"
+                                            AutomationProperties.Name="取消在浏览器打开音频原文"
+                                            Content="取消" />
+                                    <Button Style="{StaticResource AccentButtonStyle}"
+                                            Command="{Binding AudioFeed.ConfirmExternalOpenCommand}"
+                                            AutomationProperties.Name="确认在浏览器打开音频原文"
+                                            Content="确认打开" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </Grid>
+    </Grid>
+</UserControl>

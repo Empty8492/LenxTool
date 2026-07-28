@@ -1,5 +1,7 @@
 using System.Windows.Media;
 using System.Windows.Threading;
+using LenxTool.Core.Feeds;
+using LenxTool.Core.Models;
 
 namespace LenxTool.App.Services;
 
@@ -15,6 +17,7 @@ public enum FeedAudioPlaybackStatus
 
 public sealed record FeedAudioPlaybackRequest(
     string SourceUrl,
+    string MediaType,
     double ResumeProgress);
 
 public sealed record FeedAudioPlaybackSnapshot(
@@ -83,7 +86,7 @@ public sealed class WpfFeedAudioPlaybackService :
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         ArgumentNullException.ThrowIfNull(request);
-        Uri source = ValidateSource(request.SourceUrl);
+        Uri source = ValidateSource(request);
         double resumeProgress = NormalizeProgress(request.ResumeProgress);
 
         if (_player is not null
@@ -310,24 +313,31 @@ public sealed class WpfFeedAudioPlaybackService :
             new FeedAudioPlaybackChangedEventArgs(snapshot));
     }
 
-    private static Uri ValidateSource(string value)
+    private static Uri ValidateSource(
+        FeedAudioPlaybackRequest request)
     {
-        if (!Uri.TryCreate(value, UriKind.Absolute, out Uri? source)
-            || source.Scheme is not ("http" or "https")
-            || string.IsNullOrWhiteSpace(source.IdnHost)
-            || !string.IsNullOrEmpty(source.UserInfo)
-            || !IsDefaultWebPort(source))
+        FeedAttachmentClassification attachment =
+            FeedAttachmentClassifier.Classify(
+                new(
+                    request.SourceUrl,
+                    request.MediaType,
+                    null,
+                    null),
+                baseUrl: null);
+        if (attachment.UrlStatus != FeedAttachmentUrlStatus.Allowed
+            || !attachment.IsTypeVerified
+            || attachment.Kind != FeedAttachmentKind.Audio
+            || !Uri.TryCreate(
+                attachment.SafeUrl,
+                UriKind.Absolute,
+                out Uri? source))
         {
             throw new ArgumentException(
-                "音频来源必须是使用默认端口且不含凭据的 HTTP(S) 地址。",
-                nameof(value));
+                "音频来源必须通过地址和类型一致性验证。",
+                nameof(request));
         }
         return source;
     }
-
-    private static bool IsDefaultWebPort(Uri uri) =>
-        (uri.Scheme == Uri.UriSchemeHttps && uri.Port == 443)
-        || (uri.Scheme == Uri.UriSchemeHttp && uri.Port == 80);
 
     private static double NormalizeProgress(double progress) =>
         double.IsFinite(progress)
