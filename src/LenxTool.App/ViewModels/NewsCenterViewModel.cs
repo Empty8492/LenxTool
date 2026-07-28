@@ -40,6 +40,8 @@ public sealed partial class NewsCenterViewModel
         _feedVideoDeliveryPlanning;
     private bool _videoFeedInitialized;
     private Task _videoFeedInitialization = Task.CompletedTask;
+    private bool _notificationFeedInitialized;
+    private Task _notificationFeedInitialization = Task.CompletedTask;
 
     public NewsCenterViewModel(
         INewsCenterService newsCenterService,
@@ -138,6 +140,9 @@ public sealed partial class NewsCenterViewModel
     public Task AudioFeedInitialization => _audioFeedInitialization;
     public FeedVideoViewModel? VideoFeed { get; private set; }
     public Task VideoFeedInitialization => _videoFeedInitialization;
+    public FeedContentCollectionViewModel? NotificationFeed { get; private set; }
+    public Task NotificationFeedInitialization =>
+        _notificationFeedInitialization;
     public AsyncRelayCommand RefreshCommand { get; }
     public AsyncRelayCommand GenerateArticleReportCommand { get; }
     public AsyncRelayCommand GenerateDailyTrendReportCommand { get; }
@@ -185,6 +190,12 @@ public sealed partial class NewsCenterViewModel
             {
                 _videoFeedInitialization = StartVideoFeedInitialization();
                 OnPropertyChanged(nameof(VideoFeedInitialization));
+            }
+            else if (value == 4)
+            {
+                _notificationFeedInitialization =
+                    StartNotificationFeedInitialization();
+                OnPropertyChanged(nameof(NotificationFeedInitialization));
             }
         }
     }
@@ -277,6 +288,7 @@ public sealed partial class NewsCenterViewModel
         PictureFeed?.Dispose();
         AudioFeed?.Dispose();
         VideoFeed?.Dispose();
+        NotificationFeed?.Dispose();
         DisposeTimeline();
     }
 
@@ -426,6 +438,43 @@ public sealed partial class NewsCenterViewModel
         catch (Exception exception)
         {
             videoFeed.ReportLoadFailure(exception);
+        }
+    }
+
+    private Task StartNotificationFeedInitialization()
+    {
+        if (_notificationFeedInitialized)
+        {
+            return Task.CompletedTask;
+        }
+        if (!_notificationFeedInitialization.IsCompleted)
+        {
+            return _notificationFeedInitialization;
+        }
+
+        NotificationFeed ??= new(
+            EntryViewKind.Notification,
+            "通知",
+            _feedEntryRepository,
+            _feedCatalogRepository,
+            _entryStateRepository,
+            _favoriteRepository,
+            OpenFeedContentUri);
+        OnPropertyChanged(nameof(NotificationFeed));
+        return InitializeNotificationFeedCoreAsync(NotificationFeed);
+    }
+
+    private async Task InitializeNotificationFeedCoreAsync(
+        FeedContentCollectionViewModel notificationFeed)
+    {
+        try
+        {
+            await notificationFeed.InitializeAsync(CancellationToken.None);
+            _notificationFeedInitialized = true;
+        }
+        catch (Exception exception)
+        {
+            notificationFeed.ReportLoadFailure(exception);
         }
     }
 

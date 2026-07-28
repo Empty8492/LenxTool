@@ -378,6 +378,44 @@ public sealed class NewsCenterLayoutTests
     }
 
     [Fact]
+    public void NotificationFeedUsesLocalEntryQueryVirtualizationAndKeyboardOpen()
+    {
+        XElement host = LoadFixture("FeedTimelineView.xaml");
+        Assert.Contains(
+            host.Descendants(),
+            element => element.Name.LocalName == "TabItem"
+                && element.Attribute("Header")?.Value == "通知");
+
+        XElement notification = LoadFixture("FeedNotificationView.xaml");
+        XElement list = Assert.Single(
+            notification.Descendants(),
+            element => element.Name.LocalName == "PagedListBox");
+        Assert.Equal(
+            "{Binding NotificationFeed.Items}",
+            list.Attribute("ItemsSource")?.Value);
+        Assert.Equal(
+            "{Binding NotificationFeed.LoadMoreCommand}",
+            list.Attribute("LoadMoreCommand")?.Value);
+        Assert.Equal(
+            "True",
+            list.Attribute("VirtualizingPanel.IsVirtualizing")?.Value);
+        Assert.Equal(
+            "Recycling",
+            list.Attribute("VirtualizingPanel.VirtualizationMode")?.Value);
+        Assert.Contains(
+            notification.Descendants(),
+            element => element.Name.LocalName == "KeyBinding"
+                && element.Attribute("Key")?.Value == "Enter"
+                && element.Attribute("Command")?.Value.Contains(
+                    "NotificationFeed.OpenItemCommand",
+                    StringComparison.Ordinal) == true);
+        Assert.DoesNotContain(
+            notification.Descendants(),
+            element => element.Name.LocalName
+                is "MediaElement" or "WebView2" or "SafeHtmlView");
+    }
+
+    [Fact]
     public void FeedViewsUseSharedNativeSelectionControlStyles()
     {
         XElement host = LoadFixture("FeedTimelineView.xaml");
@@ -401,12 +439,14 @@ public sealed class NewsCenterLayoutTests
         XElement picture = LoadFixture("FeedPictureView.xaml");
         XElement audio = LoadFixture("FeedAudioView.xaml");
         XElement video = LoadFixture("FeedVideoView.xaml");
+        XElement notification = LoadFixture("FeedNotificationView.xaml");
         XElement timelineBrowser = LoadFixture("FeedTimelineBrowserView.xaml");
         XElement[] controls = timelineFilters
             .Descendants()
             .Concat(picture.Descendants())
             .Concat(audio.Descendants())
             .Concat(video.Descendants())
+            .Concat(notification.Descendants())
             .Concat(timelineBrowser.Descendants())
             .Where(element =>
                 element.Name.LocalName is

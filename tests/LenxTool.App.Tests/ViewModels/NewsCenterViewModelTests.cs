@@ -88,6 +88,66 @@ public sealed class NewsCenterViewModelTests
             query => query.ViewKind == EntryViewKind.Video);
     }
 
+    [Fact]
+    public async Task NotificationFeedLoadsOnlyAfterSelectingItsTab()
+    {
+        var entries = new StubFeedEntryRepository([]);
+        using NewsCenterViewModel viewModel = CreateViewModel(
+            CreateSnapshot(),
+            feedEntries: entries);
+
+        await viewModel.InitializeAsync(CancellationToken.None);
+
+        Assert.Null(viewModel.NotificationFeed);
+        Assert.DoesNotContain(
+            entries.Queries,
+            query => query.ViewKind == EntryViewKind.Notification);
+
+        viewModel.SelectedFeedViewIndex = 4;
+        await viewModel.NotificationFeedInitialization.WaitAsync(
+            TimeSpan.FromSeconds(1));
+
+        Assert.NotNull(viewModel.NotificationFeed);
+        Assert.Contains(
+            entries.Queries,
+            query => query.ViewKind == EntryViewKind.Notification);
+    }
+
+    [Fact]
+    public async Task NotificationFeedKeepsItsFiltersWhenSwitchingAwayAndBack()
+    {
+        var entries = new StubFeedEntryRepository([]);
+        using NewsCenterViewModel viewModel = CreateViewModel(
+            CreateSnapshot(),
+            feedEntries: entries);
+        await viewModel.InitializeAsync(CancellationToken.None);
+        viewModel.SelectedFeedViewIndex = 4;
+        await viewModel.NotificationFeedInitialization.WaitAsync(
+            TimeSpan.FromSeconds(1));
+        FeedContentCollectionViewModel notificationFeed =
+            Assert.IsType<FeedContentCollectionViewModel>(
+                viewModel.NotificationFeed);
+        var selectedDate = new DateTime(2026, 7, 20);
+        notificationFeed.SelectedDate = selectedDate;
+        notificationFeed.FavoritesOnly = true;
+        int notificationQueryCount = entries.Queries.Count(
+            query => query.ViewKind == EntryViewKind.Notification);
+
+        viewModel.SelectedFeedViewIndex = 0;
+        viewModel.SelectedFeedViewIndex = 4;
+        await viewModel.NotificationFeedInitialization.WaitAsync(
+            TimeSpan.FromSeconds(1));
+
+        Assert.Same(notificationFeed, viewModel.NotificationFeed);
+        Assert.Equal(selectedDate, notificationFeed.SelectedDate);
+        Assert.True(notificationFeed.FavoritesOnly);
+        Assert.Equal(
+            notificationQueryCount,
+            entries.Queries.Count(
+                query => query.ViewKind
+                         == EntryViewKind.Notification));
+    }
+
     private const string CategoryId = "10000000-0000-4000-8000-000000000001";
     private const string FeedId = "30000000-0000-4000-8000-000000000001";
     private static readonly DateTimeOffset TimelineNow = new(

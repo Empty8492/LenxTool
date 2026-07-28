@@ -53,6 +53,9 @@
     <None Include="..\..\src\LenxTool.App\Views\FeedVideoView.xaml"
           Link="Fixtures\FeedVideoView.xaml"
           CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\src\LenxTool.App\Views\FeedNotificationView.xaml"
+          Link="Fixtures\FeedNotificationView.xaml"
+          CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\src\LenxTool.App\Views\FeedHealthView.xaml"
           Link="Fixtures\FeedHealthView.xaml"
           CopyToOutputDirectory="PreserveNewest" />

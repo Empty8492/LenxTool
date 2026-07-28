@@ -498,6 +498,13 @@ public sealed partial class NewsCenterViewModel
                 preserveSelection,
                 cancellationToken);
         }
+        if (NotificationFeed is not null
+            && _notificationFeedInitialized)
+        {
+            await NotificationFeed.RefreshCatalogAsync(
+                preserveSelection,
+                cancellationToken);
+        }
     }
 
     private async Task ApplyTimelineFiltersAsync(CancellationToken cancellationToken)

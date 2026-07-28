@@ -35,5 +35,10 @@
                  AutomationProperties.Name="视频视图">
             <views:FeedVideoView />
         </TabItem>
+        <TabItem Header="通知"
+                 Style="{StaticResource SegmentedTabItemStyle}"
+                 AutomationProperties.Name="通知视图">
+            <views:FeedNotificationView />
+        </TabItem>
     </TabControl>
 </UserControl>
