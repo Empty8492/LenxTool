@@ -17,6 +17,8 @@ public sealed class FeedMediaDeliveryServiceTests : IDisposable
         IPAddress.Parse("93.184.216.34");
     private static readonly byte[] Mp3Bytes =
         "ID3\u0004\u0000\u0000\u0000\u0000\u0000\u0015audio-payload"u8.ToArray();
+    private static readonly byte[] Mp4Bytes =
+        [0, 0, 0, 24, .. "ftypmp42"u8.ToArray(), 0, 0, 0, 0];
     private readonly string _testRoot = Path.Combine(
         Path.GetTempPath(),
         "Lenx Tools tests",
@@ -240,6 +242,37 @@ public sealed class FeedMediaDeliveryServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task DeliverAsyncRejectsVideoIncompatibleWithProcessingChain()
+    {
+        var compatibility = new FakeCompatibilityProbe(
+            new InvalidDataException(
+                "The local media stack cannot decode this video."));
+        await using TestContext context = await CreateContextAsync(
+            (_, _, _) => Response(
+                HttpStatusCode.OK,
+                "video/mp4",
+                Mp4Bytes),
+            compatibilityProbe: compatibility);
+        var enclosure = new FeedEnclosure(
+            "https://media.example/episodes/daily.mp4",
+            "video/mp4",
+            Mp4Bytes.Length,
+            "Video");
+
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            context.Service.DeliverAsync(
+                CreateEntry(),
+                enclosure,
+                CancellationToken.None));
+
+        Assert.Equal(1, compatibility.CallCount);
+        await AssertNoResidueAsync(context);
+        Assert.Empty(
+            await new MediaJobRepository(context.Database)
+                .GetQueuedAsync(CancellationToken.None));
+    }
+
+    [Fact]
     public async Task DeliverAsyncRejectsUnverifiedAttachmentBeforeNetwork()
     {
         await using TestContext context = await CreateContextAsync(
@@ -389,12 +422,17 @@ public sealed class FeedMediaDeliveryServiceTests : IDisposable
             IReadOnlyList<IPAddress>,
             CancellationToken,
             FeedMediaHttpResponse> send,
-        FeedMediaDeliveryOptions? options = null) =>
-        await CreateContextAsync(new FakeTransport(send), options);
+        FeedMediaDeliveryOptions? options = null,
+        IFeedMediaCompatibilityProbe? compatibilityProbe = null) =>
+        await CreateContextAsync(
+            new FakeTransport(send),
+            options,
+            compatibilityProbe);
 
     private async Task<TestContext> CreateContextAsync(
         FakeTransport transport,
-        FeedMediaDeliveryOptions? options = null)
+        FeedMediaDeliveryOptions? options = null,
+        IFeedMediaCompatibilityProbe? compatibilityProbe = null)
     {
         var paths = new AppPaths(Path.Combine(
             _testRoot,
@@ -412,7 +450,8 @@ public sealed class FeedMediaDeliveryServiceTests : IDisposable
             FeedDiscoveryOptions.Default,
             options ?? TestOptions(),
             paths,
-            TimeProvider.System);
+            TimeProvider.System,
+            compatibilityProbe ?? new FakeCompatibilityProbe());
         return new(database, paths, service, transport);
     }
 
@@ -421,6 +460,22 @@ public sealed class FeedMediaDeliveryServiceTests : IDisposable
         TotalTimeout: TimeSpan.FromSeconds(5),
         MaximumRedirects: 3,
         MaximumConcurrentDownloads: 2);
+
+    private sealed class FakeCompatibilityProbe(
+        Exception? failure = null)
+        : IFeedMediaCompatibilityProbe
+    {
+        public int CallCount { get; private set; }
+
+        public void EnsureCompatibleVideo(string inputPath)
+        {
+            CallCount++;
+            if (failure is not null)
+            {
+                throw failure;
+            }
+        }
+    }
 
     public static TheoryData<
         string,

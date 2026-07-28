@@ -36,6 +36,10 @@ public sealed partial class NewsCenterViewModel
     private readonly IAppNavigationService? _appNavigation;
     private bool _audioFeedInitialized;
     private Task _audioFeedInitialization = Task.CompletedTask;
+    private readonly IFeedVideoDeliveryPlanningService?
+        _feedVideoDeliveryPlanning;
+    private bool _videoFeedInitialized;
+    private Task _videoFeedInitialization = Task.CompletedTask;
 
     public NewsCenterViewModel(
         INewsCenterService newsCenterService,
@@ -53,24 +57,29 @@ public sealed partial class NewsCenterViewModel
         IFeedAudioPlaybackService? feedAudioPlayback = null,
         IFeedMediaDeliveryService? feedMediaDelivery = null,
         IMediaJobInbox? mediaJobInbox = null,
-        IAppNavigationService? appNavigation = null)
+        IAppNavigationService? appNavigation = null,
+        IFeedVideoDeliveryPlanningService?
+            feedVideoDeliveryPlanning = null)
         : base("资讯列表", "订阅资讯、每日早报、热点趋势与 AI 报告")
     {
-        bool hasAudioDependency =
-            feedAudioPlayback is not null
-            || feedMediaDelivery is not null
+        bool hasSharedMediaDependency =
+            feedMediaDelivery is not null
             || mediaJobInbox is not null
             || appNavigation is not null;
-        bool hasCompleteAudioDependencies =
-            feedAudioPlayback is not null
-            && feedMediaDelivery is not null
+        bool hasCompleteSharedMediaDependencies =
+            feedMediaDelivery is not null
             && mediaJobInbox is not null
             && appNavigation is not null;
-        if (hasAudioDependency && !hasCompleteAudioDependencies)
+        if ((hasSharedMediaDependency
+                && !hasCompleteSharedMediaDependencies)
+            || (feedAudioPlayback is not null
+                && !hasCompleteSharedMediaDependencies)
+            || (feedVideoDeliveryPlanning is not null
+                && !hasCompleteSharedMediaDependencies))
         {
             throw new ArgumentException(
-                "音频视图依赖必须完整提供或全部省略。",
-                nameof(feedAudioPlayback));
+                "媒体视图的共享依赖必须完整提供或全部省略。",
+                nameof(feedMediaDelivery));
         }
 
         _newsCenterService = newsCenterService;
@@ -89,6 +98,8 @@ public sealed partial class NewsCenterViewModel
         _feedMediaDelivery = feedMediaDelivery;
         _mediaJobInbox = mediaJobInbox;
         _appNavigation = appNavigation;
+        _feedVideoDeliveryPlanning =
+            feedVideoDeliveryPlanning;
         _timelineSynchronizationContext =
             SynchronizationContext.Current is System.Windows.Threading.DispatcherSynchronizationContext dispatcherContext
             && System.Windows.Application.Current is not null
@@ -119,6 +130,8 @@ public sealed partial class NewsCenterViewModel
     public Task PictureFeedInitialization => _pictureFeedInitialization;
     public FeedAudioViewModel? AudioFeed { get; private set; }
     public Task AudioFeedInitialization => _audioFeedInitialization;
+    public FeedVideoViewModel? VideoFeed { get; private set; }
+    public Task VideoFeedInitialization => _videoFeedInitialization;
     public AsyncRelayCommand RefreshCommand { get; }
     public AsyncRelayCommand GenerateArticleReportCommand { get; }
     public AsyncRelayCommand GenerateDailyTrendReportCommand { get; }
@@ -161,6 +174,11 @@ public sealed partial class NewsCenterViewModel
             {
                 _audioFeedInitialization = StartAudioFeedInitialization();
                 OnPropertyChanged(nameof(AudioFeedInitialization));
+            }
+            else if (value == 3)
+            {
+                _videoFeedInitialization = StartVideoFeedInitialization();
+                OnPropertyChanged(nameof(VideoFeedInitialization));
             }
         }
     }
@@ -252,6 +270,7 @@ public sealed partial class NewsCenterViewModel
         GenerateDailyTrendReportCommand.Dispose();
         PictureFeed?.Dispose();
         AudioFeed?.Dispose();
+        VideoFeed?.Dispose();
         DisposeTimeline();
     }
 
@@ -350,6 +369,56 @@ public sealed partial class NewsCenterViewModel
         catch (Exception exception)
         {
             audioFeed.ReportLoadFailure(exception);
+        }
+    }
+
+    private Task StartVideoFeedInitialization()
+    {
+        if (_videoFeedInitialized)
+        {
+            return Task.CompletedTask;
+        }
+        if (!_videoFeedInitialization.IsCompleted)
+        {
+            return _videoFeedInitialization;
+        }
+        if (_feedVideoDeliveryPlanning is null
+            || _feedMediaDelivery is null
+            || _mediaJobInbox is null
+            || _appNavigation is null)
+        {
+            return Task.CompletedTask;
+        }
+
+        VideoFeed ??= new(
+            new(
+                EntryViewKind.Video,
+                "视频",
+                _feedEntryRepository,
+                _feedCatalogRepository,
+                _entryStateRepository,
+                _favoriteRepository,
+                OpenFeedContentUri),
+            _feedVideoDeliveryPlanning,
+            _feedMediaDelivery,
+            _mediaJobInbox,
+            _appNavigation,
+            OpenFeedContentUri);
+        OnPropertyChanged(nameof(VideoFeed));
+        return InitializeVideoFeedCoreAsync(VideoFeed);
+    }
+
+    private async Task InitializeVideoFeedCoreAsync(
+        FeedVideoViewModel videoFeed)
+    {
+        try
+        {
+            await videoFeed.InitializeAsync(CancellationToken.None);
+            _videoFeedInitialized = true;
+        }
+        catch (Exception exception)
+        {
+            videoFeed.ReportLoadFailure(exception);
         }
     }
 

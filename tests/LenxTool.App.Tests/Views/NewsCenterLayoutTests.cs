@@ -306,6 +306,78 @@ public sealed class NewsCenterLayoutTests
     }
 
     [Fact]
+    public void VideoFeedUsesSafePosterExplicitActionsAndNoEmbeddedPlayer()
+    {
+        XElement host = LoadFixture("FeedTimelineView.xaml");
+        Assert.Contains(
+            host.Descendants(),
+            element => element.Name.LocalName == "TabItem"
+                && element.Attribute("Header")?.Value == "视频");
+
+        XElement video = LoadFixture("FeedVideoView.xaml");
+        XElement list = Assert.Single(
+            video.Descendants(),
+            element => element.Name.LocalName == "PagedListBox");
+        Assert.Equal(
+            "{Binding VideoFeed.Items}",
+            list.Attribute("ItemsSource")?.Value);
+        Assert.Equal(
+            "{Binding VideoFeed.Feed.LoadMoreCommand}",
+            list.Attribute("LoadMoreCommand")?.Value);
+        Assert.Equal(
+            "{Binding VideoFeed.SelectedItem, Mode=TwoWay}",
+            list.Attribute("SelectedItem")?.Value);
+        Assert.Equal(
+            "True",
+            list.Attribute("VirtualizingPanel.IsVirtualizing")?.Value);
+        Assert.Equal(
+            "Recycling",
+            list.Attribute("VirtualizingPanel.VirtualizationMode")?.Value);
+        Assert.Contains(
+            video.Descendants(),
+            element => element.Name.LocalName == "FeedThumbnail"
+                && element.Attribute("SourceUrl")?.Value
+                == "{Binding PosterUrl}");
+        Assert.DoesNotContain(
+            video.Descendants(),
+            element => element.Name.LocalName
+                is "MediaElement" or "WebView2" or "SafeHtmlView");
+
+        string[] accessibleActions =
+        [
+            "检查并下载所选视频",
+            "取消视频下载或确认",
+            "请求在浏览器打开视频原文",
+            "确认下载较大视频",
+            "取消下载较大视频",
+            "确认在浏览器打开视频原文",
+            "取消在浏览器打开视频原文"
+        ];
+        Assert.All(
+            accessibleActions,
+            name => Assert.Contains(
+                video.Descendants(),
+                element =>
+                    element.Attribute("AutomationProperties.Name")?.Value
+                    == name));
+
+        string[] filterNames =
+        [
+            "视频分类筛选",
+            "视频来源筛选",
+            "视频日期筛选",
+            "仅看收藏视频"
+        ];
+        Assert.All(
+            filterNames,
+            name => Assert.Contains(
+                video.Descendants(),
+                element =>
+                    element.Attribute("AutomationProperties.Name")?.Value
+                    == name));
+    }
+
+    [Fact]
     public void FeedViewsUseSharedNativeSelectionControlStyles()
     {
         XElement host = LoadFixture("FeedTimelineView.xaml");
@@ -328,11 +400,13 @@ public sealed class NewsCenterLayoutTests
         XElement timelineFilters = LoadFixture("FeedTimelineFiltersView.xaml");
         XElement picture = LoadFixture("FeedPictureView.xaml");
         XElement audio = LoadFixture("FeedAudioView.xaml");
+        XElement video = LoadFixture("FeedVideoView.xaml");
         XElement timelineBrowser = LoadFixture("FeedTimelineBrowserView.xaml");
         XElement[] controls = timelineFilters
             .Descendants()
             .Concat(picture.Descendants())
             .Concat(audio.Descendants())
+            .Concat(video.Descendants())
             .Concat(timelineBrowser.Descendants())
             .Where(element =>
                 element.Name.LocalName is

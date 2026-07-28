@@ -9,15 +9,17 @@
 | 测试组 | 结果 |
 |---|---:|
 | LenxTool.Core.Tests | 140 passed |
-| LenxTool.Infrastructure.Tests | 380 passed |
-| LenxTool.App.Tests | 245 passed |
+| LenxTool.Infrastructure.Tests | 382 passed |
+| LenxTool.App.Tests | 262 passed |
 | Cloudflare Worker Vitest | 64 passed |
 | Worker TypeScript strict typecheck | passed |
 | .NET build warnings | 0 |
 | NuGet vulnerable packages | 0 detected |
 | npm audit vulnerabilities | 0 detected |
 
-当前完整 Release 结果为 Core 140/140、Infrastructure 380/380、App/WPF 245/245、Worker workerd/D1 Vitest 64/64、Worker strict typecheck 与全解决方案 build 0 警告/0 错误。本轮未修改 NuGet/npm 依赖；NuGet 在线漏洞扫描与 `npm audit` 均为 0 漏洞。
+当前完整 Release 结果为 Core 140/140、Infrastructure 382/382、App/WPF 262/262、Worker workerd/D1 Vitest 64/64、Worker strict typecheck 与全解决方案 build 0 警告/0 错误。本轮未修改 NuGet/npm 依赖；NuGet 在线漏洞扫描与 `npm audit` 均为 0 漏洞。
+
+P2-04 新增 17 项 App/WPF 与 2 项 Infrastructure 证据。6 项视频计划实例覆盖 10 MiB 直接明确投递、25 MiB 二次确认、未知大小按 512 MiB 预算、513 MiB 超限、空间不足，以及已有同源文件无需再次下载确认；8 项视频 ViewModel 实例覆盖安全 Video/Poster 选择、伪封面与保留地址阻断、两步原文外开、确认前后计划重检、小文件/已有任务投递、超限/空间不足和下载取消。惰性接入、DI 与结构测试冻结 Video 查询、四类筛选、可信 `FeedThumbnail`、无 `MediaElement`/WebView2/HTML 播放器和全部可访问操作；真实 WPF 装载 1,000 条视频，在 900×620 和等效 200% 缩放下无横向溢出，只实现 1～40 个容器且主要按钮未裁切。Infrastructure 新增联网前磁盘预留测试，以及视频下载后 Media Foundation 音轨兼容探针失败时零任务/零临时残留测试。本片无 schema、Worker 或依赖变更，完整结果为 .NET 784/784、Worker 64/64、strict typecheck、Release 0 警告/0 错误及 NuGet/npm 0 漏洞。
 
 P2-03 新增 10 项 App/WPF 证据。7 项音频 ViewModel 场景覆盖选择/进入页签不触网、42% 本地进度恢复、暂停与断流最终落盘、切换条目停止旧源且忽略迟到事件、强制 Audio 不支持格式与播放失败的两步浏览器回退、保留地址原文阻断、同源转写复用既有任务并导航媒体工作台，以及下载取消后不发布任务或导航。惰性接入和 DI 场景确认只有选择音频页签才发出 `EntryViewKind.Audio` 查询，结构测试冻结来源/分类/日期/收藏筛选、回收虚拟化、原生可访问操作和无内嵌 `MediaElement`；真实 WPF 运行时装载 1,000 条音频，在 900×620 和等效 200% 缩放下无横向溢出，只实现 1～40 个列表容器且所有主要按钮未裁切。播放适配器在入口重新验证 URL 与 MIME/扩展组合，不在选择时打开来源、不持久化媒体文件、不隐式创建转写任务；转写继续复用既有 Feed-media SSRF/MIME/签名/大小/超时/取消与幂等测试。本片无数据库、Worker 或依赖变更，完整结果为 .NET 765/765、Worker 64/64、strict typecheck、Release 0 警告/0 错误及 NuGet/npm 0 漏洞。
 

@@ -63,6 +63,42 @@ public sealed class FeedVideoViewModelTests
     }
 
     [Fact]
+    public async Task UnverifiedPosterAndReservedOriginalProduceNoExternalAction()
+    {
+        FeedEntry entry = VideoEntry("video-1", 5 * Mebibyte)
+            with
+            {
+                NormalizedUrl = "http://127.0.0.1/private",
+                Enclosures =
+                [
+                    new(
+                        "https://cdn.example/video-1.mp4",
+                        "video/mp4",
+                        5 * Mebibyte,
+                        "Video"),
+                    new(
+                        "https://cdn.example/video-1-poster.jpg",
+                        "text/html",
+                        128,
+                        "Fake poster")
+                ]
+            };
+        using FeedVideoViewModel viewModel = CreateViewModel(
+            [entry],
+            new StubVideoPlanner(),
+            new StubDeliveryService());
+
+        await viewModel.InitializeAsync(CancellationToken.None);
+
+        FeedVideoItem item = Assert.IsType<FeedVideoItem>(
+            viewModel.SelectedItem);
+        Assert.Null(item.PosterUrl);
+        Assert.Null(item.SafeOriginalUrl);
+        Assert.False(
+            viewModel.RequestExternalOpenCommand.CanExecute(null));
+    }
+
+    [Fact]
     public async Task LargeVideoRechecksPlanBeforeConfirmedDelivery()
     {
         FeedEntry entry = VideoEntry("video-1", 25 * Mebibyte);

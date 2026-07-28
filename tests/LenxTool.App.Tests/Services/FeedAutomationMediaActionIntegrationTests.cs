@@ -56,7 +56,8 @@ public sealed class FeedAutomationMediaActionIntegrationTests : IDisposable
                     MaximumRedirects: 3,
                     MaximumConcurrentDownloads: 1),
                 paths,
-                new FixedTimeProvider(Now));
+                new FixedTimeProvider(Now),
+                new MediaFoundationFeedMediaCompatibilityProbe());
             var inbox = new MediaJobInbox();
             var published = new List<MediaJob>();
             inbox.JobQueued += published.Add;

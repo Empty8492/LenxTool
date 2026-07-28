@@ -234,6 +234,12 @@ public partial class App : Application
         services.AddSingleton<
             IFeedAudioPlaybackService,
             WpfFeedAudioPlaybackService>();
+        services.AddSingleton<
+            IFeedMediaStorageProbe,
+            FeedMediaStorageProbe>();
+        services.AddSingleton<
+            IFeedVideoDeliveryPlanningService,
+            FeedVideoDeliveryPlanningService>();
         services.AddSingleton<MediaJobInbox>();
         services.AddSingleton<IMediaJobInbox>(static services =>
             services.GetRequiredService<MediaJobInbox>());

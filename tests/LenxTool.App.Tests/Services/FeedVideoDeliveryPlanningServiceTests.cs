@@ -65,7 +65,12 @@ public sealed class FeedVideoDeliveryPlanningServiceTests
         Assert.Equal(expectedConfirmation, plan.RequiresConfirmation);
         Assert.Equal(declaredBytes, plan.DeclaredBytes);
         Assert.Equal(options.MaximumBytes, plan.MaximumBytes);
-        Assert.Equal(availableBytes, plan.AvailableBytes);
+        Assert.Equal(
+            expectedStatus
+                == FeedVideoDeliveryPlanStatus.ExceedsLimit
+                ? 0
+                : availableBytes,
+            plan.AvailableBytes);
         Assert.Equal(
             Path.Combine(directory.Path, "Data", "FeedMedia"),
             plan.TargetDirectory);

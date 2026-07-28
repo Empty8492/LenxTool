@@ -63,8 +63,6 @@ public sealed class FeedVideoDeliveryPlanningService :
 {
     public const long LargeMediaConfirmationBytes =
         20L * 1024 * 1024;
-    public const long MinimumFreeSpaceReserveBytes =
-        64L * 1024 * 1024;
     private readonly IFeedMediaDeliveryRepository _repository;
     private readonly FeedMediaDeliveryOptions _options;
     private readonly AppPaths _paths;
@@ -107,9 +105,6 @@ public sealed class FeedVideoDeliveryPlanningService :
 
         string targetDirectory =
             Path.GetFullPath(_paths.FeedMediaDirectory);
-        long availableBytes = Math.Max(
-            0,
-            _storage.GetAvailableBytes(targetDirectory));
         long requiredMediaBytes =
             attachment.Length ?? _options.MaximumBytes;
         FeedMediaDeliveryRegistration? existing =
@@ -120,6 +115,14 @@ public sealed class FeedVideoDeliveryPlanningService :
         bool alreadyAvailable =
             existing is not null
             && File.Exists(existing.Job.InputPath);
+        long availableBytes = 0;
+        if (!alreadyAvailable
+            && requiredMediaBytes <= _options.MaximumBytes)
+        {
+            availableBytes = Math.Max(
+                0,
+                _storage.GetAvailableBytes(targetDirectory));
+        }
 
         FeedVideoDeliveryPlanStatus status;
         if (alreadyAvailable)
@@ -162,10 +165,12 @@ public sealed class FeedVideoDeliveryPlanningService :
     {
         long requiredWithReserve =
             requiredMediaBytes
-            > long.MaxValue - MinimumFreeSpaceReserveBytes
+            > long.MaxValue
+                - FeedMediaDeliveryOptions.MinimumFreeSpaceReserveBytes
                 ? long.MaxValue
                 : requiredMediaBytes
-                    + MinimumFreeSpaceReserveBytes;
+                    + FeedMediaDeliveryOptions
+                        .MinimumFreeSpaceReserveBytes;
         return availableBytes >= requiredWithReserve;
     }
 }

@@ -60,6 +60,34 @@ public sealed class NewsCenterViewModelTests
             query => query.ViewKind == EntryViewKind.Audio);
     }
 
+    [Fact]
+    public async Task VideoFeedLoadsOnlyAfterSelectingItsTab()
+    {
+        var entries = new StubFeedEntryRepository([]);
+        using NewsCenterViewModel viewModel = CreateViewModel(
+            CreateSnapshot(),
+            feedEntries: entries,
+            mediaDelivery: new StubFeedMediaDeliveryService(),
+            navigation: new StubAppNavigationService(),
+            videoPlanner: new StubFeedVideoDeliveryPlanningService());
+
+        await viewModel.InitializeAsync(CancellationToken.None);
+
+        Assert.Null(viewModel.VideoFeed);
+        Assert.DoesNotContain(
+            entries.Queries,
+            query => query.ViewKind == EntryViewKind.Video);
+
+        viewModel.SelectedFeedViewIndex = 3;
+        await viewModel.VideoFeedInitialization.WaitAsync(
+            TimeSpan.FromSeconds(1));
+
+        Assert.NotNull(viewModel.VideoFeed);
+        Assert.Contains(
+            entries.Queries,
+            query => query.ViewKind == EntryViewKind.Video);
+    }
+
     private const string CategoryId = "10000000-0000-4000-8000-000000000001";
     private const string FeedId = "30000000-0000-4000-8000-000000000001";
     private static readonly DateTimeOffset TimelineNow = new(
@@ -1248,7 +1276,8 @@ public sealed class NewsCenterViewModelTests
         StubFeedAiTranslationService? translations = null,
         IFeedAudioPlaybackService? audioPlayback = null,
         IFeedMediaDeliveryService? mediaDelivery = null,
-        IAppNavigationService? navigation = null) =>
+        IAppNavigationService? navigation = null,
+        IFeedVideoDeliveryPlanningService? videoPlanner = null) =>
         new(
             new StubNewsCenterService(snapshot),
             new StubAiReportService(null),
@@ -1264,8 +1293,11 @@ public sealed class NewsCenterViewModelTests
             translations ?? new StubFeedAiTranslationService(),
             audioPlayback,
             mediaDelivery,
-            audioPlayback is null ? null : new MediaJobInbox(),
-            navigation);
+            audioPlayback is null && videoPlanner is null
+                ? null
+                : new MediaJobInbox(),
+            navigation,
+            videoPlanner);
 
     private static NewsCenterSnapshot CreateSnapshot(params NewsArticle[] articles) =>
         new(articles, [], true, DateTimeOffset.Now, null);
@@ -2013,5 +2045,15 @@ public sealed class NewsCenterViewModelTests
             AppNavigationRequest request,
             CancellationToken cancellationToken) =>
             Task.CompletedTask;
+    }
+
+    private sealed class StubFeedVideoDeliveryPlanningService :
+        IFeedVideoDeliveryPlanningService
+    {
+        public Task<FeedVideoDeliveryPlan> PlanAsync(
+            FeedEntry entry,
+            FeedEnclosure enclosure,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
     }
 }

@@ -12,13 +12,12 @@ namespace LenxTool.Infrastructure.Networking;
 internal sealed class FeedMediaDeliveryService : IFeedMediaDeliveryService, IDisposable
 {
     private const int BufferSize = 80 * 1024;
-    private const long MinimumFreeSpaceReserveBytes =
-        64L * 1024 * 1024;
     private readonly IFeedMediaDeliveryRepository _repository;
     private readonly IFeedMediaTransport _transport;
     private readonly FeedMediaDeliveryOptions _options;
     private readonly AppPaths _paths;
     private readonly TimeProvider _timeProvider;
+    private readonly IFeedMediaCompatibilityProbe _compatibilityProbe;
     private readonly FeedNetworkPolicy _networkPolicy;
     private readonly SemaphoreSlim _downloadSlots;
     private readonly object _keyedGatesLock = new();
@@ -33,7 +32,8 @@ internal sealed class FeedMediaDeliveryService : IFeedMediaDeliveryService, IDis
         FeedDiscoveryOptions feedOptions,
         FeedMediaDeliveryOptions options,
         AppPaths paths,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        IFeedMediaCompatibilityProbe compatibilityProbe)
     {
         ArgumentNullException.ThrowIfNull(repository);
         ArgumentNullException.ThrowIfNull(resolver);
@@ -42,6 +42,7 @@ internal sealed class FeedMediaDeliveryService : IFeedMediaDeliveryService, IDis
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(paths);
         ArgumentNullException.ThrowIfNull(timeProvider);
+        ArgumentNullException.ThrowIfNull(compatibilityProbe);
         ValidateOptions(options);
 
         _repository = repository;
@@ -49,6 +50,7 @@ internal sealed class FeedMediaDeliveryService : IFeedMediaDeliveryService, IDis
         _options = options;
         _paths = paths;
         _timeProvider = timeProvider;
+        _compatibilityProbe = compatibilityProbe;
         _networkPolicy = new(resolver, feedOptions);
         _downloadSlots = new(options.MaximumConcurrentDownloads);
     }
@@ -80,7 +82,7 @@ internal sealed class FeedMediaDeliveryService : IFeedMediaDeliveryService, IDis
             deliveryKey + attachment.FileExtension);
         string tempPath = Path.Combine(
             _paths.FeedMediaTempDirectory,
-            $"{deliveryKey}.{Guid.NewGuid():N}.part");
+            $"{deliveryKey}.{Guid.NewGuid():N}.part{attachment.FileExtension}");
 
         FeedMediaDeliveryRegistration? existing = await _repository.GetAsync(
             entry.Id,
@@ -126,6 +128,10 @@ internal sealed class FeedMediaDeliveryService : IFeedMediaDeliveryService, IDis
                     attachment.NormalizedMediaType!,
                     tempPath,
                     timeout.Token).ConfigureAwait(false);
+                if (attachment.Kind == FeedAttachmentKind.Video)
+                {
+                    _compatibilityProbe.EnsureCompatibleVideo(tempPath);
+                }
             }
             catch (OperationCanceledException exception)
                 when (!cancellationToken.IsCancellationRequested)
@@ -511,9 +517,11 @@ internal sealed class FeedMediaDeliveryService : IFeedMediaDeliveryService, IDis
                 "无法确定媒体临时目录所在磁盘。");
         long available = new DriveInfo(root).AvailableFreeSpace;
         long required = mediaBytes
-            > long.MaxValue - MinimumFreeSpaceReserveBytes
+            > long.MaxValue
+                - FeedMediaDeliveryOptions.MinimumFreeSpaceReserveBytes
                 ? long.MaxValue
-                : mediaBytes + MinimumFreeSpaceReserveBytes;
+                : mediaBytes
+                    + FeedMediaDeliveryOptions.MinimumFreeSpaceReserveBytes;
         if (available < required)
         {
             throw new IOException(

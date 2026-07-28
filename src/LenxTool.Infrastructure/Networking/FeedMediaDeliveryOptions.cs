@@ -6,6 +6,9 @@ public sealed record FeedMediaDeliveryOptions(
     int MaximumRedirects,
     int MaximumConcurrentDownloads)
 {
+    public const long MinimumFreeSpaceReserveBytes =
+        64L * 1024 * 1024;
+
     public static FeedMediaDeliveryOptions Default { get; } = new(
         MaximumBytes: 512L * 1024 * 1024,
         TotalTimeout: TimeSpan.FromMinutes(10),

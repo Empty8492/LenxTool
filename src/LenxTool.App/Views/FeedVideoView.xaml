@@ -1,0 +1,315 @@
+<UserControl x:Class="LenxTool.App.Views.FeedVideoView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:LenxTool.App.Controls">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="12" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <Border Padding="18,14" Style="{StaticResource BentoCardStyle}">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource SectionTitleStyle}"
+                                   Text="视频" />
+                        <TextBlock Margin="0,4,0,0"
+                                   Style="{StaticResource MetaTextStyle}"
+                                   Text="{Binding VideoFeed.Status}"
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="1"
+                                Orientation="Horizontal"
+                                VerticalAlignment="Center">
+                        <Button Margin="0,0,8,0"
+                                Command="{Binding VideoFeed.Feed.ClearFiltersCommand}"
+                                AutomationProperties.Name="清除视频筛选"
+                                Content="清除筛选" />
+                        <Button Style="{StaticResource AccentButtonStyle}"
+                                Command="{Binding VideoFeed.Feed.ApplyFiltersCommand}"
+                                AutomationProperties.Name="应用视频筛选"
+                                Content="应用筛选" />
+                    </StackPanel>
+                </Grid>
+                <WrapPanel Grid.Row="1" Margin="0,12,0,0">
+                    <StackPanel Width="170" Margin="0,0,10,0">
+                        <TextBlock Margin="2,0,0,5"
+                                   Style="{StaticResource MetaTextStyle}"
+                                   Text="分类" />
+                        <ComboBox MinHeight="36"
+                                  Style="{StaticResource CompactComboBoxStyle}"
+                                  ItemsSource="{Binding VideoFeed.Feed.Categories}"
+                                  SelectedItem="{Binding VideoFeed.Feed.SelectedCategory}"
+                                  DisplayMemberPath="Label"
+                                  AutomationProperties.Name="视频分类筛选" />
+                    </StackPanel>
+                    <StackPanel Width="190" Margin="0,0,10,0">
+                        <TextBlock Margin="2,0,0,5"
+                                   Style="{StaticResource MetaTextStyle}"
+                                   Text="Feed" />
+                        <ComboBox MinHeight="36"
+                                  Style="{StaticResource CompactComboBoxStyle}"
+                                  ItemsSource="{Binding VideoFeed.Feed.Feeds}"
+                                  SelectedItem="{Binding VideoFeed.Feed.SelectedFeed}"
+                                  DisplayMemberPath="Label"
+                                  AutomationProperties.Name="视频来源筛选" />
+                    </StackPanel>
+                    <StackPanel Width="150" Margin="0,0,10,0">
+                        <TextBlock Margin="2,0,0,5"
+                                   Style="{StaticResource MetaTextStyle}"
+                                   Text="发布日期" />
+                        <DatePicker MinHeight="36"
+                                    Style="{StaticResource CompactDatePickerStyle}"
+                                    SelectedDate="{Binding VideoFeed.Feed.SelectedDate}"
+                                    AutomationProperties.Name="视频日期筛选" />
+                    </StackPanel>
+                    <CheckBox MinHeight="36"
+                              Margin="4,19,0,0"
+                              VerticalContentAlignment="Center"
+                              Style="{StaticResource CompactCheckBoxStyle}"
+                              IsChecked="{Binding VideoFeed.Feed.FavoritesOnly}"
+                              Content="仅看收藏"
+                              AutomationProperties.Name="仅看收藏视频" />
+                </WrapPanel>
+            </Grid>
+        </Border>
+
+        <Grid Grid.Row="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="2*" MinWidth="320" />
+                <ColumnDefinition Width="12" />
+                <ColumnDefinition Width="3*" MinWidth="390" />
+            </Grid.ColumnDefinitions>
+
+            <Grid>
+                <controls:PagedListBox
+                    ItemsSource="{Binding VideoFeed.Items}"
+                    SelectedItem="{Binding VideoFeed.SelectedItem, Mode=TwoWay}"
+                    LoadMoreCommand="{Binding VideoFeed.Feed.LoadMoreCommand}"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                    ScrollViewer.CanContentScroll="True"
+                    VirtualizingPanel.IsVirtualizing="True"
+                    VirtualizingPanel.VirtualizationMode="Recycling"
+                    AutomationProperties.Name="虚拟化视频列表">
+                    <ListBox.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <VirtualizingStackPanel />
+                        </ItemsPanelTemplate>
+                    </ListBox.ItemsPanel>
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem">
+                            <Setter Property="HorizontalContentAlignment"
+                                    Value="Stretch" />
+                            <Setter Property="Padding" Value="0" />
+                            <Setter Property="Margin" Value="0,0,0,10" />
+                            <Setter Property="AutomationProperties.Name"
+                                    Value="{Binding Title, StringFormat=视频条目：{0}}" />
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <Border Padding="10"
+                                    Style="{StaticResource BentoCardStyle}">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="116" />
+                                        <ColumnDefinition Width="12" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <controls:FeedThumbnail
+                                        Height="72"
+                                        EntryId="{Binding Entry.Id}"
+                                        SourceUrl="{Binding PosterUrl}"
+                                        Referrer="{Binding SafeOriginalUrl}"
+                                        AltText="{Binding Title}" />
+                                    <StackPanel Grid.Column="2"
+                                                VerticalAlignment="Center">
+                                        <TextBlock FontWeight="SemiBold"
+                                                   Text="{Binding Title}"
+                                                   TextWrapping="Wrap"
+                                                   MaxHeight="42" />
+                                        <TextBlock Margin="0,5,0,0"
+                                                   Style="{StaticResource MetaTextStyle}"
+                                                   Text="{Binding FeedName}"
+                                                   TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Margin="0,3,0,0"
+                                                   Style="{StaticResource MetaTextStyle}"
+                                                   Text="{Binding MediaDetails}" />
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </controls:PagedListBox>
+
+                <Border Padding="22"
+                        Background="{DynamicResource Brush.SurfaceRaised}"
+                        BorderBrush="{DynamicResource Brush.Border}"
+                        BorderThickness="1"
+                        CornerRadius="12"
+                        Panel.ZIndex="10">
+                    <Border.Style>
+                        <Style TargetType="Border">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding VideoFeed.Items.Count}"
+                                             Value="0">
+                                    <Setter Property="Visibility"
+                                            Value="Visible" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Border.Style>
+                    <StackPanel HorizontalAlignment="Center"
+                                VerticalAlignment="Center">
+                        <TextBlock HorizontalAlignment="Center"
+                                   Style="{StaticResource SectionTitleStyle}"
+                                   Text="当前没有可显示的视频" />
+                        <TextBlock Margin="0,6,0,0"
+                                   HorizontalAlignment="Center"
+                                   Style="{StaticResource MetaTextStyle}"
+                                   Text="可调整来源、分类、日期或收藏筛选。"
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <Border Grid.Column="2"
+                    Padding="20"
+                    Style="{StaticResource BentoCardStyle}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel>
+                        <controls:FeedThumbnail
+                            Height="230"
+                            EntryId="{Binding VideoFeed.SelectedItem.Entry.Id}"
+                            SourceUrl="{Binding VideoFeed.SelectedItem.PosterUrl}"
+                            Referrer="{Binding VideoFeed.SelectedItem.SafeOriginalUrl}"
+                            AltText="{Binding VideoFeed.SelectedItem.Title}" />
+                        <TextBlock Margin="0,16,0,0"
+                                   FontSize="22"
+                                   FontWeight="SemiBold"
+                                   Text="{Binding VideoFeed.SelectedItem.Title}"
+                                   TextWrapping="Wrap" />
+                        <TextBlock Margin="0,8,0,0"
+                                   Style="{StaticResource MetaTextStyle}">
+                            <Run Text="{Binding VideoFeed.SelectedItem.FeedName, Mode=OneWay}" />
+                            <Run Text=" · 原文 " />
+                            <Run Text="{Binding VideoFeed.SelectedItem.OriginalHost, Mode=OneWay}" />
+                        </TextBlock>
+                        <TextBlock Margin="0,4,0,0"
+                                   Style="{StaticResource MetaTextStyle}">
+                            <Run Text="{Binding VideoFeed.SelectedItem.SourceHost, Mode=OneWay}" />
+                            <Run Text=" · " />
+                            <Run Text="{Binding VideoFeed.SelectedItem.MediaDetails, Mode=OneWay}" />
+                            <Run Text=" · " />
+                            <Run Text="{Binding VideoFeed.SelectedItem.DurationText, Mode=OneWay}" />
+                        </TextBlock>
+                        <TextBlock Margin="0,14,0,0"
+                                   Style="{StaticResource MetaTextStyle}"
+                                   Text="{Binding VideoFeed.Status}"
+                                   TextWrapping="Wrap" />
+
+                        <WrapPanel Margin="0,18,0,0">
+                            <Button MinWidth="126"
+                                    Margin="0,0,8,8"
+                                    Style="{StaticResource AccentButtonStyle}"
+                                    Command="{Binding VideoFeed.PrepareDeliveryCommand}"
+                                    AutomationProperties.Name="检查并下载所选视频"
+                                    Content="下载并转写" />
+                            <Button MinWidth="104"
+                                    Margin="0,0,8,8"
+                                    Command="{Binding VideoFeed.CancelDeliveryCommand}"
+                                    AutomationProperties.Name="取消视频下载或确认"
+                                    Content="取消下载" />
+                            <Button MinWidth="104"
+                                    Margin="0,0,0,8"
+                                    Command="{Binding VideoFeed.RequestExternalOpenCommand}"
+                                    AutomationProperties.Name="请求在浏览器打开视频原文"
+                                    Content="打开原文" />
+                        </WrapPanel>
+
+                        <Border Margin="0,10,0,0"
+                                Padding="14"
+                                Background="{DynamicResource Brush.SurfaceRaised}"
+                                BorderBrush="{DynamicResource Brush.Border}"
+                                BorderThickness="1"
+                                CornerRadius="10"
+                                Visibility="{Binding VideoFeed.HasPendingDeliveryConfirmation, Converter={StaticResource BooleanToVisibilityConverter}}">
+                            <StackPanel>
+                                <TextBlock FontWeight="SemiBold"
+                                           Text="确认视频下载" />
+                                <TextBlock Margin="0,8,0,0"
+                                           Style="{StaticResource MetaTextStyle}">
+                                    <Run Text="声明大小：" />
+                                    <Run Text="{Binding VideoFeed.PendingDeclaredSize, Mode=OneWay}" />
+                                    <Run Text=" · 最大：" />
+                                    <Run Text="{Binding VideoFeed.PendingMaximumSize, Mode=OneWay}" />
+                                </TextBlock>
+                                <TextBlock Margin="0,4,0,0"
+                                           Style="{StaticResource MetaTextStyle}">
+                                    <Run Text="可用空间：" />
+                                    <Run Text="{Binding VideoFeed.PendingAvailableSpace, Mode=OneWay}" />
+                                </TextBlock>
+                                <TextBlock Margin="0,4,0,0"
+                                           Style="{StaticResource MetaTextStyle}"
+                                           Text="{Binding VideoFeed.PendingTargetDirectory}"
+                                           TextWrapping="Wrap"
+                                           AutomationProperties.Name="视频下载目标目录" />
+                                <StackPanel Margin="0,12,0,0"
+                                            HorizontalAlignment="Right"
+                                            Orientation="Horizontal">
+                                    <Button Margin="0,0,8,0"
+                                            Command="{Binding VideoFeed.CancelDeliveryCommand}"
+                                            AutomationProperties.Name="取消下载较大视频"
+                                            Content="取消" />
+                                    <Button Style="{StaticResource AccentButtonStyle}"
+                                            Command="{Binding VideoFeed.ConfirmDeliveryCommand}"
+                                            AutomationProperties.Name="确认下载较大视频"
+                                            Content="确认下载" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Margin="0,10,0,0"
+                                Padding="14"
+                                Background="{DynamicResource Brush.SurfaceRaised}"
+                                BorderBrush="{DynamicResource Brush.Border}"
+                                BorderThickness="1"
+                                CornerRadius="10"
+                                Visibility="{Binding VideoFeed.HasPendingExternalConfirmation, Converter={StaticResource BooleanToVisibilityConverter}}">
+                            <StackPanel>
+                                <TextBlock Text="是否在默认浏览器打开原文？不会直接打开视频附件。"
+                                           TextWrapping="Wrap" />
+                                <StackPanel Margin="0,10,0,0"
+                                            HorizontalAlignment="Right"
+                                            Orientation="Horizontal">
+                                    <Button Margin="0,0,8,0"
+                                            Command="{Binding VideoFeed.CancelExternalOpenCommand}"
+                                            AutomationProperties.Name="取消在浏览器打开视频原文"
+                                            Content="取消" />
+                                    <Button Style="{StaticResource AccentButtonStyle}"
+                                            Command="{Binding VideoFeed.ConfirmExternalOpenCommand}"
+                                            AutomationProperties.Name="确认在浏览器打开视频原文"
+                                            Content="确认打开" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
+        </Grid>
+    </Grid>
+</UserControl>

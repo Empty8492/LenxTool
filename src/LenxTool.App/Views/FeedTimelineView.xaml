@@ -30,5 +30,10 @@
                  AutomationProperties.Name="音频与播客视图">
             <views:FeedAudioView />
         </TabItem>
+        <TabItem Header="视频"
+                 Style="{StaticResource SegmentedTabItemStyle}"
+                 AutomationProperties.Name="视频视图">
+            <views:FeedVideoView />
+        </TabItem>
     </TabControl>
 </UserControl>

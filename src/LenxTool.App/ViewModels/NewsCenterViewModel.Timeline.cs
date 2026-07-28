@@ -458,6 +458,12 @@ public sealed partial class NewsCenterViewModel
                 preserveSelection,
                 cancellationToken);
         }
+        if (VideoFeed is not null && _videoFeedInitialized)
+        {
+            await VideoFeed.RefreshCatalogAsync(
+                preserveSelection,
+                cancellationToken);
+        }
     }
 
     private async Task ApplyTimelineFiltersAsync(CancellationToken cancellationToken)

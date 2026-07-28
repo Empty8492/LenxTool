@@ -13,6 +13,9 @@ public static class FeedMediaServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(options);
         services.AddSingleton(options);
         services.AddSingleton<IFeedMediaTransport, PinnedFeedMediaTransport>();
+        services.AddSingleton<
+            IFeedMediaCompatibilityProbe,
+            MediaFoundationFeedMediaCompatibilityProbe>();
         services.AddSingleton<IFeedMediaDeliveryService, FeedMediaDeliveryService>();
         return services;
     }
