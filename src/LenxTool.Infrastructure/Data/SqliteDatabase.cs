@@ -10,7 +10,7 @@ public sealed partial class SqliteDatabase(
     AppPaths paths,
     ILogger<SqliteDatabase> logger) : IDisposable
 {
-    private const int CurrentSchemaVersion = 19;
+    private const int CurrentSchemaVersion = 20;
     private readonly SemaphoreSlim _initializationGate = new(1, 1);
     private bool _initialized;
     private bool _disposed;
@@ -386,6 +386,24 @@ public sealed partial class SqliteDatabase(
                 command.Parameters.AddWithValue(
                     "$checksum",
                     "lenx-schema-v19-notification-kinds");
+                await command.ExecuteNonQueryAsync(cancellationToken)
+                    .ConfigureAwait(false);
+                version = 19;
+            }
+
+            if (version < 20)
+            {
+                command.CommandText = MigrationTwentySql;
+                command.Parameters.Clear();
+                await command.ExecuteNonQueryAsync(cancellationToken)
+                    .ConfigureAwait(false);
+                command.CommandText = "INSERT INTO schema_versions(version, applied_at, checksum) VALUES (20, $appliedAt, $checksum);";
+                command.Parameters.AddWithValue(
+                    "$appliedAt",
+                    DateTimeOffset.UtcNow.ToString("O"));
+                command.Parameters.AddWithValue(
+                    "$checksum",
+                    "lenx-schema-v20-feed-smart-views");
                 await command.ExecuteNonQueryAsync(cancellationToken)
                     .ConfigureAwait(false);
             }
@@ -1093,6 +1111,55 @@ public sealed partial class SqliteDatabase(
 
         CREATE INDEX ix_app_notifications_kind_created
             ON app_notifications(kind, created_at DESC, id);
+        """;
+
+    private const string MigrationTwentySql = """
+        CREATE TABLE feed_smart_view_state(
+            singleton_id INTEGER PRIMARY KEY CHECK(singleton_id = 1),
+            view_set_version INTEGER NOT NULL DEFAULT 0
+                CHECK(typeof(view_set_version) = 'integer'
+                    AND view_set_version >= 0),
+            generated_at TEXT
+                CHECK(generated_at IS NULL
+                    OR length(generated_at) BETWEEN 20 AND 40),
+            last_synced_at TEXT
+                CHECK(last_synced_at IS NULL
+                    OR length(last_synced_at) BETWEEN 20 AND 40)
+        );
+
+        INSERT INTO feed_smart_view_state(
+            singleton_id, view_set_version, generated_at, last_synced_at)
+        VALUES(1, 0, NULL, NULL);
+
+        CREATE TABLE feed_smart_views(
+            id TEXT PRIMARY KEY CHECK(length(id) = 36),
+            version INTEGER NOT NULL
+                CHECK(typeof(version) = 'integer' AND version >= 1),
+            name TEXT NOT NULL CHECK(length(name) BETWEEN 1 AND 120),
+            sort_order INTEGER NOT NULL
+                CHECK(typeof(sort_order) = 'integer'
+                    AND sort_order BETWEEN 0 AND 1000),
+            is_enabled INTEGER NOT NULL CHECK(is_enabled = 1),
+            feed_id TEXT CHECK(feed_id IS NULL OR length(feed_id) = 36),
+            category_id TEXT
+                CHECK(category_id IS NULL OR length(category_id) = 36),
+            view_kind TEXT CHECK(view_kind IS NULL OR view_kind IN (
+                'ARTICLE', 'PICTURE', 'AUDIO', 'VIDEO', 'NOTIFICATION')),
+            read_filter TEXT NOT NULL
+                CHECK(read_filter IN ('ALL', 'UNREAD', 'READ')),
+            favorites_only INTEGER NOT NULL
+                CHECK(favorites_only IN (0, 1)),
+            search_text TEXT
+                CHECK(search_text IS NULL
+                    OR length(search_text) BETWEEN 1 AND 200),
+            published_within_days INTEGER
+                CHECK(published_within_days IS NULL OR (
+                    typeof(published_within_days) = 'integer'
+                    AND published_within_days BETWEEN 1 AND 365))
+        ) WITHOUT ROWID;
+
+        CREATE INDEX ix_feed_smart_views_order
+            ON feed_smart_views(sort_order, name, id);
         """;
 
 }

@@ -50,7 +50,8 @@ public sealed class SqliteDatabaseTests : IDisposable
             "feed_ai_automation_jobs", "feed_ai_automation_daily_entries",
             "feed_automation_runs", "feed_automation_action_runs",
             "feed_automation_rule_state", "feed_automation_rules",
-            "feed_media_deliveries", "app_notifications"
+            "feed_media_deliveries", "app_notifications",
+            "feed_smart_view_state", "feed_smart_views"
         ];
         Assert.All(required, table => Assert.Contains(table, names));
 
@@ -84,6 +85,7 @@ public sealed class SqliteDatabaseTests : IDisposable
         Assert.Contains("ix_feed_automation_rules_order", indexes);
         Assert.Contains("ux_feed_media_deliveries_job", indexes);
         Assert.Contains("ix_app_notifications_unread", indexes);
+        Assert.Contains("ix_feed_smart_views_order", indexes);
 
         await using SqliteCommand catalogStateCommand = connection.CreateCommand();
         catalogStateCommand.CommandText =
@@ -102,7 +104,7 @@ public sealed class SqliteDatabaseTests : IDisposable
 
         await using SqliteCommand versionCommand = connection.CreateCommand();
         versionCommand.CommandText = "SELECT COUNT(*) FROM schema_versions";
-        Assert.Equal(19L, (long)(await versionCommand.ExecuteScalarAsync(
+        Assert.Equal(20L, (long)(await versionCommand.ExecuteScalarAsync(
             CancellationToken.None))!);
     }
 
@@ -128,7 +130,7 @@ public sealed class SqliteDatabaseTests : IDisposable
         await using SqliteConnection connection = await upgraded.OpenConnectionAsync(CancellationToken.None);
         await using SqliteCommand version = connection.CreateCommand();
         version.CommandText = "SELECT MAX(version) FROM schema_versions;";
-        Assert.Equal(19L, (long)(await version.ExecuteScalarAsync(CancellationToken.None))!);
+        Assert.Equal(20L, (long)(await version.ExecuteScalarAsync(CancellationToken.None))!);
         Assert.Single(Directory.GetFiles(CreatePaths().BackupDirectory, "lenx-pre-migration-*.db"));
     }
 
@@ -165,12 +167,14 @@ public sealed class SqliteDatabaseTests : IDisposable
                 DROP TABLE feed_automation_rule_state;
                 DROP TABLE feed_media_deliveries;
                 DROP TABLE app_notifications;
+                DROP TABLE feed_smart_views;
+                DROP TABLE feed_smart_view_state;
                 DROP INDEX ix_user_entry_states_profile_hidden;
                 ALTER TABLE user_entry_states DROP COLUMN is_hidden;
                 ALTER TABLE feed_catalog DROP COLUMN view_kind_explicit;
                 ALTER TABLE feed_catalog DROP COLUMN full_text_policy;
                 ALTER TABLE feed_entries DROP COLUMN has_full_content;
-                DELETE FROM schema_versions WHERE version IN (8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19);
+                DELETE FROM schema_versions WHERE version IN (8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20);
                 INSERT INTO feed_catalog(
                     id, original_url, normalized_url, display_name, view_kind,
                     refresh_interval_minutes, sort_order, is_enabled, version, created_at, updated_at)
@@ -227,7 +231,7 @@ public sealed class SqliteDatabaseTests : IDisposable
             """;
         Assert.Equal(0L, (long)(await check.ExecuteScalarAsync(CancellationToken.None))!);
         check.CommandText = "SELECT MAX(version) FROM schema_versions;";
-        Assert.Equal(19L, (long)(await check.ExecuteScalarAsync(CancellationToken.None))!);
+        Assert.Equal(20L, (long)(await check.ExecuteScalarAsync(CancellationToken.None))!);
     }
 
     [Fact]
@@ -318,12 +322,14 @@ public sealed class SqliteDatabaseTests : IDisposable
                 DROP TABLE feed_automation_rule_state;
                 DROP TABLE feed_media_deliveries;
                 DROP TABLE app_notifications;
+                DROP TABLE feed_smart_views;
+                DROP TABLE feed_smart_view_state;
                 DROP INDEX ix_user_entry_states_profile_hidden;
                 ALTER TABLE user_entry_states DROP COLUMN is_hidden;
                 ALTER TABLE feed_catalog DROP COLUMN view_kind_explicit;
                 ALTER TABLE feed_catalog DROP COLUMN full_text_policy;
                 ALTER TABLE feed_entries DROP COLUMN has_full_content;
-                DELETE FROM schema_versions WHERE version IN (5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19);
+                DELETE FROM schema_versions WHERE version IN (5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20);
                 DELETE FROM content_fts WHERE entity_type='feed_entry';
                 INSERT INTO feed_entries(
                     id, feed_id, external_id, title, summary, sanitized_content,
@@ -349,7 +355,7 @@ public sealed class SqliteDatabaseTests : IDisposable
         check.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE type='trigger' AND name LIKE 'feed_entries_fts_%';";
         Assert.Equal(3L, (long)(await check.ExecuteScalarAsync(CancellationToken.None))!);
         check.CommandText = "SELECT MAX(version) FROM schema_versions;";
-        Assert.Equal(19L, (long)(await check.ExecuteScalarAsync(CancellationToken.None))!);
+        Assert.Equal(20L, (long)(await check.ExecuteScalarAsync(CancellationToken.None))!);
     }
 
     [Fact]
@@ -371,10 +377,12 @@ public sealed class SqliteDatabaseTests : IDisposable
                 DROP TABLE feed_automation_rule_state;
                 DROP TABLE feed_media_deliveries;
                 DROP TABLE app_notifications;
+                DROP TABLE feed_smart_views;
+                DROP TABLE feed_smart_view_state;
                 DROP INDEX ix_user_entry_states_profile_hidden;
                 ALTER TABLE user_entry_states DROP COLUMN is_hidden;
                 ALTER TABLE feed_catalog DROP COLUMN view_kind_explicit;
-                DELETE FROM schema_versions WHERE version IN (5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19);
+                DELETE FROM schema_versions WHERE version IN (5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20);
                 DELETE FROM content_fts WHERE entity_type='feed_entry';
                 INSERT INTO feed_entries(
                     id, feed_id, external_id, title, summary, sanitized_content,

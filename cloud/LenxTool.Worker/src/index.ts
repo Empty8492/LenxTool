@@ -2,6 +2,7 @@ import { CatalogApiError, handleCatalogAdminRequest, handleCatalogReadRequest } 
 import { handleCatalogBatchRequest } from "./catalog-batch";
 import { handleAutomationRuleRequest } from "./automation-rules";
 import { handleFeedDiscoveryRequest } from "./feed-discovery";
+import { handleSmartViewRequest } from "./smart-views";
 
 export interface Env {
   DB: D1Database;
@@ -60,6 +61,13 @@ export default {
         url
       );
       if (automationResponse) return automationResponse;
+      const smartViewResponse = await handleSmartViewRequest(
+        request,
+        env.DB,
+        catalogAuth,
+        url
+      );
+      if (smartViewResponse) return smartViewResponse;
       const discoveryResponse = await handleFeedDiscoveryRequest(
         request,
         env.DB,

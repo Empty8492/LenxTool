@@ -265,6 +265,9 @@ describe("P1 final Worker/D1 acceptance", () => {
       "invites",
       "managed_feeds",
       "refresh_tokens",
+      "smart_view_state",
+      "smart_view_versions",
+      "smart_views",
       "users"
     ]);
 

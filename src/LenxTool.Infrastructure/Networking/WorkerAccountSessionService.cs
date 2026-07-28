@@ -282,6 +282,60 @@ public sealed class WorkerAccountSessionService :
         }, cancellationToken);
     }
 
+    internal Task<HttpResponseMessage> SendSmartViewMutationAsync(
+        HttpMethod method,
+        string path,
+        long expectedViewSetVersion,
+        object? payload,
+        CancellationToken cancellationToken)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (method != HttpMethod.Post &&
+            method != HttpMethod.Patch &&
+            method != HttpMethod.Delete)
+        {
+            throw new ArgumentException(
+                "Smart view mutations only support POST, PATCH, or DELETE.",
+                nameof(method));
+        }
+        if (string.IsNullOrWhiteSpace(path)
+            || path.Length > 256
+            || (path != "/v1/admin/smart-views"
+                && !path.StartsWith(
+                    "/v1/admin/smart-views/",
+                    StringComparison.Ordinal))
+            || path.Contains('?', StringComparison.Ordinal)
+            || path.Contains('#', StringComparison.Ordinal)
+            || path.Contains('\\', StringComparison.Ordinal)
+            || expectedViewSetVersion is < 0
+                or > 9_007_199_254_740_991
+            || (method == HttpMethod.Delete && payload is not null)
+            || (method != HttpMethod.Delete && payload is null))
+        {
+            throw new ArgumentException(
+                "The smart view mutation path, version, or payload is invalid.",
+                nameof(path));
+        }
+
+        string idempotencyKey = Guid.NewGuid().ToString("N");
+        return SendAuthorizedAsync(token =>
+        {
+            HttpRequestMessage request =
+                CreateAuthorizedRequest(method, path, token.AccessToken);
+            request.Headers.TryAddWithoutValidation(
+                "If-Match",
+                $"\"smart-views-all-{expectedViewSetVersion}\"");
+            request.Headers.TryAddWithoutValidation(
+                "Idempotency-Key",
+                idempotencyKey);
+            if (payload is not null)
+            {
+                request.Content = JsonContent.Create(payload);
+            }
+            return request;
+        }, cancellationToken);
+    }
+
     private async Task<HttpResponseMessage> SendAuthorizedAsync(
         Func<TokenState, HttpRequestMessage> requestFactory,
         CancellationToken cancellationToken)

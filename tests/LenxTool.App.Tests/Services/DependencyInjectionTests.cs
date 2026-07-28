@@ -135,6 +135,12 @@ public sealed class DependencyInjectionTests
         Assert.IsType<FavoriteRepository>(provider.GetRequiredService<IFavoriteRepository>());
         Assert.NotNull(provider.GetRequiredService<DashboardViewModel>());
         Assert.NotNull(provider.GetRequiredService<NotificationCenterViewModel>());
+        Assert.IsType<FeedSmartViewRepository>(
+            provider.GetRequiredService<IFeedSmartViewRepository>());
+        Assert.IsType<FeedSmartViewSyncService>(
+            provider.GetRequiredService<IFeedSmartViewSyncService>());
+        Assert.IsType<FeedSmartViewAdminService>(
+            provider.GetRequiredService<IFeedSmartViewAdminService>());
         Assert.NotNull(provider.GetRequiredService<AutomationAdminViewModel>());
 
         ShellViewModel shell = provider.GetRequiredService<ShellViewModel>();

@@ -41,7 +41,8 @@ describe("feed catalog migrations", () => {
       "0005_feed_ai_policy.sql",
       "0006_automation_rules.sql",
       "0007_explicit_feed_view_kind.sql",
-      "0008_feed_discovery_index.sql"
+      "0008_feed_discovery_index.sql",
+      "0009_smart_views.sql"
     ]);
   });
 

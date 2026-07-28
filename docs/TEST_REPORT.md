@@ -8,16 +8,18 @@
 
 | 测试组 | 结果 |
 |---|---:|
-| LenxTool.Core.Tests | 140 passed |
-| LenxTool.Infrastructure.Tests | 383 passed |
+| LenxTool.Core.Tests | 147 passed |
+| LenxTool.Infrastructure.Tests | 390 passed |
 | LenxTool.App.Tests | 266 passed |
-| Cloudflare Worker Vitest | 64 passed |
+| Cloudflare Worker Vitest | 70 passed |
 | Worker TypeScript strict typecheck | passed |
 | .NET build warnings | 0 |
 | NuGet vulnerable packages | 0 detected |
 | npm audit vulnerabilities | 0 detected |
 
-当前完整 Release 结果为 Core 140/140、Infrastructure 383/383、App/WPF 266/266、Worker workerd/D1 Vitest 64/64、Worker strict typecheck 与全解决方案 build 0 警告/0 错误。本轮未修改 NuGet/npm 依赖；NuGet 在线漏洞扫描与 `npm audit` 均为 0 漏洞。
+当前完整 Release 结果为 Core 147/147、Infrastructure 390/390、App/WPF 266/266、Worker workerd/D1 Vitest 70/70、Worker strict typecheck 与全解决方案 build 0 警告/0 错误。本轮未修改 NuGet/npm 依赖；NuGet 在线漏洞扫描与 `npm audit` 均为 0 漏洞。
+
+P2-05 智能视图基础新增 7 项 Core、7 项 Infrastructure 和 6 项 Worker 场景。Core 覆盖封闭定义规范化、无效 GUID/时间窗口/搜索上限、停用阻断，以及向带本地档案的 `FeedEntryQuery` 确定性映射。schema v20 仓储覆盖 ACTIVE 快照事务替换、跨重启、旧版本/停用定义拒绝和条件同步时间；传输覆盖增量 ACTIVE、损坏/非递增响应保留缓存、管理员 filter-only 创建头和空正文删除。真实 workerd/D1 覆盖 0009 表约束、ACTIVE/ALL、创建/停用/删除、普通用户写入/ALL 403、条件版本、幂等、DELETE 非空正文、非法字段/脚本/URL/范围拒绝和 304/版本超前；全库隐私扫描继续通过。完整 .NET 803/803、Worker 70/70、strict typecheck 和 Release build 0 警告/0 错误通过；管理员/普通用户 UI 仍待下一切片。
 
 P2-05 通知流切片新增/扩展 4 项 App 和 2 项 Infrastructure 场景：schema v19 将历史通知回填为内容命中，并验证系统健康类别、并发幂等、跨重启及本地已读状态；统一发布器对规范化标题/来源生成稳定 SHA-256 ID，重复事件只推送一次。抓取异常在同一失败周期和固定错误类别内稳定去重，通知不包含 HTTP 状态或异常细节；自动摘要完成只发布条目标题级任务消息，不携带摘要结果。ViewModel 按三类筛选不会修改未读计数或仓储，DI 与 MainWindow 结构测试确认类别选择可访问且模板不绑定正文、摘要或 URL。完整 .NET 789/789 和 Release build 0 警告/0 错误通过；Worker 与依赖未修改，智能视图仍待后续切片。
 

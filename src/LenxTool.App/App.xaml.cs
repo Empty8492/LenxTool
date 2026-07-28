@@ -165,6 +165,18 @@ public partial class App : Application
         services.AddSingleton<
             IFeedAutomationRuleSimulationService,
             FeedAutomationRuleSimulationService>();
+        services.AddSingleton<FeedSmartViewRepository>();
+        services.AddSingleton<IFeedSmartViewRepository>(
+            static services =>
+                services.GetRequiredService<FeedSmartViewRepository>());
+        services.AddSingleton<
+            IFeedSmartViewSyncService,
+            FeedSmartViewSyncService>();
+        services.AddSingleton<
+            IFeedSmartViewAdminService,
+            FeedSmartViewAdminService>();
+        services.AddHostedService<
+            FeedSmartViewSyncBackgroundService>();
         services.AddHostedService<
             FeedAutomationRuleSyncBackgroundService>();
         services.AddSingleton<
