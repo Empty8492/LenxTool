@@ -215,6 +215,31 @@ public sealed class FeedMediaDeliveryServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task DeliverAsyncRejectsInsufficientDiskBeforeNetwork()
+    {
+        FeedMediaDeliveryOptions options =
+            TestOptions() with
+            {
+                MaximumBytes = long.MaxValue / 4
+            };
+        await using TestContext context = await CreateContextAsync(
+            (_, _, _) => Response(
+                HttpStatusCode.OK,
+                "audio/mpeg",
+                Mp3Bytes),
+            options);
+
+        await Assert.ThrowsAsync<IOException>(() =>
+            context.Service.DeliverAsync(
+                CreateEntry(),
+                CreateEnclosure(length: null),
+                CancellationToken.None));
+
+        Assert.Equal(0, context.Transport.CallCount);
+        await AssertNoResidueAsync(context);
+    }
+
+    [Fact]
     public async Task DeliverAsyncRejectsUnverifiedAttachmentBeforeNetwork()
     {
         await using TestContext context = await CreateContextAsync(

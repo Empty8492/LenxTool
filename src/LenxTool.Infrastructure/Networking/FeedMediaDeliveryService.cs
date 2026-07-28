@@ -12,6 +12,8 @@ namespace LenxTool.Infrastructure.Networking;
 internal sealed class FeedMediaDeliveryService : IFeedMediaDeliveryService, IDisposable
 {
     private const int BufferSize = 80 * 1024;
+    private const long MinimumFreeSpaceReserveBytes =
+        64L * 1024 * 1024;
     private readonly IFeedMediaDeliveryRepository _repository;
     private readonly IFeedMediaTransport _transport;
     private readonly FeedMediaDeliveryOptions _options;
@@ -106,6 +108,8 @@ internal sealed class FeedMediaDeliveryService : IFeedMediaDeliveryService, IDis
             ValidateExistingPath(existing.Job.InputPath, finalPath);
         }
 
+        EnsureAvailableDiskSpace(
+            attachment.Length ?? _options.MaximumBytes);
         _paths.EnsureCreated();
         await _downloadSlots.WaitAsync(cancellationToken).ConfigureAwait(false);
         bool movedToFinal = false;
@@ -269,6 +273,10 @@ internal sealed class FeedMediaDeliveryService : IFeedMediaDeliveryService, IDis
             {
                 throw new InvalidDataException(
                     $"媒体响应超过 {_options.MaximumBytes} 字节的下载上限。");
+            }
+            if (response.Content.Headers.ContentLength is long responseLength)
+            {
+                EnsureAvailableDiskSpace(responseLength);
             }
 
             await using Stream input = await response.Content.ReadAsStreamAsync(
@@ -491,6 +499,25 @@ internal sealed class FeedMediaDeliveryService : IFeedMediaDeliveryService, IDis
             options.MaximumConcurrentDownloads <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(options));
+        }
+    }
+
+    private void EnsureAvailableDiskSpace(long mediaBytes)
+    {
+        string fullPath = Path.GetFullPath(
+            _paths.FeedMediaTempDirectory);
+        string root = Path.GetPathRoot(fullPath)
+            ?? throw new IOException(
+                "无法确定媒体临时目录所在磁盘。");
+        long available = new DriveInfo(root).AvailableFreeSpace;
+        long required = mediaBytes
+            > long.MaxValue - MinimumFreeSpaceReserveBytes
+                ? long.MaxValue
+                : mediaBytes + MinimumFreeSpaceReserveBytes;
+        if (available < required)
+        {
+            throw new IOException(
+                "媒体下载所需磁盘空间不足。");
         }
     }
 
