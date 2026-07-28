@@ -118,6 +118,8 @@ public sealed class DependencyInjectionTests
             provider.GetRequiredService<IAppNotificationRepository>());
         Assert.IsType<AppNotificationInbox>(
             provider.GetRequiredService<IAppNotificationInbox>());
+        Assert.IsType<LocalAppNotificationPublisher>(
+            provider.GetRequiredService<IAppNotificationPublisher>());
         Assert.IsType<FeedAutomationNotificationActionService>(
             provider.GetRequiredService<
                 IFeedAutomationNotificationActionService>());

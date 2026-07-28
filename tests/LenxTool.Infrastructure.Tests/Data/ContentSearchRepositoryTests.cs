@@ -236,7 +236,9 @@ public sealed class ContentSearchRepositoryTests : IDisposable
                 DELETE FROM content_fts
                 WHERE entity_type IN ('subtitle', 'favorite', 'tag');
                 ALTER TABLE feed_catalog DROP COLUMN view_kind_explicit;
-                DELETE FROM schema_versions WHERE version IN (17, 18);
+                DROP INDEX ix_app_notifications_kind_created;
+                ALTER TABLE app_notifications DROP COLUMN kind;
+                DELETE FROM schema_versions WHERE version IN (17, 18, 19);
 
                 INSERT INTO media_jobs(
                     id, kind, input_path, status, progress, engine,
@@ -279,7 +281,7 @@ public sealed class ContentSearchRepositoryTests : IDisposable
         await using SqliteCommand version = verification.CreateCommand();
         version.CommandText = "SELECT MAX(version) FROM schema_versions;";
         Assert.Equal(
-            18L,
+            19L,
             (long)(await version.ExecuteScalarAsync(CancellationToken.None))!);
     }
 

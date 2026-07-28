@@ -10,7 +10,7 @@ public sealed partial class SqliteDatabase(
     AppPaths paths,
     ILogger<SqliteDatabase> logger) : IDisposable
 {
-    private const int CurrentSchemaVersion = 18;
+    private const int CurrentSchemaVersion = 19;
     private readonly SemaphoreSlim _initializationGate = new(1, 1);
     private bool _initialized;
     private bool _disposed;
@@ -368,6 +368,24 @@ public sealed partial class SqliteDatabase(
                 command.Parameters.AddWithValue(
                     "$checksum",
                     "lenx-schema-v18-explicit-feed-view-kind");
+                await command.ExecuteNonQueryAsync(cancellationToken)
+                    .ConfigureAwait(false);
+                version = 18;
+            }
+
+            if (version < 19)
+            {
+                command.CommandText = MigrationNineteenSql;
+                command.Parameters.Clear();
+                await command.ExecuteNonQueryAsync(cancellationToken)
+                    .ConfigureAwait(false);
+                command.CommandText = "INSERT INTO schema_versions(version, applied_at, checksum) VALUES (19, $appliedAt, $checksum);";
+                command.Parameters.AddWithValue(
+                    "$appliedAt",
+                    DateTimeOffset.UtcNow.ToString("O"));
+                command.Parameters.AddWithValue(
+                    "$checksum",
+                    "lenx-schema-v19-notification-kinds");
                 await command.ExecuteNonQueryAsync(cancellationToken)
                     .ConfigureAwait(false);
             }
@@ -1065,6 +1083,16 @@ public sealed partial class SqliteDatabase(
 
         CREATE INDEX ix_app_notifications_unread
             ON app_notifications(read_at, created_at DESC, id);
+        """;
+
+    private const string MigrationNineteenSql = """
+        ALTER TABLE app_notifications
+            ADD COLUMN kind TEXT NOT NULL DEFAULT 'CONTENT_MATCH'
+            CHECK(kind IN (
+                'CONTENT_MATCH', 'SYSTEM_HEALTH', 'TASK_COMPLETED'));
+
+        CREATE INDEX ix_app_notifications_kind_created
+            ON app_notifications(kind, created_at DESC, id);
         """;
 
 }

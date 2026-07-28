@@ -34,10 +34,10 @@ public sealed class AppNotificationRepository(SqliteDatabase database)
         command.CommandText = """
             INSERT INTO app_notifications(
                 id, entry_id, feed_id, rule_id, rule_version,
-                title, source_label, created_at, read_at)
+                title, source_label, created_at, read_at, kind)
             VALUES(
                 $id, $entryId, $feedId, $ruleId, $ruleVersion,
-                $title, $sourceLabel, $createdAt, $readAt);
+                $title, $sourceLabel, $createdAt, $readAt, $kind);
             """;
         AddNotificationParameters(command, notification);
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
@@ -167,7 +167,8 @@ public sealed class AppNotificationRepository(SqliteDatabase database)
                     ? null
                     : DateTimeOffset.Parse(
                         reader.GetString(8),
-                        CultureInfo.InvariantCulture)));
+                        CultureInfo.InvariantCulture),
+                ParseKind(reader.GetString(9))));
         }
         return notifications;
     }
@@ -193,6 +194,9 @@ public sealed class AppNotificationRepository(SqliteDatabase database)
                 : notification.ReadAt.Value.ToString(
                     "O",
                     CultureInfo.InvariantCulture));
+        command.Parameters.AddWithValue(
+            "$kind",
+            StoreKind(notification.Kind));
     }
 
     private static void Validate(AppNotification notification)
@@ -216,6 +220,10 @@ public sealed class AppNotificationRepository(SqliteDatabase database)
             notification.SourceLabel,
             nameof(notification.SourceLabel),
             160);
+        if (!Enum.IsDefined(notification.Kind))
+        {
+            throw new ArgumentOutOfRangeException(nameof(notification));
+        }
         ValidateTimestamp(notification.CreatedAt, nameof(notification.CreatedAt));
         if (notification.ReadAt is { } readAt)
         {
@@ -264,6 +272,25 @@ public sealed class AppNotificationRepository(SqliteDatabase database)
 
     private const string SelectColumns = """
         id, entry_id, feed_id, rule_id, rule_version,
-        title, source_label, created_at, read_at
+        title, source_label, created_at, read_at, kind
         """;
+
+    private static string StoreKind(AppNotificationKind kind) =>
+        kind switch
+        {
+            AppNotificationKind.ContentMatch => "CONTENT_MATCH",
+            AppNotificationKind.SystemHealth => "SYSTEM_HEALTH",
+            AppNotificationKind.TaskCompleted => "TASK_COMPLETED",
+            _ => throw new ArgumentOutOfRangeException(nameof(kind))
+        };
+
+    private static AppNotificationKind ParseKind(string value) =>
+        value switch
+        {
+            "CONTENT_MATCH" => AppNotificationKind.ContentMatch,
+            "SYSTEM_HEALTH" => AppNotificationKind.SystemHealth,
+            "TASK_COMPLETED" => AppNotificationKind.TaskCompleted,
+            _ => throw new InvalidDataException(
+                "通知类别不受支持。")
+        };
 }

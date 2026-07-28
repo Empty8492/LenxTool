@@ -256,6 +256,8 @@ public partial class App : Application
         services.AddSingleton<AppNotificationInbox>();
         services.AddSingleton<IAppNotificationInbox>(static services =>
             services.GetRequiredService<AppNotificationInbox>());
+        services.AddSingleton<IAppNotificationPublisher,
+            LocalAppNotificationPublisher>();
         services.AddSingleton<IAppSettingsRepository, AppSettingsRepository>();
         services.AddSingleton<IFileHashService, FileHashService>();
         services.AddSingleton<ILocalModelService, LocalWhisperModelService>();

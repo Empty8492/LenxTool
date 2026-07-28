@@ -99,6 +99,39 @@ public sealed class NotificationCenterViewModelTests
         Assert.Equal(0, repository.RecentCalls);
     }
 
+    [Fact]
+    public async Task KindFilterChangesVisibleItemsWithoutChangingPrivateUnreadState()
+    {
+        AppNotification content = Notification('f', "内容命中");
+        AppNotification health = Notification('1', "抓取异常") with
+        {
+            Kind = AppNotificationKind.SystemHealth,
+            CreatedAt = Now.AddMinutes(-1)
+        };
+        AppNotification task = Notification('2', "摘要完成") with
+        {
+            Kind = AppNotificationKind.TaskCompleted,
+            CreatedAt = Now.AddMinutes(-2)
+        };
+        var repository = new StubRepository(content, health, task);
+        var viewModel = new NotificationCenterViewModel(
+            repository,
+            new AppNotificationInbox(),
+            new FixedTimeProvider(Now));
+        await viewModel.InitializeAsync(CancellationToken.None);
+
+        viewModel.SelectedKindFilter =
+            AppNotificationKindFilter.SystemHealth;
+
+        Assert.Equal(health, Assert.Single(viewModel.Items));
+        Assert.Equal(3, viewModel.UnreadCount);
+        Assert.Equal(0, repository.MarkAllCalls);
+
+        viewModel.SelectedKindFilter =
+            AppNotificationKindFilter.All;
+        Assert.Equal(3, viewModel.Items.Count);
+    }
+
     private static AppNotification Notification(
         char key,
         string title) => new(

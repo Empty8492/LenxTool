@@ -300,7 +300,7 @@ public sealed class SubtitleRepositoryTests : IDisposable
         await using SqliteConnection upgradedConnection = await upgraded.OpenConnectionAsync(CancellationToken.None);
         await using SqliteCommand version = upgradedConnection.CreateCommand();
         version.CommandText = "SELECT MAX(version) FROM schema_versions;";
-        Assert.Equal(18L, (long)(await version.ExecuteScalarAsync(CancellationToken.None))!);
+        Assert.Equal(19L, (long)(await version.ExecuteScalarAsync(CancellationToken.None))!);
     }
 
     public void Dispose()

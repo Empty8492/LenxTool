@@ -9,15 +9,17 @@
 | 测试组 | 结果 |
 |---|---:|
 | LenxTool.Core.Tests | 140 passed |
-| LenxTool.Infrastructure.Tests | 382 passed |
-| LenxTool.App.Tests | 262 passed |
+| LenxTool.Infrastructure.Tests | 383 passed |
+| LenxTool.App.Tests | 266 passed |
 | Cloudflare Worker Vitest | 64 passed |
 | Worker TypeScript strict typecheck | passed |
 | .NET build warnings | 0 |
 | NuGet vulnerable packages | 0 detected |
 | npm audit vulnerabilities | 0 detected |
 
-当前完整 Release 结果为 Core 140/140、Infrastructure 382/382、App/WPF 262/262、Worker workerd/D1 Vitest 64/64、Worker strict typecheck 与全解决方案 build 0 警告/0 错误。本轮未修改 NuGet/npm 依赖；NuGet 在线漏洞扫描与 `npm audit` 均为 0 漏洞。
+当前完整 Release 结果为 Core 140/140、Infrastructure 383/383、App/WPF 266/266、Worker workerd/D1 Vitest 64/64、Worker strict typecheck 与全解决方案 build 0 警告/0 错误。本轮未修改 NuGet/npm 依赖；NuGet 在线漏洞扫描与 `npm audit` 均为 0 漏洞。
+
+P2-05 通知流切片新增/扩展 4 项 App 和 2 项 Infrastructure 场景：schema v19 将历史通知回填为内容命中，并验证系统健康类别、并发幂等、跨重启及本地已读状态；统一发布器对规范化标题/来源生成稳定 SHA-256 ID，重复事件只推送一次。抓取异常在同一失败周期和固定错误类别内稳定去重，通知不包含 HTTP 状态或异常细节；自动摘要完成只发布条目标题级任务消息，不携带摘要结果。ViewModel 按三类筛选不会修改未读计数或仓储，DI 与 MainWindow 结构测试确认类别选择可访问且模板不绑定正文、摘要或 URL。完整 .NET 789/789 和 Release build 0 警告/0 错误通过；Worker 与依赖未修改，智能视图仍待后续切片。
 
 P2-04 新增 17 项 App/WPF 与 2 项 Infrastructure 证据。6 项视频计划实例覆盖 10 MiB 直接明确投递、25 MiB 二次确认、未知大小按 512 MiB 预算、513 MiB 超限、空间不足，以及已有同源文件无需再次下载确认；8 项视频 ViewModel 实例覆盖安全 Video/Poster 选择、伪封面与保留地址阻断、两步原文外开、确认前后计划重检、小文件/已有任务投递、超限/空间不足和下载取消。惰性接入、DI 与结构测试冻结 Video 查询、四类筛选、可信 `FeedThumbnail`、无 `MediaElement`/WebView2/HTML 播放器和全部可访问操作；真实 WPF 装载 1,000 条视频，在 900×620 和等效 200% 缩放下无横向溢出，只实现 1～40 个容器且主要按钮未裁切。Infrastructure 新增联网前磁盘预留测试，以及视频下载后 Media Foundation 音轨兼容探针失败时零任务/零临时残留测试。本片无 schema、Worker 或依赖变更，完整结果为 .NET 784/784、Worker 64/64、strict typecheck、Release 0 警告/0 错误及 NuGet/npm 0 漏洞。
 

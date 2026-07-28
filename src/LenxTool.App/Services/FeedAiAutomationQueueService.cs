@@ -18,6 +18,7 @@ public sealed class FeedAiAutomationQueueService :
     private readonly IFeedAiTranslationService _translationService;
     private readonly TimeProvider _timeProvider;
     private readonly FeedAiAutomationOptions _options;
+    private readonly IAppNotificationPublisher? _notifications;
     private readonly SemaphoreSlim _globalGate;
     private bool _disposed;
 
@@ -28,7 +29,8 @@ public sealed class FeedAiAutomationQueueService :
         IFeedAiSummaryService summaryService,
         IFeedAiTranslationService translationService,
         TimeProvider timeProvider,
-        FeedAiAutomationOptions options)
+        FeedAiAutomationOptions options,
+        IAppNotificationPublisher? notifications = null)
     {
         ArgumentNullException.ThrowIfNull(jobs);
         ArgumentNullException.ThrowIfNull(catalogRepository);
@@ -44,6 +46,7 @@ public sealed class FeedAiAutomationQueueService :
         _translationService = translationService;
         _timeProvider = timeProvider;
         _options = options;
+        _notifications = notifications;
         _globalGate = new(options.MaximumConcurrency, options.MaximumConcurrency);
     }
 
@@ -285,11 +288,18 @@ public sealed class FeedAiAutomationQueueService :
             _translationService,
             cancellationToken).ConfigureAwait(false);
 
-        await TryCompleteAsync(
+        bool completed = await TryCompleteAsync(
             job,
             FeedAiAutomationJobOutcome.Succeeded,
             null,
             cancellationToken).ConfigureAwait(false);
+        if (completed &&
+            job.TaskType == FeedAiAutomationTaskType.Summary)
+        {
+            await TryPublishTaskNotificationAsync(
+                job,
+                entry).ConfigureAwait(false);
+        }
     }
 
     private async Task<FeedPolicyContext?> GetPolicyContextAsync(
@@ -368,7 +378,7 @@ public sealed class FeedAiAutomationQueueService :
             cancellationToken);
     }
 
-    private async Task TryCompleteAsync(
+    private async Task<bool> TryCompleteAsync(
         FeedAiAutomationJob job,
         FeedAiAutomationJobOutcome outcome,
         string? errorCode,
@@ -382,10 +392,39 @@ public sealed class FeedAiAutomationQueueService :
                 errorCode,
                 _timeProvider.GetUtcNow(),
                 cancellationToken).ConfigureAwait(false);
+            return true;
         }
         catch (InvalidOperationException)
         {
             // An expired lease can be reclaimed while an older worker is finishing.
+            return false;
+        }
+    }
+
+    private async Task TryPublishTaskNotificationAsync(
+        FeedAiAutomationJob job,
+        FeedEntry entry)
+    {
+        if (_notifications is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _notifications.PublishAsync(
+                new(
+                    AppNotificationKind.TaskCompleted,
+                    $"ai-summary:{job.Id}",
+                    entry.Id,
+                    entry.FeedId,
+                    $"摘要已生成：{entry.Title}",
+                    "AI 自动摘要"),
+                CancellationToken.None).ConfigureAwait(false);
+        }
+        catch
+        {
+            // A notification failure must not change the completed AI job.
         }
     }
 

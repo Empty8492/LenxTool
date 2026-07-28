@@ -170,12 +170,41 @@ public sealed class FeedAiAutomationQueueServiceTests
         Assert.Empty(jobs.Retried);
     }
 
+    [Fact]
+    public async Task SuccessfulSummaryPublishesTaskNotificationWithoutResultBody()
+    {
+        FeedEntry entry = Entry();
+        var jobs = new StubJobRepository
+        {
+            Claimed = [Job(
+                "30000000-0000-4000-8000-000000000009",
+                FeedAiAutomationTaskType.Summary,
+                "und")]
+        };
+        var notifications = new RecordingNotificationPublisher();
+        var service = CreateService(
+            jobs,
+            Catalog(autoSummary: true, autoTranslation: false),
+            entry,
+            notifications: notifications);
+
+        await service.ProcessBackgroundBatchAsync(CancellationToken.None);
+
+        AppNotificationDraft draft =
+            Assert.Single(notifications.Drafts);
+        Assert.Equal(AppNotificationKind.TaskCompleted, draft.Kind);
+        Assert.Equal($"摘要已生成：{entry.Title}", draft.Title);
+        Assert.DoesNotContain("content", draft.Title, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Hello world", draft.Title, StringComparison.Ordinal);
+    }
+
     private static FeedAiAutomationQueueService CreateService(
         StubJobRepository jobs,
         FeedCatalogSnapshot catalog,
         FeedEntry entry,
         StubSummaryService? summaries = null,
-        StubTranslationService? translations = null) =>
+        StubTranslationService? translations = null,
+        IAppNotificationPublisher? notifications = null) =>
         new(
             jobs,
             new StubCatalogRepository(catalog),
@@ -187,7 +216,8 @@ public sealed class FeedAiAutomationQueueServiceTests
             {
                 InitialDelay = TimeSpan.Zero,
                 PollInterval = TimeSpan.FromMilliseconds(10)
-            });
+            },
+            notifications);
 
     private static FeedCatalogSnapshot Catalog(
         bool autoSummary,
@@ -421,6 +451,33 @@ public sealed class FeedAiAutomationQueueServiceTests
                     FeedAiTaskType.Translation,
                     input.TargetLanguage),
                 blocks));
+        }
+    }
+
+    private sealed class RecordingNotificationPublisher
+        : IAppNotificationPublisher
+    {
+        public ConcurrentBag<AppNotificationDraft> Drafts { get; } = [];
+
+        public Task<AppNotificationRegistration> PublishAsync(
+            AppNotificationDraft draft,
+            CancellationToken cancellationToken)
+        {
+            Drafts.Add(draft);
+            return Task.FromResult(
+                new AppNotificationRegistration(
+                    new(
+                        new string('b', 64),
+                        draft.EntryId,
+                        draft.FeedId,
+                        draft.RuleId ?? Guid.Empty.ToString("D"),
+                        draft.RuleVersion ?? 1,
+                        draft.Title,
+                        draft.SourceLabel,
+                        Now,
+                        null,
+                        draft.Kind),
+                    Created: true));
         }
     }
 

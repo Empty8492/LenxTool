@@ -18,6 +18,7 @@ internal sealed class FeedRefreshService : IFeedRefreshService, IDisposable
     private readonly TimeProvider _timeProvider;
     private readonly IFeedAiAutomationQueueService? _aiAutomationQueue;
     private readonly IFeedAutomationPlanningService? _automationPlanning;
+    private readonly IAppNotificationPublisher? _notifications;
     private readonly FeedNetworkPolicy _networkPolicy;
     private readonly SemaphoreSlim _concurrency;
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _feedGates = new(StringComparer.Ordinal);
@@ -36,7 +37,8 @@ internal sealed class FeedRefreshService : IFeedRefreshService, IDisposable
         FeedRefreshOptions options,
         TimeProvider timeProvider,
         IFeedAiAutomationQueueService? aiAutomationQueue = null,
-        IFeedAutomationPlanningService? automationPlanning = null)
+        IFeedAutomationPlanningService? automationPlanning = null,
+        IAppNotificationPublisher? notifications = null)
     {
         _repository = repository;
         _entryWriter = entryWriter;
@@ -47,6 +49,7 @@ internal sealed class FeedRefreshService : IFeedRefreshService, IDisposable
         _timeProvider = timeProvider;
         _aiAutomationQueue = aiAutomationQueue;
         _automationPlanning = automationPlanning;
+        _notifications = notifications;
         _networkPolicy = new(resolver, networkOptions);
         _concurrency = new(options.MaximumConcurrency, options.MaximumConcurrency);
     }
@@ -369,9 +372,46 @@ internal sealed class FeedRefreshService : IFeedRefreshService, IDisposable
             errorCode,
             now);
         bool saved = await _repository.SaveStateAsync(state, cancellationToken).ConfigureAwait(false);
+        if (saved)
+        {
+            await TryPublishHealthNotificationAsync(
+                target,
+                errorCode).ConfigureAwait(false);
+        }
         return saved
             ? new(target.Feed.Id, FeedRefreshOutcome.Failed, 0, state.NextFetchAt, errorCode)
             : new(target.Feed.Id, FeedRefreshOutcome.SkippedUnavailable, 0, null, null);
+    }
+
+    private async Task TryPublishHealthNotificationAsync(
+        FeedRefreshTarget target,
+        string errorCode)
+    {
+        if (_notifications is null)
+        {
+            return;
+        }
+
+        string failureCycle =
+            target.State?.LastSuccessAt?.UtcTicks.ToString(
+                System.Globalization.CultureInfo.InvariantCulture)
+            ?? "never";
+        try
+        {
+            await _notifications.PublishAsync(
+                new(
+                    AppNotificationKind.SystemHealth,
+                    $"feed-health:{target.Feed.Id}:{failureCycle}:{errorCode}",
+                    $"feed-health:{target.Feed.Id}",
+                    target.Feed.Id,
+                    $"{target.Feed.DisplayName} 抓取异常",
+                    target.Feed.DisplayName),
+                CancellationToken.None).ConfigureAwait(false);
+        }
+        catch
+        {
+            // A local notification failure must not alter Feed refresh state.
+        }
     }
 
     private TimeSpan CalculateFailureDelay(int failures, TimeSpan? retryAfter)

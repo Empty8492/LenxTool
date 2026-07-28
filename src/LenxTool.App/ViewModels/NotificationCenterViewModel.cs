@@ -6,14 +6,28 @@ using LenxTool.Core.Models;
 
 namespace LenxTool.App.ViewModels;
 
+public enum AppNotificationKindFilter
+{
+    All,
+    ContentMatch,
+    SystemHealth,
+    TaskCompleted
+}
+
+public sealed record AppNotificationKindFilterOption(
+    AppNotificationKindFilter Value,
+    string Label);
+
 public sealed class NotificationCenterViewModel : ObservableObject
 {
     private const int RecentLimit = 50;
     private readonly IAppNotificationRepository _repository;
     private readonly TimeProvider _timeProvider;
     private readonly SynchronizationContext? _synchronizationContext;
+    private readonly List<AppNotification> _allItems = [];
     private bool _isOpen;
     private int _unreadCount;
+    private AppNotificationKindFilter _selectedKindFilter;
 
     public NotificationCenterViewModel(
         IAppNotificationRepository repository,
@@ -35,6 +49,13 @@ public sealed class NotificationCenterViewModel : ObservableObject
     }
 
     public ObservableCollection<AppNotification> Items { get; } = [];
+    public IReadOnlyList<AppNotificationKindFilterOption> KindFilters { get; } =
+    [
+        new(AppNotificationKindFilter.All, "全部"),
+        new(AppNotificationKindFilter.ContentMatch, "内容命中"),
+        new(AppNotificationKindFilter.SystemHealth, "系统健康"),
+        new(AppNotificationKindFilter.TaskCompleted, "任务完成")
+    ];
     public RelayCommand ToggleCommand { get; }
     public AsyncRelayCommand<AppNotification> MarkReadCommand { get; }
     public AsyncRelayCommand MarkAllReadCommand { get; }
@@ -43,6 +64,18 @@ public sealed class NotificationCenterViewModel : ObservableObject
     {
         get => _isOpen;
         set => SetProperty(ref _isOpen, value);
+    }
+
+    public AppNotificationKindFilter SelectedKindFilter
+    {
+        get => _selectedKindFilter;
+        set
+        {
+            if (SetProperty(ref _selectedKindFilter, value))
+            {
+                RefreshVisibleItems();
+            }
+        }
     }
 
     public int UnreadCount
@@ -80,13 +113,13 @@ public sealed class NotificationCenterViewModel : ObservableObject
         int unreadCount = await _repository.GetUnreadCountAsync(
             cancellationToken);
 
-        Items.Clear();
+        _allItems.Clear();
         foreach (AppNotification notification in recent)
         {
-            Items.Add(notification);
+            _allItems.Add(notification);
         }
+        RefreshVisibleItems();
         UnreadCount = unreadCount;
-        OnPropertyChanged(nameof(Items));
         MarkReadCommand.NotifyCanExecuteChanged();
     }
 
@@ -110,25 +143,26 @@ public sealed class NotificationCenterViewModel : ObservableObject
     private void AcceptNotification(
         AppNotification notification)
     {
-        int existingIndex = FindIndex(notification.Id);
+        int existingIndex = FindAllIndex(notification.Id);
         bool wasUnread = existingIndex >= 0 &&
-            !Items[existingIndex].IsRead;
+            !_allItems[existingIndex].IsRead;
         if (existingIndex >= 0)
         {
-            Items.RemoveAt(existingIndex);
+            _allItems.RemoveAt(existingIndex);
         }
 
         int insertionIndex = 0;
-        while (insertionIndex < Items.Count &&
-               Compare(Items[insertionIndex], notification) <= 0)
+        while (insertionIndex < _allItems.Count &&
+               Compare(_allItems[insertionIndex], notification) <= 0)
         {
             insertionIndex++;
         }
-        Items.Insert(insertionIndex, notification);
-        while (Items.Count > RecentLimit)
+        _allItems.Insert(insertionIndex, notification);
+        while (_allItems.Count > RecentLimit)
         {
-            Items.RemoveAt(Items.Count - 1);
+            _allItems.RemoveAt(_allItems.Count - 1);
         }
+        RefreshVisibleItems();
 
         bool isUnread = !notification.IsRead;
         if (!wasUnread && isUnread)
@@ -161,10 +195,12 @@ public sealed class NotificationCenterViewModel : ObservableObject
             return;
         }
 
-        int index = FindIndex(notification.Id);
-        if (index >= 0 && !Items[index].IsRead)
+        int index = FindAllIndex(notification.Id);
+        if (index >= 0 && !_allItems[index].IsRead)
         {
-            Items[index] = Items[index] with { ReadAt = readAt };
+            _allItems[index] =
+                _allItems[index] with { ReadAt = readAt };
+            RefreshVisibleItems();
             UnreadCount = Math.Max(0, UnreadCount - 1);
         }
         MarkReadCommand.NotifyCanExecuteChanged();
@@ -182,23 +218,25 @@ public sealed class NotificationCenterViewModel : ObservableObject
         await _repository.MarkAllReadAsync(
             readAt,
             cancellationToken);
-        for (int index = 0; index < Items.Count; index++)
+        for (int index = 0; index < _allItems.Count; index++)
         {
-            if (!Items[index].IsRead)
+            if (!_allItems[index].IsRead)
             {
-                Items[index] = Items[index] with { ReadAt = readAt };
+                _allItems[index] =
+                    _allItems[index] with { ReadAt = readAt };
             }
         }
+        RefreshVisibleItems();
         UnreadCount = 0;
         MarkReadCommand.NotifyCanExecuteChanged();
     }
 
-    private int FindIndex(string id)
+    private int FindAllIndex(string id)
     {
-        for (int index = 0; index < Items.Count; index++)
+        for (int index = 0; index < _allItems.Count; index++)
         {
             if (string.Equals(
-                    Items[index].Id,
+                    _allItems[index].Id,
                     id,
                     StringComparison.Ordinal))
             {
@@ -207,6 +245,33 @@ public sealed class NotificationCenterViewModel : ObservableObject
         }
         return -1;
     }
+
+    private void RefreshVisibleItems()
+    {
+        Items.Clear();
+        foreach (AppNotification notification in _allItems)
+        {
+            if (MatchesFilter(notification.Kind))
+            {
+                Items.Add(notification);
+            }
+        }
+        OnPropertyChanged(nameof(Items));
+        MarkReadCommand.NotifyCanExecuteChanged();
+    }
+
+    private bool MatchesFilter(AppNotificationKind kind) =>
+        SelectedKindFilter switch
+        {
+            AppNotificationKindFilter.All => true,
+            AppNotificationKindFilter.ContentMatch =>
+                kind == AppNotificationKind.ContentMatch,
+            AppNotificationKindFilter.SystemHealth =>
+                kind == AppNotificationKind.SystemHealth,
+            AppNotificationKindFilter.TaskCompleted =>
+                kind == AppNotificationKind.TaskCompleted,
+            _ => false
+        };
 
     private static int Compare(
         AppNotification left,

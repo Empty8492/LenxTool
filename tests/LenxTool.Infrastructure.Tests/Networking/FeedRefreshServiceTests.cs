@@ -321,6 +321,39 @@ public sealed class FeedRefreshServiceTests
     }
 
     [Fact]
+    public async Task RepeatedFailureCyclePublishesOneBoundedHealthNotification()
+    {
+        var repository = new FakeFeedFetchStateRepository(Target());
+        var notifications = new RecordingNotificationPublisher();
+        var transport = new FakeRefreshTransport((_, _, _, _) =>
+            Task.FromResult(
+                new FeedRefreshHttpResponse(
+                    new HttpResponseMessage(
+                        HttpStatusCode.InternalServerError))));
+        using FeedRefreshService service = CreateService(
+            repository,
+            transport,
+            notifications: notifications);
+
+        await service.RefreshAsync(
+            FeedId,
+            force: true,
+            CancellationToken.None);
+        await service.RefreshAsync(
+            FeedId,
+            force: true,
+            CancellationToken.None);
+
+        Assert.Equal(2, notifications.Drafts.Count);
+        Assert.Single(
+            notifications.Drafts.Select(draft => draft.DedupeKey).Distinct());
+        AppNotificationDraft draft = notifications.Drafts[0];
+        Assert.Equal(AppNotificationKind.SystemHealth, draft.Kind);
+        Assert.Equal("Daily 抓取异常", draft.Title);
+        Assert.DoesNotContain("500", draft.Title, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ConcurrentRefreshOfSameFeedMakesOnlyOneRequest()
     {
         var repository = new FakeFeedFetchStateRepository(Target());
@@ -573,7 +606,8 @@ public sealed class FeedRefreshServiceTests
         IFeedHostResolver? resolver = null,
         IFeedEntryWriter? entryWriter = null,
         IFeedAiAutomationQueueService? aiAutomationQueue = null,
-        IFeedAutomationPlanningService? automationPlanning = null) => new(
+        IFeedAutomationPlanningService? automationPlanning = null,
+        IAppNotificationPublisher? notifications = null) => new(
             repository,
             entryWriter ?? new FakeFeedEntryWriter(),
             new FeedDocumentParser(),
@@ -583,7 +617,8 @@ public sealed class FeedRefreshServiceTests
             options ?? FeedRefreshOptions.Default,
             new FixedTimeProvider(Now),
             aiAutomationQueue,
-            automationPlanning);
+            automationPlanning,
+            notifications);
 
     private static FeedRefreshTarget Target(
         FeedFetchState? state = null,
@@ -706,6 +741,33 @@ public sealed class FeedRefreshServiceTests
                         entries.Count))
                 : Task.FromException<FeedAutomationPlanningResult>(
                     Failure);
+        }
+    }
+
+    private sealed class RecordingNotificationPublisher
+        : IAppNotificationPublisher
+    {
+        public List<AppNotificationDraft> Drafts { get; } = [];
+
+        public Task<AppNotificationRegistration> PublishAsync(
+            AppNotificationDraft draft,
+            CancellationToken cancellationToken)
+        {
+            Drafts.Add(draft);
+            return Task.FromResult(
+                new AppNotificationRegistration(
+                    new(
+                        new string('a', 64),
+                        draft.EntryId,
+                        draft.FeedId,
+                        draft.RuleId ?? Guid.Empty.ToString("D"),
+                        draft.RuleVersion ?? 1,
+                        draft.Title,
+                        draft.SourceLabel,
+                        Now,
+                        null,
+                        draft.Kind),
+                    Created: true));
         }
     }
 

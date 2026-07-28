@@ -16,7 +16,10 @@ public sealed class AppNotificationRepositoryTests : IDisposable
     [Fact]
     public async Task RegisterAsyncPersistsAndRestoresNotification()
     {
-        AppNotification expected = CreateNotification('a', "新模型发布");
+        AppNotification expected = CreateNotification(
+            'a',
+            "订阅抓取异常",
+            AppNotificationKind.SystemHealth);
         using (SqliteDatabase database = CreateDatabase())
         {
             await database.InitializeAsync(CancellationToken.None);
@@ -43,6 +46,9 @@ public sealed class AppNotificationRepositoryTests : IDisposable
             1,
             await restoredRepository.GetUnreadCountAsync(
                 CancellationToken.None));
+        Assert.Equal(
+            AppNotificationKind.SystemHealth,
+            expected.Kind);
     }
 
     [Fact]
@@ -140,7 +146,8 @@ public sealed class AppNotificationRepositoryTests : IDisposable
 
     private static AppNotification CreateNotification(
         char key,
-        string title) => new(
+        string title,
+        AppNotificationKind kind = AppNotificationKind.ContentMatch) => new(
         new string(key, 64),
         "entry-notification",
         "30000000-0000-4000-8000-000000000701",
@@ -149,7 +156,8 @@ public sealed class AppNotificationRepositoryTests : IDisposable
         title,
         "AI 资讯",
         new DateTimeOffset(2026, 7, 26, 20, 0, 0, TimeSpan.Zero),
-        null);
+        null,
+        kind);
 
     public void Dispose()
     {
