@@ -141,6 +141,7 @@ public sealed class DependencyInjectionTests
             provider.GetRequiredService<IFeedSmartViewSyncService>());
         Assert.IsType<FeedSmartViewAdminService>(
             provider.GetRequiredService<IFeedSmartViewAdminService>());
+        Assert.NotNull(provider.GetRequiredService<SmartViewAdminViewModel>());
         Assert.NotNull(provider.GetRequiredService<AutomationAdminViewModel>());
 
         ShellViewModel shell = provider.GetRequiredService<ShellViewModel>();

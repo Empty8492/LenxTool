@@ -63,6 +63,9 @@
     <None Include="..\..\src\LenxTool.App\Views\AutomationAdminView.xaml"
           Link="Fixtures\AutomationAdminView.xaml"
           CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\src\LenxTool.App\Views\SmartViewAdminView.xaml"
+          Link="Fixtures\SmartViewAdminView.xaml"
+          CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\src\LenxTool.App\Views\HistorySearchFilterBar.xaml"
           Link="Fixtures\HistorySearchFilterBar.xaml"
           CopyToOutputDirectory="PreserveNewest" />
