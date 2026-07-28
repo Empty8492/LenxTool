@@ -133,6 +133,10 @@ public partial class App : Application
             services.GetRequiredService<FeedEntryRepository>());
         services.AddSingleton<IFeedEntryRepository>(static services =>
             services.GetRequiredService<FeedEntryRepository>());
+        // 发现页用专用批量投影读取标题和时间，避免为卡片物化完整正文。
+        services.AddSingleton<
+            IFeedDiscoveryPreviewRepository,
+            FeedDiscoveryPreviewRepository>();
         services.AddSingleton<FeedFullTextRepository>();
         services.AddSingleton<IFeedFullTextRepository>(static services =>
             services.GetRequiredService<FeedFullTextRepository>());
@@ -274,6 +278,8 @@ public partial class App : Application
         services.AddSingleton<HistoryViewModel>();
         services.AddSingleton<ToolsViewModel>();
         services.AddSingleton<SettingsViewModel>();
+        // DISC-04 只注册只读发现页；共享目录写入仍由后续发布闭环负责。
+        services.AddSingleton<FeedDiscoveryViewModel>();
         services.AddSingleton<FeedAdminViewModel>();
         services.AddSingleton<AutomationAdminViewModel>();
         services.AddSingleton<NotificationCenterViewModel>();

@@ -41,6 +41,8 @@ public sealed class DependencyInjectionTests
         Assert.Same(
             provider.GetRequiredService<IDesktopFileDialogService>(),
             provider.GetRequiredService<IOpmlFileDialogService>());
+        // 统一发现页必须消费 DISC-03 的协调服务，而不是旧 URL 单候选服务。
+        Assert.NotNull(provider.GetRequiredService<FeedDiscoveryViewModel>());
         Assert.NotNull(provider.GetRequiredService<FeedAdminViewModel>());
         Assert.NotNull(provider.GetRequiredService<IFeedDiscoveryService>());
         Assert.NotNull(provider.GetRequiredService<IUnifiedFeedDiscoveryService>());
@@ -68,6 +70,8 @@ public sealed class DependencyInjectionTests
         Assert.Same(
             provider.GetRequiredService<IFeedEntryWriter>(),
             provider.GetRequiredService<IFeedEntryRepository>());
+        Assert.IsType<FeedDiscoveryPreviewRepository>(
+            provider.GetRequiredService<IFeedDiscoveryPreviewRepository>());
         Assert.IsType<FeedFullTextRepository>(
             provider.GetRequiredService<IFeedFullTextRepository>());
         Assert.IsType<FeedAiResultRepository>(

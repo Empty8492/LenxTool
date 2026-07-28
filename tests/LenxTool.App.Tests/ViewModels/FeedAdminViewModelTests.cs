@@ -479,6 +479,13 @@ public sealed class FeedAdminViewModelTests
         var dialogs = new FakeOpmlFileDialogs();
         var fetchStates = new FakeFeedFetchStateRepository();
         var refresh = new FakeFeedRefreshService();
+        // 管理页测试只验证嵌入接线，统一发现行为由独立 ViewModel 测试覆盖。
+        var unifiedDiscovery = new FeedDiscoveryViewModel(
+            new EmptyUnifiedDiscoveryService(),
+            repository,
+            new EmptyFeedDiscoveryPreviewRepository(),
+            account,
+            TimeSpan.FromHours(1));
         var viewModel = new FeedAdminViewModel(
             admin,
             repository,
@@ -489,7 +496,8 @@ public sealed class FeedAdminViewModelTests
             opmlFiles,
             dialogs,
             fetchStates,
-            refresh);
+            refresh,
+            unifiedDiscovery);
         return new(viewModel, admin, repository, sync, discovery, account, batch, opmlFiles, dialogs, fetchStates, refresh);
     }
 
@@ -716,6 +724,39 @@ public sealed class FeedAdminViewModelTests
             Failure is null
                 ? Task.FromResult(Result ?? throw new InvalidOperationException("Missing discovery result."))
                 : Task.FromException<FeedDiscoveryResult>(Failure);
+    }
+
+    /// <summary>
+    /// 管理页夹具不会执行统一搜索，只提供可构造的只读依赖。
+    /// </summary>
+    private sealed class EmptyUnifiedDiscoveryService
+        : IUnifiedFeedDiscoveryService
+    {
+        public Task<UnifiedFeedDiscoveryResult> DiscoverAsync(
+            string input,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(new UnifiedFeedDiscoveryResult(
+                new(
+                    input,
+                    FeedDiscoveryQueryKind.Keyword,
+                    FeedDiscoveryQueryError.None),
+                [],
+                [],
+                FeedDiscoveryCompletionStatus.Complete));
+    }
+
+    /// <summary>
+    /// 管理页夹具不读取近期预览，避免把两个 ViewModel 的测试职责混合。
+    /// </summary>
+    private sealed class EmptyFeedDiscoveryPreviewRepository
+        : IFeedDiscoveryPreviewRepository
+    {
+        public Task<IReadOnlyList<FeedDiscoveryPreviewItem>> GetRecentAsync(
+            IReadOnlyCollection<string> feedIds,
+            int maximumPerFeed,
+            string localProfile,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<FeedDiscoveryPreviewItem>>([]);
     }
 
     private sealed class FakeAccountSessionService(AccountSessionSnapshot current) : IAccountSessionService

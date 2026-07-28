@@ -50,6 +50,10 @@
     <None Include="..\..\src\LenxTool.App\Views\FeedHealthView.xaml"
           Link="Fixtures\FeedHealthView.xaml"
           CopyToOutputDirectory="PreserveNewest" />
+    <!-- DISC-04 结构测试读取真实发现页 XAML，防止只读与可访问性边界漂移。 -->
+    <None Include="..\..\src\LenxTool.App\Views\FeedDiscoveryView.xaml"
+          Link="Fixtures\FeedDiscoveryView.xaml"
+          CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\src\LenxTool.App\Views\AutomationAdminView.xaml"
           Link="Fixtures\AutomationAdminView.xaml"
           CopyToOutputDirectory="PreserveNewest" />

@@ -598,6 +598,10 @@
                         </Border>
 
                         <TabControl Grid.Row="4">
+                            <TabItem Header="发现">
+                                <!-- 发现页属于管理员订阅管理，但仍使用独立 ViewModel 隔离只读搜索与目录写入。 -->
+                                <views:FeedDiscoveryView DataContext="{Binding UnifiedDiscovery}" />
+                            </TabItem>
                             <TabItem Header="分类">
                                 <Grid Margin="0,16,0,0">
                                     <Grid.ColumnDefinitions>

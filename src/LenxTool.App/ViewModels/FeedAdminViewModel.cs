@@ -62,7 +62,8 @@ public sealed partial class FeedAdminViewModel : PageViewModel
         IOpmlFileService opmlFileService,
         IOpmlFileDialogService opmlFileDialogs,
         IFeedFetchStateRepository fetchStateRepository,
-        IFeedRefreshService feedRefreshService)
+        IFeedRefreshService feedRefreshService,
+        FeedDiscoveryViewModel unifiedDiscovery)
         : base("订阅管理", "维护所有用户共享的 RSS/Atom 目录；权限与版本仍由 Worker 强制校验")
     {
         _adminService = adminService;
@@ -75,6 +76,8 @@ public sealed partial class FeedAdminViewModel : PageViewModel
         _opmlFileDialogs = opmlFileDialogs;
         _fetchStateRepository = fetchStateRepository;
         _feedRefreshService = feedRefreshService;
+        // 首版统一发现按计划嵌入管理员订阅管理；发布写入仍保持独立后续切片。
+        UnifiedDiscovery = unifiedDiscovery;
         Categories = [];
         Feeds = [];
         OpmlItems = [];
@@ -139,6 +142,7 @@ public sealed partial class FeedAdminViewModel : PageViewModel
     public ObservableCollection<FeedCatalogItem> Feeds { get; }
     public ObservableCollection<FeedCategoryChoice> CategoryChoices { get; }
     public ObservableCollection<OpmlImportItemViewModel> OpmlItems { get; }
+    public FeedDiscoveryViewModel UnifiedDiscovery { get; }
     public IReadOnlyList<FeedViewKindChoice> ViewKindChoices { get; }
     public IReadOnlyList<FeedFullTextPolicyChoice> FullTextPolicyChoices { get; }
     public AsyncRelayCommand RefreshCommand { get; }

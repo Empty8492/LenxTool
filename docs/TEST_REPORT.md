@@ -9,15 +9,17 @@
 | 测试组 | 结果 |
 |---|---:|
 | LenxTool.Core.Tests | 140 passed |
-| LenxTool.Infrastructure.Tests | 377 passed |
-| LenxTool.App.Tests | 209 passed |
+| LenxTool.Infrastructure.Tests | 378 passed |
+| LenxTool.App.Tests | 220 passed |
 | Cloudflare Worker Vitest | 63 passed |
 | Worker TypeScript strict typecheck | passed |
 | .NET build warnings | 0 |
 | NuGet vulnerable packages | 0 detected |
 | npm audit vulnerabilities | 0 detected |
 
-本轮 UX-03 的完整 Release 结果为 Core 140/140、Infrastructure 377/377、App/WPF 209/209、Worker workerd/D1 Vitest 63/63、Worker strict typecheck、NuGet/npm audit 0 漏洞与全解决方案 build 0 警告/0 错误。
+本轮 DISC-04 的完整 Release 结果为 Core 140/140、Infrastructure 378/378、App/WPF 220/220、Worker workerd/D1 Vitest 63/63、Worker strict typecheck 与全解决方案 build 0 警告/0 错误。本片未修改 NuGet/npm 依赖；同步基线记录的两类 audit 均为 0 漏洞，当前受限环境中的 NuGet 在线复查因系统 TLS 凭据不可用而未形成新的扫描结果。
+
+DISC-04 新增管理员订阅管理内的只读发现页、请求状态机和专用本地预览投影。8 项 ViewModel 场景覆盖识别/防抖/提交/取消、旧 provider 忽略取消、手动取消及时释放命令、非法输入立即终止、部分成功零候选、限流、角色降权和预览故障隔离；2 项结构场景冻结管理页签、Automation 名称、实时状态、窄窗滚动和无发布命令；1 项真实 WPF 运行时场景覆盖原生 Automation Peer、键盘焦点、900×620、等效 200% 缩放和深浅主题。真实 SQLite 场景以单次窗口查询验证多 Feed 稳定排序、隐藏过滤和每 Feed 4 条上限；查询只读取标题和时间，不物化摘要、正文或附件。
 
 UX-03 新增共享分段页签、复选框和增强下拉框样式，并以独立 `DateControls.xaml` 封装 DatePicker、DatePickerTextBox、Calendar、CalendarItem、CalendarButton 与 CalendarDayButton 模板。3 项结构测试冻结官方命名部件、普通/悬停/按下/选中/聚焦/禁用/校验错误状态、资讯页显式样式接线和 UI Automation 名称；1 项真实 WPF 运行时测试覆盖方向键切换、原生 Automation Peer、内部 Calendar 弹层选择回写、日期水印/文本、900×620 窄窗、等效 200% 布局缩放及运行中深浅主题切换。浅色/深色 Release 离屏渲染经人工检查未发现裁切、错位或低对比。
 
