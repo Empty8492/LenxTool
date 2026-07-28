@@ -8,7 +8,7 @@
 
 | 测试组 | 结果 |
 |---|---:|
-| LenxTool.Core.Tests | 147 passed |
+| LenxTool.Core.Tests | 161 passed |
 | LenxTool.Infrastructure.Tests | 390 passed |
 | LenxTool.App.Tests | 292 passed |
 | Cloudflare Worker Vitest | 70 passed |
@@ -17,7 +17,9 @@
 | NuGet vulnerable packages | 0 detected |
 | npm audit vulnerabilities | 0 detected |
 
-当前完整 Release 结果为 Core 147/147、Infrastructure 390/390、App/WPF 292/292、Worker workerd/D1 Vitest 70/70、Worker strict typecheck 与全解决方案 build 0 警告/0 错误。本轮未修改 NuGet/npm 依赖；最近一次 NuGet 在线漏洞扫描与 `npm audit` 均为 0 漏洞。
+当前完整 Release 结果为 Core 161/161、Infrastructure 390/390、App/WPF 292/292、Worker workerd/D1 Vitest 70/70、Worker strict typecheck 与全解决方案 build 0 警告/0 错误。本轮未修改 NuGet/npm 依赖；最近一次 NuGet 在线漏洞扫描与 `npm audit` 均为 0 漏洞。
+
+P2-07 新增 14 项 Core 契约场景。统一能力快照覆盖支持的五类 `EntryViewKind`、是否需要凭据、最大内容字节数和适配器幂等性，并在协调器构造时复制、排序和校验。请求工厂按导出器/目标/条目/内容哈希/视图生成稳定 SHA-256 幂等键；协调器会拒绝伪造或非规范请求，并在调用适配器前阻断不存在的导出器、不支持的类型和超限内容。成功结果必须使用同一请求键并提供远端 ID 或无用户信息的 HTTP(S) URL；封闭适配器错误保留可重试与 0～7 天 `Retry-After`，调用方取消原样传播，未知异常不泄露供应商异常正文。反射隐私测试确认请求、结果和错误模型没有 token、password、credential 或 response 属性。完整 .NET 843/843、Worker 70/70、strict typecheck 与 Release build 0 警告/0 错误通过；未注册适配器、未修改 UI/DI、未发起网络请求，默认无外部导出。
 
 P2-06 新增 6 项 App/WPF 场景并完成 P2-A 检查点。第五个通知页签复用统一 `FeedEntry`/`EntryViewKind.Notification`、50 条分页、私人状态和既有安全原文打开契约，与顶部本机应用通知收件箱保持独立；时间线的新查询会主动取消旧查询，迟到结果不能覆盖最新筛选。10,000 条五类混合条目仅发出 5 次 `offset=0/limit=50` 首屏查询，五视图重复切换不会重查且各自筛选保持不变。真实 WPF 在每类 300 条数据上验证五个页签滚动到底并返回后仍复用列表实例与滚动偏移，容器数稳定在 1～40；900×620、等效 200% 缩放、方向键和减少动画均通过。完整 .NET 829/829、Worker 70/70、strict typecheck 与 Release build 0 警告/0 错误通过；本项无 schema、云端字段或依赖变更。
 

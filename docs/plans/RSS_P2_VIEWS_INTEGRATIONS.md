@@ -1,6 +1,6 @@
 # P2 详细计划：内容视图、导出与定时摘要
 
-状态：P2-01～P2-06 与 [统一发现及原生控件视觉插入计划](RSS_DISCOVERY_AND_CONTROL_UX.md)已完成；下一项 P2-07
+状态：P2-01～P2-07 与 [统一发现及原生控件视觉插入计划](RSS_DISCOVERY_AND_CONTROL_UX.md)已完成；下一项 P2-08
 最后核对：2026-07-29
 开始条件：P1 最终检查点通过，统一 `FeedEntry`、私人状态、规则和搜索契约稳定。
 参考项目：RSSNext/Folo（内容视图、条目动作、AI 定时任务的行为参考），LenxTool 当前 WPF/DPAPI/媒体/更新与审计基础
@@ -209,13 +209,28 @@ P2 不引入 Folo 社区、关注关系、钱包、支付、移动端或完整 A
 
 **验收：**
 
-- [ ] 能力声明包括支持的内容类型、是否需凭据、最大大小、是否幂等。
-- [ ] 导出请求使用稳定幂等 ID，结构化返回远端 ID/URL/可重试错误。
-- [ ] ViewModel 不读取适配器秘密或供应商响应细节。
+- [x] 能力声明包括支持的内容类型、是否需凭据、最大大小、是否幂等。
+- [x] 导出请求使用稳定幂等 ID，结构化返回远端 ID/URL/可重试错误。
+- [x] ViewModel 不读取适配器秘密或供应商响应细节。
 
 **验证：** 契约、取消、幂等和错误映射测试。
 
 **参考：** Folo [`useEntryActions.tsx`](https://github.com/RSSNext/Folo/blob/773f1bfe218ac349b9fb9b5cbd982c320f6b414f/apps/desktop/layer/renderer/src/hooks/biz/useEntryActions.tsx) 的动作集合；LenxTool 以适配器契约重写。
+
+**冻结规格（2026-07-29）：**
+
+- 每个适配器仅通过 `IEntryExporter` 暴露不可变能力快照与单次 `ExportAsync`；能力使用稳定的 `ExporterId`，声明支持的 `EntryViewKind`、是否需要凭据、最大内容字节数与是否幂等。适配器负责持有自己的供应商客户端和凭据访问，统一请求、结果及协调器接口均不出现 token、密码、请求/响应正文或任意供应商对象。
+- `EntryExportRequest` 只携带导出器 ID、不含秘密的本地目标引用、统一 `FeedEntry`、视图类型、待导出内容字节数和 64 位小写 SHA-256 幂等键。工厂以导出器、目标、条目 ID、内容哈希与视图类型的长度前缀规范输入生成稳定键；相同逻辑操作跨进程重建得到同一键，不同目标、内容版本或视图得到不同键。
+- `EntryExportResult` 只返回同一幂等键、成功时的远端 ID/安全 HTTP(S) URL，或失败时的封闭错误码、可重试标志和非负 `Retry-After`；取消继续遵循 .NET `OperationCanceledException`，不伪装成失败结果。适配器可抛出仅携带上述结构化错误的 `EntryExportException`，协调器负责映射；未知异常映射为不含异常正文的 `Unknown`。
+- 协调器在调用适配器前验证导出器、视图能力、请求大小和幂等键，在调用后验证结果键及成功/失败形状；重复导出持久队列、凭据状态与主机策略分别留给 P2-09 和 P2-08，本项不新增 DI/UI、schema、网络请求或默认启用的外部目标。
+
+**实现切片：**
+
+1. 先以 Core 失败测试冻结能力、稳定键、路由、超限/不支持预检、取消、结构化错误映射和适配器结果校验。
+2. 新增最小模型、接口、验证器与纯 Core 协调器，不接入现有 ViewModel 或任何具体供应商。
+3. 完成 Core 聚焦测试、全量 .NET/Worker/typecheck/Release 门禁、文档与隐私复核后独立推送。
+
+**完成记录（2026-07-29）：** Core 新增 `IEntryExporter`/`IEntryExportCoordinator`、不可变能力快照、统一请求/结果、封闭错误码和仅携带结构化错误的 `EntryExportException`。请求工厂使用导出器、目标引用、条目 ID、内容哈希和视图类型的长度前缀输入生成 64 位小写 SHA-256 键；协调器会重算并拒绝伪造键，在进入适配器前完成导出器存在性、内容类型与最大字节数预检。能力集合复制、排序并拒绝空类型/重复 ID；适配器的返回键、成功/失败形状、远端引用和 HTTP(S) URL 也会复核，带用户信息的 URL 被阻断。调用方取消原样传播；封闭适配器错误保留可重试语义并把 `Retry-After` 限制到 0～7 天，未知异常只映射为不含异常正文的 `Unknown`。14 项 Core 场景覆盖上述契约以及公开操作模型无 token/password/credential/response 属性；最终门禁为 Core 161/161、Infrastructure 390/390、App/WPF 292/292、Worker 70/70、strict typecheck 与 Release build 0 警告/0 错误。本项未注册具体适配器、未修改 ViewModel/DI、未发起网络请求，也未新增 schema、秘密存储或依赖，因此默认仍没有任何外部导出。
 
 ### P2-08：集成策略、凭据与目标健康检查
 
