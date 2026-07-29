@@ -13,6 +13,8 @@ public sealed class MarkdownEntryExporter : IEntryExporter, IDisposable
 {
     private const int BufferSize = 80 * 1024;
     private const int VersionKeyLength = 20;
+    internal const long MaximumContentBytes = 8L * 1024 * 1024;
+    internal const long MaximumOutputBytes = 12L * 1024 * 1024;
     private static readonly UTF8Encoding Utf8WithoutBom =
         new(encoderShouldEmitUTF8Identifier: false);
     private readonly Dictionary<string, MarkdownExportTarget>
@@ -48,7 +50,7 @@ public sealed class MarkdownEntryExporter : IEntryExporter, IDisposable
         "Markdown 文件",
         Array.AsReadOnly(Enum.GetValues<EntryViewKind>()),
         RequiresCredentials: false,
-        MaximumContentBytes: null,
+        MaximumContentBytes,
         // 新版本文件名由请求幂等键派生；崩溃恢复不会再次制造副本。
         IsIdempotent: true);
 
@@ -68,6 +70,7 @@ public sealed class MarkdownEntryExporter : IEntryExporter, IDisposable
         {
             throw Failure(EntryExportErrorCode.InvalidRequest);
         }
+        EnsureWithinContentBounds(request);
 
         await _exportGate.WaitAsync(cancellationToken)
             .ConfigureAwait(false);
@@ -83,6 +86,12 @@ public sealed class MarkdownEntryExporter : IEntryExporter, IDisposable
             when (cancellationToken.IsCancellationRequested)
         {
             throw;
+        }
+        catch (MarkdownRenderLimitExceededException exception)
+        {
+            throw Failure(
+                EntryExportErrorCode.ContentTooLarge,
+                exception);
         }
         catch (UnauthorizedAccessException exception)
         {
@@ -108,7 +117,7 @@ public sealed class MarkdownEntryExporter : IEntryExporter, IDisposable
         MarkdownExportTarget target,
         CancellationToken cancellationToken)
     {
-        Directory.CreateDirectory(target.RootDirectory);
+        // 任何输出预算失败都必须发生在创建目录或复制缓存资源之前。
         MarkdownExportPathPolicy.EnsureNoReparsePoints(
             target.RootDirectory);
         string stem = MarkdownExportPathPolicy.CreateFileStem(
@@ -130,33 +139,91 @@ public sealed class MarkdownEntryExporter : IEntryExporter, IDisposable
                 remoteUrl: null);
         }
 
-        IReadOnlyDictionary<string, string> localImages =
+        IReadOnlyList<CachedImagePlan> cachedImagePlans =
             target.ContentMode
                 == MarkdownExportContentMode.ContentWithCachedImages
-                ? await CopyCachedImagesAsync(
+                ? await PlanCachedImagesAsync(
                         request.Entry,
-                        target.RootDirectory,
                         cancellationToken)
                     .ConfigureAwait(false)
-                : new Dictionary<string, string>(
-                    StringComparer.Ordinal);
+                : [];
+        Dictionary<string, string> plannedImages =
+            cachedImagePlans.ToDictionary(
+                plan => plan.Candidate.SourceUrl,
+                plan => plan.RelativePath,
+                StringComparer.Ordinal);
         string markdown = MarkdownDocumentRenderer.Render(
             request.Entry,
             request.ViewKind,
             target.ContentMode,
-            localImages);
+            plannedImages,
+            target.RenderOptions,
+            checked((int)MaximumOutputBytes));
+
+        // 创建前先检查所有已存在祖先，创建后再次检查实际目录。
+        MarkdownExportPathPolicy.EnsureNoReparsePoints(
+            target.RootDirectory);
+        Directory.CreateDirectory(target.RootDirectory);
+        MarkdownExportPathPolicy.EnsureNoReparsePoints(
+            target.RootDirectory);
+        if (cachedImagePlans.Count > 0)
+        {
+            IReadOnlyDictionary<string, string> copiedImages =
+                await CopyCachedImagesAsync(
+                        cachedImagePlans,
+                        target.RootDirectory,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+            if (copiedImages.Count != plannedImages.Count)
+            {
+                // A cache entry may disappear between metadata lookup and
+                // opening its stream. Removing such links only shrinks output.
+                markdown = MarkdownDocumentRenderer.Render(
+                    request.Entry,
+                    request.ViewKind,
+                    target.ContentMode,
+                    copiedImages,
+                    target.RenderOptions,
+                    checked((int)MaximumOutputBytes));
+            }
+        }
+
         string temporaryPath = MarkdownExportPathPolicy
             .ResolveContainedPath(
                 target.RootDirectory,
                 $".{Guid.NewGuid():N}.md.tmp");
         try
         {
-            await File.WriteAllTextAsync(
-                    temporaryPath,
-                    markdown,
-                    Utf8WithoutBom,
-                    cancellationToken)
-                .ConfigureAwait(false);
+            int outputByteCount = Utf8WithoutBom.GetByteCount(markdown);
+            if (outputByteCount > MaximumOutputBytes)
+            {
+                throw Failure(
+                    EntryExportErrorCode.ContentTooLarge);
+            }
+            byte[] bytes = Utf8WithoutBom.GetBytes(markdown);
+            await using (var output = new FileStream(
+                temporaryPath,
+                FileMode.CreateNew,
+                FileAccess.Write,
+                FileShare.None,
+                BufferSize,
+                FileOptions.Asynchronous
+                | FileOptions.SequentialScan))
+            {
+                await output.WriteAsync(
+                        bytes,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                await output.FlushAsync(cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            // 临时写入后、原子移动前再次验证，缩短目录被替换的竞态窗口。
+            MarkdownExportPathPolicy.ResolveContainedPath(
+                target.RootDirectory,
+                Path.GetFileName(temporaryPath));
+            MarkdownExportPathPolicy.ResolveContainedPath(
+                target.RootDirectory,
+                Path.GetFileName(destination));
             File.Move(
                 temporaryPath,
                 destination,
@@ -174,22 +241,21 @@ public sealed class MarkdownEntryExporter : IEntryExporter, IDisposable
             remoteUrl: null);
     }
 
-    private async Task<IReadOnlyDictionary<string, string>>
-        CopyCachedImagesAsync(
+    private async Task<IReadOnlyList<CachedImagePlan>>
+        PlanCachedImagesAsync(
             FeedEntry entry,
-            string rootDirectory,
             CancellationToken cancellationToken)
     {
-        var exported = new Dictionary<string, string>(
-            StringComparer.Ordinal);
+        var plans = new List<CachedImagePlan>();
         if (_assetStore is null)
         {
-            return exported;
+            return plans;
         }
 
         foreach (MarkdownImageCandidate candidate
                  in MarkdownDocumentRenderer.FindImageCandidates(
-                     entry.SanitizedContent))
+                     entry.SanitizedContent,
+                     checked((int)MaximumOutputBytes)))
         {
             cancellationToken.ThrowIfCancellationRequested();
             EntryAsset? asset = await _assetStore.GetAsync(
@@ -205,19 +271,42 @@ public sealed class MarkdownEntryExporter : IEntryExporter, IDisposable
                 continue;
             }
 
-            await using Stream? source = await _assetStore
-                .OpenReadAsync(asset!, cancellationToken)
+            string extension = GetImageExtension(asset!.MimeType)!;
+            string assetFileName =
+                $"{asset.ContentHash}{extension}";
+            plans.Add(
+                new(
+                    candidate,
+                    asset,
+                    $"_assets/{assetFileName}"));
+        }
+        return plans;
+    }
+
+    private async Task<IReadOnlyDictionary<string, string>>
+        CopyCachedImagesAsync(
+            IReadOnlyList<CachedImagePlan> plans,
+            string rootDirectory,
+            CancellationToken cancellationToken)
+    {
+        var exported = new Dictionary<string, string>(
+            StringComparer.Ordinal);
+        foreach (CachedImagePlan plan in plans)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await using Stream? source = await _assetStore!
+                .OpenReadAsync(plan.Asset, cancellationToken)
                 .ConfigureAwait(false);
             if (source is null)
             {
                 continue;
             }
-            string extension = GetImageExtension(asset!.MimeType)!;
+
             string assetsDirectory = MarkdownExportPathPolicy
                 .ResolveContainedPath(rootDirectory, "_assets");
             Directory.CreateDirectory(assetsDirectory);
-            string assetFileName =
-                $"{asset.ContentHash}{extension}";
+            string assetFileName = Path.GetFileName(
+                plan.RelativePath);
             string destination = MarkdownExportPathPolicy
                 .ResolveContainedPath(
                     assetsDirectory,
@@ -252,8 +341,8 @@ public sealed class MarkdownEntryExporter : IEntryExporter, IDisposable
             {
                 TryDelete(temporaryPath);
             }
-            exported[candidate.SourceUrl] =
-                $"_assets/{assetFileName}";
+            exported[plan.Candidate.SourceUrl] =
+                plan.RelativePath;
         }
         return exported;
     }
@@ -342,6 +431,48 @@ public sealed class MarkdownEntryExporter : IEntryExporter, IDisposable
         };
     }
 
+    private static void EnsureWithinContentBounds(
+        EntryExportRequest request)
+    {
+        if (request.ContentBytes < 0)
+        {
+            throw Failure(EntryExportErrorCode.InvalidRequest);
+        }
+        if (request.ContentBytes > MaximumContentBytes)
+        {
+            throw Failure(EntryExportErrorCode.ContentTooLarge);
+        }
+
+        long actualBytes = 0;
+        AddUtf8Bytes(ref actualBytes, request.Entry.Title);
+        AddUtf8Bytes(ref actualBytes, request.Entry.NormalizedUrl);
+        AddUtf8Bytes(ref actualBytes, request.Entry.Author);
+        AddUtf8Bytes(ref actualBytes, request.Entry.SanitizedContent);
+        AddUtf8Bytes(ref actualBytes, request.Entry.Id);
+        AddUtf8Bytes(ref actualBytes, request.Entry.FeedId);
+        AddUtf8Bytes(ref actualBytes, request.Entry.ContentHash);
+        foreach (string category in request.Entry.Categories)
+        {
+            AddUtf8Bytes(ref actualBytes, category);
+        }
+        if (actualBytes > MaximumContentBytes)
+        {
+            throw Failure(EntryExportErrorCode.ContentTooLarge);
+        }
+    }
+
+    private static void AddUtf8Bytes(
+        ref long total,
+        string? value)
+    {
+        if (value is null)
+        {
+            return;
+        }
+        total = checked(
+            total + Utf8WithoutBom.GetByteCount(value));
+    }
+
     private static EntryExportException Failure(
         EntryExportErrorCode code,
         Exception? innerException = null,
@@ -368,4 +499,9 @@ public sealed class MarkdownEntryExporter : IEntryExporter, IDisposable
     }
 
     public void Dispose() => _exportGate.Dispose();
+
+    private sealed record CachedImagePlan(
+        MarkdownImageCandidate Candidate,
+        EntryAsset Asset,
+        string RelativePath);
 }

@@ -67,6 +67,161 @@ public sealed class EntryExportTaskRepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task ExplicitEnqueueRevivesFailedAndCancelledButNotCompletedTask()
+    {
+        using SqliteDatabase database = await CreateDatabaseAsync();
+        var repository = new EntryExportTaskRepository(database);
+        EntryExportRequest request = Request();
+        await repository.EnqueueAsync(
+            request,
+            Now,
+            CancellationToken.None);
+        EntryExportTaskLease failedLease =
+            Assert.IsType<EntryExportTaskLease>(
+                await repository.ClaimDueAsync(
+                    Now,
+                    TimeSpan.FromMinutes(5),
+                    CancellationToken.None));
+        await repository.FailAsync(
+            failedLease,
+            EntryExportTaskErrorCode.DestinationUnavailable,
+            Now.AddMinutes(1),
+            CancellationToken.None);
+
+        EntryExportEnqueueResult revivedFailure =
+            await repository.EnqueueAsync(
+                request,
+                Now.AddMinutes(2),
+                CancellationToken.None);
+
+        Assert.True(revivedFailure.Created);
+        Assert.Equal(EntryExportTaskStatus.Queued, revivedFailure.Task.Status);
+        Assert.Equal(0, revivedFailure.Task.AttemptCount);
+        Assert.Null(revivedFailure.Task.LastErrorCode);
+        Assert.Null(revivedFailure.Task.CompletedAt);
+
+        Assert.Equal(
+            EntryExportCancellationResult.Cancelled,
+            await repository.RequestCancellationAsync(
+                request.IdempotencyKey,
+                Now.AddMinutes(3),
+                CancellationToken.None));
+        EntryExportEnqueueResult revivedCancellation =
+            await repository.EnqueueAsync(
+                request,
+                Now.AddMinutes(4),
+                CancellationToken.None);
+        Assert.True(revivedCancellation.Created);
+        Assert.Equal(
+            EntryExportTaskStatus.Queued,
+            revivedCancellation.Task.Status);
+
+        EntryExportTaskLease completedLease =
+            Assert.IsType<EntryExportTaskLease>(
+                await repository.ClaimDueAsync(
+                    Now.AddMinutes(4),
+                    TimeSpan.FromMinutes(5),
+                    CancellationToken.None));
+        await repository.CompleteAsync(
+            completedLease,
+            Now.AddMinutes(5),
+            CancellationToken.None);
+        EntryExportEnqueueResult completedDuplicate =
+            await repository.EnqueueAsync(
+                request,
+                Now.AddMinutes(6),
+                CancellationToken.None);
+
+        Assert.False(completedDuplicate.Created);
+        Assert.Equal(
+            EntryExportTaskStatus.Completed,
+            completedDuplicate.Task.Status);
+    }
+
+    [Fact]
+    public async Task ConcurrentExplicitEnqueueRevivesFailedTaskExactlyOnceAndResetsLifecycle()
+    {
+        using SqliteDatabase database = await CreateDatabaseAsync();
+        var firstRepository = new EntryExportTaskRepository(database);
+        var secondRepository = new EntryExportTaskRepository(database);
+        EntryExportRequest request = Request();
+        await firstRepository.EnqueueAsync(
+            request,
+            Now,
+            CancellationToken.None);
+        EntryExportTaskLease failedLease =
+            Assert.IsType<EntryExportTaskLease>(
+                await firstRepository.ClaimDueAsync(
+                    Now,
+                    TimeSpan.FromMinutes(5),
+                    CancellationToken.None));
+        await firstRepository.FailAsync(
+            failedLease,
+            EntryExportTaskErrorCode.DestinationUnavailable,
+            Now.AddMinutes(1),
+            CancellationToken.None);
+        DateTimeOffset revivedAt = Now.AddMinutes(2);
+
+        EntryExportEnqueueResult[] results = await Task.WhenAll(
+            firstRepository.EnqueueAsync(
+                request,
+                revivedAt,
+                CancellationToken.None),
+            secondRepository.EnqueueAsync(
+                request,
+                revivedAt,
+                CancellationToken.None));
+
+        Assert.Single(results, result => result.Created);
+        Assert.All(
+            results,
+            result =>
+            {
+                Assert.Equal(
+                    EntryExportTaskStatus.Queued,
+                    result.Task.Status);
+                Assert.Equal(0, result.Task.AttemptCount);
+                Assert.Equal(revivedAt, result.Task.CreatedAt);
+                Assert.Equal(revivedAt, result.Task.UpdatedAt);
+                Assert.Equal(revivedAt, result.Task.NextAttemptAt);
+                Assert.Null(result.Task.LastErrorCode);
+                Assert.Null(result.Task.CompletedAt);
+            });
+
+        await using SqliteConnection connection =
+            await database.OpenConnectionAsync(CancellationToken.None);
+        await using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT status, content_bytes, attempt_count, next_attempt_at,
+                   lease_token, lease_expires_at, cancellation_requested,
+                   last_error_code, created_at, updated_at, completed_at
+            FROM entry_export_tasks
+            WHERE idempotency_key=$idempotencyKey;
+            """;
+        command.Parameters.AddWithValue(
+            "$idempotencyKey",
+            request.IdempotencyKey);
+        await using SqliteDataReader reader =
+            await command.ExecuteReaderAsync(CancellationToken.None);
+        Assert.True(await reader.ReadAsync(CancellationToken.None));
+        string revivedTimestamp = revivedAt.ToUniversalTime().ToString(
+            "O",
+            System.Globalization.CultureInfo.InvariantCulture);
+        Assert.Equal("QUEUED", reader.GetString(0));
+        Assert.Equal(request.ContentBytes, reader.GetInt64(1));
+        Assert.Equal(0, reader.GetInt32(2));
+        Assert.Equal(revivedTimestamp, reader.GetString(3));
+        Assert.True(reader.IsDBNull(4));
+        Assert.True(reader.IsDBNull(5));
+        Assert.Equal(0, reader.GetInt32(6));
+        Assert.True(reader.IsDBNull(7));
+        Assert.Equal(revivedTimestamp, reader.GetString(8));
+        Assert.Equal(revivedTimestamp, reader.GetString(9));
+        Assert.True(reader.IsDBNull(10));
+        Assert.False(await reader.ReadAsync(CancellationToken.None));
+    }
+
+    [Fact]
     public async Task RetrySurvivesRestartAndBecomesClaimableAtDueTime()
     {
         using (SqliteDatabase database = await CreateDatabaseAsync())

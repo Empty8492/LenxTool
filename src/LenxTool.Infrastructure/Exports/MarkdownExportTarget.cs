@@ -27,4 +27,16 @@ public sealed record MarkdownExportTarget(
     string TargetId,
     string RootDirectory,
     MarkdownExportContentMode ContentMode,
-    MarkdownExistingFileBehavior ExistingFileBehavior);
+    MarkdownExistingFileBehavior ExistingFileBehavior)
+{
+    internal MarkdownRenderOptions? RenderOptions { get; init; }
+}
+
+/// <summary>
+/// 为受信任的本地适配器提供正文模板和 front matter 扩展；
+/// 这些选项不参与文件名或目录计算。
+/// </summary>
+internal sealed record MarkdownRenderOptions(
+    string? TemplateMarkdown,
+    IReadOnlyList<string> Tags,
+    bool IncludeSourceLink);

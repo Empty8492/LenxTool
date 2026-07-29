@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Diagnostics;
 using System.Text;
 using LenxTool.Core.Contracts;
+using LenxTool.Core.Errors;
 using LenxTool.Core.Exports;
 using LenxTool.Core.Models;
 using LenxTool.Infrastructure.Exports;
@@ -63,7 +64,7 @@ public sealed class MarkdownEntryExporterTests : IDisposable
 
             第一段 **加粗**。
 
-            [站点](https://example.com/reference)
+            [站点](<https://example.com/reference>)
 
             """.Replace("\r\n", "\n", StringComparison.Ordinal),
             Encoding.UTF8.GetString(bytes));
@@ -135,6 +136,7 @@ public sealed class MarkdownEntryExporterTests : IDisposable
     [Theory]
     [InlineData("中文标题")]
     [InlineData("CON")]
+    [InlineData("CON.txt")]
     [InlineData(@"..\..\secret/../../evil")]
     [InlineData("标题<>:\"/\\|?*结尾. ")]
     public async Task ExportAsyncKeepsSanitizedFileInsideRoot(string title)
@@ -238,7 +240,7 @@ public sealed class MarkdownEntryExporterTests : IDisposable
         string contentMarkdown = await ReadAsync(_root, "content", contentResult);
         string imageMarkdown = await ReadAsync(_root, "images", imagesResult);
         Assert.Contains(
-            "[阅读原文](https://example.com/articles/42)",
+            "[阅读原文](<https://example.com/articles/42>)",
             linkMarkdown,
             StringComparison.Ordinal);
         Assert.DoesNotContain("本地正文", linkMarkdown, StringComparison.Ordinal);
@@ -390,6 +392,307 @@ public sealed class MarkdownEntryExporterTests : IDisposable
                 "*.md").Length);
     }
 
+    [Fact]
+    public async Task ExportAsyncRejectsDeclaredContentAboveInputLimit()
+    {
+        string exportRoot = Path.Combine(_root, "declared-limit");
+        using var exporter = CreateExporter(
+            new MarkdownExportTarget(
+                "declared-limit",
+                exportRoot,
+                MarkdownExportContentMode.Content,
+                MarkdownExistingFileBehavior.Overwrite));
+        EntryExportRequest request =
+            Request("declared-limit", Entry()) with
+            {
+                ContentBytes =
+                    MarkdownEntryExporter.MaximumContentBytes + 1
+            };
+
+        EntryExportException exception =
+            await Assert.ThrowsAsync<EntryExportException>(
+                () => exporter.ExportAsync(
+                    request,
+                    CancellationToken.None));
+
+        Assert.Equal(
+            EntryExportErrorCode.ContentTooLarge,
+            exception.Error.Code);
+        Assert.False(Directory.Exists(exportRoot));
+    }
+
+    [Fact]
+    public async Task ExportAsyncRejectsActualFieldsAboveInputLimitWhenDeclaredSmall()
+    {
+        string exportRoot = Path.Combine(_root, "actual-limit");
+        using var exporter = CreateExporter(
+            new MarkdownExportTarget(
+                "actual-limit",
+                exportRoot,
+                MarkdownExportContentMode.Content,
+                MarkdownExistingFileBehavior.Overwrite));
+        FeedEntry entry = Entry(
+            content: new string(
+                'a',
+                checked((int)MarkdownEntryExporter.MaximumContentBytes)));
+        EntryExportRequest request =
+            Request("actual-limit", entry) with
+            {
+                ContentBytes = 1
+            };
+
+        EntryExportException exception =
+            await Assert.ThrowsAsync<EntryExportException>(
+                () => exporter.ExportAsync(
+                    request,
+                    CancellationToken.None));
+
+        Assert.Equal(
+            EntryExportErrorCode.ContentTooLarge,
+            exception.Error.Code);
+        Assert.False(Directory.Exists(exportRoot));
+    }
+
+    [Fact]
+    public async Task ExportAsyncAcceptsActualFieldsAtExactInputLimit()
+    {
+        string exportRoot = Path.Combine(_root, "exact-limit");
+        using var exporter = CreateExporter(
+            new MarkdownExportTarget(
+                "exact-limit",
+                exportRoot,
+                MarkdownExportContentMode.Content,
+                MarkdownExistingFileBehavior.Overwrite));
+        FeedEntry empty = Entry(content: string.Empty);
+        int metadataBytes = ActualExportInputBytes(empty);
+        FeedEntry entry = empty with
+        {
+            SanitizedContent = new string(
+                'a',
+                checked(
+                    (int)MarkdownEntryExporter.MaximumContentBytes
+                    - metadataBytes))
+        };
+
+        EntryExportResult result = await exporter.ExportAsync(
+            Request("exact-limit", entry),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.True(
+            File.Exists(
+                Path.Combine(
+                    exportRoot,
+                    Assert.IsType<string>(result.RemoteId))));
+    }
+
+    [Fact]
+    public void RenderRejectsDepthWeightedWorkAmplification()
+    {
+        const int MaximumOutputBytes = 64 * 1024;
+        const int NestedDepth = 40;
+        string content =
+            string.Concat(Enumerable.Repeat("<div>", NestedDepth))
+            + new string('a', 8 * 1024)
+            + string.Concat(Enumerable.Repeat("</div>", NestedDepth));
+
+        Assert.Throws<MarkdownRenderLimitExceededException>(
+            () => MarkdownDocumentRenderer.Render(
+                Entry(content: content),
+                EntryViewKind.Article,
+                MarkdownExportContentMode.Content,
+                new Dictionary<string, string>(StringComparer.Ordinal),
+                renderOptions: null,
+                MaximumOutputBytes));
+    }
+
+    [Fact]
+    public async Task ExportAsyncRejectsDepthWeightedWorkBeforeCreatingTarget()
+    {
+        const int NestedDepth = 40;
+        string exportRoot = Path.Combine(_root, "work-amplification");
+        using var exporter = CreateExporter(
+            new MarkdownExportTarget(
+                "work-amplification",
+                exportRoot,
+                MarkdownExportContentMode.Content,
+                MarkdownExistingFileBehavior.Overwrite));
+        string content =
+            string.Concat(Enumerable.Repeat("<div>", NestedDepth))
+            + new string('a', 1024 * 1024)
+            + string.Concat(Enumerable.Repeat("</div>", NestedDepth));
+
+        EntryExportException exception =
+            await Assert.ThrowsAsync<EntryExportException>(
+                () => exporter.ExportAsync(
+                    Request(
+                        "work-amplification",
+                        Entry(content: content)),
+                    CancellationToken.None));
+
+        Assert.Equal(
+            EntryExportErrorCode.ContentTooLarge,
+            exception.Error.Code);
+        Assert.False(exception.Error.IsRetryable);
+        Assert.False(Directory.Exists(exportRoot));
+    }
+
+    [Fact]
+    public void RenderRejectsMarkupFloodBeforeBuildingDom()
+    {
+        string content = string.Concat(
+            Enumerable.Repeat(
+                "<div>",
+                MarkdownDocumentRenderer.MaximumHtmlNodeCount + 1));
+
+        Assert.Throws<MarkdownRenderLimitExceededException>(
+            () => MarkdownDocumentRenderer.Render(
+                Entry(content: content),
+                EntryViewKind.Article,
+                MarkdownExportContentMode.Content,
+                new Dictionary<string, string>(StringComparer.Ordinal),
+                renderOptions: null,
+                maximumOutputBytes: 64 * 1024));
+    }
+
+    [Fact]
+    public void RenderAcceptsMaximumTextNodeDepthAndRejectsNextDepth()
+    {
+        int acceptedElementDepth =
+            MarkdownDocumentRenderer.MaximumHtmlDepth - 1;
+        string accepted =
+            string.Concat(Enumerable.Repeat("<div>", acceptedElementDepth))
+            + "x"
+            + string.Concat(Enumerable.Repeat("</div>", acceptedElementDepth));
+        string rejected =
+            $"<div>{accepted}</div>";
+
+        _ = MarkdownDocumentRenderer.Render(
+            Entry(content: accepted),
+            EntryViewKind.Article,
+            MarkdownExportContentMode.Content,
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            renderOptions: null,
+            maximumOutputBytes: 64 * 1024);
+        Assert.Throws<MarkdownRenderLimitExceededException>(
+            () => MarkdownDocumentRenderer.Render(
+                Entry(content: rejected),
+                EntryViewKind.Article,
+                MarkdownExportContentMode.Content,
+                new Dictionary<string, string>(StringComparer.Ordinal),
+                renderOptions: null,
+                maximumOutputBytes: 64 * 1024));
+    }
+
+    [Theory]
+    [InlineData("pre")]
+    [InlineData("code")]
+    public void RenderDoesNotEscapeLargeCodeBeforeCodeFormatting(
+        string elementName)
+    {
+        string code = new('*', 48 * 1024);
+        string markdown = MarkdownDocumentRenderer.Render(
+            Entry(
+                content:
+                    $"<{elementName}>{code}</{elementName}>"),
+            EntryViewKind.Article,
+            MarkdownExportContentMode.Content,
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            renderOptions: null,
+            maximumOutputBytes: 64 * 1024);
+
+        Assert.Contains(code, markdown, StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "\\*\\*\\*",
+            markdown,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenderDropsLargeScriptWithoutRenderingItsChildren()
+    {
+        const string Marker = "must-not-be-rendered";
+        string markdown = MarkdownDocumentRenderer.Render(
+            Entry(
+                content:
+                    $"<script>{Marker}{new string('*', 64 * 1024)}</script>"),
+            EntryViewKind.Article,
+            MarkdownExportContentMode.Content,
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            renderOptions: null,
+            maximumOutputBytes: 8 * 1024);
+
+        Assert.DoesNotContain(
+            Marker,
+            markdown,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ExportAsyncRejectsExpandedCachedImageOutputBeforeFileEffects()
+    {
+        const string ImageUrl = "https://example.com/cover.png";
+        string exportRoot = Path.Combine(_root, "bounded-cached-output");
+        var assetStore = new FakeAssetStore(
+            ImageUrl,
+            [0x89, 0x50, 0x4E, 0x47]);
+        using var exporter = new MarkdownEntryExporter(
+            [
+                new(
+                    "bounded-cached-output",
+                    exportRoot,
+                    MarkdownExportContentMode.ContentWithCachedImages,
+                    MarkdownExistingFileBehavior.Overwrite)
+            ],
+            assetStore);
+        string content =
+            $"<p>{new string('*', 7 * 1024 * 1024)}</p>"
+            + $"<img src=\"{ImageUrl}\" alt=\"cover\">";
+
+        EntryExportException exception =
+            await Assert.ThrowsAsync<EntryExportException>(
+                () => exporter.ExportAsync(
+                    Request(
+                        "bounded-cached-output",
+                        Entry(content: content)),
+                    CancellationToken.None));
+
+        Assert.Equal(
+            EntryExportErrorCode.ContentTooLarge,
+            exception.Error.Code);
+        Assert.Equal(1, assetStore.GetCount);
+        Assert.Equal(0, assetStore.OpenCount);
+        Assert.False(Directory.Exists(exportRoot));
+    }
+
+    [Fact]
+    public async Task ExportAsyncRejectsNegativeDeclaredContentSize()
+    {
+        string exportRoot = Path.Combine(_root, "negative-size");
+        using var exporter = CreateExporter(
+            new MarkdownExportTarget(
+                "negative-size",
+                exportRoot,
+                MarkdownExportContentMode.Content,
+                MarkdownExistingFileBehavior.Overwrite));
+        EntryExportRequest request =
+            Request("negative-size", Entry()) with
+            {
+                ContentBytes = -1
+            };
+
+        EntryExportException exception =
+            await Assert.ThrowsAsync<EntryExportException>(
+                () => exporter.ExportAsync(
+                    request,
+                    CancellationToken.None));
+
+        Assert.Equal(
+            EntryExportErrorCode.InvalidRequest,
+            exception.Error.Code);
+        Assert.False(Directory.Exists(exportRoot));
+    }
+
     private static MarkdownEntryExporter CreateExporter(
         params MarkdownExportTarget[] targets) =>
         new(targets, assetStore: null);
@@ -428,6 +731,23 @@ public sealed class MarkdownEntryExporterTests : IDisposable
             DateTimeOffset.Parse(
                 "2026-07-29T12:30:00+00:00",
                 CultureInfo.InvariantCulture));
+
+    private static int ActualExportInputBytes(FeedEntry entry)
+    {
+        int total = 0;
+        total += Encoding.UTF8.GetByteCount(entry.Title);
+        total += Encoding.UTF8.GetByteCount(
+            entry.NormalizedUrl ?? string.Empty);
+        total += Encoding.UTF8.GetByteCount(
+            entry.Author ?? string.Empty);
+        total += Encoding.UTF8.GetByteCount(entry.SanitizedContent);
+        total += Encoding.UTF8.GetByteCount(entry.Id);
+        total += Encoding.UTF8.GetByteCount(entry.FeedId);
+        total += Encoding.UTF8.GetByteCount(entry.ContentHash);
+        total += entry.Categories.Sum(
+            Encoding.UTF8.GetByteCount);
+        return total;
+    }
 
     private static async Task<string> ReadAsync(
         string root,

@@ -38,6 +38,29 @@ public sealed class EntryExportTaskRepository(SqliteDatabase database)
         command.Parameters.AddWithValue("$updatedAt", timestamp);
         bool created = await command.ExecuteNonQueryAsync(cancellationToken)
             .ConfigureAwait(false) == 1;
+        if (!created)
+        {
+            // 用户再次显式入队时，可安全复活尚未产生成功副作用的终态。
+            // 适配器已在队列入口保证幂等；Completed 仍永久去重。
+            command.CommandText = """
+                UPDATE entry_export_tasks
+                SET status='QUEUED',
+                    content_bytes=$contentBytes,
+                    attempt_count=0,
+                    next_attempt_at=$nextAttemptAt,
+                    lease_token=NULL,
+                    lease_expires_at=NULL,
+                    cancellation_requested=0,
+                    last_error_code=NULL,
+                    created_at=$createdAt,
+                    updated_at=$updatedAt,
+                    completed_at=NULL
+                WHERE idempotency_key=$idempotencyKey
+                  AND status IN ('FAILED', 'CANCELLED');
+                """;
+            created = await command.ExecuteNonQueryAsync(cancellationToken)
+                .ConfigureAwait(false) == 1;
+        }
 
         command.Parameters.Clear();
         command.CommandText = SelectColumnsSql + """

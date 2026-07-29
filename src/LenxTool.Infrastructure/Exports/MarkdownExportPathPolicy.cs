@@ -78,6 +78,75 @@ internal static class MarkdownExportPathPolicy
     }
 
     /// <summary>
+    /// 把用户选择的 Vault 子目录约束为普通相对目录段；路径不能借助
+    /// 根路径、父目录、ADS 或 Windows 设备名改变写入边界。
+    /// </summary>
+    public static string NormalizeRelativeDirectory(
+        string? relativeDirectory)
+    {
+        string value = (relativeDirectory ?? string.Empty).Trim();
+        if (value.Length == 0)
+        {
+            return string.Empty;
+        }
+        if (Path.IsPathRooted(value))
+        {
+            throw new ArgumentException(
+                "Obsidian 导出目录必须是相对路径。",
+                nameof(relativeDirectory));
+        }
+
+        string[] segments = value.Split(
+            [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar],
+            StringSplitOptions.None);
+        if (segments.Any(segment =>
+                segment.Length == 0
+                || segment is "." or ".."
+                || segment.EndsWith(' ') || segment.EndsWith('.')
+                || segment.Any(character =>
+                    char.IsControl(character)
+                    || InvalidWindowsFileNameCharacters.Contains(character))
+                || IsReservedWindowsName(segment)))
+        {
+            throw new ArgumentException(
+                "Obsidian 导出目录包含不安全的路径段。",
+                nameof(relativeDirectory));
+        }
+        return string.Join(Path.DirectorySeparatorChar, segments);
+    }
+
+    public static string ResolveContainedDirectory(
+        string canonicalRoot,
+        string? relativeDirectory)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(canonicalRoot);
+        string root = Path.GetFullPath(canonicalRoot);
+        string relative = NormalizeRelativeDirectory(
+            relativeDirectory);
+        string candidate = relative.Length == 0
+            ? root
+            : Path.GetFullPath(Path.Combine(root, relative));
+        string rootPrefix = root.EndsWith(
+                Path.DirectorySeparatorChar)
+            ? root
+            : root + Path.DirectorySeparatorChar;
+        if (!string.Equals(
+                root,
+                candidate,
+                StringComparison.OrdinalIgnoreCase)
+            && !candidate.StartsWith(
+                rootPrefix,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "Obsidian 导出目录越过了已授权的 Vault 边界。");
+        }
+        EnsureNoReparsePoints(root);
+        EnsureNoReparsePoints(candidate);
+        return candidate;
+    }
+
+    /// <summary>
     /// 字符串包含关系无法阻止 junction/symlink 把真实写入位置重定向到根外；
     /// 因此所有已存在的路径组件都必须拒绝重解析点。
     /// </summary>
@@ -154,6 +223,15 @@ internal static class MarkdownExportPathPolicy
         }
         return TruncateWithoutSplittingRune(safe, maximumLength)
             .TrimEnd(' ', '.');
+    }
+
+    private static bool IsReservedWindowsName(string segment)
+    {
+        int extensionIndex = segment.IndexOf('.');
+        string baseName = extensionIndex < 0
+            ? segment
+            : segment[..extensionIndex];
+        return ReservedWindowsNames.Contains(baseName);
     }
 
     private static string TruncateWithoutSplittingRune(
