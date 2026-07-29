@@ -502,6 +502,98 @@ public sealed class FeedEntryRepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task ActiveEntryExportProtectsSourceFromRetentionUntilTaskIsTerminal()
+    {
+        using SqliteDatabase database = await CreateDatabaseAsync();
+        AppPaths paths = new(_testRoot);
+        var entries = new FeedEntryRepository(database);
+        var exports = new EntryExportTaskRepository(database);
+        using var assets = new EntryAssetStore(
+            database,
+            paths,
+            new(MaximumBytes: 1024, MaximumAssetBytes: 128));
+        var maintenance = new DatabaseMaintenanceService(
+            paths,
+            database,
+            entries,
+            assets);
+        DateTimeOffset cutoff = Now.AddDays(-180);
+        FeedEntry expired = Entry(
+            "active-export",
+            "Active export",
+            "active-export-marker",
+            Now.AddDays(-200));
+        await entries.UpsertAsync(
+            FeedId,
+            [expired],
+            CancellationToken.None);
+        EntryExportRequest request = EntryExportRequest.Create(
+            "markdown",
+            "retention-target",
+            expired,
+            EntryViewKind.Article,
+            128);
+        await exports.EnqueueAsync(
+            request,
+            Now,
+            CancellationToken.None);
+
+        StorageCleanupPreview queuedPreview =
+            await maintenance.PreviewCleanupAsync(
+                cutoff,
+                CancellationToken.None);
+        Assert.Equal(0, queuedPreview.ExpiredFeedEntryCount);
+        Assert.Equal(0, await entries.DeleteExpiredUnprotectedAsync(
+            cutoff,
+            100,
+            CancellationToken.None));
+        Assert.NotNull(await entries.GetByIdAsync(
+            expired.Id,
+            CancellationToken.None));
+
+        EntryExportTaskLease lease = Assert.IsType<EntryExportTaskLease>(
+            await exports.ClaimDueAsync(
+                Now,
+                TimeSpan.FromMinutes(5),
+                CancellationToken.None));
+        StorageCleanupPreview runningPreview =
+            await maintenance.PreviewCleanupAsync(
+                cutoff,
+                CancellationToken.None);
+        Assert.Equal(0, runningPreview.ExpiredFeedEntryCount);
+        Assert.Equal(0, await entries.DeleteExpiredUnprotectedAsync(
+            cutoff,
+            100,
+            CancellationToken.None));
+        Assert.NotNull(await entries.GetByIdAsync(
+            expired.Id,
+            CancellationToken.None));
+
+        await exports.CompleteAsync(
+            lease,
+            Now.AddMinutes(1),
+            CancellationToken.None);
+        StorageCleanupPreview completedPreview =
+            await maintenance.PreviewCleanupAsync(
+                cutoff,
+                CancellationToken.None);
+        Assert.Equal(1, completedPreview.ExpiredFeedEntryCount);
+        Assert.Equal(1, await entries.DeleteExpiredUnprotectedAsync(
+            cutoff,
+            100,
+            CancellationToken.None));
+        Assert.Null(await entries.GetByIdAsync(
+            expired.Id,
+            CancellationToken.None));
+        EntryExportTask history = Assert.IsType<EntryExportTask>(
+            await exports.GetAsync(
+                request.IdempotencyKey,
+                CancellationToken.None));
+        Assert.Equal(EntryExportTaskStatus.Completed, history.Status);
+        Assert.Equal(expired.Id, history.EntryId);
+    }
+
+    [Fact]
     public async Task UnifiedContentSearchReturnsFeedEntryWithCatalogSource()
     {
         using SqliteDatabase database = await CreateDatabaseAsync();

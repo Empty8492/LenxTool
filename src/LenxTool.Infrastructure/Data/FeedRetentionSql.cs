@@ -35,5 +35,9 @@ internal static class FeedRetentionSql
             JOIN media_jobs media_job ON media_job.id=delivery.media_job_id
             WHERE delivery.entry_id=e.id
               AND media_job.status IN ('Queued', 'Running'))
+        AND NOT EXISTS (
+            SELECT 1 FROM entry_export_tasks export_task
+            WHERE export_task.entry_id=e.id
+              AND export_task.status IN ('QUEUED', 'RUNNING'))
         """;
 }
