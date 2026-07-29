@@ -240,7 +240,8 @@ public sealed class ContentSearchRepositoryTests : IDisposable
                 ALTER TABLE app_notifications DROP COLUMN kind;
                 DROP TABLE feed_smart_views;
                 DROP TABLE feed_smart_view_state;
-                DELETE FROM schema_versions WHERE version IN (17, 18, 19, 20);
+                DROP TABLE entry_export_tasks;
+                DELETE FROM schema_versions WHERE version IN (17, 18, 19, 20, 21);
 
                 INSERT INTO media_jobs(
                     id, kind, input_path, status, progress, engine,
@@ -283,7 +284,7 @@ public sealed class ContentSearchRepositoryTests : IDisposable
         await using SqliteCommand version = verification.CreateCommand();
         version.CommandText = "SELECT MAX(version) FROM schema_versions;";
         Assert.Equal(
-            20L,
+            21L,
             (long)(await version.ExecuteScalarAsync(CancellationToken.None))!);
     }
 

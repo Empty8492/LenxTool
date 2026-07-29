@@ -8,16 +8,18 @@
 
 | 测试组 | 结果 |
 |---|---:|
-| LenxTool.Core.Tests | 161 passed |
-| LenxTool.Infrastructure.Tests | 390 passed |
-| LenxTool.App.Tests | 305 passed |
-| Cloudflare Worker Vitest | 70 passed |
+| LenxTool.Core.Tests | 173 passed |
+| LenxTool.Infrastructure.Tests | 414 passed |
+| LenxTool.App.Tests | 323 passed |
+| Cloudflare Worker Vitest | 74 passed |
 | Worker TypeScript strict typecheck | passed |
 | .NET build warnings | 0 |
 | NuGet vulnerable packages | 0 detected |
 | npm audit vulnerabilities | 0 detected |
 
-当前分组 Release 结果为 Core 161/161、Infrastructure 390/390、App/WPF 305/305，共 856/856；Worker workerd/D1 Vitest 70/70、Worker strict typecheck 与全解决方案 build 0 警告/0 错误。本轮未修改 NuGet/npm 依赖；最近一次 NuGet 在线漏洞扫描与 `npm audit` 均为 0 漏洞。
+当前分组 Release 结果为 Core 173/173、Infrastructure 414/414、App/WPF 323/323，共 910/910；Worker workerd/D1 Vitest 74/74、Worker strict typecheck 与全解决方案 build 0 警告/0 错误。本轮未修改 NuGet/npm 依赖；最近一次 NuGet 在线漏洞扫描与 `npm audit` 均为 0 漏洞。
+
+P2-09/P2-10 新增持久导出队列、五态数据库约束、租约心跳、精确重试、跨进程合作取消和 Markdown 本地文件导出回归。真实 SQLite 场景覆盖并发防重领、租约续期、失败重试后取消并模拟崩溃恢复，以及第二个服务取消第一个服务的长运行适配器；Markdown 场景覆盖三种内容模式、UTF-8 无 BOM、Windows/Unicode 安全文件名、覆盖/跳过/稳定新版本、缓存图片白名单、原子转正和 junction/reparse 拒绝。完整门禁为 Core 173/173、Infrastructure 414/414、App/WPF 323/323，共 910/910；Worker 74/74、strict typecheck 与 Release build 0 警告/0 错误。Wrangler 在受限环境尝试写沙箱外调试日志时报告 EPERM，但测试进程以退出码 0 完成 12/12 文件和 74/74 场景。
 
 P2-07 新增 14 项 Core 契约场景。统一能力快照覆盖支持的五类 `EntryViewKind`、是否需要凭据、最大内容字节数和适配器幂等性，并在协调器构造时复制、排序和校验。请求工厂按导出器/目标/条目/内容哈希/视图生成稳定 SHA-256 幂等键；协调器会拒绝伪造或非规范请求，并在调用适配器前阻断不存在的导出器、不支持的类型和超限内容。成功结果必须使用同一请求键并提供远端 ID 或无用户信息的 HTTP(S) URL；封闭适配器错误保留可重试与 0～7 天 `Retry-After`，调用方取消原样传播，未知异常不泄露供应商异常正文。反射隐私测试确认请求、结果和错误模型没有 token、password、credential 或 response 属性。完整 .NET 843/843、Worker 70/70、strict typecheck 与 Release build 0 警告/0 错误通过；未注册适配器、未修改 UI/DI、未发起网络请求，默认无外部导出。
 

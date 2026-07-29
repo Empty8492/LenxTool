@@ -6,6 +6,7 @@ using LenxTool.App.Services;
 using LenxTool.App.ViewModels;
 using LenxTool.Core.Contracts;
 using LenxTool.Core.Errors;
+using LenxTool.Core.Exports;
 using LenxTool.Core.Models;
 using LenxTool.Infrastructure.Data;
 using LenxTool.Infrastructure.Media;
@@ -246,6 +247,20 @@ public partial class App : Application
         services.AddSingleton<IOpmlFileService, OpmlFileService>();
         services.AddFeedDiscovery(CreateFeedDiscoveryOptions());
         services.AddEntryIntegrationInfrastructure();
+        // 队列基础设施默认不注册任何具体导出器，因此不会静默向外部目标投递。
+        services.AddSingleton<IEntryExportCoordinator>(static provider =>
+            new EntryExportCoordinator(
+                provider.GetServices<IEntryExporter>()));
+        services.AddSingleton<
+            IEntryExportTaskRepository,
+            EntryExportTaskRepository>();
+        services.AddSingleton(EntryExportQueueOptions.Default);
+        services.AddSingleton<EntryExportQueueService>();
+        services.AddSingleton<IEntryExportQueueService>(static provider =>
+            provider.GetRequiredService<EntryExportQueueService>());
+        services.AddSingleton<IEntryExportQueueProcessor>(static provider =>
+            provider.GetRequiredService<EntryExportQueueService>());
+        services.AddHostedService<EntryExportQueueBackgroundService>();
         services.AddArticleImages(ArticleImageDownloadOptions.Default);
         services.AddSingleton<FeedMediaDeliveryRepository>();
         services.AddSingleton<IFeedMediaDeliveryRepository>(static services =>

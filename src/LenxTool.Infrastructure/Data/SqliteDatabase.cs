@@ -10,7 +10,7 @@ public sealed partial class SqliteDatabase(
     AppPaths paths,
     ILogger<SqliteDatabase> logger) : IDisposable
 {
-    private const int CurrentSchemaVersion = 20;
+    private const int CurrentSchemaVersion = 21;
     private readonly SemaphoreSlim _initializationGate = new(1, 1);
     private bool _initialized;
     private bool _disposed;
@@ -404,6 +404,24 @@ public sealed partial class SqliteDatabase(
                 command.Parameters.AddWithValue(
                     "$checksum",
                     "lenx-schema-v20-feed-smart-views");
+                await command.ExecuteNonQueryAsync(cancellationToken)
+                    .ConfigureAwait(false);
+                version = 20;
+            }
+
+            if (version < 21)
+            {
+                command.CommandText = MigrationTwentyOneSql;
+                command.Parameters.Clear();
+                await command.ExecuteNonQueryAsync(cancellationToken)
+                    .ConfigureAwait(false);
+                command.CommandText = "INSERT INTO schema_versions(version, applied_at, checksum) VALUES (21, $appliedAt, $checksum);";
+                command.Parameters.AddWithValue(
+                    "$appliedAt",
+                    DateTimeOffset.UtcNow.ToString("O"));
+                command.Parameters.AddWithValue(
+                    "$checksum",
+                    "lenx-schema-v21-entry-export-queue");
                 await command.ExecuteNonQueryAsync(cancellationToken)
                     .ConfigureAwait(false);
             }
@@ -1160,6 +1178,107 @@ public sealed partial class SqliteDatabase(
 
         CREATE INDEX ix_feed_smart_views_order
             ON feed_smart_views(sort_order, name, id);
+        """;
+
+    private const string MigrationTwentyOneSql = """
+        -- 导出历史不引用 feed_entries，避免源条目按保留策略删除时连带丢失审计状态。
+        -- 表中只保存重建请求所需的非秘密元数据，不保存凭据、正文或供应商响应。
+        CREATE TABLE entry_export_tasks(
+            idempotency_key TEXT PRIMARY KEY
+                CHECK(length(idempotency_key) = 64
+                    AND idempotency_key = lower(idempotency_key)
+                    AND idempotency_key NOT GLOB '*[^0-9a-f]*'),
+            exporter_id TEXT NOT NULL
+                CHECK(length(exporter_id) BETWEEN 1 AND 64),
+            target_id TEXT NOT NULL
+                CHECK(length(target_id) BETWEEN 1 AND 256),
+            entry_id TEXT NOT NULL
+                CHECK(length(entry_id) BETWEEN 1 AND 128),
+            content_hash TEXT NOT NULL
+                CHECK(length(content_hash) BETWEEN 1 AND 128),
+            view_kind TEXT NOT NULL CHECK(view_kind IN (
+                'Article', 'Picture', 'Audio', 'Video', 'Notification')),
+            content_bytes INTEGER NOT NULL
+                CHECK(typeof(content_bytes) = 'integer'
+                    AND content_bytes >= 0),
+            status TEXT NOT NULL CHECK(status IN (
+                'QUEUED', 'RUNNING', 'COMPLETED', 'FAILED', 'CANCELLED')),
+            attempt_count INTEGER NOT NULL DEFAULT 0
+                CHECK(typeof(attempt_count) = 'integer'
+                    AND attempt_count BETWEEN 0 AND 100),
+            next_attempt_at TEXT
+                CHECK(next_attempt_at IS NULL
+                    OR length(next_attempt_at) BETWEEN 20 AND 40),
+            lease_token TEXT
+                CHECK(lease_token IS NULL OR length(lease_token) = 36),
+            lease_expires_at TEXT
+                CHECK(lease_expires_at IS NULL
+                    OR length(lease_expires_at) BETWEEN 20 AND 40),
+            cancellation_requested INTEGER NOT NULL DEFAULT 0
+                CHECK(cancellation_requested IN (0, 1)),
+            last_error_code TEXT CHECK(last_error_code IS NULL OR
+                last_error_code IN (
+                    'InvalidRequest', 'ExporterNotFound',
+                    'UnsupportedContent', 'CredentialsRequired',
+                    'ContentTooLarge', 'RateLimited',
+                    'DestinationUnavailable', 'AccessDenied',
+                    'Conflict', 'ProviderRejected', 'Unknown',
+                    'EntryMissing', 'EntryChanged')),
+            created_at TEXT NOT NULL
+                CHECK(length(created_at) BETWEEN 20 AND 40),
+            updated_at TEXT NOT NULL
+                CHECK(length(updated_at) BETWEEN 20 AND 40),
+            completed_at TEXT
+                CHECK(completed_at IS NULL
+                    OR length(completed_at) BETWEEN 20 AND 40),
+            CHECK(
+                (status = 'QUEUED'
+                    AND next_attempt_at IS NOT NULL
+                    AND lease_token IS NULL
+                    AND lease_expires_at IS NULL
+                    AND cancellation_requested = 0
+                    AND completed_at IS NULL)
+                OR
+                (status = 'RUNNING'
+                    AND attempt_count >= 1
+                    AND next_attempt_at IS NULL
+                    AND lease_token IS NOT NULL
+                    AND lease_expires_at IS NOT NULL
+                    AND completed_at IS NULL)
+                OR
+                (status = 'COMPLETED'
+                    AND attempt_count >= 1
+                    AND next_attempt_at IS NULL
+                    AND lease_token IS NULL
+                    AND lease_expires_at IS NULL
+                    AND cancellation_requested = 0
+                    AND last_error_code IS NULL
+                    AND completed_at IS NOT NULL)
+                OR
+                (status = 'FAILED'
+                    AND attempt_count >= 1
+                    AND next_attempt_at IS NULL
+                    AND lease_token IS NULL
+                    AND lease_expires_at IS NULL
+                    AND cancellation_requested = 0
+                    AND last_error_code IS NOT NULL
+                    AND completed_at IS NOT NULL)
+                OR
+                (status = 'CANCELLED'
+                    AND next_attempt_at IS NULL
+                    AND lease_token IS NULL
+                    AND lease_expires_at IS NULL
+                    AND cancellation_requested = 0
+                    AND last_error_code IS NULL
+                    AND completed_at IS NOT NULL))
+        ) WITHOUT ROWID;
+
+        CREATE INDEX ix_entry_export_tasks_due
+            ON entry_export_tasks(
+                status, next_attempt_at, created_at, idempotency_key);
+        CREATE INDEX ix_entry_export_tasks_history
+            ON entry_export_tasks(
+                updated_at DESC, idempotency_key);
         """;
 
 }

@@ -2,6 +2,7 @@ using System.Reflection;
 using LenxTool.App.ViewModels;
 using LenxTool.App.Services;
 using LenxTool.Core.Contracts;
+using LenxTool.Core.Exports;
 using LenxTool.Core.Models;
 using LenxTool.Infrastructure.Data;
 using LenxTool.Infrastructure.Networking;
@@ -152,6 +153,18 @@ public sealed class DependencyInjectionTests
             IEntryIntegrationHealthService>());
         Assert.Empty(provider.GetServices<
             IEntryIntegrationHealthProbe>());
+        Assert.IsType<EntryExportTaskRepository>(
+            provider.GetRequiredService<IEntryExportTaskRepository>());
+        Assert.IsType<EntryExportCoordinator>(
+            provider.GetRequiredService<IEntryExportCoordinator>());
+        Assert.Same(
+            provider.GetRequiredService<IEntryExportQueueService>(),
+            provider.GetRequiredService<IEntryExportQueueProcessor>());
+        // 没有显式目标配置时，不注册任何适配器，后台队列不会静默投递。
+        Assert.Empty(provider.GetServices<IEntryExporter>());
+        Assert.Empty(
+            provider.GetRequiredService<IEntryExportCoordinator>()
+                .Capabilities);
         Assert.NotNull(provider.GetRequiredService<
             IntegrationSettingsViewModel>());
         Assert.NotNull(provider.GetRequiredService<
