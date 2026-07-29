@@ -53,6 +53,34 @@ public sealed class EntryIntegrationPolicyTests
     }
 
     [Fact]
+    public void ValidatorOnlyAllowsHostlessEnabledObsidianPolicy()
+    {
+        EntryIntegrationPolicy obsidian =
+            EntryIntegrationPolicyValidator.ValidateAndNormalize(
+                new(
+                    EntryIntegrationKind.Obsidian,
+                    IsEnabled: true,
+                    []));
+        EntryIntegrationPolicy disabledNetwork =
+            EntryIntegrationPolicyValidator.ValidateAndNormalize(
+                new(
+                    EntryIntegrationKind.Webhook,
+                    IsEnabled: false,
+                    []));
+
+        Assert.True(obsidian.IsEnabled);
+        Assert.Empty(obsidian.AllowedHosts);
+        Assert.False(disabledNetwork.IsEnabled);
+        Assert.Empty(disabledNetwork.AllowedHosts);
+        Assert.Throws<ArgumentException>(
+            () => EntryIntegrationPolicyValidator.ValidateAndNormalize(
+                new(
+                    EntryIntegrationKind.Webhook,
+                    IsEnabled: true,
+                    [])));
+    }
+
+    [Fact]
     public void PolicySetRejectsDuplicateAndUndefinedKinds()
     {
         var duplicate = new[]

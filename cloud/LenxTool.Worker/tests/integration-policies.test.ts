@@ -117,6 +117,67 @@ describe("Worker integration policies", () => {
     }>())).policies).toEqual([]);
   });
 
+  it("allows hostless Obsidian but keeps network integrations host-bound", async () => {
+    const admin = await seedSession("admin");
+    const user = await seedSession("user");
+    const accepted = await replace(
+      admin,
+      0,
+      "integration-obsidian-001",
+      [
+        {
+          kind: "OBSIDIAN",
+          isEnabled: true,
+          allowedHosts: []
+        },
+        {
+          kind: "WEBHOOK",
+          isEnabled: false,
+          allowedHosts: []
+        }
+      ]
+    );
+
+    expect(accepted.status).toBe(200);
+    expect(await accepted.clone().json()).toMatchObject({
+      policySetVersion: 1,
+      policies: [
+        {
+          kind: "OBSIDIAN",
+          isEnabled: true,
+          allowedHosts: []
+        },
+        {
+          kind: "WEBHOOK",
+          isEnabled: false,
+          allowedHosts: []
+        }
+      ]
+    });
+    expect(await read(user, "ACTIVE").then(response => response.json<{
+      policies: unknown[];
+    }>())).toMatchObject({
+      policies: [{
+        kind: "OBSIDIAN",
+        isEnabled: true,
+        allowedHosts: []
+      }]
+    });
+
+    const rejected = await replace(
+      admin,
+      1,
+      "integration-hostless-webhook",
+      [{
+        kind: "WEBHOOK",
+        isEnabled: true,
+        allowedHosts: []
+      }]
+    );
+    expect(rejected.status).toBe(400);
+    expect(await errorCode(rejected)).toBe("VALIDATION_ERROR");
+  });
+
   it("rejects ambiguous targets and preserves version/idempotency semantics", async () => {
     const admin = await seedSession("admin");
     const invalidHosts = [

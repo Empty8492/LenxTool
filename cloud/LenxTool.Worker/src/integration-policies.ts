@@ -388,12 +388,19 @@ function normalizePolicySet(values: unknown[]): IntegrationPolicy[] {
       input.allowedHosts.map(normalizeExactHost)
     )].sort();
     const isEnabled = requireBoolean(input.isEnabled, "启用状态");
-    if (isEnabled && allowedHosts.length === 0) {
+    if (isEnabled
+        && requiresAllowedHosts(kind)
+        && allowedHosts.length === 0) {
       throw validationError("启用集成前必须配置精确目标主机");
     }
     return { kind, isEnabled, allowedHosts };
   });
   return policies.sort(comparePolicies);
+}
+
+// Obsidian 只写用户授权的本地 Vault；其余集成仍受精确 DNS 白名单约束。
+function requiresAllowedHosts(kind: IntegrationKind): boolean {
+  return kind !== "OBSIDIAN";
 }
 
 function normalizeExactHost(value: unknown): string {

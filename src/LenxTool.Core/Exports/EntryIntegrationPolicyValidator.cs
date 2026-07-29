@@ -38,7 +38,9 @@ public static class EntryIntegrationPolicyValidator
             .Distinct(StringComparer.Ordinal)
             .Order(StringComparer.Ordinal)
             .ToArray();
-        if (input.IsEnabled && hosts.Length == 0)
+        if (input.IsEnabled
+            && RequiresAllowedHosts(input.Kind)
+            && hosts.Length == 0)
         {
             throw new ArgumentException(
                 "启用外部集成前必须配置至少一个精确目标主机。",
@@ -76,6 +78,14 @@ public static class EntryIntegrationPolicyValidator
             .ToArray();
         return Array.AsReadOnly(result);
     }
+
+    /// <summary>
+    /// Obsidian 首版只写用户显式授权的本地 Vault，不连接网络端点；
+    /// 其他集成仍必须由精确 DNS 白名单约束。
+    /// </summary>
+    private static bool RequiresAllowedHosts(
+        EntryIntegrationKind kind) =>
+        kind != EntryIntegrationKind.Obsidian;
 
     private static string NormalizeExactHost(string value)
     {
