@@ -512,6 +512,7 @@ public sealed class HistoryViewModelTests
         public string? PickDatabaseBackup() => null;
         public string? PickFileForHash() => null;
         public (string Source, string Destination)? PickWordConversion() => null;
+        public string? PickFolder() => null;
         public void OpenFolder(string path) { }
         public void OpenUri(string uri) { }
     }

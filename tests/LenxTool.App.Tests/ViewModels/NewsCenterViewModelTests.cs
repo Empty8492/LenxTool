@@ -7,6 +7,7 @@ using LenxTool.Core.Contracts;
 using LenxTool.Core.Errors;
 using LenxTool.Core.Feeds;
 using LenxTool.Core.Models;
+using LenxTool.Infrastructure.Exports;
 
 namespace LenxTool.App.Tests.ViewModels;
 
@@ -1660,6 +1661,300 @@ public sealed class NewsCenterViewModelTests
     }
 
     [Fact]
+    public async Task ObsidianExportUsesExplicitlySelectedItemAndOnlyEnqueues()
+    {
+        FeedEntry selectedEntry = CreateFeedEntry(0);
+        FeedEntry requestedEntry = CreateFeedEntry(1);
+        string vaultRoot = Path.Combine(
+            Path.GetTempPath(),
+            $"lenxtool-obsidian-command-{Guid.NewGuid():N}");
+        var queue = new StubEntryExportQueueService();
+        var policies = new StubEntryIntegrationPolicyService(isEnabled: true);
+        var targets = new StubObsidianExportTargetStore(new(
+            "default",
+            vaultRoot,
+            "LenxTool",
+            null,
+            [],
+            true));
+        using NewsCenterViewModel viewModel = CreateViewModel(
+            CreateSnapshot(),
+            feedEntries: new([selectedEntry, requestedEntry]),
+            exportQueue: queue,
+            integrationPolicies: policies,
+            obsidianTargets: targets);
+
+        await viewModel.InitializeAsync(CancellationToken.None);
+
+        Assert.Empty(queue.Requests);
+        Assert.Equal(0, targets.GetCount);
+        Assert.Equal(0, policies.GetCount);
+        FeedTimelineItem selectedItem = Assert.Single(
+            viewModel.TimelineEntries,
+            item => item.Entry.Id == selectedEntry.Id);
+        FeedTimelineItem requestedItem = Assert.Single(
+            viewModel.TimelineEntries,
+            item => item.Entry.Id == requestedEntry.Id);
+        viewModel.SelectedTimelineEntry = selectedItem;
+        Assert.Empty(queue.Requests);
+        Assert.Equal(0, targets.GetCount);
+        Assert.Equal(0, policies.GetCount);
+
+        await viewModel.RefreshCommand.ExecuteAsync();
+
+        Assert.Empty(queue.Requests);
+        Assert.Equal(0, targets.GetCount);
+        Assert.Equal(0, policies.GetCount);
+
+        await viewModel.ExportTimelineEntryToObsidianCommand.ExecuteAsync(
+            requestedItem);
+
+        EntryExportRequest request = Assert.Single(queue.Requests);
+        Assert.Equal(requestedEntry.Id, request.Entry.Id);
+        Assert.Equal("obsidian", request.ExporterId);
+        Assert.StartsWith(
+            "default.",
+            request.TargetId,
+            StringComparison.Ordinal);
+        Assert.Equal(EntryIntegrationPolicyScope.Active, Assert.Single(policies.Scopes));
+        Assert.False(Directory.Exists(vaultRoot));
+        Assert.Contains("已加入", viewModel.ObsidianExportStatus);
+        Assert.Contains(requestedEntry.Title, viewModel.ObsidianExportStatus);
+        Assert.DoesNotContain(selectedEntry.Title, viewModel.ObsidianExportStatus);
+    }
+
+    [Fact]
+    public async Task ObsidianExportStatusBoundsAndNormalizesRequestedItemTitle()
+    {
+        FeedEntry entry = CreateFeedEntry(1) with
+        {
+            Title = "  " + new string('A', 60) + "\r\n伪造状态"
+        };
+        var queue = new StubEntryExportQueueService();
+        using NewsCenterViewModel viewModel = CreateObsidianEnabledViewModel(
+            entry,
+            queue);
+        await viewModel.InitializeAsync(CancellationToken.None);
+
+        await viewModel.ExportTimelineEntryToObsidianCommand.ExecuteAsync(
+            Assert.Single(viewModel.TimelineEntries));
+
+        Assert.Contains(
+            new string('A', 48) + "…",
+            viewModel.ObsidianExportStatus);
+        Assert.DoesNotContain("\r", viewModel.ObsidianExportStatus);
+        Assert.DoesNotContain("\n", viewModel.ObsidianExportStatus);
+        Assert.DoesNotContain("伪造状态", viewModel.ObsidianExportStatus);
+    }
+
+    [Fact]
+    public async Task ObsidianExportHonorsExplicitVideoFeedWithoutEnclosure()
+    {
+        FeedEntry entry = CreateFeedEntry(7);
+        FeedCatalogSnapshot catalog = CreateCatalog();
+        catalog = catalog with
+        {
+            Feeds =
+            [
+                catalog.Feeds[0] with
+                {
+                    ViewKind = FeedViewKind.Video,
+                    IsViewKindExplicit = true
+                }
+            ]
+        };
+        var queue = new StubEntryExportQueueService();
+        using NewsCenterViewModel viewModel = CreateViewModel(
+            CreateSnapshot(),
+            feedEntries: new([entry]),
+            catalogRepository: new StubFeedCatalogRepository(catalog),
+            exportQueue: queue,
+            integrationPolicies: new StubEntryIntegrationPolicyService(
+                isEnabled: true),
+            obsidianTargets: new StubObsidianExportTargetStore(new(
+                "default",
+                "C:\\ObsidianVault",
+                "LenxTool",
+                null,
+                [],
+                true)));
+        await viewModel.InitializeAsync(CancellationToken.None);
+
+        await viewModel.ExportTimelineEntryToObsidianCommand.ExecuteAsync(
+            Assert.Single(viewModel.TimelineEntries));
+
+        Assert.Equal(
+            EntryViewKind.Video,
+            Assert.Single(queue.Requests).ViewKind);
+    }
+
+    [Fact]
+    public async Task ObsidianExportReportsExistingIdempotentRequest()
+    {
+        FeedEntry entry = CreateFeedEntry(2);
+        var queue = new StubEntryExportQueueService();
+        using NewsCenterViewModel viewModel = CreateObsidianEnabledViewModel(
+            entry,
+            queue);
+        await viewModel.InitializeAsync(CancellationToken.None);
+        FeedTimelineItem item = Assert.Single(viewModel.TimelineEntries);
+
+        await viewModel.ExportTimelineEntryToObsidianCommand.ExecuteAsync(item);
+        await viewModel.ExportTimelineEntryToObsidianCommand.ExecuteAsync(item);
+
+        Assert.Equal(2, queue.Requests.Count);
+        Assert.Single(
+            queue.Requests.Select(request => request.IdempotencyKey).Distinct());
+        Assert.Contains("已存在", viewModel.ObsidianExportStatus);
+    }
+
+    [Fact]
+    public async Task ObsidianExportUsesNewQueueScopeAfterTargetConfigurationChanges()
+    {
+        FeedEntry entry = CreateFeedEntry(7);
+        var queue = new StubEntryExportQueueService();
+        var targets = new StubObsidianExportTargetStore(new(
+            "default",
+            @"C:\ObsidianVault",
+            "LenxTool",
+            null,
+            [],
+            true));
+        using NewsCenterViewModel viewModel = CreateViewModel(
+            CreateSnapshot(),
+            feedEntries: new([entry]),
+            exportQueue: queue,
+            integrationPolicies: new StubEntryIntegrationPolicyService(
+                isEnabled: true),
+            obsidianTargets: targets);
+        await viewModel.InitializeAsync(CancellationToken.None);
+        FeedTimelineItem item = Assert.Single(viewModel.TimelineEntries);
+
+        await viewModel.ExportTimelineEntryToObsidianCommand.ExecuteAsync(item);
+        targets.Current = targets.Current! with
+        {
+            RelativeDirectory = "LenxTool-Changed"
+        };
+        await viewModel.ExportTimelineEntryToObsidianCommand.ExecuteAsync(item);
+
+        Assert.Equal(2, queue.Requests.Count);
+        Assert.Equal(
+            2,
+            queue.Requests
+                .Select(request => request.TargetId)
+                .Distinct(StringComparer.Ordinal)
+                .Count());
+        Assert.Equal(
+            2,
+            queue.Requests
+                .Select(request => request.IdempotencyKey)
+                .Distinct(StringComparer.Ordinal)
+                .Count());
+        Assert.Contains("已加入", viewModel.ObsidianExportStatus);
+    }
+
+    [Fact]
+    public async Task ObsidianExportDoesNotEnqueueWhenTargetIsUnconfigured()
+    {
+        FeedEntry entry = CreateFeedEntry(3);
+        var queue = new StubEntryExportQueueService();
+        var policies = new StubEntryIntegrationPolicyService(isEnabled: true);
+        var targets = new StubObsidianExportTargetStore(null);
+        using NewsCenterViewModel viewModel = CreateViewModel(
+            CreateSnapshot(),
+            feedEntries: new([entry]),
+            exportQueue: queue,
+            integrationPolicies: policies,
+            obsidianTargets: targets);
+        await viewModel.InitializeAsync(CancellationToken.None);
+
+        await viewModel.ExportTimelineEntryToObsidianCommand.ExecuteAsync(
+            Assert.Single(viewModel.TimelineEntries));
+
+        Assert.Empty(queue.Requests);
+        Assert.Equal(0, policies.GetCount);
+        Assert.Contains("未配置", viewModel.ObsidianExportStatus);
+    }
+
+    [Fact]
+    public async Task ObsidianExportDoesNotEnqueueWhenActivePolicyIsDisabled()
+    {
+        FeedEntry entry = CreateFeedEntry(4);
+        var queue = new StubEntryExportQueueService();
+        var policies = new StubEntryIntegrationPolicyService(isEnabled: false);
+        var targets = new StubObsidianExportTargetStore(new(
+            "default",
+            "C:\\ObsidianVault",
+            "LenxTool",
+            null,
+            [],
+            true));
+        using NewsCenterViewModel viewModel = CreateViewModel(
+            CreateSnapshot(),
+            feedEntries: new([entry]),
+            exportQueue: queue,
+            integrationPolicies: policies,
+            obsidianTargets: targets);
+        await viewModel.InitializeAsync(CancellationToken.None);
+
+        await viewModel.ExportTimelineEntryToObsidianCommand.ExecuteAsync(
+            Assert.Single(viewModel.TimelineEntries));
+
+        Assert.Empty(queue.Requests);
+        Assert.Equal(EntryIntegrationPolicyScope.Active, Assert.Single(policies.Scopes));
+        Assert.Contains("管理员", viewModel.ObsidianExportStatus);
+    }
+
+    [Fact]
+    public async Task ObsidianExportPreventsConcurrentReentry()
+    {
+        FeedEntry entry = CreateFeedEntry(5);
+        var queue = new StubEntryExportQueueService();
+        TaskCompletionSource release = queue.BlockNextEnqueue();
+        using NewsCenterViewModel viewModel = CreateObsidianEnabledViewModel(
+            entry,
+            queue);
+        await viewModel.InitializeAsync(CancellationToken.None);
+        FeedTimelineItem item = Assert.Single(viewModel.TimelineEntries);
+
+        Task first = viewModel.ExportTimelineEntryToObsidianCommand.ExecuteAsync(item);
+        await queue.EnqueueStarted.Task.WaitAsync(TimeSpan.FromSeconds(1));
+        Task second = viewModel.ExportTimelineEntryToObsidianCommand.ExecuteAsync(item);
+
+        Assert.Single(queue.Requests);
+        release.SetResult();
+        await Task.WhenAll(first, second);
+        Assert.Single(queue.Requests);
+    }
+
+    [Fact]
+    public async Task ObsidianExportShowsClosedErrorWhenGateCheckFails()
+    {
+        FeedEntry entry = CreateFeedEntry(6);
+        var queue = new StubEntryExportQueueService();
+        var targets = new StubObsidianExportTargetStore(null)
+        {
+            ThrowOnGet = true
+        };
+        using NewsCenterViewModel viewModel = CreateViewModel(
+            CreateSnapshot(),
+            feedEntries: new([entry]),
+            exportQueue: queue,
+            integrationPolicies: new StubEntryIntegrationPolicyService(
+                isEnabled: true),
+            obsidianTargets: targets);
+        await viewModel.InitializeAsync(CancellationToken.None);
+
+        await viewModel.ExportTimelineEntryToObsidianCommand.ExecuteAsync(
+            Assert.Single(viewModel.TimelineEntries));
+
+        Assert.Empty(queue.Requests);
+        Assert.Equal(
+            $"条目“{entry.Title}”：Obsidian 导出暂时不可用，请稍后重试。",
+            viewModel.ObsidianExportStatus);
+    }
+
+    [Fact]
     public async Task EntityNavigationOpensFeedEntryInTheReader()
     {
         FeedEntry entry = CreateFeedEntry(42);
@@ -1695,7 +1990,10 @@ public sealed class NewsCenterViewModelTests
         IFeedVideoDeliveryPlanningService? videoPlanner = null,
         IFeedSmartViewRepository? smartViews = null,
         IFeedSmartViewSyncService? smartViewSync = null,
-        TimeProvider? timeProvider = null) =>
+        TimeProvider? timeProvider = null,
+        IEntryExportQueueService? exportQueue = null,
+        IEntryIntegrationPolicyService? integrationPolicies = null,
+        IObsidianExportTargetStore? obsidianTargets = null) =>
         new(
             new StubNewsCenterService(snapshot),
             new StubAiReportService(null),
@@ -1718,7 +2016,27 @@ public sealed class NewsCenterViewModelTests
             videoPlanner,
             smartViews,
             smartViewSync,
-            timeProvider);
+            timeProvider,
+            exportQueue,
+            integrationPolicies,
+            obsidianTargets);
+
+    private static NewsCenterViewModel CreateObsidianEnabledViewModel(
+        FeedEntry entry,
+        StubEntryExportQueueService queue) =>
+        CreateViewModel(
+            CreateSnapshot(),
+            feedEntries: new([entry]),
+            exportQueue: queue,
+            integrationPolicies: new StubEntryIntegrationPolicyService(
+                isEnabled: true),
+            obsidianTargets: new StubObsidianExportTargetStore(new(
+                "default",
+                "C:\\ObsidianVault",
+                "LenxTool",
+                null,
+                [],
+                true)));
 
     private static NewsCenterSnapshot CreateSnapshot(params NewsArticle[] articles) =>
         new(articles, [], true, DateTimeOffset.Now, null);
@@ -2464,6 +2782,7 @@ public sealed class NewsCenterViewModelTests
         public string? PickDatabaseBackup() => null;
         public string? PickFileForHash() => null;
         public (string Source, string Destination)? PickWordConversion() => null;
+        public string? PickFolder() => null;
         public void OpenFolder(string path) { }
         public void OpenUri(string uri) => OpenedUri = uri;
     }
@@ -2524,6 +2843,131 @@ public sealed class NewsCenterViewModelTests
                 10,
                 TimelineNow));
         }
+    }
+
+    private sealed class StubEntryExportQueueService
+        : IEntryExportQueueService
+    {
+        private readonly HashSet<string> _createdKeys =
+            new(StringComparer.Ordinal);
+        private TaskCompletionSource? _release;
+
+        public List<EntryExportRequest> Requests { get; } = [];
+        public TaskCompletionSource EnqueueStarted { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public TaskCompletionSource BlockNextEnqueue()
+        {
+            _release = new(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+            return _release;
+        }
+
+        public async Task<EntryExportEnqueueResult> EnqueueAsync(
+            EntryExportRequest request,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            Requests.Add(request);
+            EnqueueStarted.TrySetResult();
+            if (_release is not null)
+            {
+                await _release.Task.WaitAsync(cancellationToken);
+                _release = null;
+            }
+
+            bool created = _createdKeys.Add(request.IdempotencyKey);
+            DateTimeOffset now = TimelineNow;
+            return new(
+                new(
+                    request.IdempotencyKey,
+                    request.ExporterId,
+                    request.TargetId,
+                    request.Entry.Id,
+                    request.Entry.ContentHash,
+                    request.ViewKind,
+                    request.ContentBytes,
+                    EntryExportTaskStatus.Queued,
+                    0,
+                    null,
+                    null,
+                    now,
+                    now,
+                    null),
+                created);
+        }
+
+        public Task<EntryExportCancellationResult> CancelAsync(
+            string idempotencyKey,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<EntryExportTask?> GetAsync(
+            string idempotencyKey,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<IReadOnlyList<EntryExportTask>> GetRecentAsync(
+            int maximumCount,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+    }
+
+    private sealed class StubEntryIntegrationPolicyService(bool isEnabled)
+        : IEntryIntegrationPolicyService
+    {
+        public int GetCount { get; private set; }
+        public List<EntryIntegrationPolicyScope> Scopes { get; } = [];
+
+        public Task<EntryIntegrationPolicySnapshot> GetAsync(
+            EntryIntegrationPolicyScope scope,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            GetCount++;
+            Scopes.Add(scope);
+            IReadOnlyList<EntryIntegrationPolicy> policies = isEnabled
+                ? [new(EntryIntegrationKind.Obsidian, true, [])]
+                : [];
+            return Task.FromResult(new EntryIntegrationPolicySnapshot(
+                1,
+                policies,
+                scope,
+                TimelineNow));
+        }
+
+        public Task<EntryIntegrationPolicyMutationResult> ReplaceAsync(
+            IReadOnlyList<EntryIntegrationPolicyInput> inputs,
+            long expectedVersion,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+    }
+
+    private sealed class StubObsidianExportTargetStore(
+        ObsidianExportTarget? target)
+        : IObsidianExportTargetStore
+    {
+        public ObsidianExportTarget? Current { get; set; } = target;
+        public int GetCount { get; private set; }
+        public bool ThrowOnGet { get; init; }
+
+        public Task<ObsidianExportTarget?> GetAsync(
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            GetCount++;
+            if (ThrowOnGet)
+            {
+                throw new InvalidOperationException(
+                    "Simulated Obsidian target read failure.");
+            }
+            return Task.FromResult(Current);
+        }
+
+        public Task SaveAsync(
+            ObsidianExportTarget target,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
     }
 
     private sealed class FixedTimeProvider(DateTimeOffset now)

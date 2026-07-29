@@ -1495,6 +1495,86 @@
                                 </DockPanel>
                             </StackPanel>
                         </Border>
+                        <Border Margin="0,16,0,0"
+                                DataContext="{Binding ObsidianSettings}"
+                                Style="{StaticResource BentoCardStyle}">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource SectionTitleStyle}"
+                                           Text="Obsidian Markdown 导出" />
+                                <TextBlock Margin="0,7,0,0"
+                                           Style="{StaticResource MetaTextStyle}"
+                                           Text="仅在你显式选择导出时写入 Vault；不会启动 Obsidian，也不会调用 Obsidian URI。保存后无需重启，后续导出立即使用新配置。"
+                                           TextWrapping="Wrap" />
+                                <TextBlock Margin="0,14,0,0"
+                                           Style="{StaticResource MetaTextStyle}"
+                                           Text="Vault 根目录" />
+                                <Grid Margin="0,7,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="12" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox AutomationProperties.Name="Obsidian Vault 根目录"
+                                             Text="{Binding VaultRootPath, UpdateSourceTrigger=PropertyChanged}" />
+                                    <Button Grid.Column="2"
+                                            AutomationProperties.Name="选择 Obsidian Vault 根目录"
+                                            Command="{Binding PickVaultFolderCommand}"
+                                            Content="选择文件夹" />
+                                </Grid>
+                                <Grid Margin="0,14,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="16" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel>
+                                        <TextBlock Style="{StaticResource MetaTextStyle}"
+                                                   Text="Vault 内相对目录" />
+                                        <TextBox Margin="0,7,0,0"
+                                                 AutomationProperties.Name="Obsidian Vault 内相对目录"
+                                                 Text="{Binding RelativeDirectory, UpdateSourceTrigger=PropertyChanged}" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="2">
+                                        <TextBlock Style="{StaticResource MetaTextStyle}"
+                                                   Text="标签（逗号或换行分隔）" />
+                                        <TextBox Margin="0,7,0,0"
+                                                 AutomationProperties.Name="Obsidian 导出标签"
+                                                 Text="{Binding TagsText, UpdateSourceTrigger=PropertyChanged}" />
+                                    </StackPanel>
+                                </Grid>
+                                <TextBlock Margin="0,14,0,0"
+                                           Style="{StaticResource MetaTextStyle}"
+                                           Text="Markdown 模板（可选）" />
+                                <TextBox MinHeight="92"
+                                         Margin="0,7,0,0"
+                                         AcceptsReturn="True"
+                                         AutomationProperties.Name="Obsidian Markdown 模板"
+                                         Text="{Binding TemplateMarkdown, UpdateSourceTrigger=PropertyChanged}"
+                                         TextWrapping="Wrap"
+                                         VerticalScrollBarVisibility="Auto" />
+                                <CheckBox Margin="0,14,0,0"
+                                          AutomationProperties.Name="Obsidian 导出包含原文链接"
+                                          Content="在导出内容中包含原文链接"
+                                          IsChecked="{Binding IncludeSourceLink}" />
+                                <ProgressBar Height="3"
+                                             Margin="0,14,0,0"
+                                             IsIndeterminate="True"
+                                             Visibility="{Binding IsBusy, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                <DockPanel Margin="0,16,0,0"
+                                           LastChildFill="False">
+                                    <TextBlock AutomationProperties.LiveSetting="Polite"
+                                               Style="{StaticResource MetaTextStyle}"
+                                               Text="{Binding Status}"
+                                               TextWrapping="Wrap" />
+                                    <Button DockPanel.Dock="Right"
+                                            Margin="16,0,0,0"
+                                            Style="{StaticResource AccentButtonStyle}"
+                                            AutomationProperties.Name="保存 Obsidian 导出设置"
+                                            Command="{Binding SaveCommand}"
+                                            Content="保存设置" />
+                                </DockPanel>
+                            </StackPanel>
+                        </Border>
                         <Border Margin="0,16,0,0" Style="{StaticResource BentoCardStyle}">
                             <Grid>
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="180" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>

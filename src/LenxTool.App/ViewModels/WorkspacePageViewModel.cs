@@ -58,7 +58,8 @@ public sealed partial class SettingsViewModel : PageViewModel
         IAccountSessionService accountSession,
         IFeedCatalogSyncService catalogSync,
         IDatabaseMaintenanceService? databaseMaintenance = null,
-        IntegrationSettingsViewModel? integrationSettings = null)
+        IntegrationSettingsViewModel? integrationSettings = null,
+        ObsidianSettingsViewModel? obsidianSettings = null)
         : base("设置", "外观、服务凭据、数据与更新")
     {
         _themeService = themeService;
@@ -69,6 +70,7 @@ public sealed partial class SettingsViewModel : PageViewModel
         _catalogSync = catalogSync;
         _databaseMaintenance = databaseMaintenance;
         IntegrationSettings = integrationSettings;
+        ObsidianSettings = obsidianSettings;
         _synchronizationContext = SynchronizationContext.Current;
         CheckForUpdatesCommand = new(CheckForUpdatesAsync);
         DownloadUpdateCommand = new(DownloadUpdateAsync, () => _candidate is not null);
@@ -134,6 +136,7 @@ public sealed partial class SettingsViewModel : PageViewModel
     public AsyncRelayCommand LogoutCommand { get; }
     public AsyncRelayCommand RefreshAccountCommand { get; }
     public IntegrationSettingsViewModel? IntegrationSettings { get; }
+    public ObsidianSettingsViewModel? ObsidianSettings { get; }
     public string AppearanceStatus
     {
         get => _appearanceStatus;
@@ -230,6 +233,10 @@ public sealed partial class SettingsViewModel : PageViewModel
         {
             await IntegrationSettings.InitializeAsync(
                 cancellationToken);
+        }
+        if (ObsidianSettings is not null)
+        {
+            await ObsidianSettings.InitializeAsync(cancellationToken);
         }
     }
 

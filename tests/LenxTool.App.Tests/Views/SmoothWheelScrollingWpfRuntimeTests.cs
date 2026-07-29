@@ -257,7 +257,8 @@ public sealed class SmoothWheelScrollingWpfRuntimeTests
                     AnimatedScrollViewer.SmoothScrollToTopCommand.Execute(
                         parameter: null,
                         target: viewer);
-                    PumpFor(TimeSpan.FromMilliseconds(80d));
+                    Assert.True(
+                        SmoothWheelScrolling.HasActiveAnimation(viewer));
                     var transform = Assert.IsType<TranslateTransform>(
                         content.RenderTransform);
                     double visualOffsetAtReverse = Math.Clamp(

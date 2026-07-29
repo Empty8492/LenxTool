@@ -4,6 +4,7 @@ using LenxTool.Core.Accounts;
 using LenxTool.Core.Contracts;
 using LenxTool.Core.Models;
 using LenxTool.Core.Updates;
+using LenxTool.Infrastructure.Exports;
 
 namespace LenxTool.App.Tests.ViewModels;
 
@@ -168,6 +169,33 @@ public sealed class SettingsViewModelTests
     }
 
     [Fact]
+    public async Task InitializeAlsoLoadsOptionalObsidianSettings()
+    {
+        var obsidianStore = new FakeObsidianExportTargetStore
+        {
+            Current = new(
+                "default",
+                @"D:\知识库",
+                "Lenx",
+                null,
+                ["feed"],
+                true)
+        };
+        var obsidian = new ObsidianSettingsViewModel(
+            obsidianStore,
+            new FakeDesktopFileDialogService());
+        var viewModel = CreateViewModel(
+            new FakeAccountSessionService(),
+            obsidianSettings: obsidian);
+
+        await viewModel.InitializeAsync(CancellationToken.None);
+
+        Assert.Same(obsidian, viewModel.ObsidianSettings);
+        Assert.Equal(@"D:\知识库", obsidian.VaultRootPath);
+        Assert.Equal("Lenx", obsidian.RelativeDirectory);
+    }
+
+    [Fact]
     public async Task StorageCleanupRequiresPreviewThenRefreshesUsage()
     {
         var maintenance = new FakeDatabaseMaintenanceService
@@ -253,14 +281,16 @@ public sealed class SettingsViewModelTests
     private static SettingsViewModel CreateViewModel(
         IAccountSessionService account,
         IFeedCatalogSyncService? sync = null,
-        IDatabaseMaintenanceService? maintenance = null) => new(
+        IDatabaseMaintenanceService? maintenance = null,
+        ObsidianSettingsViewModel? obsidianSettings = null) => new(
         new FakeThemeService(),
         new FakeUpdateService(),
         new FakeSecretStore(),
         new FakeSettingsRepository(),
         account,
         sync ?? new FakeFeedCatalogSyncService(),
-        maintenance);
+        maintenance,
+        obsidianSettings: obsidianSettings);
 
     private static AccountSessionSnapshot SignedIn(AccountRole role) => new(
         AccountSessionStatus.SignedIn,
@@ -429,6 +459,40 @@ public sealed class SettingsViewModelTests
         {
             RunCalls++;
             return Task.FromResult(Result with { Cutoff = cutoff });
+        }
+    }
+
+    private sealed class FakeObsidianExportTargetStore
+        : IObsidianExportTargetStore
+    {
+        public ObsidianExportTarget? Current { get; init; }
+
+        public Task<ObsidianExportTarget?> GetAsync(
+            CancellationToken cancellationToken) =>
+            Task.FromResult(Current);
+
+        public Task SaveAsync(
+            ObsidianExportTarget target,
+            CancellationToken cancellationToken) =>
+            Task.CompletedTask;
+    }
+
+    private sealed class FakeDesktopFileDialogService
+        : IDesktopFileDialogService
+    {
+        public IReadOnlyList<string> PickMediaFiles() => [];
+        public string? PickWhisperModel() => null;
+        public string? PickDatabaseBackup() => null;
+        public string? PickFileForHash() => null;
+        public (string Source, string Destination)? PickWordConversion() =>
+            null;
+        public string? PickFolder() => null;
+        public void OpenFolder(string path)
+        {
+        }
+
+        public void OpenUri(string uri)
+        {
         }
     }
 }

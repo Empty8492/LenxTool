@@ -46,6 +46,15 @@
                                                 Padding="4,0"
                                                 BorderThickness="0"
                                                 Background="Transparent"
+                                                Command="{Binding DataContext.ExportTimelineEntryToObsidianCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                CommandParameter="{Binding}"
+                                                Content="↗"
+                                                ToolTip="导出到 Obsidian"
+                                                AutomationProperties.Name="导出该 Feed 到 Obsidian" />
+                                        <Button Margin="4,0,0,0"
+                                                Padding="4,0"
+                                                BorderThickness="0"
+                                                Background="Transparent"
                                                 Command="{Binding DataContext.ToggleTimelineStarCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                 CommandParameter="{Binding}"
                                                 Content="{Binding StarGlyph}"
@@ -185,6 +194,13 @@
                                         Content="从头阅读"
                                         Click="ResetTimelineProgressClick"
                                         AutomationProperties.Name="重置 Feed 阅读进度" />
+                                <Button MinWidth="116"
+                                        Margin="8,0,0,0"
+                                        Padding="10,5"
+                                        Command="{Binding ExportTimelineEntryToObsidianCommand}"
+                                        CommandParameter="{Binding SelectedTimelineEntry}"
+                                        Content="导出到 Obsidian"
+                                        AutomationProperties.Name="导出当前 Feed 到 Obsidian" />
                             </StackPanel>
                             <StackPanel>
                                 <TextBlock Style="{StaticResource SectionTitleStyle}"
@@ -195,6 +211,10 @@
                                 <TextBlock Margin="0,3,12,0"
                                            Style="{StaticResource MetaTextStyle}"
                                            Text="{Binding TimelineEditorStatus}"
+                                           TextWrapping="Wrap" />
+                                <TextBlock Margin="0,3,12,0"
+                                           Style="{StaticResource MetaTextStyle}"
+                                           Text="{Binding ObsidianExportStatus}"
                                            TextWrapping="Wrap" />
                             </StackPanel>
                         </DockPanel>

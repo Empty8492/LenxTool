@@ -11,6 +11,7 @@ public interface IDesktopFileDialogService
     string? PickDatabaseBackup();
     string? PickFileForHash();
     (string Source, string Destination)? PickWordConversion();
+    string? PickFolder();
     void OpenFolder(string path);
     void OpenUri(string uri);
 }
@@ -77,6 +78,16 @@ public sealed class DesktopFileDialogService : IDesktopFileDialogService, IOpmlF
             AddExtension = true
         };
         return save.ShowDialog() == true ? (open.FileName, save.FileName) : null;
+    }
+
+    public string? PickFolder()
+    {
+        var dialog = new OpenFolderDialog
+        {
+            Title = "选择 Obsidian Vault 根目录",
+            Multiselect = false
+        };
+        return dialog.ShowDialog() == true ? dialog.FolderName : null;
     }
 
     public string? PickOpmlImport()

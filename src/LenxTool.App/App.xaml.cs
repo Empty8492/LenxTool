@@ -9,6 +9,7 @@ using LenxTool.Core.Errors;
 using LenxTool.Core.Exports;
 using LenxTool.Core.Models;
 using LenxTool.Infrastructure.Data;
+using LenxTool.Infrastructure.Exports;
 using LenxTool.Infrastructure.Media;
 using LenxTool.Infrastructure.Networking;
 using LenxTool.Infrastructure.Security;
@@ -247,7 +248,12 @@ public partial class App : Application
         services.AddSingleton<IOpmlFileService, OpmlFileService>();
         services.AddFeedDiscovery(CreateFeedDiscoveryOptions());
         services.AddEntryIntegrationInfrastructure();
-        // 队列基础设施默认不注册任何具体导出器，因此不会静默向外部目标投递。
+        // Obsidian 适配器始终可解析，但只有用户显式入队、目标已配置且
+        // ACTIVE 管理策略允许时才会写入本地 Vault。
+        services.AddSingleton<
+            IObsidianExportTargetStore,
+            AppSettingsObsidianExportTargetStore>();
+        services.AddSingleton<IEntryExporter, ObsidianEntryExporter>();
         services.AddSingleton<IEntryExportCoordinator>(static provider =>
             new EntryExportCoordinator(
                 provider.GetServices<IEntryExporter>()));
@@ -327,6 +333,7 @@ public partial class App : Application
         services.AddSingleton<ToolsViewModel>();
         services.AddSingleton<SettingsViewModel>();
         services.AddSingleton<IntegrationSettingsViewModel>();
+        services.AddSingleton<ObsidianSettingsViewModel>();
         // 发现页发布复用现有目录管理员服务、版本同步和服务端 RBAC。
         services.AddSingleton<FeedDiscoveryViewModel>();
         services.AddSingleton<FeedAdminViewModel>();

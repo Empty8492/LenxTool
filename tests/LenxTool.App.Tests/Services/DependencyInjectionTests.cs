@@ -5,6 +5,7 @@ using LenxTool.Core.Contracts;
 using LenxTool.Core.Exports;
 using LenxTool.Core.Models;
 using LenxTool.Infrastructure.Data;
+using LenxTool.Infrastructure.Exports;
 using LenxTool.Infrastructure.Networking;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -160,13 +161,20 @@ public sealed class DependencyInjectionTests
         Assert.Same(
             provider.GetRequiredService<IEntryExportQueueService>(),
             provider.GetRequiredService<IEntryExportQueueProcessor>());
-        // 没有显式目标配置时，不注册任何适配器，后台队列不会静默投递。
-        Assert.Empty(provider.GetServices<IEntryExporter>());
-        Assert.Empty(
+        Assert.IsType<AppSettingsObsidianExportTargetStore>(
+            provider.GetRequiredService<IObsidianExportTargetStore>());
+        IEntryExporter exporter = Assert.Single(
+            provider.GetServices<IEntryExporter>());
+        Assert.IsType<ObsidianEntryExporter>(exporter);
+        EntryExportCapability capability = Assert.Single(
             provider.GetRequiredService<IEntryExportCoordinator>()
                 .Capabilities);
+        Assert.Equal(ObsidianEntryExporter.ExporterId, capability.ExporterId);
+        Assert.True(capability.IsIdempotent);
         Assert.NotNull(provider.GetRequiredService<
             IntegrationSettingsViewModel>());
+        Assert.NotNull(provider.GetRequiredService<
+            ObsidianSettingsViewModel>());
         Assert.NotNull(provider.GetRequiredService<
             IntegrationAdminViewModel>());
 
