@@ -1,7 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
-using System.Windows.Media.Animation;
 
 namespace LenxTool.App.Controls;
 
@@ -13,13 +12,6 @@ public sealed class AnimatedScrollViewer : ScrollViewer
             typeof(bool),
             typeof(AnimatedScrollViewer),
             new PropertyMetadata(false));
-
-    private static readonly DependencyProperty AnimatedVerticalOffsetProperty =
-        DependencyProperty.Register(
-            nameof(AnimatedVerticalOffset),
-            typeof(double),
-            typeof(AnimatedScrollViewer),
-            new PropertyMetadata(0d, OnAnimatedVerticalOffsetChanged));
 
     public static readonly DependencyProperty ScrollResetKeyProperty =
         DependencyProperty.Register(
@@ -54,12 +46,6 @@ public sealed class AnimatedScrollViewer : ScrollViewer
         set => SetValue(ScrollResetKeyProperty, value);
     }
 
-    private double AnimatedVerticalOffset
-    {
-        get => (double)GetValue(AnimatedVerticalOffsetProperty);
-        set => SetValue(AnimatedVerticalOffsetProperty, value);
-    }
-
     protected override void OnScrollChanged(ScrollChangedEventArgs e)
     {
         base.OnScrollChanged(e);
@@ -72,7 +58,6 @@ public sealed class AnimatedScrollViewer : ScrollViewer
     protected override void OnPreviewMouseWheel(MouseWheelEventArgs e)
     {
         // 每日早报也复用全局滚轮计划，确保所有页面拥有同一灵敏度与过渡。
-        CancelScrollAnimation();
         if (SmoothWheelScrolling.TryHandleWheel(this, e)) return;
         base.OnPreviewMouseWheel(e);
     }
@@ -80,47 +65,11 @@ public sealed class AnimatedScrollViewer : ScrollViewer
     private void SmoothScrollToTop()
     {
         if (VerticalOffset <= 0) return;
-        if (!SystemParameters.ClientAreaAnimation)
-        {
-            ScrollToTop();
-            return;
-        }
-
-        CancelScrollAnimation();
-        // 回顶与滚轮只能保留一个动画时钟，避免两个偏移源互相拉扯。
-        SmoothWheelScrolling.Cancel(this);
-        AnimatedVerticalOffset = VerticalOffset;
-        var animation = new DoubleAnimation
-        {
-            From = VerticalOffset,
-            To = 0,
-            Duration = TimeSpan.FromMilliseconds(420),
-            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
-            FillBehavior = FillBehavior.Stop
-        };
-        animation.Completed += (_, _) =>
-        {
-            BeginAnimation(AnimatedVerticalOffsetProperty, null);
-            ScrollToTop();
-        };
-        BeginAnimation(AnimatedVerticalOffsetProperty, animation, HandoffBehavior.SnapshotAndReplace);
-    }
-
-    private void CancelScrollAnimation()
-    {
-        double currentOffset = VerticalOffset;
-        BeginAnimation(AnimatedVerticalOffsetProperty, null);
-        AnimatedVerticalOffset = currentOffset;
-    }
-
-    private static void OnAnimatedVerticalOffsetChanged(
-        DependencyObject dependencyObject,
-        DependencyPropertyChangedEventArgs e)
-    {
-        if (dependencyObject is AnimatedScrollViewer viewer && e.NewValue is double offset)
-        {
-            viewer.ScrollToVerticalOffset(offset);
-        }
+        // 回顶沿用滚轮合成路径：逻辑位置一次提交，过渡期间只变更内容渲染变换。
+        SmoothWheelScrolling.ScrollToSmoothly(
+            this,
+            targetOffset: 0d,
+            TimeSpan.FromMilliseconds(420d));
     }
 
     private static void OnScrollResetKeyChanged(
@@ -133,9 +82,7 @@ public sealed class AnimatedScrollViewer : ScrollViewer
             return;
         }
 
-        viewer.CancelScrollAnimation();
-        SmoothWheelScrolling.Cancel(viewer);
-        viewer.ScrollToTop();
+        SmoothWheelScrolling.ScrollToImmediately(viewer, 0d);
     }
 
     private static void ExecuteSmoothScrollToTop(object sender, ExecutedRoutedEventArgs e)

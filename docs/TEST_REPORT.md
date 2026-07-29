@@ -10,14 +10,14 @@
 |---|---:|
 | LenxTool.Core.Tests | 161 passed |
 | LenxTool.Infrastructure.Tests | 390 passed |
-| LenxTool.App.Tests | 292 passed |
+| LenxTool.App.Tests | 305 passed |
 | Cloudflare Worker Vitest | 70 passed |
 | Worker TypeScript strict typecheck | passed |
 | .NET build warnings | 0 |
 | NuGet vulnerable packages | 0 detected |
 | npm audit vulnerabilities | 0 detected |
 
-当前完整 Release 结果为 Core 161/161、Infrastructure 390/390、App/WPF 292/292、Worker workerd/D1 Vitest 70/70、Worker strict typecheck 与全解决方案 build 0 警告/0 错误。本轮未修改 NuGet/npm 依赖；最近一次 NuGet 在线漏洞扫描与 `npm audit` 均为 0 漏洞。
+当前分组 Release 结果为 Core 161/161、Infrastructure 390/390、App/WPF 305/305，共 856/856；Worker workerd/D1 Vitest 70/70、Worker strict typecheck 与全解决方案 build 0 警告/0 错误。本轮未修改 NuGet/npm 依赖；最近一次 NuGet 在线漏洞扫描与 `npm audit` 均为 0 漏洞。
 
 P2-07 新增 14 项 Core 契约场景。统一能力快照覆盖支持的五类 `EntryViewKind`、是否需要凭据、最大内容字节数和适配器幂等性，并在协调器构造时复制、排序和校验。请求工厂按导出器/目标/条目/内容哈希/视图生成稳定 SHA-256 幂等键；协调器会拒绝伪造或非规范请求，并在调用适配器前阻断不存在的导出器、不支持的类型和超限内容。成功结果必须使用同一请求键并提供远端 ID 或无用户信息的 HTTP(S) URL；封闭适配器错误保留可重试与 0～7 天 `Retry-After`，调用方取消原样传播，未知异常不泄露供应商异常正文。反射隐私测试确认请求、结果和错误模型没有 token、password、credential 或 response 属性。完整 .NET 843/843、Worker 70/70、strict typecheck 与 Release build 0 警告/0 错误通过；未注册适配器、未修改 UI/DI、未发起网络请求，默认无外部导出。
 
@@ -37,7 +37,7 @@ DISC-06 最终检查点新增 2 项 Infrastructure、1 项 App 和 1 项 Worker 
 
 DISC-05 新增 7 项发布 ViewModel 场景，并把既有 2 项结构场景和 1 项真实 WPF 场景扩展到确认发布。覆盖未勾选不能写入、规范化 URL 与四类策略可见、ALL 目录重复项只查看、快速双击只到达管理员服务一次、成功写入只调用一次并刷新到新版本、双管理员版本冲突刷新且不自动重放、网络中断锁住后续写入、服务端 403 保持权威，以及成功后候选同步变为现有项。真实 WPF 运行时继续覆盖原生 Button/CheckBox/ComboBox Automation Peer、Tab 焦点、900×620 窄窗、等效 200% 缩放和深浅主题。既有 Infrastructure 测试同时证明目录写入携带 `If-Match` 和幂等键、401 刷新只重放同一幂等键、普通用户直调得到 403、冲突只发送一次。
 
-全局滚轮体验补强现有 7 项纯逻辑测试、1 项 XAML 结构测试和 1 项真实 WPF 运行时测试。所有显式或模板内部的原生 `ScrollViewer` 统一采用每日早报既有的 1.45 倍灵敏度，连续滚轮输入从未完成目标继续累积，并以 160～220 ms 的逐帧临界阻尼过渡到最终位置；同一滚动区在突发输入期间只保留一个动画状态，目标扩展时保留速度，不再为每个刻度创建 `DoubleAnimation`、缓动函数和完成回调。新增纯逻辑回归将 60 Hz 与 120 Hz 等时轨迹差限制在 0.5 px、速度差限制在 5 px/s；真实 WPF 回归确认两次连续输入复用同一动画会话且偏移持续前进。反向输入会清除相反动量，拖动、键盘/触控和程序化阅读进度恢复会先废弃旧动画；开启“减少动画”后保持相同距离但取消过渡。结构测试继续冻结 ListBox、ListView、PagedListBox 与普通/增强下拉列表的虚拟化像素滚动接线，分页列表保留 240 px 预取缓冲。
+全局滚轮体验现有 12 项纯逻辑/帧统计测试、1 项 XAML 结构测试和 9 项真实 WPF 运行时测试。所有显式或模板内部的原生 `ScrollViewer` 统一采用每日早报既有的 1.45 倍灵敏度与 160～220 ms 平滑过渡。普通页面和 420 ms 回顶均先提交一次逻辑滚动，再用内容 `RenderTransform` 在合成阶段补间；包含 130 个按钮的重页面回归把单格滚轮的 `ScrollChanged` 逻辑更新从修复前 12 次降为 1 次，回顶同样只提交 1 次。ListBox、ListView、PagedListBox 与普通/增强下拉列表使用 Recycling 像素虚拟化，并以前后各一屏缓存支持模板内部合成式滚动；500 项实窗列表回归确认只提交 1 次逻辑偏移且已实现容器保持有界，连续输入超过缓存覆盖距离时会退回安全的逐帧偏移。每日早报 180 段长文只实现视口前后一屏，初始文本视觉由修复前 182 个降至不超过 80 个；首尾滚动与合成式回顶保持滚动范围稳定，离开缓冲区的图片会取消对应下载和解码。热点 13 个平台组只实现当前视口和半屏缓冲，首尾滚动都保持 2～8 个重卡片。每次实窗动画记录平均 FPS、P95/最差帧间隔和长帧数；纯逻辑回归分别校准稳定与掉帧的 60Hz/120Hz 输入，未取得显示器刷新率时不会误报“达到帧预算”。连续滚轮、反向输入、外部渲染变换接管、程序化定位、鼠标/键盘/触控接管、回顶交接、卸载清理和“减少动画”继续覆盖。本轮分组 .NET 856/856 与 Release build 0 警告/0 错误通过；一次组合进程运行出现定时取消超时与全局 SQLite 句柄污染，失败项隔离复跑 2/2、Infrastructure 独立全量 390/390 均通过。Worker 和依赖未修改。
 
 DISC-04 新增管理员订阅管理内的只读发现基础、请求状态机和专用本地预览投影。8 项 ViewModel 场景覆盖识别/防抖/提交/取消、旧 provider 忽略取消、手动取消及时释放命令、非法输入立即终止、部分成功零候选、限流、角色降权和预览故障隔离；结构与真实 WPF 场景冻结管理页签、Automation 名称、实时状态、窄窗滚动、原生 Automation Peer、键盘焦点、900×620、等效 200% 缩放和深浅主题。真实 SQLite 场景以单次窗口查询验证多 Feed 稳定排序、隐藏过滤和每 Feed 4 条上限；查询只读取标题和时间，不物化摘要、正文或附件。
 

@@ -1,10 +1,13 @@
 using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Threading;
 using LenxTool.App.Controls;
 using LenxTool.App.Services;
+using LenxTool.Core.Models;
 
 namespace LenxTool.App.Tests.Views;
 
@@ -14,6 +17,788 @@ namespace LenxTool.App.Tests.Views;
 [Collection(WpfRuntimeGroup.Name)]
 public sealed class SmoothWheelScrollingWpfRuntimeTests
 {
+    [Fact]
+    public void HeavyPhysicalPageCommitsOneLogicalScrollDuringSmoothTransition()
+    {
+        Exception? failure = null;
+        WpfRuntimeHost.Run(
+            () =>
+            {
+                Window? window = null;
+                var themeService = new ThemeService();
+                try
+                {
+                    themeService.ApplyReduceMotion(reduceMotion: false);
+                    var content = new StackPanel();
+                    for (int index = 0; index < 130; index++)
+                    {
+                        content.Children.Add(
+                            new Button
+                            {
+                                Height = 48d,
+                                Content = $"热点条目 {index + 1}"
+                            });
+                    }
+
+                    var viewer = new AnimatedScrollViewer
+                    {
+                        VerticalScrollBarVisibility = ScrollBarVisibility.Visible,
+                        HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+                        Content = content
+                    };
+                    window = new Window
+                    {
+                        Title = "Heavy smooth wheel runtime acceptance",
+                        Width = 960,
+                        Height = 620,
+                        Left = -10000,
+                        Top = -10000,
+                        ShowInTaskbar = false,
+                        Content = viewer
+                    };
+                    window.Show();
+                    window.UpdateLayout();
+                    PumpDispatcher();
+
+                    int logicalScrollUpdates = 0;
+                    viewer.ScrollChanged += (_, eventArgs) =>
+                    {
+                        if (Math.Abs(eventArgs.VerticalChange) > 0.001d)
+                        {
+                            logicalScrollUpdates++;
+                        }
+                    };
+
+                    double expectedTarget = ExpectedTarget(viewer);
+                    RaiseWheel(content.Children[0]);
+                    PumpDispatcher();
+                    Assert.InRange(
+                        viewer.VerticalOffset,
+                        expectedTarget - 0.5d,
+                        expectedTarget + 0.5d);
+                    var scrollTransform = Assert.IsType<TranslateTransform>(
+                        content.RenderTransform);
+                    Assert.True(
+                        scrollTransform.Y > 0d,
+                        "重页面应通过内容渲染变换补间，而不是逐帧修改逻辑滚动位置。");
+                    PumpFor(TimeSpan.FromMilliseconds(320d));
+
+                    Assert.InRange(
+                        viewer.VerticalOffset,
+                        expectedTarget - 0.5d,
+                        expectedTarget + 0.5d);
+                    Assert.InRange(scrollTransform.Y, -0.01d, 0.01d);
+                    Assert.Equal(1, logicalScrollUpdates);
+                    ScrollFrameTelemetrySnapshot telemetry = Assert.IsType<
+                        ScrollFrameTelemetrySnapshot>(
+                        ScrollFrameTelemetry.GetLatestSnapshot(viewer));
+                    Assert.True(telemetry.FrameCount >= 2);
+                    Assert.InRange(
+                        telemetry.AverageFramesPerSecond,
+                        10d,
+                        300d);
+                    Assert.True(
+                        telemetry.P95FrameInterval
+                            < TimeSpan.FromMilliseconds(100d));
+                }
+                catch (Exception exception)
+                {
+                    failure = exception;
+                }
+                finally
+                {
+                    themeService.ApplyReduceMotion(reduceMotion: false);
+                    Keyboard.ClearFocus();
+                    window?.Close();
+                    PumpDispatcher();
+                }
+            },
+            TimeSpan.FromSeconds(10),
+            () => "重页面平滑滚动验收超时。");
+
+        if (failure is not null)
+        {
+            throw new Xunit.Sdk.XunitException(failure.ToString());
+        }
+    }
+
+    [Fact]
+    public void HeavyPhysicalPageCommitsOneLogicalScrollWhenReturningToTop()
+    {
+        Exception? failure = null;
+        WpfRuntimeHost.Run(
+            () =>
+            {
+                Window? window = null;
+                var themeService = new ThemeService();
+                try
+                {
+                    themeService.ApplyReduceMotion(reduceMotion: false);
+                    var content = new StackPanel();
+                    for (int index = 0; index < 130; index++)
+                    {
+                        content.Children.Add(
+                            new Button
+                            {
+                                Height = 48d,
+                                Content = $"早报段落 {index + 1}"
+                            });
+                    }
+
+                    var viewer = new AnimatedScrollViewer
+                    {
+                        VerticalScrollBarVisibility = ScrollBarVisibility.Visible,
+                        HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+                        Content = content
+                    };
+                    window = new Window
+                    {
+                        Title = "Heavy back-to-top runtime acceptance",
+                        Width = 960,
+                        Height = 620,
+                        Left = -10000,
+                        Top = -10000,
+                        ShowInTaskbar = false,
+                        Content = viewer
+                    };
+                    window.Show();
+                    window.UpdateLayout();
+                    viewer.ScrollToVerticalOffset(1200d);
+                    PumpDispatcher();
+
+                    int logicalScrollUpdates = 0;
+                    viewer.ScrollChanged += (_, eventArgs) =>
+                    {
+                        if (Math.Abs(eventArgs.VerticalChange) > 0.001d)
+                        {
+                            logicalScrollUpdates++;
+                        }
+                    };
+
+                    AnimatedScrollViewer.SmoothScrollToTopCommand.Execute(
+                        parameter: null,
+                        target: viewer);
+                    PumpDispatcher();
+
+                    Assert.InRange(viewer.VerticalOffset, 0d, 0.5d);
+                    var scrollTransform = Assert.IsType<TranslateTransform>(
+                        content.RenderTransform);
+                    Assert.True(
+                        scrollTransform.Y < -100d,
+                        "回顶应一次提交顶部偏移，再通过内容渲染变换保持连续画面。");
+                    PumpFor(TimeSpan.FromMilliseconds(520d));
+
+                    Assert.InRange(viewer.VerticalOffset, 0d, 0.01d);
+                    Assert.InRange(scrollTransform.Y, -0.01d, 0.01d);
+                    Assert.Equal(1, logicalScrollUpdates);
+                }
+                catch (Exception exception)
+                {
+                    failure = exception;
+                }
+                finally
+                {
+                    themeService.ApplyReduceMotion(reduceMotion: false);
+                    Keyboard.ClearFocus();
+                    window?.Close();
+                    PumpDispatcher();
+                }
+            },
+            TimeSpan.FromSeconds(10),
+            () => "重页面合成式回顶验收超时。");
+
+        if (failure is not null)
+        {
+            throw new Xunit.Sdk.XunitException(failure.ToString());
+        }
+    }
+
+    [Fact]
+    public void ReverseWheelDuringBackToTopStartsFromCurrentVisualPosition()
+    {
+        Exception? failure = null;
+        WpfRuntimeHost.Run(
+            () =>
+            {
+                Window? window = null;
+                var themeService = new ThemeService();
+                try
+                {
+                    themeService.ApplyReduceMotion(reduceMotion: false);
+                    var content = new Border { Height = 4000d };
+                    var viewer = new AnimatedScrollViewer
+                    {
+                        VerticalScrollBarVisibility = ScrollBarVisibility.Visible,
+                        HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+                        Content = content
+                    };
+                    window = new Window
+                    {
+                        Title = "Reverse back-to-top wheel acceptance",
+                        Width = 720,
+                        Height = 520,
+                        Left = -10000,
+                        Top = -10000,
+                        ShowInTaskbar = false,
+                        Content = viewer
+                    };
+                    window.Show();
+                    window.UpdateLayout();
+                    SmoothWheelScrolling.ScrollToImmediately(viewer, 1600d);
+                    PumpDispatcher();
+
+                    AnimatedScrollViewer.SmoothScrollToTopCommand.Execute(
+                        parameter: null,
+                        target: viewer);
+                    PumpFor(TimeSpan.FromMilliseconds(80d));
+                    var transform = Assert.IsType<TranslateTransform>(
+                        content.RenderTransform);
+                    double visualOffsetAtReverse = Math.Clamp(
+                        viewer.VerticalOffset - transform.Y,
+                        0d,
+                        viewer.ScrollableHeight);
+                    Assert.True(visualOffsetAtReverse > 100d);
+                    WheelScrollPlan expected = SmoothWheelScrolling.CreateWheelPlan(
+                        visualOffsetAtReverse,
+                        visualOffsetAtReverse,
+                        viewer.ScrollableHeight,
+                        viewer.ViewportHeight,
+                        wheelDelta: -120,
+                        SystemParameters.WheelScrollLines,
+                        usesLogicalUnits: false,
+                        motionAllowed: true);
+
+                    RaiseWheel(content, delta: -120);
+                    PumpFor(TimeSpan.FromMilliseconds(320d));
+
+                    Assert.InRange(
+                        viewer.VerticalOffset,
+                        expected.TargetOffset - 1d,
+                        expected.TargetOffset + 1d);
+                    Assert.True(viewer.VerticalOffset > visualOffsetAtReverse);
+                }
+                catch (Exception exception)
+                {
+                    failure = exception;
+                }
+                finally
+                {
+                    themeService.ApplyReduceMotion(reduceMotion: false);
+                    Keyboard.ClearFocus();
+                    window?.Close();
+                    PumpDispatcher();
+                }
+            },
+            TimeSpan.FromSeconds(10),
+            () => "回顶途中反向滚轮验收超时。");
+
+        if (failure is not null)
+        {
+            throw new Xunit.Sdk.XunitException(failure.ToString());
+        }
+    }
+
+    [Fact]
+    public void BufferedPixelVirtualizedListUsesOneLogicalScrollCommit()
+    {
+        Exception? failure = null;
+        WpfRuntimeHost.Run(
+            () =>
+            {
+                Window? window = null;
+                var themeService = new ThemeService();
+                try
+                {
+                    themeService.ApplyReduceMotion(reduceMotion: false);
+                    var list = new ListBox
+                    {
+                        ItemsSource = Enumerable.Range(1, 500)
+                            .Select(index => $"虚拟列表条目 {index}")
+                            .ToArray()
+                    };
+                    VirtualizingPanel.SetIsVirtualizing(list, true);
+                    VirtualizingPanel.SetVirtualizationMode(
+                        list,
+                        VirtualizationMode.Recycling);
+                    VirtualizingPanel.SetScrollUnit(list, ScrollUnit.Pixel);
+                    VirtualizingPanel.SetCacheLength(
+                        list,
+                        new VirtualizationCacheLength(1d, 1d));
+                    VirtualizingPanel.SetCacheLengthUnit(
+                        list,
+                        VirtualizationCacheLengthUnit.Page);
+                    window = new Window
+                    {
+                        Title = "Buffered virtualized wheel runtime acceptance",
+                        Width = 520,
+                        Height = 420,
+                        Left = -10000,
+                        Top = -10000,
+                        ShowInTaskbar = false,
+                        Content = list
+                    };
+                    window.Show();
+                    window.UpdateLayout();
+                    PumpDispatcher();
+
+                    ScrollViewer viewer = FindDescendant<ScrollViewer>(list);
+                    UIElement content = Assert.IsAssignableFrom<UIElement>(
+                        viewer.Content);
+                    int logicalScrollUpdates = 0;
+                    viewer.ScrollChanged += (_, eventArgs) =>
+                    {
+                        if (Math.Abs(eventArgs.VerticalChange) > 0.001d)
+                        {
+                            logicalScrollUpdates++;
+                        }
+                    };
+
+                    ListBoxItem firstItem = Assert.IsType<ListBoxItem>(
+                        list.ItemContainerGenerator.ContainerFromIndex(0));
+                    RaiseWheel(firstItem);
+                    PumpDispatcher();
+
+                    Assert.True(viewer.VerticalOffset > 1d);
+                    var scrollTransform = Assert.IsType<TranslateTransform>(
+                        content.RenderTransform);
+                    Assert.True(
+                        scrollTransform.Y > 0d,
+                        "带缓存的像素虚拟列表应通过渲染变换补间滚动。");
+                    PumpFor(TimeSpan.FromMilliseconds(320d));
+
+                    Assert.InRange(scrollTransform.Y, -0.01d, 0.01d);
+                    Assert.Equal(1, logicalScrollUpdates);
+                    int realizedItems = Enumerable.Range(0, list.Items.Count)
+                        .Count(index =>
+                            list.ItemContainerGenerator.ContainerFromIndex(index)
+                            is not null);
+                    Assert.InRange(realizedItems, 2, 200);
+                }
+                catch (Exception exception)
+                {
+                    failure = exception;
+                }
+                finally
+                {
+                    themeService.ApplyReduceMotion(reduceMotion: false);
+                    Keyboard.ClearFocus();
+                    window?.Close();
+                    PumpDispatcher();
+                }
+            },
+            TimeSpan.FromSeconds(10),
+            () => "像素虚拟列表合成式滚动验收超时。");
+
+        if (failure is not null)
+        {
+            throw new Xunit.Sdk.XunitException(failure.ToString());
+        }
+    }
+
+    [Fact]
+    public void VirtualizedListFallsBackWhenBurstExceedsRealizedCache()
+    {
+        Exception? failure = null;
+        WpfRuntimeHost.Run(
+            () =>
+            {
+                Window? window = null;
+                var themeService = new ThemeService();
+                try
+                {
+                    themeService.ApplyReduceMotion(reduceMotion: false);
+                    var list = new ListBox
+                    {
+                        ItemsSource = Enumerable.Range(1, 500)
+                            .Select(index => $"缓存边界条目 {index}")
+                            .ToArray()
+                    };
+                    VirtualizingPanel.SetIsVirtualizing(list, true);
+                    VirtualizingPanel.SetVirtualizationMode(
+                        list,
+                        VirtualizationMode.Recycling);
+                    VirtualizingPanel.SetScrollUnit(list, ScrollUnit.Pixel);
+                    VirtualizingPanel.SetCacheLength(
+                        list,
+                        new VirtualizationCacheLength(1d, 1d));
+                    VirtualizingPanel.SetCacheLengthUnit(
+                        list,
+                        VirtualizationCacheLengthUnit.Page);
+                    window = new Window
+                    {
+                        Title = "Virtualized cache boundary acceptance",
+                        Width = 520,
+                        Height = 420,
+                        Left = -10000,
+                        Top = -10000,
+                        ShowInTaskbar = false,
+                        Content = list
+                    };
+                    window.Show();
+                    window.UpdateLayout();
+                    PumpDispatcher();
+
+                    ScrollViewer viewer = FindDescendant<ScrollViewer>(list);
+                    UIElement content = Assert.IsAssignableFrom<UIElement>(
+                        viewer.Content);
+                    ListBoxItem firstItem = Assert.IsType<ListBoxItem>(
+                        list.ItemContainerGenerator.ContainerFromIndex(0));
+                    for (int notch = 0; notch < 10; notch++)
+                    {
+                        RaiseWheel(firstItem);
+                    }
+
+                    var scrollTransform = Assert.IsType<TranslateTransform>(
+                        content.RenderTransform);
+                    Assert.InRange(scrollTransform.Y, -0.01d, 0.01d);
+                    double offsetBeforeFrames = viewer.VerticalOffset;
+                    PumpFor(TimeSpan.FromMilliseconds(320d));
+
+                    Assert.True(
+                        viewer.VerticalOffset > offsetBeforeFrames + 1d,
+                        "累计目标超过一屏缓存时应退回逐帧偏移，避免合成动画穿过未实现项目。");
+                }
+                catch (Exception exception)
+                {
+                    failure = exception;
+                }
+                finally
+                {
+                    themeService.ApplyReduceMotion(reduceMotion: false);
+                    Keyboard.ClearFocus();
+                    window?.Close();
+                    PumpDispatcher();
+                }
+            },
+            TimeSpan.FromSeconds(10),
+            () => "虚拟列表缓存边界验收超时。");
+
+        if (failure is not null)
+        {
+            throw new Xunit.Sdk.XunitException(failure.ToString());
+        }
+    }
+
+    [Fact]
+    public void ExternalRenderTransformForcesSafeOffsetFallback()
+    {
+        Exception? failure = null;
+        WpfRuntimeHost.Run(
+            () =>
+            {
+                Window? window = null;
+                var themeService = new ThemeService();
+                try
+                {
+                    themeService.ApplyReduceMotion(reduceMotion: false);
+                    var content = new StackPanel();
+                    for (int index = 0; index < 80; index++)
+                    {
+                        content.Children.Add(
+                            new Border { Height = 48d });
+                    }
+
+                    var viewer = new AnimatedScrollViewer
+                    {
+                        VerticalScrollBarVisibility =
+                            ScrollBarVisibility.Visible,
+                        Content = content
+                    };
+                    window = new Window
+                    {
+                        Title = "External transform ownership acceptance",
+                        Width = 720,
+                        Height = 520,
+                        Left = -10000,
+                        Top = -10000,
+                        ShowInTaskbar = false,
+                        Content = viewer
+                    };
+                    window.Show();
+                    window.UpdateLayout();
+                    PumpDispatcher();
+
+                    RaiseWheel(content.Children[0]);
+                    PumpFor(TimeSpan.FromMilliseconds(40d));
+                    double offsetBeforeExternalTakeover =
+                        viewer.VerticalOffset;
+                    var externalTransform = new TranslateTransform(3d, 0d);
+                    content.RenderTransform = externalTransform;
+                    RaiseMouseDown(content);
+                    PumpDispatcher();
+                    Assert.InRange(
+                        viewer.VerticalOffset,
+                        offsetBeforeExternalTakeover - 0.5d,
+                        offsetBeforeExternalTakeover + 0.5d);
+                    int logicalScrollUpdates = 0;
+                    viewer.ScrollChanged += (_, eventArgs) =>
+                    {
+                        if (Math.Abs(eventArgs.VerticalChange) > 0.001d)
+                        {
+                            logicalScrollUpdates++;
+                        }
+                    };
+
+                    RaiseWheel(content.Children[0]);
+                    PumpFor(TimeSpan.FromMilliseconds(320d));
+
+                    Assert.Same(externalTransform, content.RenderTransform);
+                    Assert.True(
+                        logicalScrollUpdates > 1,
+                        "内容变换被外部接管后必须退回安全偏移路径，不能继续驱动失效的旧变换。");
+                }
+                catch (Exception exception)
+                {
+                    failure = exception;
+                }
+                finally
+                {
+                    themeService.ApplyReduceMotion(reduceMotion: false);
+                    Keyboard.ClearFocus();
+                    window?.Close();
+                    PumpDispatcher();
+                }
+            },
+            TimeSpan.FromSeconds(10),
+            () => "外部渲染变换所有权验收超时。");
+
+        if (failure is not null)
+        {
+            throw new Xunit.Sdk.XunitException(failure.ToString());
+        }
+    }
+
+    [Fact]
+    public void DailyBriefingRealizesOnlyBufferedViewportBlocks()
+    {
+        Exception? failure = null;
+        WpfRuntimeHost.Run(
+            () =>
+            {
+                Window? window = null;
+                try
+                {
+                    RichArticleBlock[] blocks = Enumerable.Range(1, 180)
+                        .Select(index => new RichArticleBlock(
+                            RichArticleBlockKind.Body,
+                            [new($"早报正文段落 {index:D3}，用于验证长文视口虚拟化。")]))
+                        .ToArray();
+                    var article = new NewsArticle(
+                        "daily-virtualization",
+                        new DateOnly(2026, 7, 29),
+                        "每日早报",
+                        "每日早报性能验收",
+                        string.Empty,
+                        string.Empty,
+                        "https://example.com/daily",
+                        "daily-virtualization-hash",
+                        DateTimeOffset.UtcNow);
+                    var articleView = new RichArticleView
+                    {
+                        Article = article,
+                        Document = new RichArticleDocument(
+                            null,
+                            Array.AsReadOnly(blocks))
+                    };
+                    var viewer = new AnimatedScrollViewer
+                    {
+                        VerticalScrollBarVisibility = ScrollBarVisibility.Visible,
+                        HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+                        Content = articleView
+                    };
+                    window = new Window
+                    {
+                        Title = "Daily briefing viewport virtualization",
+                        Width = 880,
+                        Height = 520,
+                        Left = -10000,
+                        Top = -10000,
+                        ShowInTaskbar = false,
+                        Content = viewer
+                    };
+                    window.Show();
+                    window.UpdateLayout();
+                    PumpDispatcher();
+                    double initialExtentHeight = viewer.ExtentHeight;
+
+                    int initiallyRealizedTextBlocks =
+                        CountDescendants<TextBlock>(articleView);
+                    Assert.InRange(initiallyRealizedTextBlocks, 2, 80);
+                    Assert.True(viewer.ScrollableHeight > 4000d);
+
+                    SmoothWheelScrolling.ScrollToImmediately(
+                        viewer,
+                        viewer.ScrollableHeight);
+                    PumpDispatcher();
+                    PumpUntil(
+                        () => FindTextBlock(
+                            articleView,
+                            "早报正文段落 180") is not null,
+                        TimeSpan.FromSeconds(2));
+                    double bottomExtentHeight = viewer.ExtentHeight;
+
+                    Assert.Null(FindTextBlock(
+                        articleView,
+                        "早报正文段落 001"));
+                    Assert.InRange(
+                        CountDescendants<TextBlock>(articleView),
+                        2,
+                        80);
+
+                    AnimatedScrollViewer.SmoothScrollToTopCommand.Execute(
+                        parameter: null,
+                        target: viewer);
+                    PumpFor(TimeSpan.FromMilliseconds(520d));
+                    PumpUntil(
+                        () => FindTextBlock(
+                            articleView,
+                            "早报正文段落 001") is not null,
+                        TimeSpan.FromSeconds(2));
+
+                    Assert.Null(FindTextBlock(
+                        articleView,
+                        "早报正文段落 180"));
+                    Assert.InRange(viewer.VerticalOffset, 0d, 0.01d);
+                    Assert.InRange(
+                        Math.Abs(viewer.ExtentHeight - bottomExtentHeight),
+                        0d,
+                        1d);
+                    Assert.InRange(
+                        Math.Abs(viewer.ExtentHeight - initialExtentHeight),
+                        0d,
+                        1d);
+                }
+                catch (Exception exception)
+                {
+                    failure = exception;
+                }
+                finally
+                {
+                    Keyboard.ClearFocus();
+                    window?.Close();
+                    PumpDispatcher();
+                }
+            },
+            TimeSpan.FromSeconds(10),
+            () => "每日早报长文视口虚拟化验收超时。");
+
+        if (failure is not null)
+        {
+            throw new Xunit.Sdk.XunitException(failure.ToString());
+        }
+    }
+
+    [Fact]
+    public void TrendGroupsRealizeOnlyVisibleCardsAndHalfViewportBuffer()
+    {
+        Exception? failure = null;
+        WpfRuntimeHost.Run(
+            () =>
+            {
+                Window? window = null;
+                try
+                {
+                    var panel = new UniformGrid { Columns = 2 };
+                    var groups =
+                        new List<ViewportDeferredContentControl>();
+                    int releasedGroupCount = 0;
+                    for (int groupIndex = 0; groupIndex < 13; groupIndex++)
+                    {
+                        int capturedGroup = groupIndex;
+                        var group = new ViewportDeferredContentControl
+                        {
+                            EstimatedHeight = 720d,
+                            PreloadViewportCount = 0.5d,
+                            ContentReleased = () => releasedGroupCount++,
+                            ContentFactory = () =>
+                            {
+                                var items = new StackPanel();
+                                for (int itemIndex = 0;
+                                     itemIndex < 10;
+                                     itemIndex++)
+                                {
+                                    items.Children.Add(
+                                        new Button
+                                        {
+                                            Height = 58d,
+                                            Content =
+                                                $"平台 {capturedGroup + 1} 热点 {itemIndex + 1}"
+                                        });
+                                }
+                                return items;
+                            }
+                        };
+                        groups.Add(group);
+                        panel.Children.Add(group);
+                    }
+
+                    var viewer = new AnimatedScrollViewer
+                    {
+                        VerticalScrollBarVisibility = ScrollBarVisibility.Visible,
+                        HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+                        Content = panel
+                    };
+                    window = new Window
+                    {
+                        Title = "Trend viewport virtualization",
+                        Width = 960,
+                        Height = 620,
+                        Left = -10000,
+                        Top = -10000,
+                        ShowInTaskbar = false,
+                        Content = viewer
+                    };
+                    window.Show();
+                    window.UpdateLayout();
+                    PumpDispatcher();
+
+                    int initialRealized =
+                        groups.Count(group => group.IsContentRealized);
+                    Assert.InRange(initialRealized, 2, 8);
+                    Assert.True(viewer.ScrollableHeight > 3000d);
+
+                    SmoothWheelScrolling.ScrollToImmediately(
+                        viewer,
+                        viewer.ScrollableHeight);
+                    PumpUntil(
+                        () => groups[^1].IsContentRealized,
+                        TimeSpan.FromSeconds(2));
+
+                    Assert.False(groups[0].IsContentRealized);
+                    Assert.True(releasedGroupCount >= 1);
+                    Assert.InRange(
+                        groups.Count(group => group.IsContentRealized),
+                        2,
+                        8);
+
+                    window.Close();
+                    window = null;
+                    PumpDispatcher();
+                    Assert.All(
+                        groups,
+                        group => Assert.False(
+                            group.IsContentRealized));
+                }
+                catch (Exception exception)
+                {
+                    failure = exception;
+                }
+                finally
+                {
+                    Keyboard.ClearFocus();
+                    window?.Close();
+                    PumpDispatcher();
+                }
+            },
+            TimeSpan.FromSeconds(10),
+            () => "热点平台卡片视口虚拟化验收超时。");
+
+        if (failure is not null)
+        {
+            throw new Xunit.Sdk.XunitException(failure.ToString());
+        }
+    }
+
     [Fact]
     public void PlainAndDailyBriefingScrollViewersShareSmoothWheelBehavior()
     {
@@ -158,8 +943,11 @@ public sealed class SmoothWheelScrollingWpfRuntimeTests
                     AnimatedScrollViewer.SmoothScrollToTopCommand.Execute(
                         parameter: null,
                         target: briefing);
-                    Assert.False(
-                        SmoothWheelScrolling.HasActiveAnimation(briefing));
+                    if (SystemParameters.ClientAreaAnimation)
+                    {
+                        Assert.True(
+                            SmoothWheelScrolling.HasActiveAnimation(briefing));
+                    }
                     PumpFor(TimeSpan.FromMilliseconds(520));
                     Assert.InRange(briefing.VerticalOffset, 0d, 0.01d);
                     Assert.All(
@@ -305,5 +1093,88 @@ public sealed class SmoothWheelScrollingWpfRuntimeTests
             DispatcherPriority.Background,
             new Action(() => frame.Continue = false));
         Dispatcher.PushFrame(frame);
+    }
+
+    private static T FindDescendant<T>(DependencyObject parent)
+        where T : DependencyObject
+    {
+        for (int index = 0;
+             index < VisualTreeHelper.GetChildrenCount(parent);
+             index++)
+        {
+            DependencyObject child =
+                VisualTreeHelper.GetChild(parent, index);
+            if (child is T match) return match;
+            T? descendant = FindDescendantOrDefault<T>(child);
+            if (descendant is not null) return descendant;
+        }
+
+        throw new InvalidOperationException(
+            $"未找到 {typeof(T).Name} 子控件。");
+    }
+
+    private static T? FindDescendantOrDefault<T>(DependencyObject parent)
+        where T : DependencyObject
+    {
+        for (int index = 0;
+             index < VisualTreeHelper.GetChildrenCount(parent);
+             index++)
+        {
+            DependencyObject child =
+                VisualTreeHelper.GetChild(parent, index);
+            if (child is T match) return match;
+            T? descendant = FindDescendantOrDefault<T>(child);
+            if (descendant is not null) return descendant;
+        }
+        return null;
+    }
+
+    private static int CountDescendants<T>(DependencyObject parent)
+        where T : DependencyObject
+    {
+        int count = 0;
+        for (int index = 0;
+             index < VisualTreeHelper.GetChildrenCount(parent);
+             index++)
+        {
+            DependencyObject child =
+                VisualTreeHelper.GetChild(parent, index);
+            if (child is T) count++;
+            count += CountDescendants<T>(child);
+        }
+        return count;
+    }
+
+    private static TextBlock? FindTextBlock(
+        DependencyObject parent,
+        string textPrefix)
+    {
+        for (int index = 0;
+             index < VisualTreeHelper.GetChildrenCount(parent);
+             index++)
+        {
+            DependencyObject child =
+                VisualTreeHelper.GetChild(parent, index);
+            if (child is TextBlock textBlock
+                && GetRenderedText(textBlock).StartsWith(
+                    textPrefix,
+                    StringComparison.Ordinal))
+            {
+                return textBlock;
+            }
+
+            TextBlock? descendant = FindTextBlock(child, textPrefix);
+            if (descendant is not null) return descendant;
+        }
+        return null;
+    }
+
+    private static string GetRenderedText(TextBlock textBlock)
+    {
+        if (!string.IsNullOrEmpty(textBlock.Text)) return textBlock.Text;
+        return string.Concat(
+            textBlock.Inlines
+                .OfType<System.Windows.Documents.Run>()
+                .Select(run => run.Text));
     }
 }

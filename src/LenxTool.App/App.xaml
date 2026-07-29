@@ -16,7 +16,11 @@
             <!-- 列表继续使用虚拟化，但改为像素单位，才能获得连续滚动而不是整项跳动。 -->
             <Style x:Key="PixelVirtualizedListStyle" TargetType="{x:Type ListBox}">
                 <Setter Property="VirtualizingPanel.IsVirtualizing" Value="True" />
+                <Setter Property="VirtualizingPanel.VirtualizationMode" Value="Recycling" />
                 <Setter Property="VirtualizingPanel.ScrollUnit" Value="Pixel" />
+                <!-- 前后各保留一屏容器，连续滚轮可一次提交目标偏移后由合成器补间。 -->
+                <Setter Property="VirtualizingPanel.CacheLength" Value="1,1" />
+                <Setter Property="VirtualizingPanel.CacheLengthUnit" Value="Page" />
             </Style>
             <Style TargetType="{x:Type ListBox}"
                    BasedOn="{StaticResource PixelVirtualizedListStyle}" />
@@ -26,7 +30,10 @@
                    BasedOn="{StaticResource PixelVirtualizedListStyle}" />
             <Style TargetType="{x:Type ComboBox}">
                 <Setter Property="VirtualizingPanel.IsVirtualizing" Value="True" />
+                <Setter Property="VirtualizingPanel.VirtualizationMode" Value="Recycling" />
                 <Setter Property="VirtualizingPanel.ScrollUnit" Value="Pixel" />
+                <Setter Property="VirtualizingPanel.CacheLength" Value="1,1" />
+                <Setter Property="VirtualizingPanel.CacheLengthUnit" Value="Page" />
             </Style>
 
             <DataTemplate DataType="{x:Type vm:AutomationAdminViewModel}">
@@ -1556,6 +1563,42 @@
                         </TabItem>
                         <TabItem Header="热点趋势">
                             <Grid Margin="0,8,0,0">
+                                <Grid.Resources>
+                                    <!-- 每个平台卡片只在进入有效视口缓冲区后创建其 10 个按钮。 -->
+                                    <DataTemplate x:Key="TrendPlatformCardTemplate">
+                                        <Border Margin="0,0,12,12"
+                                                Padding="0"
+                                                Style="{StaticResource BentoCardStyle}"
+                                                ClipToBounds="True">
+                                            <Grid>
+                                                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                                                <Grid Margin="18,14">
+                                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                                    <TextBlock FontSize="15" FontWeight="SemiBold" Text="{Binding Platform}" />
+                                                    <TextBlock Grid.Column="1" Style="{StaticResource MetaTextStyle}" Text="{Binding Count, StringFormat={}{0} 条}" />
+                                                </Grid>
+                                                <ItemsControl Grid.Row="1" ItemsSource="{Binding Items}">
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <Button Style="{StaticResource TrendItemButtonStyle}"
+                                                                    Command="{Binding DataContext.OpenTrendCommand, RelativeSource={RelativeSource AncestorType={x:Type TabControl}}}"
+                                                                    CommandParameter="{Binding}"
+                                                                    AutomationProperties.Name="{Binding Title}">
+                                                                <Grid Margin="16,12">
+                                                                    <Grid.ColumnDefinitions><ColumnDefinition Width="34" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="18" /></Grid.ColumnDefinitions>
+                                                                    <TextBlock VerticalAlignment="Top" FontSize="16" FontWeight="SemiBold" Foreground="{DynamicResource Brush.Accent}" Text="{Binding Rank}" />
+                                                                    <TextBlock Grid.Column="1" Margin="0,0,14,0" VerticalAlignment="Center" FontWeight="SemiBold" Text="{Binding Title}" TextWrapping="Wrap" />
+                                                                    <TextBlock Grid.Column="2" Margin="0,0,10,0" VerticalAlignment="Center" Style="{StaticResource MetaTextStyle}" Text="{Binding Heat}" />
+                                                                    <Path Grid.Column="3" Width="7" Height="11" VerticalAlignment="Center" Stretch="Fill" Stroke="{DynamicResource Brush.TextMuted}" StrokeThickness="1.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Data="M 1,1 L 6,5.5 L 1,10" />
+                                                                </Grid>
+                                                            </Button>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </Grid.Resources>
                                 <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="12" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
                                 <Border Padding="20,14" Style="{StaticResource BentoCardStyle}">
                                     <Grid>
@@ -1613,34 +1656,11 @@
                                     </ItemsControl.ItemsPanel>
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate>
-                                            <Border Margin="0,0,12,12" Padding="0" Style="{StaticResource BentoCardStyle}" ClipToBounds="True">
-                                                <Grid>
-                                                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
-                                                    <Grid Margin="18,14">
-                                                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                                                        <TextBlock FontSize="15" FontWeight="SemiBold" Text="{Binding Platform}" />
-                                                        <TextBlock Grid.Column="1" Style="{StaticResource MetaTextStyle}" Text="{Binding Count, StringFormat={}{0} 条}" />
-                                                    </Grid>
-                                                    <ItemsControl Grid.Row="1" ItemsSource="{Binding Items}">
-                                                        <ItemsControl.ItemTemplate>
-                                                            <DataTemplate>
-                                                                <Button Style="{StaticResource TrendItemButtonStyle}"
-                                                                        Command="{Binding DataContext.OpenTrendCommand, RelativeSource={RelativeSource AncestorType={x:Type TabControl}}}"
-                                                                        CommandParameter="{Binding}"
-                                                                        AutomationProperties.Name="{Binding Title}">
-                                                                    <Grid Margin="16,12">
-                                                                        <Grid.ColumnDefinitions><ColumnDefinition Width="34" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="18" /></Grid.ColumnDefinitions>
-                                                                        <TextBlock VerticalAlignment="Top" FontSize="16" FontWeight="SemiBold" Foreground="{DynamicResource Brush.Accent}" Text="{Binding Rank}" />
-                                                                        <TextBlock Grid.Column="1" Margin="0,0,14,0" VerticalAlignment="Center" FontWeight="SemiBold" Text="{Binding Title}" TextWrapping="Wrap" />
-                                                                        <TextBlock Grid.Column="2" Margin="0,0,10,0" VerticalAlignment="Center" Style="{StaticResource MetaTextStyle}" Text="{Binding Heat}" />
-                                                                        <Path Grid.Column="3" Width="7" Height="11" VerticalAlignment="Center" Stretch="Fill" Stroke="{DynamicResource Brush.TextMuted}" StrokeThickness="1.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Data="M 1,1 L 6,5.5 L 1,10" />
-                                                                    </Grid>
-                                                                </Button>
-                                                            </DataTemplate>
-                                                        </ItemsControl.ItemTemplate>
-                                                    </ItemsControl>
-                                                </Grid>
-                                            </Border>
+                                            <controls:ViewportDeferredContentControl
+                                                DeferredContent="{Binding}"
+                                                DeferredContentTemplate="{StaticResource TrendPlatformCardTemplate}"
+                                                EstimatedHeight="720"
+                                                PreloadViewportCount="0.5" />
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>

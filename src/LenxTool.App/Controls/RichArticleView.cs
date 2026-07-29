@@ -100,13 +100,18 @@ public sealed class RichArticleView : UserControl, IDisposable
     {
         CancelImageLoads();
         _imageLoadCancellation = new CancellationTokenSource();
+        CancellationToken imageLoadToken =
+            _imageLoadCancellation.Token;
         _contentPanel.Children.Clear();
 
         NewsArticle? article = Article;
         if (article is null)
         {
-            _contentPanel.Children.Add(CreateTextBlock(
-                new RichArticleBlock(RichArticleBlockKind.Body, [new("当天暂无早报。")])));
+            AddDeferredBlock(
+                new RichArticleBlock(
+                    RichArticleBlockKind.Body,
+                    [new("当天暂无早报。")]),
+                CreateTextBlock);
             return;
         }
 
@@ -118,10 +123,38 @@ public sealed class RichArticleView : UserControl, IDisposable
             MaximumImageNetworkBytesPerArticle);
         if (content.Blocks.Count == 0 || !content.Blocks.Any(block => block.Kind == RichArticleBlockKind.Heading))
         {
-            _contentPanel.Children.Add(CreateTextBlock(
-                new RichArticleBlock(RichArticleBlockKind.Heading, [new(article.Title)])));
+            AddDeferredBlock(
+                new RichArticleBlock(
+                    RichArticleBlockKind.Heading,
+                    [new(article.Title)]),
+                CreateTextBlock);
         }
 
+        AddDeferred(
+            estimatedHeight: 48d,
+            () => CreateMetaBlock(article));
+
+        foreach (RichArticleBlock block in content.Blocks)
+        {
+            RichArticleBlock currentBlock = block;
+            if (currentBlock.Kind == RichArticleBlockKind.Image
+                && currentBlock.ImageUrl is not null)
+            {
+                AddDeferredImage(
+                    article,
+                    currentBlock,
+                    imageBudget,
+                    imageLoadToken);
+            }
+            else
+            {
+                AddDeferredBlock(currentBlock, CreateTextBlock);
+            }
+        }
+    }
+
+    private TextBlock CreateMetaBlock(NewsArticle article)
+    {
         var meta = new TextBlock
         {
             Margin = new Thickness(0, 2, 0, 18),
@@ -139,25 +172,79 @@ public sealed class RichArticleView : UserControl, IDisposable
             meta.Inlines.Add(new Run(
                 $"  ·  提取于 {extractedAt.ToLocalTime():yyyy-MM-dd HH:mm}"));
         }
-        _contentPanel.Children.Add(meta);
+        return meta;
+    }
 
-        foreach (RichArticleBlock block in content.Blocks)
+    private void AddDeferredBlock(
+        RichArticleBlock block,
+        Func<RichArticleBlock, TextBlock> factory)
+    {
+        AddDeferred(
+            EstimateBlockHeight(block),
+            () => factory(block));
+    }
+
+    private void AddDeferred(
+        double estimatedHeight,
+        Func<FrameworkElement> factory)
+    {
+        _contentPanel.Children.Add(
+            new ViewportDeferredContentControl
+            {
+                EstimatedHeight = estimatedHeight,
+                PreloadViewportCount = 1d,
+                ContentFactory = factory
+            });
+    }
+
+    private void AddDeferredImage(
+        NewsArticle article,
+        RichArticleBlock block,
+        ArticleImageDownloadBudget imageBudget,
+        CancellationToken articleToken)
+    {
+        CancellationTokenSource? blockCancellation = null;
+        var deferred = new ViewportDeferredContentControl
         {
-            if (block.Kind == RichArticleBlockKind.Image && block.ImageUrl is not null)
-            {
-                _contentPanel.Children.Add(ArticleImageBlockFactory.Create(
-                    article.Id,
-                    block.ImageUrl,
-                    block.Text,
-                    article.Url,
-                    imageBudget,
-                    _imageLoadCancellation.Token));
-            }
-            else
-            {
-                _contentPanel.Children.Add(CreateTextBlock(block));
-            }
-        }
+            EstimatedHeight = 210d,
+            PreloadViewportCount = 1d
+        };
+        deferred.ContentFactory = () =>
+        {
+            blockCancellation?.Dispose();
+            blockCancellation =
+                CancellationTokenSource.CreateLinkedTokenSource(articleToken);
+            return ArticleImageBlockFactory.Create(
+                article.Id,
+                block.ImageUrl!,
+                block.Text,
+                article.Url,
+                imageBudget,
+                blockCancellation.Token);
+        };
+        deferred.ContentReleased = () =>
+        {
+            blockCancellation?.Cancel();
+            blockCancellation?.Dispose();
+            blockCancellation = null;
+        };
+        _contentPanel.Children.Add(deferred);
+    }
+
+    private static double EstimateBlockHeight(RichArticleBlock block)
+    {
+        if (block.Kind == RichArticleBlockKind.Image) return 210d;
+        double lineCount = Math.Max(
+            1d,
+            Math.Ceiling(block.Text.Length / 52d));
+        double textHeight = lineCount * 25d;
+        return block.Kind switch
+        {
+            RichArticleBlockKind.Heading => Math.Max(70d, textHeight + 36d),
+            RichArticleBlockKind.Subheading => Math.Max(50d, textHeight + 26d),
+            RichArticleBlockKind.Translation => textHeight + 28d,
+            _ => textHeight + 20d
+        };
     }
 
     private void CancelImageLoads()

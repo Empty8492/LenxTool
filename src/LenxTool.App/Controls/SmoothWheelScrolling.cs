@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 
 namespace LenxTool.App.Controls;
 
@@ -115,8 +116,7 @@ internal static class SmoothWheelScrolling
     }
 
     /// <summary>
-    /// Advances the persistent wheel animation by one rendered frame.
-    /// A critically damped response keeps velocity continuous when burst input extends the target.
+    /// 按一个真实渲染帧推进持久滚轮动画；临界阻尼使连续输入扩展目标时速度保持连续。
     /// </summary>
     internal static WheelAnimationFrame AdvanceFrame(
         double currentOffset,
@@ -185,11 +185,35 @@ internal static class SmoothWheelScrolling
             eventArgs.Delta);
         if (!ReferenceEquals(target, viewer)) return false;
 
-        double pendingTarget = GetIsAnimationActive(viewer)
+        WheelAnimationState? activeState =
+            GetIsAnimationActive(viewer)
+                ? GetAnimationState(viewer)
+                : null;
+        double pendingTarget = activeState is not null
             ? GetTargetVerticalOffset(viewer)
             : viewer.VerticalOffset;
+        double currentOffset = viewer.VerticalOffset;
+        if (activeState is not null)
+        {
+            double visualOffset =
+                activeState.GetCurrentVisualOffset();
+            int incomingDirection = Math.Sign(-eventArgs.Delta);
+            int activeDirection = Math.Sign(
+                pendingTarget - visualOffset);
+            if (incomingDirection != 0
+                && activeDirection != 0
+                && incomingDirection != activeDirection)
+            {
+                // 反向滚轮从屏幕当前真实位置重新规划，不能继续沿用旧目标累计。
+                Cancel(viewer);
+                // WPF 可能延后应用 ScrollTo；反向接管仅发生一次，这里同步提交可避免新动画从旧目标起步。
+                viewer.UpdateLayout();
+                currentOffset = visualOffset;
+                pendingTarget = visualOffset;
+            }
+        }
         WheelScrollPlan plan = CreateWheelPlan(
-            viewer.VerticalOffset,
+            currentOffset,
             pendingTarget,
             viewer.ScrollableHeight,
             viewer.ViewportHeight,
@@ -208,8 +232,10 @@ internal static class SmoothWheelScrolling
     internal static void Cancel(ScrollViewer viewer)
     {
         ArgumentNullException.ThrowIfNull(viewer);
-        double currentOffset = viewer.VerticalOffset;
-        GetAnimationState(viewer)?.Stop();
+        double currentOffset =
+            GetAnimationState(viewer)?.StopAndCommitVisualOffset()
+            ?? viewer.VerticalOffset;
+        viewer.ScrollToVerticalOffset(currentOffset);
         SetTargetVerticalOffset(viewer, currentOffset);
         SetIsAnimationActive(viewer, false);
     }
@@ -232,6 +258,30 @@ internal static class SmoothWheelScrolling
     }
 
     /// <summary>
+    /// 让程序化定位复用滚轮的合成式过渡；不允许动画时立即提交目标位置。
+    /// </summary>
+    internal static void ScrollToSmoothly(
+        ScrollViewer viewer,
+        double targetOffset,
+        TimeSpan duration)
+    {
+        ArgumentNullException.ThrowIfNull(viewer);
+        double normalizedTarget = Math.Clamp(
+            NormalizeNonNegative(targetOffset),
+            0d,
+            NormalizeNonNegative(viewer.ScrollableHeight));
+        TimeSpan normalizedDuration = IsMotionAllowed()
+            && duration > TimeSpan.Zero
+                ? duration
+                : TimeSpan.Zero;
+        ApplyPlan(
+            viewer,
+            new WheelScrollPlan(
+                normalizedTarget,
+                normalizedDuration));
+    }
+
+    /// <summary>
     /// 暴露只读动画状态，供派生控件协作与真实 WPF 验收使用。
     /// </summary>
     internal static bool HasActiveAnimation(ScrollViewer viewer)
@@ -241,7 +291,7 @@ internal static class SmoothWheelScrolling
     }
 
     /// <summary>
-    /// Returns the active state identity used by runtime acceptance tests to verify burst coalescing.
+    /// 暴露当前动画状态标识，供实窗验收确认连续滚轮复用同一会话。
     /// </summary>
     internal static object? GetActiveAnimationSession(ScrollViewer viewer)
     {
@@ -282,7 +332,7 @@ internal static class SmoothWheelScrolling
         SetTargetVerticalOffset(viewer, plan.TargetOffset);
         if (!plan.ShouldAnimate)
         {
-            GetAnimationState(viewer)?.Stop();
+            GetAnimationState(viewer)?.StopAndCommitVisualOffset();
             SetIsAnimationActive(viewer, false);
             viewer.ScrollToVerticalOffset(plan.TargetOffset);
             return;
@@ -398,17 +448,26 @@ internal static class SmoothWheelScrolling
     {
         private readonly ScrollViewer _viewer;
         private readonly EventHandler _renderingHandler;
+        private readonly EventHandler _telemetryRenderingHandler;
+        private readonly ScrollFrameCadenceTracker _cadenceTracker = new();
         private bool _isRunning;
+        private bool _isTelemetryRunning;
         private long _lastFrameTimestamp;
         private long _completionTimestamp;
         private double _targetOffset;
         private double _velocity;
         private TimeSpan _responseDuration;
+        private UIElement? _compositedContent;
+        private Transform? _originalRenderTransform;
+        private TranslateTransform? _scrollTransform;
+        private int _animationGeneration;
+        private bool _usesCompositedTransition;
 
         internal WheelAnimationState(ScrollViewer viewer)
         {
             _viewer = viewer;
             _renderingHandler = OnRendering;
+            _telemetryRenderingHandler = OnTelemetryRendering;
             _viewer.Unloaded += OnViewerUnloaded;
         }
 
@@ -416,13 +475,28 @@ internal static class SmoothWheelScrolling
             double targetOffset,
             TimeSpan responseDuration)
         {
+            if (TryStartOrRetargetComposited(
+                    targetOffset,
+                    responseDuration))
+            {
+                return;
+            }
+
+            if (_usesCompositedTransition)
+            {
+                double visualOffset = StopCompositedTransition();
+                _viewer.ScrollToVerticalOffset(visualOffset);
+                // 跨出虚拟缓存后只发生一次同步交接，确保逐帧路径从当前画面继续。
+                _viewer.UpdateLayout();
+                StopTelemetry();
+            }
+
             long now = Stopwatch.GetTimestamp();
             double currentOffset = _viewer.VerticalOffset;
             if (_isRunning
                 && (targetOffset - currentOffset) * _velocity < 0d)
             {
-                // A direction reversal should respond immediately instead of
-                // carrying momentum away from the user's new target.
+                // 反向输入立即清除旧方向动量，避免画面继续偏离用户的新目标。
                 _velocity = 0d;
             }
 
@@ -436,11 +510,19 @@ internal static class SmoothWheelScrolling
             _velocity = 0d;
             _lastFrameTimestamp = now;
             _isRunning = true;
+            StartTelemetry();
             CompositionTarget.Rendering += _renderingHandler;
         }
 
-        internal void Stop()
+        internal double StopAndCommitVisualOffset()
         {
+            if (_usesCompositedTransition)
+            {
+                double visualOffset = StopCompositedTransition();
+                StopTelemetry();
+                return visualOffset;
+            }
+
             if (_isRunning)
             {
                 CompositionTarget.Rendering -= _renderingHandler;
@@ -448,6 +530,24 @@ internal static class SmoothWheelScrolling
             }
 
             _velocity = 0d;
+            StopTelemetry();
+            return _viewer.VerticalOffset;
+        }
+
+        internal double GetCurrentVisualOffset()
+        {
+            double translation =
+                _usesCompositedTransition
+                && _compositedContent is not null
+                && ReferenceEquals(
+                    _compositedContent.RenderTransform,
+                    _scrollTransform)
+                    ? _scrollTransform?.Y ?? 0d
+                    : 0d;
+            return Math.Clamp(
+                _viewer.VerticalOffset - translation,
+                0d,
+                NormalizeNonNegative(_viewer.ScrollableHeight));
         }
 
         private void OnRendering(object? sender, EventArgs eventArgs)
@@ -494,14 +594,312 @@ internal static class SmoothWheelScrolling
             RoutedEventArgs eventArgs)
         {
             Cancel(_viewer);
+            RestoreOriginalRenderTransform();
         }
 
         private void Complete()
         {
-            Stop();
+            StopOffsetTransition();
+            StopTelemetry();
             _viewer.ScrollToVerticalOffset(_targetOffset);
             SetTargetVerticalOffset(_viewer, _targetOffset);
             SetIsAnimationActive(_viewer, false);
+        }
+
+        private bool TryStartOrRetargetComposited(
+            double targetOffset,
+            TimeSpan responseDuration)
+        {
+            double currentVisualOffset = GetCurrentVisualOffset();
+            if (!TryGetCompositedTransform(
+                    currentVisualOffset,
+                    targetOffset,
+                    out TranslateTransform transform))
+            {
+                return false;
+            }
+
+            if (_isRunning && !_usesCompositedTransition)
+            {
+                StopOffsetTransition();
+            }
+
+            double currentTranslation = _usesCompositedTransition
+                ? transform.Y
+                : 0d;
+            bool continuesExistingSession =
+                _isRunning && _usesCompositedTransition;
+            currentVisualOffset = Math.Clamp(
+                _viewer.VerticalOffset - currentTranslation,
+                0d,
+                NormalizeNonNegative(_viewer.ScrollableHeight));
+            int generation = unchecked(++_animationGeneration);
+            transform.BeginAnimation(
+                TranslateTransform.YProperty,
+                null);
+            double startingTranslation = targetOffset
+                                         - currentVisualOffset;
+            transform.Y = startingTranslation;
+            _targetOffset = targetOffset;
+            _responseDuration = responseDuration;
+            _velocity = 0d;
+            _isRunning = true;
+            _usesCompositedTransition = true;
+            if (!continuesExistingSession)
+            {
+                StartTelemetry();
+            }
+
+            // 先一次性提交真实滚动位置，再只动画内容的渲染变换。
+            // RenderTransform 不触发布局，复杂页面不会再为每个动画帧重排视觉树。
+            _viewer.ScrollToVerticalOffset(targetOffset);
+            var animation = new DoubleAnimation
+            {
+                From = startingTranslation,
+                To = 0d,
+                Duration = new Duration(responseDuration),
+                EasingFunction = new CubicEase
+                {
+                    EasingMode = EasingMode.EaseOut
+                },
+                FillBehavior = FillBehavior.Stop
+            };
+            animation.Completed += (_, _) =>
+            {
+                if (generation != _animationGeneration
+                    || !_usesCompositedTransition)
+                {
+                    return;
+                }
+
+                transform.BeginAnimation(
+                    TranslateTransform.YProperty,
+                    null);
+                transform.Y = 0d;
+                _isRunning = false;
+                _usesCompositedTransition = false;
+                ViewportDeferredContentControl
+                    .RefreshCompositedViewport(_viewer);
+                StopTelemetry();
+                SetTargetVerticalOffset(_viewer, _targetOffset);
+                SetIsAnimationActive(_viewer, false);
+            };
+            transform.BeginAnimation(
+                TranslateTransform.YProperty,
+                animation,
+                HandoffBehavior.SnapshotAndReplace);
+            return true;
+        }
+
+        private bool TryGetCompositedTransform(
+            double currentVisualOffset,
+            double targetOffset,
+            out TranslateTransform transform)
+        {
+            transform = null!;
+            if (_viewer.Content is not UIElement content
+                || !CanUseCompositedTransition(
+                    currentVisualOffset,
+                    targetOffset))
+            {
+                return false;
+            }
+
+            if (ReferenceEquals(content, _compositedContent)
+                && _scrollTransform is not null
+                && ReferenceEquals(
+                    content.RenderTransform,
+                    _scrollTransform))
+            {
+                transform = _scrollTransform;
+                return true;
+            }
+
+            RestoreOriginalRenderTransform();
+            Transform originalTransform = content.RenderTransform;
+            if (!ReferenceEquals(originalTransform, Transform.Identity))
+            {
+                return false;
+            }
+
+            _compositedContent = content;
+            _originalRenderTransform = originalTransform;
+            _scrollTransform = new TranslateTransform();
+            content.RenderTransform = _scrollTransform;
+            transform = _scrollTransform;
+            return true;
+        }
+
+        private bool CanUseCompositedTransition(
+            double currentVisualOffset,
+            double targetOffset)
+        {
+            // 页面级物理滚动区始终可合成；模板内滚动区只对带前后缓存的像素虚拟列表启用，
+            // 确保一次提交目标位置后，动画经过的项目仍处于已实现缓冲区中。
+            if (!_viewer.CanContentScroll)
+            {
+                return _viewer.TemplatedParent is null;
+            }
+
+            ItemsControl? itemsControl = FindOwningItemsControl(_viewer);
+            if (itemsControl is null
+                || !VirtualizingPanel.GetIsVirtualizing(itemsControl)
+                || VirtualizingPanel.GetVirtualizationMode(itemsControl)
+                    != VirtualizationMode.Recycling
+                || VirtualizingPanel.GetScrollUnit(itemsControl)
+                    != ScrollUnit.Pixel)
+            {
+                return false;
+            }
+
+            VirtualizationCacheLength cacheLength =
+                VirtualizingPanel.GetCacheLength(itemsControl);
+            double directionalCache =
+                targetOffset >= currentVisualOffset
+                    ? cacheLength.CacheBeforeViewport
+                    : cacheLength.CacheAfterViewport;
+            double cacheCapacity =
+                VirtualizingPanel.GetCacheLengthUnit(itemsControl) switch
+                {
+                    VirtualizationCacheLengthUnit.Page =>
+                        directionalCache * Math.Max(
+                            1d,
+                            NormalizeNonNegative(_viewer.ViewportHeight)),
+                    VirtualizationCacheLengthUnit.Pixel =>
+                        directionalCache,
+                    _ => 0d
+                };
+            return Math.Abs(targetOffset - currentVisualOffset)
+                   <= cacheCapacity + 0.5d;
+        }
+
+        private static ItemsControl? FindOwningItemsControl(
+            DependencyObject child)
+        {
+            for (DependencyObject? current = child;
+                 current is not null;
+                 current = GetParent(current))
+            {
+                if (current is ItemsControl itemsControl)
+                {
+                    return itemsControl;
+                }
+            }
+            return null;
+        }
+
+        private double StopCompositedTransition()
+        {
+            TranslateTransform? transform = _scrollTransform;
+            bool ownsActiveTransform =
+                _compositedContent is not null
+                && transform is not null
+                && ReferenceEquals(
+                    _compositedContent.RenderTransform,
+                    transform);
+            double currentTranslation =
+                ownsActiveTransform ? transform!.Y : 0d;
+            double currentVisualOffset = Math.Clamp(
+                _viewer.VerticalOffset - currentTranslation,
+                0d,
+                NormalizeNonNegative(_viewer.ScrollableHeight));
+            unchecked
+            {
+                _animationGeneration++;
+            }
+            if (ownsActiveTransform)
+            {
+                transform!.BeginAnimation(
+                    TranslateTransform.YProperty,
+                    null);
+                transform.Y = 0d;
+            }
+
+            _isRunning = false;
+            _usesCompositedTransition = false;
+            _velocity = 0d;
+            return currentVisualOffset;
+        }
+
+        private void StopOffsetTransition()
+        {
+            if (_isRunning && !_usesCompositedTransition)
+            {
+                CompositionTarget.Rendering -= _renderingHandler;
+            }
+
+            _isRunning = false;
+            _velocity = 0d;
+        }
+
+        private void StartTelemetry()
+        {
+            if (_isTelemetryRunning) return;
+            _cadenceTracker.Reset();
+            _isTelemetryRunning = true;
+            CompositionTarget.Rendering +=
+                _telemetryRenderingHandler;
+        }
+
+        private void OnTelemetryRendering(
+            object? sender,
+            EventArgs eventArgs)
+        {
+            if (!_isTelemetryRunning) return;
+            if (_usesCompositedTransition)
+            {
+                ViewportDeferredContentControl
+                    .RefreshCompositedViewport(_viewer);
+            }
+            TimeSpan renderingTime =
+                eventArgs is RenderingEventArgs renderingEventArgs
+                    ? renderingEventArgs.RenderingTime
+                    : Stopwatch.GetElapsedTime(0L);
+            _cadenceTracker.RecordFrame(renderingTime);
+        }
+
+        private void StopTelemetry()
+        {
+            if (!_isTelemetryRunning) return;
+            CompositionTarget.Rendering -=
+                _telemetryRenderingHandler;
+            _isTelemetryRunning = false;
+            ScrollFrameTelemetry.Publish(
+                _viewer,
+                _cadenceTracker.Complete());
+        }
+
+        private void RestoreOriginalRenderTransform()
+        {
+            StopTelemetry();
+            StopOffsetTransition();
+            if (_usesCompositedTransition)
+            {
+                unchecked
+                {
+                    _animationGeneration++;
+                }
+            }
+
+            if (_compositedContent is not null
+                && _scrollTransform is not null
+                && ReferenceEquals(
+                    _compositedContent.RenderTransform,
+                    _scrollTransform))
+            {
+                _scrollTransform.BeginAnimation(
+                    TranslateTransform.YProperty,
+                    null);
+                _compositedContent.RenderTransform =
+                    _originalRenderTransform ?? Transform.Identity;
+            }
+
+            _compositedContent = null;
+            _originalRenderTransform = null;
+            _scrollTransform = null;
+            _isRunning = false;
+            _usesCompositedTransition = false;
+            _velocity = 0d;
         }
     }
 }
@@ -517,7 +915,7 @@ internal readonly record struct WheelScrollPlan(
 }
 
 /// <summary>
-/// Describes the offset and velocity produced for a single rendered frame.
+/// 描述单个真实渲染帧产生的偏移与速度。
 /// </summary>
 internal readonly record struct WheelAnimationFrame(
     double Offset,

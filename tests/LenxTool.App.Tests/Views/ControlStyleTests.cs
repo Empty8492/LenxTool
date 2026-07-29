@@ -252,5 +252,23 @@ public sealed class ControlStyleTests
                 && element.Attribute("Property")?.Value
                     == "VirtualizingPanel.ScrollUnit"
                 && element.Attribute("Value")?.Value == "Pixel");
+        Assert.Contains(
+            style.Elements(),
+            element => element.Name.LocalName == "Setter"
+                && element.Attribute("Property")?.Value
+                    == "VirtualizingPanel.VirtualizationMode"
+                && element.Attribute("Value")?.Value == "Recycling");
+        Assert.Contains(
+            style.Elements(),
+            element => element.Name.LocalName == "Setter"
+                && element.Attribute("Property")?.Value
+                    == "VirtualizingPanel.CacheLength"
+                && element.Attribute("Value")?.Value == "1,1");
+        Assert.Contains(
+            style.Elements(),
+            element => element.Name.LocalName == "Setter"
+                && element.Attribute("Property")?.Value
+                    == "VirtualizingPanel.CacheLengthUnit"
+                && element.Attribute("Value")?.Value == "Page");
     }
 }

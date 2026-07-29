@@ -115,6 +115,17 @@ public sealed class NewsCenterLayoutTests
             trendTab.Descendants(),
             element => element.Name.LocalName == "ItemsControl"
                 && element.Attribute("ItemsSource")?.Value == "{Binding TrendGroups}");
+        XElement deferredGroup = Assert.Single(
+            trendTab.Descendants(),
+            element => element.Name.LocalName
+                    == "ViewportDeferredContentControl"
+                && element.Attribute("DeferredContent")?.Value == "{Binding}");
+        Assert.Equal(
+            "{StaticResource TrendPlatformCardTemplate}",
+            deferredGroup.Attribute("DeferredContentTemplate")?.Value);
+        Assert.Equal(
+            "0.5",
+            deferredGroup.Attribute("PreloadViewportCount")?.Value);
         Assert.Contains(
             trendTab.Descendants(),
             element => element.Name.LocalName == "Button"
