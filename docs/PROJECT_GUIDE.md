@@ -161,7 +161,7 @@ npm.cmd test -- --run
 
 ## 10. 当前版本边界与交付状态
 
-本节是当前交付状态的唯一准绳，最后核对日期为 **2026-07-27**。`IMPLEMENTATION_PLAN.md` 保留完整任务与验收条件；其中未勾选的任务可能已有部分实现，但表示尚未满足该任务的全部验收条件。
+本节是当前交付状态的唯一准绳，最后核对日期为 **2026-07-30**。`IMPLEMENTATION_PLAN.md` 保留完整任务与验收条件；其中未勾选的任务可能已有部分实现，但表示尚未满足该任务的全部验收条件。
 
 ### 10.1 本轮已完成
 
@@ -247,10 +247,13 @@ npm.cmd test -- --run
 - P2-09 导出队列与历史已完成：schema v21 使用稳定幂等键、五态互斥约束、租约令牌和续期心跳持久化任务；单进程并发固定为 1，跨服务在租约有效期内不能重复领取，心跳还会把其他进程写入的持久取消桥接给当前适配器，应用退出可释放或等待租约恢复。队列只接受可安全重放的幂等适配器，429 精确尊重 0～7 天内的 Retry-After；历史不保存正文、凭据、请求/响应或任意 RemoteId/RemoteUrl，只展示非秘密目标引用、条目/内容版本、状态、次数、时间和封闭错误码。取消在副作用成功前合作终止，适配器已返回成功后由 Completed 优先，避免把真实成功伪装为撤销。决策和限制见 ADR-003。
 - P2-10 Markdown 文件导出已完成：固定 front matter 与 UTF-8 无 BOM 输出支持仅链接、清洗正文、正文加已缓存栅格图片；缺失图片不会触发下载。中文、Windows 保留名、恶意分隔符和 Unicode 截断统一清理，根目录及目标组件拒绝 symlink/junction reparse point，正文和图片均通过同目录临时文件转正。覆盖/跳过使用稳定条目文件名，新版本由幂等键派生，同一内容版本重启重试不会制造副本。生产仍未注册任何目标实例，所以当前不会静默写文件。
 - P2-09/P2-10 完整门禁为 Core 173/173、Infrastructure 414/414、App/WPF 323/323，共 910/910；Worker 74/74、strict typecheck 与 Release build 0 警告/0 错误。
+- P2-11 Obsidian 适配器已完成：生产始终注册适配器能力，但本机目标只保存为单条版本化 JSON；只有 Vault 已明确保存、管理员 ACTIVE 策略启用且用户点击阅读器行内或详情区“导出到 Obsidian”后才入队，后台执行时再次读取当前配置和策略。队列目标使用不泄露路径的 `default.<24 位小写十六进制>` 配置修订标识；版本化任务在任何目录操作前必须与当前规范化配置精确匹配，旧配置任务以非重试 `Conflict` 关闭，重新点击会按新配置作用域入队。Windows 路径大小写、分隔符和尾随分隔符等价形式保持同一作用域，实际目标或渲染输出变化才生成新作用域；只有预版本 `default` 任务为迁移兼容读取当前配置。失败或取消任务可由用户显式重试，已完成任务仍保持去重。显式 Feed 视图覆盖自动分类。
+- Vault 必须是已存在且不能为磁盘根的绝对本地目录，拒绝 UNC/device/network、reparse point、目录逃逸、ADS、保留名和尾随空格/点。64 KiB 内联模板只允许五种正文占位符且每种最多一次，并以单遍、非递归方式替换；空模板统一为未设置。实际输入最多 8 MiB、最终 UTF-8 文件最多 12 MiB；HTML 在建 DOM 前受标记预算保护，解析阶段限制嵌套，解析后再限制 16,384 个来源节点、128 层深度和深度加权渲染工作量。Feed 文本中的 Markdown 控制符、原始图片/链接和自定义 URI 按纯文本安全输出，代码区保留字面内容并动态选择围栏，只有通过校验的 HTTP(S) 来源链接由渲染器以安全目标形式生成。渲染与输出预算全部成功后才创建目标目录或复制缓存图片。标签进入逐项转义的复数 YAML `tags`。每个内容版本创建确定性新文件且从不覆盖，不读取 Vault 模板文件、不安装插件，也不实现或调用 `obsidian://`。临时设置存储或 Vault I/O 故障进入可重试状态，权限、无效配置、旧版本作用域和撤销策略失败关闭。只有本地 Obsidian 策略允许空主机列表，其他网络集成仍要求精确 DNS 主机。180 天清理新增对 `QUEUED`/`RUNNING` 导出引用的保护。
+- P2-11 当前完整门禁为 Core 174/174、Infrastructure 484/484、App/WPF 347/347，共 1005/1005；Worker 75/75、strict typecheck 与 Release build 0 警告/0 错误。滚动运行时验收不再依赖固定等待 80 ms，而是直接断言动画会话与最终逻辑滚动，避免离屏 WPF 帧时钟抖动改变产品契约。
 
 ### 10.2 下一里程碑
 
-Gate 0 字幕闭环、P0“管理员策展 RSS”、P1“阅读增强、AI 与自动化”、P2-01～P2-10，以及插入计划 DISC-01～DISC-06、UX-03 均已完成。下一项是 [P2 内容视图与集成计划](plans/RSS_P2_VIEWS_INTEGRATIONS.md) 的 P2-11 Obsidian 适配器。P1/P2 源码进度不等于正式签名发布完成。
+Gate 0 字幕闭环、P0“管理员策展 RSS”、P1“阅读增强、AI 与自动化”、P2-01～P2-11，以及插入计划 DISC-01～DISC-06、UX-03 均已完成。[P2 内容视图与集成计划](plans/RSS_P2_VIEWS_INTEGRATIONS.md) 的 P2-12 Eagle 适配器是尚未启动的候选后续项。P1/P2 源码进度不等于正式签名发布完成。
 
 字幕闭环完成后的产品主路线已确定为“管理员策展 RSS”：管理员维护共享 RSS/Atom 目录，普通用户只能同步和阅读，不得修改共享订阅、分类、抓取策略或自动化规则。为保持现有“云端不存新闻正文”边界，首版采用 Worker/D1 保存权威目录、各桌面客户端本地抓取和 SQLite 缓存的模式。
 
@@ -259,8 +262,8 @@ Gate 0 字幕闭环、P0“管理员策展 RSS”、P1“阅读增强、AI 与�
 1. Gate 0 字幕闭环已完成；验收记录见 [`plans/EXISTING_BACKLOG_ALIGNMENT.md`](plans/EXISTING_BACKLOG_ALIGNMENT.md)。
 2. P0-01～P0-20、P0-B/P0-C 及最终检查点已完成；P0 关闭记录见 [`plans/RSS_P0_ADMIN_CATALOG.md`](plans/RSS_P0_ADMIN_CATALOG.md)。
 3. P1-01～P1-20、P1-A/P1-B/P1-C/P1-D 及最终检查点已完成；关闭记录见 [`plans/RSS_P1_READING_INTELLIGENCE.md`](plans/RSS_P1_READING_INTELLIGENCE.md)。
-4. P2-01～P2-10 已完成五视图、智能视图、统一导出契约、安全集成策略、持久化队列与本地 Markdown 导出；[`plans/RSS_DISCOVERY_AND_CONTROL_UX.md`](plans/RSS_DISCOVERY_AND_CONTROL_UX.md) 的 DISC-01～DISC-06 已交付独立发现索引、安全可替换 provider、管理员统一发现页、确认发布闭环和最终检查点，UX-03 已交付原生 WPF 共享控件模板，不依赖 Folo 私有 API 或复制其源码。
-5. 当前从 P2-11 Obsidian 适配器继续实现桌面/外部导出适配器、本地定时摘要和 Windows 系统通知；具体见 [`plans/RSS_P2_VIEWS_INTEGRATIONS.md`](plans/RSS_P2_VIEWS_INTEGRATIONS.md)。
+4. P2-01～P2-11 已完成五视图、智能视图、统一导出契约、安全集成策略、持久化队列、本地 Markdown 导出与受控 Obsidian Vault 适配器；[`plans/RSS_DISCOVERY_AND_CONTROL_UX.md`](plans/RSS_DISCOVERY_AND_CONTROL_UX.md) 的 DISC-01～DISC-06 已交付独立发现索引、安全可替换 provider、管理员统一发现页、确认发布闭环和最终检查点，UX-03 已交付原生 WPF 共享控件模板，不依赖 Folo 私有 API 或复制其源码。
+5. P2-12 Eagle 适配器、其他桌面/外部导出适配器、本地定时摘要和 Windows 系统通知仍是未启动的候选后续项；具体见 [`plans/RSS_P2_VIEWS_INTEGRATIONS.md`](plans/RSS_P2_VIEWS_INTEGRATIONS.md)。
 
 总路线、参考项目和许可证边界见 [`plans/RSS_MASTER_ROADMAP.md`](plans/RSS_MASTER_ROADMAP.md)，架构决策见 [`decisions/ADR-001-admin-curated-rss.md`](decisions/ADR-001-admin-curated-rss.md)、[`decisions/ADR-002-article-content-extraction.md`](decisions/ADR-002-article-content-extraction.md) 与 [`decisions/ADR-003-durable-entry-export-queue.md`](decisions/ADR-003-durable-entry-export-queue.md)。P0 与 P1 可作为已验收基础；生产 Worker/D1、正式安装包、签名、升级和跨物理机矩阵仍按 10.5～10.7 节单独验收。
 
@@ -284,6 +287,7 @@ Gate 0 字幕闭环、P0“管理员策展 RSS”、P1“阅读增强、AI 与�
 - 云端转写：在设置页保存有效的 Groq API Key。
 - 离线转写：导入兼容 whisper.cpp、文件大于 1 MiB 的 `ggml-*.bin` 模型。
 - DeepSeek Key：生成单条解读或每日趋势报告时需要；在设置页保存后由 DPAPI CurrentUser 加密，报告正文和 token 用量写入本地 SQLite。
+- Obsidian：管理员先在“外部集成”中启用 Obsidian；本机再从设置页选择一个已存在的本地 Vault 根目录并保存相对子目录、标签、可选内联模板和来源链接开关。只有阅读器中的显式导出按钮会入队，保存设置本身不会写入 Vault。
 - 共享账号：部署 Worker 后，以 `LENXTOOL_WORKER_BASE_URL` 配置其 HTTPS 根地址；登录界面才会启用。该变量不是凭据，账号 refresh token 仍只由 DPAPI CurrentUser 保存。
 - WebView2 Runtime：当前电脑已安装；早报正文已不再依赖它，安装器和未来富文本能力仍保留运行时检查。
 - Microsoft Word：当前电脑已安装，Word 转 PDF 无需额外配置。

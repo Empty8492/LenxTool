@@ -1,6 +1,6 @@
 # 测试报告
 
-测试日期：.NET 2026-07-29 / Worker 2026-07-28（Asia/Shanghai）
+测试日期：.NET / Worker 2026-07-30（Asia/Shanghai）
 版本：0.1.0  
 配置：Release / win-x64 / .NET SDK 10.0.302
 
@@ -8,16 +8,20 @@
 
 | 测试组 | 结果 |
 |---|---:|
-| LenxTool.Core.Tests | 173 passed |
-| LenxTool.Infrastructure.Tests | 414 passed |
-| LenxTool.App.Tests | 323 passed |
-| Cloudflare Worker Vitest | 74 passed |
+| LenxTool.Core.Tests | 174 passed |
+| LenxTool.Infrastructure.Tests | 484 passed |
+| LenxTool.App.Tests | 347 passed |
+| Cloudflare Worker Vitest | 75 passed |
 | Worker TypeScript strict typecheck | passed |
 | .NET build warnings | 0 |
 | NuGet vulnerable packages | 0 detected |
 | npm audit vulnerabilities | 0 detected |
 
-当前分组 Release 结果为 Core 173/173、Infrastructure 414/414、App/WPF 323/323，共 910/910；Worker workerd/D1 Vitest 74/74、Worker strict typecheck 与全解决方案 build 0 警告/0 错误。本轮未修改 NuGet/npm 依赖；最近一次 NuGet 在线漏洞扫描与 `npm audit` 均为 0 漏洞。
+当前分组 Release 结果为 Core 174/174、Infrastructure 484/484、App/WPF 347/347，共 1005/1005；Worker workerd/D1 Vitest 75/75、Worker strict typecheck 与全解决方案 build 0 警告/0 错误。本轮未修改 NuGet/npm 依赖；最近一次 NuGet 在线漏洞扫描与 `npm audit` 均为 0 漏洞。
+
+P2-11 新增安全 Obsidian Vault 目标、设置/目录选择、生产适配器注册、阅读器行内及详情区显式入队和 ACTIVE 策略复核场景。目标存储覆盖单一版本 JSON、缺失/损坏安全回退、空模板规范化、暂时读取失败的可重试映射、绝对已存在且非磁盘根的本地目录，以及 UNC/device/network/reparse/逃逸/ADS/保留名拒绝。模板覆盖 64 KiB 上限、五种允许占位符且每种最多一次、未知占位符、单遍非递归替换、空白保真、8 MiB 实际输入和 12 MiB 最终 UTF-8 上限；Markdown 回归覆盖原始图片、链接、`obsidian://`、自动链接、危险右括号目标、标点扩容和含反引号代码均不能突破纯文本边界，标签覆盖复数 `tags` 转义。解析边界新增 DOM 构建前标记洪泛、解析期未闭合嵌套、16,384 节点、128 层深度、深度加权工作量、特殊代码/脚本节点短路和精确边界测试；扩容失败确认在目标目录创建与缓存图片流打开前返回 `ContentTooLarge`。文件导出覆盖中文路径、只读或暂时消失的 Vault、同配置同内容幂等、规范化等价 Windows 路径保持同一作用域、实际输出配置变化生成新作用域、过期版本任务零写盘 `Conflict`、不同内容确定性 `CreateNewVersion`、不覆盖用户文件，以及配置或策略在入队后撤销时执行阶段失败关闭。
+
+队列回归确认 `FAILED`/`CANCELLED` 可由显式动作原子恢复为 `QUEUED`，包括 attempts、租约、取消、错误与时间字段全部复位；两个仓储并发复活时恰好一个返回新建，`COMPLETED` 仍去重。配置修订目标 ID 为不含路径明文的 `default.<24 位小写十六进制>`，仅预版本 `default` 任务保留迁移兼容；版本化任务必须精确匹配当前规范化作用域。App 覆盖目录选择只回填、保存后无需重启、无效路径/标签/模板提示、显式 Feed 视图覆盖自动分类、指定行及详情区动作入队、实际请求条目标题反馈与有界净化、同配置重复入队幂等、配置变化获得新幂等范围、未配置/策略关闭零入队和 XAML 绑定；DI 验证生产注册能力但启动不写文件。Worker 新增 Obsidian 空主机特例并确认其他启用的网络类型仍必须有主机。180 天保留测试确认 `QUEUED`/`RUNNING` 导出引用保护源条目，终态后恢复清理。唯一既有滚动时序用例改为直接断言动画会话和最终逻辑滚动，不再等待固定 80 ms；完整门禁为 Core 174/174、Infrastructure 484/484、App/WPF 347/347，共 1005/1005，Worker 75/75、strict typecheck 与 Release build 0 警告/0 错误。
 
 P2-09/P2-10 新增持久导出队列、五态数据库约束、租约心跳、精确重试、跨进程合作取消和 Markdown 本地文件导出回归。真实 SQLite 场景覆盖并发防重领、租约续期、失败重试后取消并模拟崩溃恢复，以及第二个服务取消第一个服务的长运行适配器；Markdown 场景覆盖三种内容模式、UTF-8 无 BOM、Windows/Unicode 安全文件名、覆盖/跳过/稳定新版本、缓存图片白名单、原子转正和 junction/reparse 拒绝。完整门禁为 Core 173/173、Infrastructure 414/414、App/WPF 323/323，共 910/910；Worker 74/74、strict typecheck 与 Release build 0 警告/0 错误。Wrangler 在受限环境尝试写沙箱外调试日志时报告 EPERM，但测试进程以退出码 0 完成 12/12 文件和 74/74 场景。
 
