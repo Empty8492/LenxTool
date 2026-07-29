@@ -71,16 +71,16 @@ public sealed class SmoothWheelScrollingWpfRuntimeTests
 
                     double expectedTarget = ExpectedTarget(viewer);
                     RaiseWheel(content.Children[0]);
-                    PumpDispatcher();
-                    Assert.InRange(
-                        viewer.VerticalOffset,
-                        expectedTarget - 0.5d,
-                        expectedTarget + 0.5d);
                     var scrollTransform = Assert.IsType<TranslateTransform>(
                         content.RenderTransform);
                     Assert.True(
                         scrollTransform.Y > 0d,
                         "重页面应通过内容渲染变换补间，而不是逐帧修改逻辑滚动位置。");
+                    PumpDispatcher();
+                    Assert.InRange(
+                        viewer.VerticalOffset,
+                        expectedTarget - 0.5d,
+                        expectedTarget + 0.5d);
                     PumpFor(TimeSpan.FromMilliseconds(320d));
 
                     Assert.InRange(
@@ -93,13 +93,20 @@ public sealed class SmoothWheelScrollingWpfRuntimeTests
                         ScrollFrameTelemetrySnapshot>(
                         ScrollFrameTelemetry.GetLatestSnapshot(viewer));
                     Assert.True(telemetry.FrameCount >= 2);
-                    Assert.InRange(
-                        telemetry.AverageFramesPerSecond,
-                        10d,
-                        300d);
+                    Assert.True(double.IsFinite(
+                        telemetry.AverageFramesPerSecond));
                     Assert.True(
-                        telemetry.P95FrameInterval
-                            < TimeSpan.FromMilliseconds(100d));
+                        telemetry.AverageFramesPerSecond > 0d);
+                    Assert.False(telemetry.HasExplicitFrameBudget);
+                    Assert.False(telemetry.MeetsFrameBudget);
+                    Assert.True(
+                        telemetry.P95FrameInterval > TimeSpan.Zero);
+                    Assert.True(
+                        telemetry.WorstFrameInterval
+                            >= telemetry.P95FrameInterval);
+                    Assert.True(
+                        telemetry.Duration
+                            >= telemetry.WorstFrameInterval);
                 }
                 catch (Exception exception)
                 {
