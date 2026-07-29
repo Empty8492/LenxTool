@@ -336,6 +336,41 @@ public sealed class WorkerAccountSessionService :
         }, cancellationToken);
     }
 
+    internal Task<HttpResponseMessage>
+        SendIntegrationPolicyMutationAsync(
+            long expectedPolicySetVersion,
+            object payload,
+            CancellationToken cancellationToken)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        ArgumentNullException.ThrowIfNull(payload);
+        if (expectedPolicySetVersion is < 0
+                or > 9_007_199_254_740_991)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(expectedPolicySetVersion));
+        }
+
+        // 幂等键在 401 刷新重放前生成，确保两次授权请求仍代表同一写操作。
+        string idempotencyKey = Guid.NewGuid().ToString("N");
+        return SendAuthorizedAsync(token =>
+        {
+            HttpRequestMessage request =
+                CreateAuthorizedRequest(
+                    HttpMethod.Put,
+                    "/v1/admin/integration-policies",
+                    token.AccessToken);
+            request.Headers.TryAddWithoutValidation(
+                "If-Match",
+                $"\"integration-policies-all-{expectedPolicySetVersion}\"");
+            request.Headers.TryAddWithoutValidation(
+                "Idempotency-Key",
+                idempotencyKey);
+            request.Content = JsonContent.Create(payload);
+            return request;
+        }, cancellationToken);
+    }
+
     private async Task<HttpResponseMessage> SendAuthorizedAsync(
         Func<TokenState, HttpRequestMessage> requestFactory,
         CancellationToken cancellationToken)

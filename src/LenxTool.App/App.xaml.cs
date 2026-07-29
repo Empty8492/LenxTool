@@ -67,6 +67,10 @@ public partial class App : Application
             SmartViewAdminViewModel smartViewAdmin =
                 _host.Services.GetRequiredService<SmartViewAdminViewModel>();
             await smartViewAdmin.InitializeAsync(CancellationToken.None).ConfigureAwait(true);
+            IntegrationAdminViewModel integrationAdmin =
+                _host.Services.GetRequiredService<IntegrationAdminViewModel>();
+            await integrationAdmin.InitializeAsync(CancellationToken.None)
+                .ConfigureAwait(true);
             IFeedRefreshService feedRefresh = _host.Services.GetRequiredService<IFeedRefreshService>();
             await feedRefresh.InitializeAsync(CancellationToken.None).ConfigureAwait(true);
             HistoryViewModel history = _host.Services.GetRequiredService<HistoryViewModel>();
@@ -241,6 +245,7 @@ public partial class App : Application
         services.AddSingleton<IOpmlCodec, OpmlCodec>();
         services.AddSingleton<IOpmlFileService, OpmlFileService>();
         services.AddFeedDiscovery(CreateFeedDiscoveryOptions());
+        services.AddEntryIntegrationInfrastructure();
         services.AddArticleImages(ArticleImageDownloadOptions.Default);
         services.AddSingleton<FeedMediaDeliveryRepository>();
         services.AddSingleton<IFeedMediaDeliveryRepository>(static services =>
@@ -306,11 +311,13 @@ public partial class App : Application
         services.AddSingleton<HistoryViewModel>();
         services.AddSingleton<ToolsViewModel>();
         services.AddSingleton<SettingsViewModel>();
+        services.AddSingleton<IntegrationSettingsViewModel>();
         // 发现页发布复用现有目录管理员服务、版本同步和服务端 RBAC。
         services.AddSingleton<FeedDiscoveryViewModel>();
         services.AddSingleton<FeedAdminViewModel>();
         services.AddSingleton<AutomationAdminViewModel>();
         services.AddSingleton<SmartViewAdminViewModel>();
+        services.AddSingleton<IntegrationAdminViewModel>();
         services.AddSingleton<NotificationCenterViewModel>();
         services.AddSingleton(CreateShellViewModel);
         services.AddSingleton<MainWindow>();
@@ -330,6 +337,8 @@ public partial class App : Application
             services.GetRequiredService<AutomationAdminViewModel>();
         SmartViewAdminViewModel smartViewAdmin =
             services.GetRequiredService<SmartViewAdminViewModel>();
+        IntegrationAdminViewModel integrationAdmin =
+            services.GetRequiredService<IntegrationAdminViewModel>();
         NotificationCenterViewModel notificationCenter =
             services.GetRequiredService<NotificationCenterViewModel>();
 
@@ -345,6 +354,7 @@ public partial class App : Application
             new("history", "历史与数据", "任务、收藏、搜索与备份", "M12,4 A8,8 0 1 1 4.5,9 M4,4 L4,9 9,9 M12,8 L12,13 16,15", history),
             new("feed-admin", "订阅管理", "管理员共享目录入口", "M4,5 L20,5 20,19 4,19 Z M8,9 L16,9 M8,13 L16,13 M8,17 L13,17", feedAdmin, AdminOnly: true),
             new("smart-view-admin", "智能视图", "管理员发布只读共享筛选", "M4,5 L20,5 20,19 4,19 Z M7,9 L17,9 M9,13 L15,13 M11,17 L13,17", smartViewAdmin, AdminOnly: true),
+            new("integration-admin", "外部集成", "管理员控制类型与精确目标主机", "M7,7 L17,7 17,17 7,17 Z M3,12 L7,12 M17,12 L21,12 M10,10 L14,14 M14,10 L10,14", integrationAdmin, AdminOnly: true),
             new("automation-admin", "自动化规则", "管理员规则编辑与只读模拟", "M5,4 L19,4 19,20 5,20 Z M8,8 L16,8 M8,12 L13,12 M8,16 L15,16 M17,14 L21,18 M21,14 L17,18", automationAdmin, AdminOnly: true),
             new("settings", "设置", "主题、密钥、账号与更新", "M12,8 A4,4 0 1 0 12,16 A4,4 0 1 0 12,8 M12,3 L13,5 16,6 18,5 20,9 18,11 18,14 20,16 18,20 15,19 13,20 11,19 8,20 6,18 7,15 6,12 4,10 6,6 9,6 Z", settings)
         ], accountSession, notificationCenter);

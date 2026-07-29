@@ -1,7 +1,7 @@
 # Worker v1 账号、共享订阅目录与发现 API 契约
 
-状态：v1 基线已冻结；P0 身份/目录、P1 AI 策略与受限自动化规则、DISC-02 已知目录发现均已实现
-最后核对：2026-07-28
+状态：v1 基线已冻结；P0 身份/目录、P1 AI 策略与受限自动化规则、DISC-02 已知目录发现、P2 智能视图与外部集成策略均已实现
+最后核对：2026-07-29
 适用范围：LenxTool 桌面端与 `cloud/LenxTool.Worker` 之间的账号、会话、管理员策展目录、已知目录发现、AI 策略和自动化规则接口
 
 本文是 P0/P1 Worker 契约的真相源。实现顺序和验收见 [P0 详细计划](../plans/RSS_P0_ADMIN_CATALOG.md)与 [P1 详细计划](../plans/RSS_P1_READING_INTELLIGENCE.md)，安全边界见 [威胁模型](../THREAT_MODEL.md)，云端只保存共享目录配置的决策见 [ADR-001](../decisions/ADR-001-admin-curated-rss.md)。
@@ -248,6 +248,8 @@ Idempotency-Key: 018f87d4-0f7e-7ad0-9c06-b285e52e7664
 | `GET /v1/automation-rules` | user/admin | URL 2 KiB；`afterVersion` 0～2^53-1；`scope` 枚举 | 200 `AutomationRulesSnapshot` 或 304 | `AUTOMATION_VERSION_AHEAD`、`ADMIN_REQUIRED` | 无 |
 | `POST /v1/admin/automation-rules` | admin | JSON 64 KiB；规则/条件/动作受限 | 201 `AutomationMutation` | `AUTOMATION_VERSION_CONFLICT`、`AUTOMATION_RULE_LIMIT_REACHED` | `automation_rule.created` |
 | `PATCH /v1/admin/automation-rules/{id}` | admin | JSON 64 KiB；ID 36；规则/条件/动作受限 | 200 `AutomationMutation` | `AUTOMATION_VERSION_CONFLICT`、`RESOURCE_NOT_FOUND` | `automation_rule.updated` |
+| `GET /v1/integration-policies` | user/admin | URL 2 KiB；`afterVersion` 0～2^53-1；`scope` 枚举 | 200 `IntegrationPolicySnapshot` 或 304 | `INTEGRATION_POLICY_VERSION_AHEAD`、`ADMIN_REQUIRED` | 无 |
+| `PUT /v1/admin/integration-policies` | admin | JSON 64 KiB；最多 9 种策略、每种最多 32 个精确 DNS 主机 | 200 `IntegrationPolicyMutation` | `INTEGRATION_POLICY_VERSION_CONFLICT`、幂等/校验错误 | `integration_policy.replaced` |
 
 所有端点还可能返回第 1.2 节的通用校验、认证、限流和服务不可用错误。
 
@@ -543,6 +545,7 @@ Content-Type: application/json
 | 只读目录、ETag、RBAC/版本并发测试 | 已实现 ACTIVE/ALL 原子快照、强 ETag、304、超前版本拒绝和权限/排序/缓存测试 | P0-05 已完成 |
 | 桌面账号/目录 DTO | 已实现安全会话、ACTIVE/ALL 同步、单项管理客户端、批量客户端和 OPML 工作流 | P0-06～P0-10/P0-15/P0-16 已完成 |
 | AI 策略与自动化规则 | 分类/Feed 策略字段、ACTIVE/ALL 规则快照、POST/PATCH、独立版本/ETag、幂等、不可变版本和桌面管理/同步均已实现 | P1-13～P1-16 已完成 |
+| 外部集成共享策略 | ACTIVE/ALL 快照、整组 PUT、独立版本/ETag、幂等、不可变版本和桌面管理/同步均已实现；个人目标与凭据不进入 Worker/D1 | P2-08 已完成 |
 
 实现不得为了迁就当前单文件 Worker 的偶然行为而改变本文语义。确需变更时，先更新契约、威胁模型和受影响测试，再修改服务端与桌面端。
 
@@ -560,3 +563,11 @@ Content-Type: application/json
 - 每条 1～16 个条件、1～8 个动作；名称最长 120，普通文本最长 512，正则最长 256。除 `ADD_TAG` 外同类动作不能重复；动作顺序唯一。无参数动作拒绝任意值，翻译仅接受 `zh-Hans`、`en`、`ja`、`ko`。
 
 Worker 只验证、版本化和发布规则，不执行正文匹配，也不把命中条目、AI 结果、字幕或本地文件写入 D1。桌面端下载 ACTIVE 快照后再次通过 Core 验证器/解释器，并在本机 SQLite 中计划和执行受限动作。
+
+## 12. P2 外部集成策略契约
+
+`GET /v1/integration-policies?scope=ACTIVE|ALL&afterVersion=n` 使用独立于目录、规则和智能视图的 `policySetVersion`。user 只能读取 ACTIVE，admin 可读取 ALL；强 ETag 为 `"integration-policies-active-n"` 或 `"integration-policies-all-n"`，当前版本返回 304，客户端版本超前返回 `409 INTEGRATION_POLICY_VERSION_AHEAD`。
+
+管理员 PUT 必须同时发送 `If-Match: "integration-policies-all-n"` 和 16～128 字符的 `Idempotency-Key`，请求体是完整 `policies` 集合。成功整组替换并只递增一次版本；同 key/同请求重放原成功响应，同 key/不同请求或旧版本返回 409。支持类型固定为 `OBSIDIAN`、`EAGLE`、`ZOTERO`、`READWISE`、`CUBOX`、`READECK`、`OUTLINE`、`QBITTORRENT`、`WEBHOOK`。
+
+每种策略只有 `kind`、`isEnabled` 和 `allowedHosts`。白名单最多 32 个精确、可公开解析的 DNS 主机名，拒绝协议、端口、路径、通配符、IP、localhost 与保留后缀；启用策略至少需要一个主机。Worker/D1 只发布共享许可，不保存个人 TargetId、完整端点、API Key、Cookie、DPAPI 密文、DNS 结果、健康检查状态或外部响应。桌面端凭据只进入本机 DPAPI；P2-08 不注册真实外部探测器或导出适配器，因此策略发布不会触发外部请求。

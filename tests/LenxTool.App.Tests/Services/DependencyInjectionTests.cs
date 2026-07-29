@@ -143,6 +143,19 @@ public sealed class DependencyInjectionTests
             provider.GetRequiredService<IFeedSmartViewAdminService>());
         Assert.NotNull(provider.GetRequiredService<SmartViewAdminViewModel>());
         Assert.NotNull(provider.GetRequiredService<AutomationAdminViewModel>());
+        Assert.IsType<WorkerEntryIntegrationPolicyService>(
+            provider.GetRequiredService<
+                IEntryIntegrationPolicyService>());
+        Assert.NotNull(provider.GetRequiredService<
+            IEntryIntegrationCredentialStore>());
+        Assert.NotNull(provider.GetRequiredService<
+            IEntryIntegrationHealthService>());
+        Assert.Empty(provider.GetServices<
+            IEntryIntegrationHealthProbe>());
+        Assert.NotNull(provider.GetRequiredService<
+            IntegrationSettingsViewModel>());
+        Assert.NotNull(provider.GetRequiredService<
+            IntegrationAdminViewModel>());
 
         ShellViewModel shell = provider.GetRequiredService<ShellViewModel>();
         Assert.Equal(

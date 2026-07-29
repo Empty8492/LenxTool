@@ -1,10 +1,10 @@
 # Worker D1 Schema
 
-最新权威迁移：[0007_explicit_feed_view_kind.sql](../../cloud/LenxTool.Worker/migrations/0007_explicit_feed_view_kind.sql)、[0008_feed_discovery_index.sql](../../cloud/LenxTool.Worker/migrations/0008_feed_discovery_index.sql)。生产发布必须按序先应用迁移，再部署读取新列/表的 Worker；顺序颠倒会使目录或发现查询因 schema 尚不存在而失败。
+最新权威迁移：[0009_smart_views.sql](../../cloud/LenxTool.Worker/migrations/0009_smart_views.sql)、[0010_integration_policies.sql](../../cloud/LenxTool.Worker/migrations/0010_integration_policies.sql)。生产发布必须按序先应用迁移，再部署读取新表的 Worker；顺序颠倒会使智能视图或集成策略查询因 schema 尚不存在而失败。
 
-状态：P0 目录、P1 AI 策略和受限自动化规则、DISC-02 已知目录发现 schema/读写均已实现
-最后核对：2026-07-28
-权威迁移：[0001_initial.sql](../../cloud/LenxTool.Worker/migrations/0001_initial.sql)、[0002_feed_catalog.sql](../../cloud/LenxTool.Worker/migrations/0002_feed_catalog.sql)、[0003_catalog_mutations.sql](../../cloud/LenxTool.Worker/migrations/0003_catalog_mutations.sql)、[0004_feed_full_text_policy.sql](../../cloud/LenxTool.Worker/migrations/0004_feed_full_text_policy.sql)、[0005_feed_ai_policy.sql](../../cloud/LenxTool.Worker/migrations/0005_feed_ai_policy.sql)、[0006_automation_rules.sql](../../cloud/LenxTool.Worker/migrations/0006_automation_rules.sql)、[0007_explicit_feed_view_kind.sql](../../cloud/LenxTool.Worker/migrations/0007_explicit_feed_view_kind.sql)、[0008_feed_discovery_index.sql](../../cloud/LenxTool.Worker/migrations/0008_feed_discovery_index.sql)
+状态：P0 目录、P1 AI 策略和受限自动化规则、DISC-02 已知目录发现、P2 智能视图与外部集成策略 schema/读写均已实现
+最后核对：2026-07-29
+权威迁移：[0001_initial.sql](../../cloud/LenxTool.Worker/migrations/0001_initial.sql)、[0002_feed_catalog.sql](../../cloud/LenxTool.Worker/migrations/0002_feed_catalog.sql)、[0003_catalog_mutations.sql](../../cloud/LenxTool.Worker/migrations/0003_catalog_mutations.sql)、[0004_feed_full_text_policy.sql](../../cloud/LenxTool.Worker/migrations/0004_feed_full_text_policy.sql)、[0005_feed_ai_policy.sql](../../cloud/LenxTool.Worker/migrations/0005_feed_ai_policy.sql)、[0006_automation_rules.sql](../../cloud/LenxTool.Worker/migrations/0006_automation_rules.sql)、[0007_explicit_feed_view_kind.sql](../../cloud/LenxTool.Worker/migrations/0007_explicit_feed_view_kind.sql)、[0008_feed_discovery_index.sql](../../cloud/LenxTool.Worker/migrations/0008_feed_discovery_index.sql)、[0009_smart_views.sql](../../cloud/LenxTool.Worker/migrations/0009_smart_views.sql)、[0010_integration_policies.sql](../../cloud/LenxTool.Worker/migrations/0010_integration_policies.sql)
 接口语义：[Worker v1 API 契约](worker-v1.md)
 
 ## 1. 数据边界
@@ -27,6 +27,8 @@ D1 是账号和管理员发布的共享订阅配置/受限规则的权威来源�
 - `0006_automation_rules.sql` 增加独立规则集状态、当前规则和不可变版本历史；只保存受限定义与发布元数据，不保存匹配条目或执行结果。
 - `0007_explicit_feed_view_kind.sql` 增加视图覆盖状态；历史非 `ARTICLE` 值回填为显式覆盖，历史 `ARTICLE` 因无法区分默认值与强制值而保持自动模式。
 - `0008_feed_discovery_index.sql` 从所有未删除 `managed_feeds` 原位回填发现字段白名单，并用 Feed/分类触发器持续同步；同时增加按用户、UTC 分钟分桶的发现限流状态。它不复制 `original_url`、AI 策略、删除时间、正文或私人状态。
+- `0009_smart_views.sql` 增加独立智能视图集状态、当前定义、不可变版本、幂等和事务 guard；只保存管理员发布的有界筛选定义，不保存筛选结果、文章或用户阅读状态。
+- `0010_integration_policies.sql` 增加独立集成策略集状态、当前类型开关/精确 DNS 主机白名单、不可变版本、幂等和事务 guard；个人目标、凭据、探测结果与外部响应禁止进入 D1。
 - 测试启动器先应用 0001、写入旧 schema 哨兵行，再应用全部迁移，从而验证带数据升级；再次调用迁移流程不会重复执行已记录文件。
 - Wrangler 应用某个迁移失败时会回滚该迁移，并保留之前成功的迁移。生产恢复遵循第 7 节，不提交手写“向下迁移”去伪造 `d1_migrations` 历史。
 
@@ -122,7 +124,15 @@ D1 默认在查询和迁移中强制外键。分类关系使用 `RESTRICT`，因
 
 每次成功 POST/PATCH 在同一 D1 batch 中比较并递增规则集版本、写当前规则、追加不可变版本、记录最小审计和幂等成功结果。失败、旧版本、普通用户 403 或幂等重放不会增加版本。条件/动作 JSON 仅保存管理员发布的有界规则配置，不会自动写入匹配文章、AI 结果、字幕或客户端路径；Worker 在落库前使用字段白名单和长度/数量上限重新规范化。
 
-## 5. 数据库约束与应用约束
+## 5. 外部集成策略表
+
+- `integration_policy_state` 只有 `singleton_id=1` 一行，保存独立的非负 `policy_set_version`、更新时间和事务内 `last_mutation_id`。
+- `integration_policies` 以九种受支持类型为主键，只保存启用开关和最多 32 个精确 DNS 主机组成的 JSON 白名单，以及发布管理员、时间和事务标记。启用策略必须至少有一个主机；协议、端口、路径、通配符、IP、localhost 和保留后缀由 Worker 在写入前拒绝。
+- `integration_policy_versions` 保存每次完整替换后的有界不可变快照；`integration_policy_idempotency` 仅保存 24 小时有效的请求摘要和成功响应；`integration_policy_mutation_guards` 保证版本、当前策略、历史、审计和幂等结果属于同一原子 batch。
+
+成功 PUT 比较并只递增一次策略集版本，整组替换当前策略并记录 `integration_policy.replaced`。普通用户只能读取 ACTIVE，管理员可读取 ALL 并发布。D1 不保存个人 TargetId、完整端点、API Key、Cookie、DPAPI 密文、DNS 结果、健康检查状态或外部响应。
+
+## 6. 数据库约束与应用约束
 
 数据库直接保证：
 
@@ -132,6 +142,7 @@ D1 默认在查询和迁移中强制外键。分类关系使用 `RESTRICT`，因
 - Feed 只能引用存在的分类；分类硬删除不会级联删除 Feed。
 - 发现索引只接受字段白名单、HTTPS URL、视图枚举、布尔值和有界时间/名称；规范 Feed URL 唯一。
 - 发现限流按有效用户与 UTC 分钟唯一，计数保持在数据库约束范围内。
+- 集成策略只接受固定类型、布尔开关和有效 JSON 白名单；主机语义由 Worker 的精确 DNS 校验器负责。
 - D1 batch 中后续约束失败会回滚该批次先前写入。
 
 P0-04 路由保证：
@@ -143,7 +154,7 @@ P0-04 路由保证：
 
 Schema 约束是最后防线，不替代 API 边界校验。
 
-## 6. 索引与查询形状
+## 7. 索引与查询形状
 
 - 分类和 Feed 的活动唯一索引同时承担重复检测。
 - `ix_*_catalog_order` 支持按分类、启用状态、排序号和 ID 生成确定性目录。
@@ -152,8 +163,9 @@ Schema 约束是最后防线，不替代 API 边界校验。
 - `ix_feed_discovery_rate_limit_bucket` 支持清理过期分钟桶。
 - P0 v1 返回有界原子快照，不为目录增加偏移量分页表或文章表。
 - P1 规则返回最多 100 条、4 MiB 的有界原子快照，不建立匹配条目或动作执行结果表。
+- P2 集成策略返回最多九种类型的原子快照；活动索引支持 ACTIVE 过滤，个人目标与健康状态始终留在客户端。
 
-## 7. 发布与恢复
+## 8. 发布与恢复
 
 在 `cloud/LenxTool.Worker` 中：
 

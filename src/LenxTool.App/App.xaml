@@ -44,6 +44,10 @@
                 <views:SmartViewAdminView />
             </DataTemplate>
 
+            <DataTemplate DataType="{x:Type vm:IntegrationAdminViewModel}">
+                <views:IntegrationAdminView />
+            </DataTemplate>
+
             <DataTemplate DataType="{x:Type vm:DashboardViewModel}">
                 <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
                     <Grid Margin="32,28,32,40">
@@ -1414,6 +1418,82 @@
                                 </StackPanel>
                                 <TextBlock Grid.ColumnSpan="3" Margin="0,72,0,0" Style="{StaticResource MetaTextStyle}" Text="{Binding SecretStatus}" />
                             </Grid>
+                        </Border>
+                        <Border Margin="0,16,0,0"
+                                DataContext="{Binding IntegrationSettings}"
+                                Style="{StaticResource BentoCardStyle}">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource SectionTitleStyle}"
+                                           Text="个人外部集成" />
+                                <TextBlock Margin="0,7,0,0"
+                                           Style="{StaticResource MetaTextStyle}"
+                                           Text="目标名称和 HTTPS 地址保存在本地数据库；凭据只进入 Windows DPAPI。P2-08 尚未安装真实适配器，测试不会静默外联。"
+                                           TextWrapping="Wrap" />
+                                <Grid Margin="0,16,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="180" />
+                                        <ColumnDefinition Width="12" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel>
+                                        <TextBlock Style="{StaticResource MetaTextStyle}"
+                                                   Text="集成类型" />
+                                        <ComboBox Margin="0,7,0,0"
+                                                  AutomationProperties.Name="个人外部集成类型"
+                                                  ItemsSource="{Binding Kinds}"
+                                                  DisplayMemberPath="Label"
+                                                  SelectedItem="{Binding SelectedKind}" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="2">
+                                        <TextBlock Style="{StaticResource MetaTextStyle}"
+                                                   Text="本机目标标识" />
+                                        <TextBox Margin="0,7,0,0"
+                                                 MaxLength="128"
+                                                 AutomationProperties.Name="个人外部集成本机目标标识"
+                                                 Text="{Binding TargetId, UpdateSourceTrigger=PropertyChanged}" />
+                                    </StackPanel>
+                                </Grid>
+                                <TextBlock Margin="0,14,0,0"
+                                           Style="{StaticResource MetaTextStyle}"
+                                           Text="目标 HTTPS 地址" />
+                                <TextBox Margin="0,7,0,0"
+                                         AutomationProperties.Name="个人外部集成目标地址"
+                                         Text="{Binding EndpointText, UpdateSourceTrigger=PropertyChanged}" />
+                                <TextBlock Margin="0,14,0,0"
+                                           Style="{StaticResource MetaTextStyle}"
+                                           Text="凭据（保存后立即从界面清空，不支持回读）" />
+                                <PasswordBox Margin="0,7,0,0"
+                                             AutomationProperties.Name="个人外部集成凭据"
+                                             controls:PasswordBoxAssistant.BoundPassword="{Binding CredentialInput, Mode=TwoWay}" />
+                                <DockPanel Margin="0,16,0,0"
+                                           LastChildFill="False">
+                                    <StackPanel>
+                                        <TextBlock AutomationProperties.LiveSetting="Polite"
+                                                   Style="{StaticResource MetaTextStyle}"
+                                                   Text="{Binding Status}"
+                                                   TextWrapping="Wrap" />
+                                        <TextBlock Margin="0,4,0,0"
+                                                   Style="{StaticResource MetaTextStyle}"
+                                                   Text="{Binding HasCredential, StringFormat=已保存凭据：{0}}" />
+                                    </StackPanel>
+                                    <StackPanel DockPanel.Dock="Right"
+                                                Margin="16,0,0,0"
+                                                Orientation="Horizontal">
+                                        <Button Margin="0,0,8,0"
+                                                AutomationProperties.Name="删除个人外部集成凭据"
+                                                Command="{Binding DeleteCredentialCommand}"
+                                                Content="删除凭据" />
+                                        <Button Margin="0,0,8,0"
+                                                AutomationProperties.Name="测试个人外部集成连接"
+                                                Command="{Binding TestCommand}"
+                                                Content="测试连接" />
+                                        <Button Style="{StaticResource AccentButtonStyle}"
+                                                AutomationProperties.Name="保存个人外部集成"
+                                                Command="{Binding SaveCommand}"
+                                                Content="本机保存" />
+                                    </StackPanel>
+                                </DockPanel>
+                            </StackPanel>
                         </Border>
                         <Border Margin="0,16,0,0" Style="{StaticResource BentoCardStyle}">
                             <Grid>

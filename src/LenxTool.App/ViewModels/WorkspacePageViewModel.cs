@@ -57,7 +57,8 @@ public sealed partial class SettingsViewModel : PageViewModel
         IAppSettingsRepository settings,
         IAccountSessionService accountSession,
         IFeedCatalogSyncService catalogSync,
-        IDatabaseMaintenanceService? databaseMaintenance = null)
+        IDatabaseMaintenanceService? databaseMaintenance = null,
+        IntegrationSettingsViewModel? integrationSettings = null)
         : base("设置", "外观、服务凭据、数据与更新")
     {
         _themeService = themeService;
@@ -67,6 +68,7 @@ public sealed partial class SettingsViewModel : PageViewModel
         _accountSession = accountSession;
         _catalogSync = catalogSync;
         _databaseMaintenance = databaseMaintenance;
+        IntegrationSettings = integrationSettings;
         _synchronizationContext = SynchronizationContext.Current;
         CheckForUpdatesCommand = new(CheckForUpdatesAsync);
         DownloadUpdateCommand = new(DownloadUpdateAsync, () => _candidate is not null);
@@ -131,6 +133,7 @@ public sealed partial class SettingsViewModel : PageViewModel
     public AsyncRelayCommand LoginCommand { get; }
     public AsyncRelayCommand LogoutCommand { get; }
     public AsyncRelayCommand RefreshAccountCommand { get; }
+    public IntegrationSettingsViewModel? IntegrationSettings { get; }
     public string AppearanceStatus
     {
         get => _appearanceStatus;
@@ -223,6 +226,11 @@ public sealed partial class SettingsViewModel : PageViewModel
 
         await _catalogSync.InitializeAsync(cancellationToken);
         ApplyCatalogSyncStatus(_catalogSync.Current);
+        if (IntegrationSettings is not null)
+        {
+            await IntegrationSettings.InitializeAsync(
+                cancellationToken);
+        }
     }
 
     private async Task SaveAppearanceAsync(CancellationToken cancellationToken)

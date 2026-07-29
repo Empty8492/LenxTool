@@ -3,6 +3,7 @@ import { handleCatalogBatchRequest } from "./catalog-batch";
 import { handleAutomationRuleRequest } from "./automation-rules";
 import { handleFeedDiscoveryRequest } from "./feed-discovery";
 import { handleSmartViewRequest } from "./smart-views";
+import { handleIntegrationPolicyRequest } from "./integration-policies";
 
 export interface Env {
   DB: D1Database;
@@ -68,6 +69,14 @@ export default {
         url
       );
       if (smartViewResponse) return smartViewResponse;
+      const integrationPolicyResponse =
+        await handleIntegrationPolicyRequest(
+          request,
+          env.DB,
+          catalogAuth,
+          url
+        );
+      if (integrationPolicyResponse) return integrationPolicyResponse;
       const discoveryResponse = await handleFeedDiscoveryRequest(
         request,
         env.DB,
