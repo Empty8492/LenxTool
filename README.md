@@ -16,11 +16,11 @@ Lenx Tools 是面向 Windows 10/11 x64 的本地优先桌面效率应用，统�
 
 ### 当前开发边界
 
-状态核对日期：2026-07-30。当前源码已经具备资讯刷新与缓存、13 个可多选筛选的分组热点平台、Groq/DeepSeek Key 加密保存、AI 解读/翻译、Groq/本地 Whisper 转写、完整字幕翻译/导出闭环、七类统一搜索、数据库备份/安全清理和签名更新检查等预览能力。
+状态核对日期：2026-07-31。当前源码已经具备资讯刷新与缓存、13 个可多选筛选的分组热点平台、Groq/DeepSeek Key 加密保存、AI 解读/翻译、Groq/本地 Whisper 转写、完整字幕翻译/导出闭环、七类统一搜索、数据库备份/安全清理和签名更新检查等预览能力。
 
 字幕 Gate 0、RSS P0、P1、P2-01～P2-11 和统一发现 DISC-01～DISC-06、UX-03 已完成。P1 已交付私人已读/收藏/标签/备注/进度、离线图片与受控全文、AI 摘要/翻译及本地自动处理、管理员受限规则与模拟、确定性动作账本、Feed 媒体投递、应用内通知、七类统一搜索和 180 天安全清理；P2 已交付五类内容视图、智能视图、统一导出契约与集成安全策略、持久化导出队列、本地 Markdown 导出器，以及必须由明确本机设置、ACTIVE 策略和阅读器按钮共同授权的安全 Obsidian Vault 导出；管理员订阅管理现已提供统一发现、真实本地预览、重复项识别和显式确认发布，并通过最终性能、安全、权限、离线与可访问性检查点。候选后续项为尚未启动的 P2-12 Eagle 适配器；JSON 双栏 Diff、生产 Worker/D1、正式签名安装包和发布矩阵仍未完成。完整状态、运行配置和发布阻塞项以 [`docs/PROJECT_GUIDE.md` 第 10 节](docs/PROJECT_GUIDE.md#10-当前版本边界与交付状态)为准。
 
-字幕闭环之后的主路线为 **管理员策展 RSS**：只有管理员能维护共享 RSS/Atom 目录、AI 策略和自动化规则，普通用户只能同步 ACTIVE 配置并在本机消费。P0/P1 已验收，P2-01～P2-11 与统一发现 DISC-01～DISC-06、UX-03 已完成；P2-12 Eagle 适配器仅列为候选后续项，尚未启动。完整任务、现有欠账对齐、参考项目和许可证边界见 [`docs/plans/RSS_MASTER_ROADMAP.md`](docs/plans/RSS_MASTER_ROADMAP.md)。
+字幕闭环之后的主路线为 **管理员策展 RSS**：只有管理员能维护共享 RSS/Atom 目录、AI 策略和自动化规则，普通用户只能同步 ACTIVE 配置并在本机消费。P0/P1 已验收，P2-01～P2-11 与统一发现 DISC-01～DISC-06、UX-03 已完成；P2-12 Eagle 适配器仅列为候选后续项，尚未启动。另有“洛克王国世界每日清体力自动化”作为独立候选调研项登记，尚未批准选型或进入实现，不属于当前 RSS 路线。完整 RSS 任务见 [`docs/plans/RSS_MASTER_ROADMAP.md`](docs/plans/RSS_MASTER_ROADMAP.md)，独立候选边界见 [`docs/plans/GAME_AUTOMATION_BACKLOG.md`](docs/plans/GAME_AUTOMATION_BACKLOG.md)。
 
 ## 常用命令
 
