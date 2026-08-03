@@ -7,7 +7,7 @@
 3. 首次启动会在 `%LocalAppData%\LenxTool` 创建数据库、备份、日志、模型、输出和更新目录。
 4. 不需要另行安装 .NET。
 
-便携版解压后运行 `LenxTool.exe`。便携版程序文件可移动，但用户数据库与密钥仍固定保存在 LocalAppData，以便升级和多版本共用。当前源码已完成 Gate 0、P0、P1、P2-01～P2-13 与统一发现开发验收，但现有安装制品尚未按本轮源码重新签名发布；不要把旧 `Release` 安装包当作最新正式版本。
+便携版解压后运行 `LenxTool.exe`。便携版程序文件可移动，但用户数据库与密钥仍固定保存在 LocalAppData，以便升级和多版本共用。当前源码已完成 Gate 0、P0、P1、P2-01～P2-14 与统一发现开发验收，但现有安装制品尚未按本轮源码重新签名发布；不要把旧 `Release` 安装包当作最新正式版本。
 
 ## 全局操作
 
@@ -210,11 +210,11 @@ Feed 的“视图类型”默认选择“自动识别”，客户端会根据经
 
 ## 外部集成策略与个人凭据
 
-- 管理员登录后可从侧栏进入“外部集成”，逐类启用或停用集成。Obsidian 和 Eagle 都不填写主机：前者只写本地 Vault，后者只允许客户端另行保存数字 loopback HTTP 端点。Zotero 必须填写精确主机 `api.zotero.org`；其他网络集成也必须填写各自精确目标主机。主机不能包含协议、端口、路径、通配符、IP、localhost 或 `.local`。
+- 管理员登录后可从侧栏进入“外部集成”，逐类启用或停用集成。Obsidian 和 Eagle 都不填写主机：前者只写本地 Vault，后者只允许客户端另行保存数字 loopback HTTP 端点。Zotero 必须填写精确主机 `api.zotero.org`，Readwise 必须填写精确主机 `readwise.io`；其他网络集成也必须填写各自精确目标主机。主机不能包含协议、端口、路径、通配符、IP、localhost 或 `.local`。
 - 普通用户不能进入或调用共享策略写入。Worker 只向普通用户提供 ACTIVE 策略，ALL 与发布操作仍由服务端管理员角色校验，客户端隐藏入口不是授权边界。
-- “设置 → 个人外部集成”只在本机保存尚未提供专用设置卡的通用网络类型 TargetId 与 HTTPS 地址。凭据保存后立即清空输入框，不支持明文回读，并由 Windows DPAPI CurrentUser 加密；删除凭据不会改变共享策略。Obsidian、Eagle 和 Zotero 使用各自的本机设置卡；Eagle 不需要凭据，Zotero API key 只使用固定 `Zotero/default` DPAPI 槽位。
-- 通用网络类型的“测试连接”会先校验管理员策略、精确主机、HTTPS/443、凭据和 DNS 公网地址，再应用 8 秒超时与 30 秒冷却。Zotero 继续经过该共享边界，并额外核对个人库 User ID 与 write/按需 notes/files 权限；当前表单必须先保存，避免测试另一代目标。Eagle 使用独立的 loopback 探测，不走公网 DNS 白名单。界面只显示固定状态，不显示第三方响应、异常、请求头、API key 或资源库路径。
-- 当前已注册的真实适配器为 Obsidian 本地文件导出、Eagle 本机 Web API 图片导出和 Zotero Web API v3 个人库导出；其他外部服务适配器仍未安装，不会静默发出第三方请求。
+- “设置 → 个人外部集成”只在本机保存尚未提供专用设置卡的通用网络类型 TargetId 与 HTTPS 地址。凭据保存后立即清空输入框，不支持明文回读，并由 Windows DPAPI CurrentUser 加密；删除凭据不会改变共享策略。选择 Readwise 后该卡会把 TargetId 固定为 `default`、端点固定为只读 `https://readwise.io/`，token 使用 `Readwise/default` DPAPI 槽位。Obsidian、Eagle 和 Zotero 使用各自的本机设置卡；Eagle 不需要凭据，Zotero API key 只使用固定 `Zotero/default` DPAPI 槽位。
+- 通用网络类型的“测试连接”会先校验管理员策略、精确主机、HTTPS/443、凭据和 DNS 公网地址，再应用 8 秒超时与 30 秒冷却。Readwise 只调用无写入副作用的官方 auth 端点；Zotero 继续经过该共享边界，并额外核对个人库 User ID 与 write/按需 notes/files 权限。当前表单必须先保存，避免测试另一代目标。Eagle 使用独立的 loopback 探测，不走公网 DNS 白名单。界面只显示固定状态，不显示第三方响应、异常、请求头、token、API key 或资源库路径。
+- 当前生产已注册的适配器为 Obsidian 本地文件导出、Eagle 本机 Web API 图片导出、Zotero Web API v3 个人库导出和 Readwise Reader 导出；Cubox 等其余外部服务适配器仍未安装，不会静默发出第三方请求。
 
 ### 导出到 Obsidian
 
@@ -248,6 +248,16 @@ Eagle 未启动、端口错误、版本不兼容、没有打开资源库或响�
 
 取消、超时或第三方故障不能回滚已经在 Zotero 创建的父项或附件项；任务会使用相同稳定对象继续重试，遇到不匹配的既有 key 则以冲突关闭而不会覆盖。401/403 需要检查 User ID、key 和权限；429 会尊重 Retry-After，暂时 409/5xx 可由持久队列重试。界面、历史和异常不会显示 API key 或第三方响应正文。当前自动化只证明假 HTTP 契约，尚未使用受控真实个人库完成外部写入验收。
 
+### 导出到 Readwise
+
+1. 管理员先在“外部集成”中启用 Readwise，并把唯一允许主机设为 `readwise.io`。不要填写协议、端口、路径或相似子域名。
+2. 在“设置 → 个人外部集成”选择 Readwise。TargetId 会固定为 `default`，端点固定为只读 `https://readwise.io/`；粘贴 Readwise access token 后先保存，再点击测试连接。token 保存后立即清空并由 Windows DPAPI CurrentUser 加密，不支持回读。
+3. 回到资讯阅读器，在目标条目的行内 `R` 按钮或详情区点击“导出到 Readwise”。启动、刷新、选择条目和保存设置都不会自动保存文档；只有显式点击并通过 ACTIVE 策略与凭据检查后才进入持久队列。
+4. LenxTool 会发送规范来源 URL、有界标题/作者/日期、最多 32 个 Feed categories，以及详情区显示的纯文本摘要预览。摘要优先取净化正文、为空才回退 Feed summary，最多 4,000 个 Unicode 文本元素且不超过 16 KiB UTF-8；预览就是实际发送的 `summary`。不会发送完整 HTML、图片、LenxTool 私人备注、AI 私人状态或本机路径。
+5. 同一精确 URL 的崩溃重放不会在 Reader 创建第二条，但这不是无副作用强幂等：Readwise 官方说明再次保存会把文档移到资料库顶部并显示绿色标记；含不同追踪参数的 URL 仍可能形成第二份。需要完全避免这类可见变化时，请先等待当前任务进入终态，不要重复点击，并在来源侧使用稳定 URL。
+
+401/403 表示 token 或账户状态不允许请求；429 会尊重有界 Retry-After，408/5xx 和无法判断的写入结果由持久队列重试。界面、队列历史和异常不会显示 token 或 Reader 响应正文。当前自动化只证明官方 API 的假 HTTP 契约，尚未使用受控真实 token/账户完成外部写入验收。
+
 ## 当前验收状态（2026-08-03）
 
-Gate 0、P0、P1、P2-01～P2-13 与统一发现 DISC-01～DISC-06、UX-03 已通过本地自动化验收：管理员目录/AI 策略/规则/智能视图/集成策略发布、普通用户 ACTIVE 只读与写入 403、OPML、断网与坏源隔离、私人状态、全文/图片、摘要/翻译、媒体投递、应用内通知、七类搜索、180 天安全清理、内容类型分类，以及时间线/图片/音频/视频/通知五视图均有覆盖。五视图会各自保留筛选和滚动位置，按需分页加载；其中“通知”页签显示管理员归类为通知的 Feed 条目，顶部铃铛仍只显示本机应用事件，两者不会混用。统一导出接口、安全集成策略、持久任务队列、本地 Markdown、受控 Obsidian Vault、Eagle 图片与 Zotero 个人库适配器已经就绪；队列只执行可安全重放的适配器，支持跨进程租约、重试和合作取消。生产 Worker/D1、受控真实 Eagle/Zotero 连通和正式签名安装包仍需单独发布验收；P2-14 及以后仍需逐项推进。最新自动化门禁数字以 [`TEST_REPORT.md`](TEST_REPORT.md) 为准。
+Gate 0、P0、P1、P2-01～P2-14 与统一发现 DISC-01～DISC-06、UX-03 已通过本地自动化验收：管理员目录/AI 策略/规则/智能视图/集成策略发布、普通用户 ACTIVE 只读与写入 403、OPML、断网与坏源隔离、私人状态、全文/图片、摘要/翻译、媒体投递、应用内通知、七类搜索、180 天安全清理、内容类型分类，以及时间线/图片/音频/视频/通知五视图均有覆盖。五视图会各自保留筛选和滚动位置，按需分页加载；其中“通知”页签显示管理员归类为通知的 Feed 条目，顶部铃铛仍只显示本机应用事件，两者不会混用。统一导出接口、安全集成策略、持久任务队列、本地 Markdown、受控 Obsidian Vault、Eagle 图片、Zotero 个人库与 Readwise Reader 适配器已经就绪；队列只执行可安全重放的适配器，支持跨进程租约、重试和合作取消。生产 Worker/D1、受控真实 Eagle/Zotero/Readwise 连通和正式签名安装包仍需单独发布验收；P2-15 及以后仍需逐项推进。最新自动化门禁数字以 [`TEST_REPORT.md`](TEST_REPORT.md) 为准。

@@ -152,9 +152,13 @@ public sealed class DependencyInjectionTests
             IEntryIntegrationCredentialStore>());
         Assert.NotNull(provider.GetRequiredService<
             IEntryIntegrationHealthService>());
-        IEntryIntegrationHealthProbe zoteroProbe = Assert.Single(
-            provider.GetServices<IEntryIntegrationHealthProbe>());
-        Assert.Equal(EntryIntegrationKind.Zotero, zoteroProbe.Kind);
+        IEntryIntegrationHealthProbe[] integrationProbes = provider
+            .GetServices<IEntryIntegrationHealthProbe>()
+            .OrderBy(probe => probe.Kind)
+            .ToArray();
+        Assert.Equal(
+            [EntryIntegrationKind.Zotero, EntryIntegrationKind.Readwise],
+            integrationProbes.Select(probe => probe.Kind));
         Assert.IsType<EntryExportTaskRepository>(
             provider.GetRequiredService<IEntryExportTaskRepository>());
         Assert.IsType<EntryExportCoordinator>(
@@ -174,10 +178,11 @@ public sealed class DependencyInjectionTests
         IEntryExporter[] exporters = provider
             .GetServices<IEntryExporter>()
             .ToArray();
-        Assert.Equal(3, exporters.Length);
+        Assert.Equal(4, exporters.Length);
         Assert.Contains(exporters, item => item is ObsidianEntryExporter);
         Assert.Contains(exporters, item => item is EagleEntryExporter);
         Assert.Contains(exporters, item => item is ZoteroEntryExporter);
+        Assert.Contains(exporters, item => item is ReadwiseEntryExporter);
         EntryExportCapability[] capabilities = provider
             .GetRequiredService<IEntryExportCoordinator>()
             .Capabilities
@@ -187,6 +192,7 @@ public sealed class DependencyInjectionTests
             [
                 EagleEntryExporter.ExporterId,
                 ObsidianEntryExporter.ExporterId,
+                ReadwiseEntryExporter.ExporterId,
                 ZoteroEntryExporter.ExporterId
             ],
             capabilities.Select(item => item.ExporterId));

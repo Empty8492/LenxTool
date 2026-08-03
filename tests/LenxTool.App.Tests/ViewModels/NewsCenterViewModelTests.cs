@@ -2364,6 +2364,170 @@ public sealed class NewsCenterViewModelTests
     }
 
     [Fact]
+    public async Task ReadwiseExportEnqueuesRequestedRowAndShowsExactExcerptPreview()
+    {
+        FeedEntry selectedEntry = CreateFeedEntry(19);
+        FeedEntry requestedEntry = CreateFeedEntry(20) with
+        {
+            SanitizedContent = string.Concat(
+                Enumerable.Repeat("正文🙂 与裁剪边界 ", 900)),
+            Categories = ["AI", " AI ", "安全"]
+        };
+        var queue = new StubEntryExportQueueService();
+        var policies = new StubEntryIntegrationPolicyService(
+            isEnabled: true,
+            EntryIntegrationKind.Readwise);
+        var credentials = new StubEntryIntegrationCredentialStore(
+            exists: true,
+            EntryIntegrationKind.Readwise,
+            ReadwiseEntryExporter.CredentialTargetId);
+        using NewsCenterViewModel viewModel = CreateViewModel(
+            CreateSnapshot(),
+            feedEntries: new([selectedEntry, requestedEntry]),
+            exportQueue: queue,
+            integrationPolicies: policies,
+            integrationCredentials: credentials);
+        await viewModel.InitializeAsync(CancellationToken.None);
+        FeedTimelineItem selectedItem = Assert.Single(
+            viewModel.TimelineEntries,
+            item => item.Entry.Id == selectedEntry.Id);
+        FeedTimelineItem requestedItem = Assert.Single(
+            viewModel.TimelineEntries,
+            item => item.Entry.Id == requestedEntry.Id);
+        viewModel.SelectedTimelineEntry = selectedItem;
+
+        Assert.False(
+            viewModel.ExportTimelineEntryToReadwiseCommand.CanExecute(
+                requestedItem));
+        await viewModel.ExportTimelineEntryToReadwiseCommand.ExecuteAsync(
+            requestedItem);
+        Assert.Empty(queue.Requests);
+        Assert.Equal(
+            ReadwiseEntryExporter.CreateExcerptPreview(selectedEntry).Text,
+            viewModel.ReadwiseExportPreview);
+
+        viewModel.SelectedTimelineEntry = requestedItem;
+
+        ReadwiseExcerptPreview preview =
+            ReadwiseEntryExporter.CreateExcerptPreview(requestedEntry);
+        Assert.True(preview.IsTruncated);
+        Assert.Equal(preview.Text, viewModel.ReadwiseExportPreview);
+        Assert.Same(
+            requestedItem.Entry,
+            viewModel.SelectedTimelineEntry!.Entry);
+        Assert.True(
+            viewModel.ExportTimelineEntryToReadwiseCommand.CanExecute(
+                requestedItem));
+
+        await viewModel.ExportTimelineEntryToReadwiseCommand.ExecuteAsync(
+            requestedItem);
+
+        EntryExportRequest request = Assert.Single(queue.Requests);
+        Assert.Equal(ReadwiseEntryExporter.ExporterId, request.ExporterId);
+        Assert.Equal(ReadwiseEntryExporter.QueueTargetId, request.TargetId);
+        Assert.Equal(requestedEntry.Id, request.Entry.Id);
+        Assert.Equal(EntryViewKind.Article, request.ViewKind);
+        Assert.Equal(
+            ReadwiseEntryExporter.GetExportContentBytes(requestedEntry),
+            request.ContentBytes);
+        Assert.Equal(1, credentials.ExistsCount);
+        Assert.Equal(
+            EntryIntegrationPolicyScope.Active,
+            Assert.Single(policies.Scopes));
+        Assert.Contains("已加入", viewModel.ReadwiseExportStatus);
+        Assert.Contains(requestedEntry.Title, viewModel.ReadwiseExportStatus);
+        Assert.DoesNotContain(selectedItem.Entry.Title, viewModel.ReadwiseExportStatus);
+    }
+
+    [Fact]
+    public async Task ReadwiseExportDoesNotEnqueueWithoutSavedToken()
+    {
+        FeedEntry entry = CreateFeedEntry(21);
+        var queue = new StubEntryExportQueueService();
+        var credentials = new StubEntryIntegrationCredentialStore(
+            exists: false,
+            EntryIntegrationKind.Readwise,
+            ReadwiseEntryExporter.CredentialTargetId);
+        using NewsCenterViewModel viewModel = CreateViewModel(
+            CreateSnapshot(),
+            feedEntries: new([entry]),
+            exportQueue: queue,
+            integrationPolicies: new StubEntryIntegrationPolicyService(
+                isEnabled: true,
+                EntryIntegrationKind.Readwise),
+            integrationCredentials: credentials);
+        await viewModel.InitializeAsync(CancellationToken.None);
+
+        await viewModel.ExportTimelineEntryToReadwiseCommand.ExecuteAsync(
+            Assert.Single(viewModel.TimelineEntries));
+
+        Assert.Empty(queue.Requests);
+        Assert.Equal(1, credentials.ExistsCount);
+        Assert.Contains("token", viewModel.ReadwiseExportStatus);
+    }
+
+    [Fact]
+    public async Task ReadwiseExportChecksOfficialHostBeforeCredentialPresence()
+    {
+        FeedEntry entry = CreateFeedEntry(22);
+        var queue = new StubEntryExportQueueService();
+        var credentials = new StubEntryIntegrationCredentialStore(
+            exists: true,
+            EntryIntegrationKind.Readwise,
+            ReadwiseEntryExporter.CredentialTargetId);
+        using NewsCenterViewModel viewModel = CreateViewModel(
+            CreateSnapshot(),
+            feedEntries: new([entry]),
+            exportQueue: queue,
+            integrationPolicies: new StubEntryIntegrationPolicyService(
+                isEnabled: true,
+                EntryIntegrationKind.Readwise,
+                allowedHosts: ["api.readwise.io"]),
+            integrationCredentials: credentials);
+        await viewModel.InitializeAsync(CancellationToken.None);
+
+        await viewModel.ExportTimelineEntryToReadwiseCommand.ExecuteAsync(
+            Assert.Single(viewModel.TimelineEntries));
+
+        Assert.Empty(queue.Requests);
+        Assert.Equal(0, credentials.ExistsCount);
+        Assert.Contains("管理员", viewModel.ReadwiseExportStatus);
+    }
+
+    [Fact]
+    public async Task ReadwiseExportRejectsPrivateSourceUrlBeforeAnySideEffect()
+    {
+        FeedEntry entry = CreateFeedEntry(23) with
+        {
+            NormalizedUrl = "http://127.0.0.1/private"
+        };
+        var queue = new StubEntryExportQueueService();
+        var policies = new StubEntryIntegrationPolicyService(
+            isEnabled: true,
+            EntryIntegrationKind.Readwise);
+        var credentials = new StubEntryIntegrationCredentialStore(
+            exists: true,
+            EntryIntegrationKind.Readwise,
+            ReadwiseEntryExporter.CredentialTargetId);
+        using NewsCenterViewModel viewModel = CreateViewModel(
+            CreateSnapshot(),
+            feedEntries: new([entry]),
+            exportQueue: queue,
+            integrationPolicies: policies,
+            integrationCredentials: credentials);
+        await viewModel.InitializeAsync(CancellationToken.None);
+        FeedTimelineItem item = Assert.Single(viewModel.TimelineEntries);
+
+        Assert.False(
+            viewModel.ExportTimelineEntryToReadwiseCommand.CanExecute(item));
+        await viewModel.ExportTimelineEntryToReadwiseCommand.ExecuteAsync(item);
+
+        Assert.Empty(queue.Requests);
+        Assert.Equal(0, policies.GetCount);
+        Assert.Equal(0, credentials.ExistsCount);
+    }
+
+    [Fact]
     public async Task EntityNavigationOpensFeedEntryInTheReader()
     {
         FeedEntry entry = CreateFeedEntry(42);
@@ -3364,9 +3528,14 @@ public sealed class NewsCenterViewModelTests
                         kind,
                         true,
                         allowedHosts
-                        ?? (kind == EntryIntegrationKind.Zotero
-                            ? ["api.zotero.org"]
-                            : []))
+                        ?? kind switch
+                        {
+                            EntryIntegrationKind.Zotero =>
+                                ["api.zotero.org"],
+                            EntryIntegrationKind.Readwise =>
+                                ["readwise.io"],
+                            _ => []
+                        })
                 ]
                 : [];
             return Task.FromResult(new EntryIntegrationPolicySnapshot(
@@ -3503,7 +3672,10 @@ public sealed class NewsCenterViewModelTests
             throw new NotSupportedException();
     }
 
-    private sealed class StubEntryIntegrationCredentialStore(bool exists)
+    private sealed class StubEntryIntegrationCredentialStore(
+        bool exists,
+        EntryIntegrationKind expectedKind = EntryIntegrationKind.Zotero,
+        string expectedTargetId = ZoteroExportTarget.DefaultTargetId)
         : IEntryIntegrationCredentialStore
     {
         public int ExistsCount { get; private set; }
@@ -3520,8 +3692,8 @@ public sealed class NewsCenterViewModelTests
             CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            Assert.Equal(EntryIntegrationKind.Zotero, kind);
-            Assert.Equal(ZoteroExportTarget.DefaultTargetId, targetId);
+            Assert.Equal(expectedKind, kind);
+            Assert.Equal(expectedTargetId, targetId);
             ExistsCount++;
             return Task.FromResult(exists);
         }

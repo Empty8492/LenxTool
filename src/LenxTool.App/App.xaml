@@ -1427,7 +1427,7 @@
                                            Text="个人外部集成" />
                                 <TextBlock Margin="0,7,0,0"
                                            Style="{StaticResource MetaTextStyle}"
-                                           Text="目标名称和 HTTPS 地址保存在本地数据库；凭据只进入 Windows DPAPI。P2-08 尚未安装真实适配器，测试不会静默外联。"
+                                           Text="目标名称和 HTTPS 地址保存在本地数据库；凭据只进入 Windows DPAPI。Readwise Reader 已接通并固定官方端点，其他尚未实现的通用类型不会静默外联。"
                                            TextWrapping="Wrap" />
                                 <Grid Margin="0,16,0,0">
                                     <Grid.ColumnDefinitions>
@@ -1450,6 +1450,7 @@
                                         <TextBox Margin="0,7,0,0"
                                                  MaxLength="128"
                                                  AutomationProperties.Name="个人外部集成本机目标标识"
+                                                 IsReadOnly="{Binding IsFixedReadwiseTarget}"
                                                  Text="{Binding TargetId, UpdateSourceTrigger=PropertyChanged}" />
                                     </StackPanel>
                                 </Grid>
@@ -1458,7 +1459,13 @@
                                            Text="目标 HTTPS 地址" />
                                 <TextBox Margin="0,7,0,0"
                                          AutomationProperties.Name="个人外部集成目标地址"
+                                         IsReadOnly="{Binding IsFixedReadwiseTarget}"
                                          Text="{Binding EndpointText, UpdateSourceTrigger=PropertyChanged}" />
+                                <TextBlock Margin="0,7,0,0"
+                                           Style="{StaticResource MetaTextStyle}"
+                                           Text="Readwise Reader 仅连接 https://readwise.io/；URL、标题、作者、标签和发送预览中的摘要会进入 Readwise 云端。"
+                                           TextWrapping="Wrap"
+                                           Visibility="{Binding IsFixedReadwiseTarget, Converter={StaticResource BooleanToVisibilityConverter}}" />
                                 <TextBlock Margin="0,14,0,0"
                                            Style="{StaticResource MetaTextStyle}"
                                            Text="凭据（保存后立即从界面清空，不支持回读）" />

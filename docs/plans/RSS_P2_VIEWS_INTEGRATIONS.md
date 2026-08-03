@@ -1,6 +1,6 @@
 # P2 详细计划：内容视图、导出与定时摘要
 
-状态：P2-01～P2-13 与 [统一发现及原生控件视觉插入计划](RSS_DISCOVERY_AND_CONTROL_UX.md)已完成；P2-14 及以后仍需明确选择
+状态：P2-01～P2-14 与 [统一发现及原生控件视觉插入计划](RSS_DISCOVERY_AND_CONTROL_UX.md)已完成；P2-15 及以后仍需明确选择
 最后核对：2026-08-03
 开始条件：P1 最终检查点通过，统一 `FeedEntry`、私人状态、规则和搜索契约稳定。
 参考项目：RSSNext/Folo（内容视图、条目动作、AI 定时任务的行为参考），LenxTool 当前 WPF/DPAPI/媒体/更新与审计基础
@@ -394,13 +394,19 @@ P2 不引入 Folo 社区、关注关系、钱包、支付、移动端或完整 A
 
 **验收：**
 
-- [ ] 内容长度裁剪可在发送前预览，来源 URL 和标签映射稳定。
-- [ ] 重复 URL 幂等，不因队列重试重复创建。
-- [ ] token 仅由 DPAPI 保存，401 后不在日志回显。
+- [x] 内容长度裁剪可在发送前预览，来源 URL 和标签映射稳定。
+- [x] 同一 URL 的队列重放不创建第二条；官方可观察的重存行为与不同追踪 URL 风险已明确。
+- [x] token 仅由 DPAPI 保存，401 后不在日志回显。
 
 **验证：** 长文、重复、401/429、取消和脱敏测试。
 
 **参考：** Folo Readwise 动作；实现时仅依据 Readwise 官方 API。
+
+**完成记录（2026-08-03）：** 生产目标固定为 `https://readwise.io/`、`Readwise/default` DPAPI 槽位和不含秘密的 `default.v1` 队列作用域。通用设置卡在选择 Readwise 后把 TargetId/端点锁定为只读；测试连接要求当前表单已保存，先经过 ACTIVE 策略精确允许 `readwise.io`、HTTPS/443 与共享公网 DNS 校验，再以 `Authorization: Token` 调用无写入副作用的 `GET /api/v2/auth/`，仅 204 视为健康。阅读器行内 `R` 仅对当前已经选中并展示精确预览的同一 FeedEntry 可执行，详情按钮复用同一边界；用户显式点击后才按“策略 → 凭据 → 队列”入队，后台执行时再次按相同顺序校验。
+
+导出器支持五类内容视图，稳定映射规范 HTTP(S) 来源、标题、作者、published/updated UTC 日期和最多 32 个 Feed categories。摘要优先使用 `SanitizedContent`，为空才回退 Feed summary；空白规范化后同时限制为 4,000 个 Unicode 文本元素与 16 KiB UTF-8，界面展示与实际 `summary` 完全相同的只读发送预览。请求固定发送 `category=article`、`location=new`、`saved_using=lenxtool`，不发送 `html`、图片、私人备注、AI 私人状态或本机路径。
+
+专用客户端只连接官方主机，关闭系统代理、自动重定向、Cookie 和自动解压，要求全部 DNS 地址为公网并固定连接；请求串行且主动保持 1.2 秒间隔，响应头和有界 JSON 正文共用 8 秒超时。429/503 的有界 `Retry-After` 会立即交给耐久队列重排，不在适配器内长睡眠并占住单槽全局 worker。官方只承诺 201 新建、200 已存在，成功正文还必须返回合法 ID 与 `read.readwise.io` HTTPS 地址；401/403、400/422、408/429/5xx、取消和 POST 未知写结果均映射为封闭且脱敏的结果。依据 Readwise 官方 [Reader API](https://readwise.io/reader_api)，同一 URL 会去重；但官方 [解析与去重 FAQ](https://docs.readwise.io/reader/docs/faqs/parsing) 同时说明重存会把文档移到资料库顶部并显示绿色标记，而带不同追踪参数的 URL 仍可能产生第二份，因此这里的幂等只承诺“精确同 URL 不重复创建”，不宣称无副作用强幂等。本切片未新增依赖、SQLite schema 或 D1 migration；未使用真实 token/账户写入，P2-D 真实连通检查点保持未勾选。
 
 ### P2-15：Cubox 适配器
 

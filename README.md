@@ -18,9 +18,9 @@ Lenx Tools 是面向 Windows 10/11 x64 的本地优先桌面效率应用，统�
 
 状态核对日期：2026-08-03。当前源码已经具备资讯刷新与缓存、13 个可多选筛选的分组热点平台、Groq/DeepSeek Key 加密保存、AI 解读/翻译、Groq/本地 Whisper 转写、完整字幕翻译/导出闭环、七类统一搜索、数据库备份/安全清理和签名更新检查等预览能力。
 
-字幕 Gate 0、RSS P0、P1、P2-01～P2-13 和统一发现 DISC-01～DISC-06、UX-03 已完成。P1 已交付私人已读/收藏/标签/备注/进度、离线图片与受控全文、AI 摘要/翻译及本地自动处理、管理员受限规则与模拟、确定性动作账本、Feed 媒体投递、应用内通知、七类统一搜索和 180 天安全清理；P2 已交付五类内容视图、智能视图、统一导出契约与集成安全策略、持久化导出队列、本地 Markdown、Obsidian、Eagle 与 Zotero 个人库导出。Zotero 仅使用官方 Web API v3 和 DPAPI API key，创建显式选择的 webpage/journalArticle，确定映射来源、single-field 作者、日期、categories 与可选摘要子笔记；默认关闭的首张图片附件启用后仍由 LenxTool 完成 URL、MIME、魔数和实际 12 MiB 校验，再走官方三阶段上传，API key 不会发送到一次性存储地址。管理员订阅管理现已提供统一发现、真实本地预览、重复项识别和显式确认发布，并通过最终性能、安全、权限、离线与可访问性检查点。P2-14 及以后仍需逐项明确选择；受控真实 Zotero/Eagle 连通、JSON 双栏 Diff、生产 Worker/D1、正式签名安装包和发布矩阵仍未完成。完整状态、运行配置和发布阻塞项以 [`docs/PROJECT_GUIDE.md` 第 10 节](docs/PROJECT_GUIDE.md#10-当前版本边界与交付状态)为准。
+字幕 Gate 0、RSS P0、P1、P2-01～P2-14 和统一发现 DISC-01～DISC-06、UX-03 已完成。P1 已交付私人已读/收藏/标签/备注/进度、离线图片与受控全文、AI 摘要/翻译及本地自动处理、管理员受限规则与模拟、确定性动作账本、Feed 媒体投递、应用内通知、七类统一搜索和 180 天安全清理；P2 已交付五类内容视图、智能视图、统一导出契约与集成安全策略、持久化导出队列、本地 Markdown、Obsidian、Eagle、Zotero 个人库与 Readwise Reader 导出。Readwise 固定官方 Reader API 与 DPAPI token，只发送用户可预览的有界纯文本摘要、来源和标签；精确同 URL 重放不会创建第二条，但官方重存会置顶并显示绿色标记，不同追踪 URL 仍可能重复。管理员订阅管理现已提供统一发现、真实本地预览、重复项识别和显式确认发布，并通过最终性能、安全、权限、离线与可访问性检查点。P2-15 及以后仍需逐项明确选择；受控真实 Zotero/Eagle/Readwise 连通、JSON 双栏 Diff、生产 Worker/D1、正式签名安装包和发布矩阵仍未完成。完整状态、运行配置和发布阻塞项以 [`docs/PROJECT_GUIDE.md` 第 10 节](docs/PROJECT_GUIDE.md#10-当前版本边界与交付状态)为准。
 
-字幕闭环之后的主路线为 **管理员策展 RSS**：只有管理员能维护共享 RSS/Atom 目录、AI 策略和自动化规则，普通用户只能同步 ACTIVE 配置并在本机消费。P0/P1 已验收，P2-01～P2-13 与统一发现 DISC-01～DISC-06、UX-03 已完成；P2-14 及以后仍按独立垂直切片推进。另有“洛克王国世界每日清体力自动化”作为独立候选调研项登记，尚未批准选型或进入实现，不属于当前 RSS 路线。完整 RSS 任务见 [`docs/plans/RSS_MASTER_ROADMAP.md`](docs/plans/RSS_MASTER_ROADMAP.md)，独立候选边界见 [`docs/plans/GAME_AUTOMATION_BACKLOG.md`](docs/plans/GAME_AUTOMATION_BACKLOG.md)。
+字幕闭环之后的主路线为 **管理员策展 RSS**：只有管理员能维护共享 RSS/Atom 目录、AI 策略和自动化规则，普通用户只能同步 ACTIVE 配置并在本机消费。P0/P1 已验收，P2-01～P2-14 与统一发现 DISC-01～DISC-06、UX-03 已完成；P2-15 及以后仍按独立垂直切片推进。另有“洛克王国世界每日清体力自动化”作为独立候选调研项登记，尚未批准选型或进入实现，不属于当前 RSS 路线。完整 RSS 任务见 [`docs/plans/RSS_MASTER_ROADMAP.md`](docs/plans/RSS_MASTER_ROADMAP.md)，独立候选边界见 [`docs/plans/GAME_AUTOMATION_BACKLOG.md`](docs/plans/GAME_AUTOMATION_BACKLOG.md)。
 
 ## 常用命令
 

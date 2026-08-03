@@ -180,6 +180,12 @@ P2-13 把首个公网网络适配器接入 P2-08/P2-09 边界。Zotero 目标只
 
 附件链在创建 imported_file 子项前由 LenxTool 下载并交叉验证 URL、声明 MIME、响应 MIME、文件魔数和 12 MiB 实际流；支持 PNG/JPEG/GIF/WebP/BMP。创建成功后按 Zotero 官方三阶段上传：官方 file endpoint 返回一次性授权，客户端只把 `prefix + bytes + suffix` 发送到经独立 HTTPS/公网 DNS 钉住的地址且不携带 API key，再回官方 endpoint 登记 upload key。上传正文使用独立两分钟超时，JSON/授权字段/URL/响应仍有界。取消、超时或崩溃不能回滚已经创建的第三方对象；确定性 key、写前/写后身份复查和文件授权的 `exists=1` 语义使重试收敛。本切片复用 schema v21 和 Worker D1 0010，没有本地或云端迁移。
 
+P2-14 在同一耐久队列上增加固定官方目标的 Readwise Reader 适配器。通用个人集成卡选择 Readwise 后把端点锁定为 `https://readwise.io/`、凭据槽位锁定为 `Readwise/default`；保存只写本机设置与 DPAPI CurrentUser，连接测试要求当前表单已保存，并在共享 ACTIVE 策略精确允许 `readwise.io`、HTTPS/443 和全部公网 DNS 地址通过后，以 `Authorization: Token` 调用无写入副作用的 `GET /api/v2/auth/`。阅读器只有当前已选中并显示精确预览的同一 FeedEntry 才允许执行行内或详情动作并以固定 `default.v1` 目标入队，后台重新执行“策略 → 凭据 → API”门控；队列、SQLite 和 D1 都不保存 token。
+
+`ReadwiseEntryExporter` 支持全部五种视图，只映射规范 HTTP(S) 来源、标题、作者、UTC 日期和最多 32 个 categories。正文先取净化内容、为空才回退 Feed summary，规范空白后按 4,000 个 Unicode 文本元素和 16 KiB UTF-8 双重裁剪；同一函数同时产生界面只读预览、队列内容字节数和实际 `summary`，不会发送 `html`、图片、私人备注、AI 私人状态或本机路径。`ReadwiseApiClient` 固定 `POST /api/v3/save/`，关闭代理、跳转、Cookie 与解压，全部 DNS 地址分类后固定连接，每次只允许一个请求并保持 1.2 秒起始间隔；响应头与最多 64 KiB JSON 正文共用 8 秒超时。429/503 的 `Retry-After` 有 24 小时上限且立即作为可重试结果交给耐久队列，不在适配器内长睡眠并占住全局 worker。只有官方定义的 201/200 及合法 ID、`read.readwise.io` HTTPS 地址才算成功，其余写入不确定性保持可重试且不解析/回显第三方正文。
+
+该导出能力按官方同一 URL 去重语义声明可安全重放，但这是“不会创建第二条”的有限幂等：再次保存会把现有文档移到资料库顶部并显示绿色标记，带不同追踪参数的 URL 仍可能创建第二份。因此队列重放可以收敛到同一对象，却不承诺第三方完全无可观察副作用。P2-14 不新增依赖、本地 schema 或 D1 migration，也没有真实 Readwise token/账户写入验收。
+
 P1 终验（2026-07-27）以两条独立数据流验证架构边界：真实 schema v17 SQLite 在重开后的离线库中覆盖 10,000 条 Feed、1,000 个收藏、混合媒体和全文/AI/规则/媒体活动引用，查询、搜索、预览和清理均满足既定预算；真实 workerd/D1 覆盖管理员发布目录/AI 策略/规则、普通用户写入 403、版本不变及应用表/字段内容隐私白名单。Release 回归为 .NET 648/648、Worker 52/52、strict typecheck 和 0 警告构建。该记录关闭 P1 架构交付，不替代生产部署与正式签名发布。
 
 ## 10. 统一 Feed 发现协调

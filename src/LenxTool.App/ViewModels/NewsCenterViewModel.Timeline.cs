@@ -120,6 +120,8 @@ public sealed partial class NewsCenterViewModel
                 CancelTimelineNoteEditCommand.NotifyCanExecuteChanged();
                 AddTimelineTagCommand.NotifyCanExecuteChanged();
                 ResetTimelineProgressCommand.NotifyCanExecuteChanged();
+                ExportTimelineEntryToReadwiseCommand?.NotifyCanExecuteChanged();
+                OnPropertyChanged(nameof(ReadwiseExportPreview));
             }
         }
     }

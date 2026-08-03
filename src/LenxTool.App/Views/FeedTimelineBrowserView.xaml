@@ -46,6 +46,15 @@
                                                 Padding="4,0"
                                                 BorderThickness="0"
                                                 Background="Transparent"
+                                                Command="{Binding DataContext.ExportTimelineEntryToReadwiseCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                CommandParameter="{Binding}"
+                                                Content="R"
+                                                ToolTip="导出到 Readwise"
+                                                AutomationProperties.Name="导出该 Feed 到 Readwise" />
+                                        <Button Margin="4,0,0,0"
+                                                Padding="4,0"
+                                                BorderThickness="0"
+                                                Background="Transparent"
                                                 Command="{Binding DataContext.ExportTimelineEntryToZoteroCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                 CommandParameter="{Binding}"
                                                 Content="Z"
@@ -231,6 +240,13 @@
                                         CommandParameter="{Binding SelectedTimelineEntry}"
                                         Content="导出到 Zotero"
                                         AutomationProperties.Name="导出当前 Feed 到 Zotero" />
+                                <Button MinWidth="116"
+                                        Margin="8,0,0,0"
+                                        Padding="10,5"
+                                        Command="{Binding ExportTimelineEntryToReadwiseCommand}"
+                                        CommandParameter="{Binding SelectedTimelineEntry}"
+                                        Content="导出到 Readwise"
+                                        AutomationProperties.Name="导出当前 Feed 到 Readwise" />
                             </WrapPanel>
                             <StackPanel Margin="0,8,0,0">
                                 <TextBlock Style="{StaticResource SectionTitleStyle}"
@@ -257,6 +273,22 @@
                                            Text="{Binding ZoteroExportStatus}"
                                            AutomationProperties.LiveSetting="Polite"
                                            TextWrapping="Wrap" />
+                                <TextBlock Margin="0,3,12,0"
+                                           Style="{StaticResource MetaTextStyle}"
+                                           Text="{Binding ReadwiseExportStatus}"
+                                           AutomationProperties.LiveSetting="Polite"
+                                           TextWrapping="Wrap" />
+                                <TextBlock Margin="0,10,0,5"
+                                           FontWeight="SemiBold"
+                                           Text="Readwise 发送摘要预览（最多 4,000 个文本元素 / 16 KiB UTF-8）" />
+                                <TextBox MinHeight="64"
+                                         MaxHeight="110"
+                                         Padding="9,7"
+                                         AutomationProperties.Name="Readwise 发送摘要预览"
+                                         IsReadOnly="True"
+                                         Text="{Binding ReadwiseExportPreview, Mode=OneWay}"
+                                         TextWrapping="Wrap"
+                                         VerticalScrollBarVisibility="Auto" />
                             </StackPanel>
                         <TextBlock Margin="0,12,0,5"
                                    FontWeight="SemiBold"

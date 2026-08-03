@@ -25,6 +25,8 @@ public sealed partial class NewsCenterViewModel
         "仅对已验证图片提供显式 Eagle 导出。";
     private string _zoteroExportStatus =
         "仅在显式点击后检查 Zotero 个人库、ACTIVE 策略与本机 API key。";
+    private string _readwiseExportStatus =
+        "Readwise 只发送下方可见的裁剪摘要；不会发送私人备注或完整正文。";
 
     public AsyncRelayCommand<FeedTimelineItem>
         ExportTimelineEntryToObsidianCommand
@@ -65,6 +67,28 @@ public sealed partial class NewsCenterViewModel
         private set => SetProperty(ref _zoteroExportStatus, value);
     }
 
+    public AsyncRelayCommand<FeedTimelineItem>
+        ExportTimelineEntryToReadwiseCommand
+    {
+        get;
+        private set;
+    } = null!;
+
+    public string ReadwiseExportStatus
+    {
+        get => _readwiseExportStatus;
+        private set => SetProperty(ref _readwiseExportStatus, value);
+    }
+
+    /// <summary>
+    /// 与真正发送给 Reader `summary` 字段完全相同的有界预览；
+    /// 选择条目不会读取凭据或发起网络请求。
+    /// </summary>
+    public string ReadwiseExportPreview =>
+        SelectedTimelineEntry is { } item
+            ? ReadwiseEntryExporter.CreateExcerptPreview(item.Entry).Text
+            : string.Empty;
+
     private void ConfigureEntryExports(
         IEntryExportQueueService? entryExportQueueService,
         IEntryIntegrationPolicyService? entryIntegrationPolicyService,
@@ -92,6 +116,95 @@ public sealed partial class NewsCenterViewModel
         ExportTimelineEntryToZoteroCommand = new(
             ExportTimelineEntryToZoteroAsync,
             CanExportTimelineEntryToZotero);
+        ExportTimelineEntryToReadwiseCommand = new(
+            ExportTimelineEntryToReadwiseAsync,
+            CanExportTimelineEntryToReadwise);
+    }
+
+    private bool CanExportTimelineEntryToReadwise(
+        FeedTimelineItem? item) =>
+        item is not null
+        && ReferenceEquals(item.Entry, SelectedTimelineEntry?.Entry)
+        && _entryExportQueueService is not null
+        && _entryIntegrationPolicyService is not null
+        && _entryIntegrationCredentialStore is not null
+        && ReadwiseEntryExporter.CanExportEntry(item.Entry);
+
+    private async Task ExportTimelineEntryToReadwiseAsync(
+        FeedTimelineItem? item,
+        CancellationToken cancellationToken)
+    {
+        if (item is null
+            || !ReferenceEquals(item.Entry, SelectedTimelineEntry?.Entry)
+            || _entryExportQueueService is null
+            || _entryIntegrationPolicyService is null
+            || _entryIntegrationCredentialStore is null
+            || !ReadwiseEntryExporter.CanExportEntry(item.Entry))
+        {
+            return;
+        }
+
+        // 编辑器加载可能只替换所选行的本机状态 record；真正导出始终重新取当前
+        // 选中项，确保可见预览与发送正文来自同一个 FeedEntry 实例。
+        item = SelectedTimelineEntry!;
+
+        string targetLabel = GetExportTargetLabel(item);
+        try
+        {
+            // 共享策略先于 DPAPI 槽位读取；停用或主机漂移时显式点击也不探测 token。
+            EntryIntegrationPolicySnapshot snapshot =
+                await _entryIntegrationPolicyService.GetAsync(
+                    EntryIntegrationPolicyScope.Active,
+                    cancellationToken);
+            if (!snapshot.Policies.Any(policy =>
+                    policy.Kind == EntryIntegrationKind.Readwise
+                    && policy.IsEnabled
+                    && policy.AllowedHosts.Contains(
+                        ReadwiseEntryExporter.ApiRoot.IdnHost,
+                        StringComparer.Ordinal)))
+            {
+                ReadwiseExportStatus =
+                    $"条目“{targetLabel}”：管理员尚未启用 Readwise 或未允许 readwise.io，未加入导出队列。";
+                return;
+            }
+
+            bool hasCredential =
+                await _entryIntegrationCredentialStore.ExistsAsync(
+                    EntryIntegrationKind.Readwise,
+                    ReadwiseEntryExporter.CredentialTargetId,
+                    cancellationToken);
+            if (!hasCredential)
+            {
+                ReadwiseExportStatus =
+                    $"条目“{targetLabel}”：请先在设置中保存 Readwise token。";
+                return;
+            }
+
+            EntryExportRequest request = EntryExportRequest.Create(
+                ReadwiseEntryExporter.ExporterId,
+                ReadwiseEntryExporter.QueueTargetId,
+                item.Entry,
+                ClassifyExportView(item.Entry),
+                ReadwiseEntryExporter.GetExportContentBytes(item.Entry));
+            EntryExportEnqueueResult result =
+                await _entryExportQueueService.EnqueueAsync(
+                    request,
+                    cancellationToken);
+            ReadwiseExportStatus = result.Created
+                ? $"条目“{targetLabel}”已加入 Readwise 导出队列。"
+                : $"条目“{targetLabel}”的当前 Readwise 导出版本已存在于队列或历史中。";
+        }
+        catch (OperationCanceledException)
+            when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            // token、Reader 响应正文和未裁剪内容都不能通过页面状态回显。
+            ReadwiseExportStatus =
+                $"条目“{targetLabel}”：Readwise 导出暂时不可用，请稍后重试。";
+        }
     }
 
     private bool CanExportTimelineEntryToZotero(
@@ -497,5 +610,6 @@ public sealed partial class NewsCenterViewModel
         ExportTimelineEntryToObsidianCommand.Dispose();
         ExportTimelineEntryToEagleCommand.Dispose();
         ExportTimelineEntryToZoteroCommand.Dispose();
+        ExportTimelineEntryToReadwiseCommand.Dispose();
     }
 }

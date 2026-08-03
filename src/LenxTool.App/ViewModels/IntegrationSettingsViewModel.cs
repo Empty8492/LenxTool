@@ -1,6 +1,7 @@
 using LenxTool.App.Mvvm;
 using LenxTool.Core.Contracts;
 using LenxTool.Core.Models;
+using LenxTool.Infrastructure.Exports;
 
 namespace LenxTool.App.ViewModels;
 
@@ -93,10 +94,21 @@ public sealed class IntegrationSettingsViewModel
                     ref _selectedKind,
                     value ?? IntegrationKindChoice.All[0]))
             {
+                OnPropertyChanged(nameof(IsFixedReadwiseTarget));
+                if (IsFixedReadwiseTarget)
+                {
+                    // Reader token 权限较高，生产适配器固定官方端点与默认槽位，
+                    // 不能沿用通用表单中的任意目标地址。
+                    TargetId = ReadwiseEntryExporter.CredentialTargetId;
+                    EndpointText = ReadwiseEntryExporter.ApiRoot.AbsoluteUri;
+                }
                 TargetChanged();
             }
         }
     }
+
+    public bool IsFixedReadwiseTarget =>
+        SelectedKind.Kind == EntryIntegrationKind.Readwise;
 
     public string TargetId
     {
@@ -161,12 +173,20 @@ public sealed class IntegrationSettingsViewModel
             // 带入只接受 HTTPS 与 DPAPI 凭据的通用表单。
             SelectedKind = selectedKind;
         }
-        TargetId =
-            await _settings.GetAsync(TargetIdKey, cancellationToken)
-            ?? "default";
-        EndpointText =
-            await _settings.GetAsync(EndpointKey, cancellationToken)
-            ?? string.Empty;
+        string? savedTargetId =
+            await _settings.GetAsync(TargetIdKey, cancellationToken);
+        string? savedEndpoint =
+            await _settings.GetAsync(EndpointKey, cancellationToken);
+        if (IsFixedReadwiseTarget)
+        {
+            TargetId = ReadwiseEntryExporter.CredentialTargetId;
+            EndpointText = ReadwiseEntryExporter.ApiRoot.AbsoluteUri;
+        }
+        else
+        {
+            TargetId = savedTargetId ?? "default";
+            EndpointText = savedEndpoint ?? string.Empty;
+        }
         await RefreshPresenceAsync(cancellationToken);
     }
 
@@ -243,6 +263,11 @@ public sealed class IntegrationSettingsViewModel
             Status = exception.Message;
             return;
         }
+        if (!await IsSavedTargetAsync(target, cancellationToken))
+        {
+            Status = "请先保存当前本机目标，再测试连接。";
+            return;
+        }
         EntryIntegrationHealthResult result =
             await _health.CheckAsync(target, cancellationToken);
         Status = result.Status switch
@@ -279,7 +304,57 @@ public sealed class IntegrationSettingsViewModel
             throw new ArgumentException(
                 "目标地址必须是绝对 HTTPS 地址。");
         }
+        if (SelectedKind.Kind == EntryIntegrationKind.Readwise)
+        {
+            if (!string.Equals(
+                    targetId,
+                    ReadwiseEntryExporter.CredentialTargetId,
+                    StringComparison.Ordinal)
+                || !string.Equals(
+                    endpoint.AbsoluteUri,
+                    ReadwiseEntryExporter.ApiRoot.AbsoluteUri,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                throw new ArgumentException(
+                    "Readwise Reader 只允许固定目标 https://readwise.io/ 与 default 凭据槽位。");
+            }
+            return new(
+                ReadwiseEntryExporter.CredentialTargetId,
+                EntryIntegrationKind.Readwise,
+                ReadwiseEntryExporter.ApiRoot);
+        }
         return new(targetId, SelectedKind.Kind, endpoint);
+    }
+
+    private async Task<bool> IsSavedTargetAsync(
+        EntryIntegrationTarget target,
+        CancellationToken cancellationToken)
+    {
+        string? savedKind = await _settings.GetAsync(
+            KindKey,
+            cancellationToken);
+        string? savedTargetId = await _settings.GetAsync(
+            TargetIdKey,
+            cancellationToken);
+        string? savedEndpoint = await _settings.GetAsync(
+            EndpointKey,
+            cancellationToken);
+        return string.Equals(
+                savedKind,
+                target.Kind.ToString(),
+                StringComparison.Ordinal)
+            && string.Equals(
+                savedTargetId,
+                target.TargetId,
+                StringComparison.Ordinal)
+            && Uri.TryCreate(
+                savedEndpoint,
+                UriKind.Absolute,
+                out Uri? endpoint)
+            && string.Equals(
+                endpoint.AbsoluteUri,
+                target.Endpoint.AbsoluteUri,
+                StringComparison.OrdinalIgnoreCase);
     }
 
     private string ValidateTargetId()

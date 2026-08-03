@@ -249,6 +249,7 @@ public partial class App : Application
         services.AddFeedDiscovery(CreateFeedDiscoveryOptions());
         services.AddEntryIntegrationInfrastructure();
         services.AddZoteroExportInfrastructure();
+        services.AddReadwiseExportInfrastructure();
         // Obsidian 适配器始终可解析，但只有用户显式入队、目标已配置且
         // ACTIVE 管理策略允许时才会写入本地 Vault。
         services.AddSingleton<
@@ -265,6 +266,9 @@ public partial class App : Application
         // Zotero 固定官方个人库根地址；API key 只从 DPAPI 读取，
         // 导出器在每次耐久任务执行时重验 ACTIVE 主机白名单与目标代际。
         services.AddSingleton<IEntryExporter, ZoteroEntryExporter>();
+        // Readwise 固定官方 Reader API；token 只从 DPAPI 默认槽位读取，
+        // RSS 摘录按界面可见预算裁剪后进入 summary，不冒充完整 HTML 正文。
+        services.AddSingleton<IEntryExporter, ReadwiseEntryExporter>();
         services.AddSingleton<IEntryExportCoordinator>(static provider =>
             new EntryExportCoordinator(
                 provider.GetServices<IEntryExporter>()));

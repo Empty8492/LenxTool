@@ -2,6 +2,7 @@ using LenxTool.App.ViewModels;
 using LenxTool.Core.Accounts;
 using LenxTool.Core.Contracts;
 using LenxTool.Core.Models;
+using LenxTool.Infrastructure.Exports;
 
 namespace LenxTool.App.Tests.ViewModels;
 
@@ -115,9 +116,9 @@ public sealed class IntegrationViewModelTests
             localSettings)
         {
             SelectedKind = IntegrationKindChoice.All.Single(
-                item => item.Kind == EntryIntegrationKind.Readwise),
+                item => item.Kind == EntryIntegrationKind.Webhook),
             TargetId = "personal",
-            EndpointText = "https://api.readwise.io/v2/",
+            EndpointText = "https://hooks.example.com/health",
             CredentialInput = "private-token"
         };
 
@@ -129,13 +130,55 @@ public sealed class IntegrationViewModelTests
             "personal",
             localSettings.Values["integration.target.id"]);
         Assert.Equal(
-            "https://api.readwise.io/v2/",
+            "https://hooks.example.com/health",
             localSettings.Values["integration.target.endpoint"]);
         Assert.DoesNotContain(
             localSettings.Values.Values,
             value => value.Contains(
                 "private-token",
                 StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task ReadwiseSettingsPinsOfficialTargetAndDefaultCredentialSlot()
+    {
+        var credentials = new FakeCredentialStore();
+        var localSettings = new FakeSettingsRepository();
+        var viewModel = new IntegrationSettingsViewModel(
+            credentials,
+            new FakeHealthService(),
+            localSettings)
+        {
+            SelectedKind = IntegrationKindChoice.All.Single(
+                item => item.Kind == EntryIntegrationKind.Readwise),
+            CredentialInput = "reader-token"
+        };
+
+        Assert.True(viewModel.IsFixedReadwiseTarget);
+        Assert.Equal(
+            ReadwiseEntryExporter.CredentialTargetId,
+            viewModel.TargetId);
+        Assert.Equal(
+            ReadwiseEntryExporter.ApiRoot.AbsoluteUri,
+            viewModel.EndpointText);
+
+        await viewModel.SaveCommand.ExecuteAsync();
+
+        Assert.Equal(EntryIntegrationKind.Readwise, credentials.LastKind);
+        Assert.Equal(
+            ReadwiseEntryExporter.CredentialTargetId,
+            credentials.LastTargetId);
+        Assert.Equal("reader-token", credentials.Value);
+        Assert.Equal(
+            ReadwiseEntryExporter.ApiRoot.AbsoluteUri,
+            localSettings.Values["integration.target.endpoint"]);
+
+        viewModel.EndpointText = "https://reader.example.com/";
+        viewModel.CredentialInput = "must-not-replace";
+        await viewModel.SaveCommand.ExecuteAsync();
+
+        Assert.Equal("reader-token", credentials.Value);
+        Assert.Contains("readwise.io", viewModel.Status, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -179,10 +222,34 @@ public sealed class IntegrationViewModelTests
             EndpointText = "https://hooks.example.com/health"
         };
 
+        await viewModel.SaveCommand.ExecuteAsync();
+
         await viewModel.TestCommand.ExecuteAsync();
 
         Assert.Contains("尚未安装", viewModel.Status, StringComparison.Ordinal);
         Assert.Equal(1, health.Count);
+    }
+
+    [Fact]
+    public async Task PersonalConnectionTestRejectsUnsavedTargetGeneration()
+    {
+        var health = new FakeHealthService();
+        var localSettings = new FakeSettingsRepository();
+        var viewModel = new IntegrationSettingsViewModel(
+            new FakeCredentialStore(),
+            health,
+            localSettings)
+        {
+            TargetId = "saved-target",
+            EndpointText = "https://hooks.example.com/health"
+        };
+        await viewModel.SaveCommand.ExecuteAsync();
+        viewModel.EndpointText = "https://other.example.com/health";
+
+        await viewModel.TestCommand.ExecuteAsync();
+
+        Assert.Equal(0, health.Count);
+        Assert.Contains("先保存", viewModel.Status, StringComparison.Ordinal);
     }
 
     private sealed class FakePolicyService
@@ -270,6 +337,8 @@ public sealed class IntegrationViewModelTests
         : IEntryIntegrationCredentialStore
     {
         public string? Value { get; private set; }
+        public EntryIntegrationKind? LastKind { get; private set; }
+        public string? LastTargetId { get; private set; }
 
         public Task<string?> GetAsync(
             EntryIntegrationKind kind,
@@ -287,6 +356,8 @@ public sealed class IntegrationViewModelTests
             string value,
             CancellationToken cancellationToken)
         {
+            LastKind = kind;
+            LastTargetId = targetId;
             Value = value;
             return Task.CompletedTask;
         }
@@ -308,12 +379,14 @@ public sealed class IntegrationViewModelTests
                 EntryIntegrationHealthStatus.Healthy,
                 DateTimeOffset.UtcNow);
         public int Count { get; private set; }
+        public EntryIntegrationTarget? LastTarget { get; private set; }
 
         public Task<EntryIntegrationHealthResult> CheckAsync(
             EntryIntegrationTarget target,
             CancellationToken cancellationToken)
         {
             Count++;
+            LastTarget = target;
             return Task.FromResult(Result);
         }
     }

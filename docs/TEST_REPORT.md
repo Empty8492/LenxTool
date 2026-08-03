@@ -9,8 +9,8 @@
 | 测试组 | 结果 |
 |---|---:|
 | LenxTool.Core.Tests | 177 passed |
-| LenxTool.Infrastructure.Tests | 642 passed |
-| LenxTool.App.Tests | 389 passed；1 个既有基线环境用例阻断 |
+| LenxTool.Infrastructure.Tests | 714 passed |
+| LenxTool.App.Tests | 397 passed；1 个既有基线环境用例阻断 |
 | Cloudflare Worker Vitest | 78 passed |
 | Worker TypeScript strict typecheck | passed |
 | .NET build warnings | 0 |
@@ -19,7 +19,13 @@
 
 Worker 发现用例曾在 60 次顺序请求跨越 UTC 分钟时把计数分到两个固定窗口，导致门禁把正确的 `200` 误判为产品限流回归；测试现只冻结 `Date`，精确用例 1/1、发现整文件 8/8 与 Worker 全量 78/78 均通过，不改变生产限流实现。
 
-当前 Release 结果为 Core 177/177、Infrastructure 642/642、App/WPF 389/389（使用 `FullyQualifiedName!~SelectionControlsWpfRuntimeTests` 排除下述既有环境缺陷），共 1208 个未阻断 .NET 用例通过；Worker workerd/D1 Vitest 78/78、Worker strict typecheck 与全解决方案 build 0 警告/0 错误。本轮未修改 NuGet/npm 依赖；NuGet 在线漏洞扫描与 `npm audit --audit-level=high` 均为 0 漏洞。凭据模式扫描只命中 `HistoryViewModelTests`、`PasswordBoxAssistantTests` 与 `SettingsViewModelTests` 中用于验证脱敏/密钥输入的固定测试哨兵，没有生产凭据命中。
+当前 Release 结果为 Core 177/177、Infrastructure 714/714、App/WPF 397/397（使用 `FullyQualifiedName!~SelectionControlsWpfRuntimeTests` 排除下述既有环境缺陷），共 1288 个未阻断 .NET 用例通过；Worker workerd/D1 Vitest 78/78、Worker strict typecheck 与全解决方案 build 0 警告/0 错误。本轮未修改 NuGet/npm 依赖；NuGet 在线漏洞扫描与 `npm audit --audit-level=high` 均为 0 漏洞。凭据模式扫描只命中既有 `HistoryViewModelTests`、`PasswordBoxAssistantTests`、`SettingsViewModelTests` 及新增 Readwise API/导出器测试中用于验证脱敏/密钥输入的固定哨兵，没有生产凭据命中。
+
+P2-14 新增固定官方目标的 Readwise Reader API 客户端、五视图导出器、无副作用健康探针、通用设置卡固定模式、阅读器行内/详情显式入口、精确摘要预览和生产 DI。API 假 HTTP 覆盖 `https://readwise.io/api/v2/auth/` 的 `Authorization: Token` 与 204、`POST /api/v3/save/` 的 201 新建/200 已有、合法 ID/`read.readwise.io` 地址、401/403、400/422、408/429/5xx、`Retry-After`、POST 未知写结果、禁代理/重定向/Cookie/解压、全部公网 DNS 钉住、单并发与 1.2 秒主动节流、超限/畸形 JSON、响应头后正文卡死、调用方取消和响应/token 脱敏。长服务端暂停不会在适配器内睡眠，而是立即把剩余 RetryAfter 交给持久队列重排，避免占住单槽全局导出 worker。
+
+导出器测试覆盖五种 `EntryViewKind`、固定 `default.v1` 目标、规范 HTTP(S) DNS 来源、标题/作者/UTC 日期、最多 32 个 categories、净化内容优先与 Feed summary 回退、4,000 Unicode 文本元素/16 KiB UTF-8 双重裁剪，以及界面预览、队列字节和实际 `summary` 三者一致。ACTIVE 策略必须精确允许 `readwise.io` 且在 DPAPI token 读取前校验；`html`、图片、私人备注、AI 私人状态和本机路径不会发送。App 覆盖选择 Readwise 后固定 `default`/只读官方端点、当前表单先保存再测试、策略/凭据/不安全来源任一失败零入队、行按钮只对当前预览的同一 FeedEntry 可执行、详情命令、可访问状态、OneWay 只读预览、XAML 与 DI 可达性。Readwise 聚焦结果为 Infrastructure 72/72、App/设置/DI 17/17。
+
+全量 Infrastructure 首轮因既有 SQLitePCL 测试宿主释放串扰为 713/714；失败的 P1 大库验收精确复跑 1/1，随后独立全量 714/714。App 首轮为 396/397，并真实暴露只读 `ReadwiseExportPreview` 被 TextBox 默认 TwoWay 绑定的产品错误；改为显式 OneWay 后精确 WPF 1/1 与独立全量 397/397。独立只读审查另发现并修复“长 Retry-After 阻塞全部导出适配器”和“行内可预览 A 却发送 B”两项 P1，修复后复核未发现新的 P0/P1。官方同 URL 200 只证明不创建第二条；重存仍会置顶/显示绿色标记，不同追踪 URL 仍可能重复。未新增依赖、SQLite schema 或 D1 migration，也没有真实 Readwise token、账户探测或写入证据，因此 P2-D 真实检查点保持开放。
 
 P2-13 新增 Zotero 个人库目标、专用 Web API v3 客户端、网页/期刊条目导出器、设置卡、阅读器行内/详情显式入口和生产 DI。目标测试覆盖正整数 User ID、显式 item type、可选 Feed summary 笔记、默认关闭的首图附件、规范化配置修订、损坏/缺失设置安全回退，以及设置代际租约持续到最后一次 API 调用。设置与命令测试覆盖当前表单必须先保存再测试、API key 保存后立即清空且不回读、ACTIVE 策略必须精确允许 `api.zotero.org`、策略/目标/凭据任一缺失时零入队、指定行参数、内容版本和目标修订共同隔离队列键、可访问状态与 XAML/DI 可达性。
 
@@ -33,7 +39,7 @@ P2-11 新增安全 Obsidian Vault 目标、设置/目录选择、生产适配器
 
 队列回归确认 `FAILED`/`CANCELLED` 可由显式动作原子恢复为 `QUEUED`，包括 attempts、租约、取消、错误与时间字段全部复位；两个仓储并发复活时恰好一个返回新建，`COMPLETED` 仍去重。配置修订目标 ID 为不含路径明文的 `default.<24 位小写十六进制>`，仅预版本 `default` 任务保留迁移兼容；版本化任务必须精确匹配当前规范化作用域。App 覆盖目录选择只回填、保存后无需重启、无效路径/标签/模板提示、显式 Feed 视图覆盖自动分类、指定行及详情区动作入队、实际请求条目标题反馈与有界净化、同配置重复入队幂等、配置变化获得新幂等范围、未配置/策略关闭零入队和 XAML 绑定；DI 验证生产注册能力但启动不写文件。Worker 新增 Obsidian 空主机特例并确认其他启用的网络类型仍必须有主机。180 天保留测试确认 `QUEUED`/`RUNNING` 导出引用保护源条目，终态后恢复清理。唯一既有滚动时序用例改为直接断言动画会话和最终逻辑滚动，不再等待固定 80 ms；完整门禁为 Core 174/174、Infrastructure 484/484、App/WPF 347/347，共 1005/1005，Worker 75/75、strict typecheck 与 Release build 0 警告/0 错误。
 
-上段“其他启用的网络类型仍必须有主机”是 P2-11 完成时的历史语义；P2-12 已把 Eagle 加入客户端本机空主机例外，P2-13 未改变共享 schema：现行契约仍为 Obsidian/Eagle 空主机、其余七种精确 DNS 主机，其中 Zotero 客户端进一步固定为 `api.zotero.org`。
+上段“其他启用的网络类型仍必须有主机”是 P2-11 完成时的历史语义；P2-12 已把 Eagle 加入客户端本机空主机例外，P2-13/P2-14 均未改变共享 schema：现行契约仍为 Obsidian/Eagle 空主机、其余七种精确 DNS 主机，其中 Zotero 客户端固定为 `api.zotero.org`，Readwise 客户端固定为 `readwise.io`。
 
 P2-09/P2-10 新增持久导出队列、五态数据库约束、租约心跳、精确重试、跨进程合作取消和 Markdown 本地文件导出回归。真实 SQLite 场景覆盖并发防重领、租约续期、失败重试后取消并模拟崩溃恢复，以及第二个服务取消第一个服务的长运行适配器；Markdown 场景覆盖三种内容模式、UTF-8 无 BOM、Windows/Unicode 安全文件名、覆盖/跳过/稳定新版本、缓存图片白名单、原子转正和 junction/reparse 拒绝。完整门禁为 Core 173/173、Infrastructure 414/414、App/WPF 323/323，共 910/910；Worker 74/74、strict typecheck 与 Release build 0 警告/0 错误。Wrangler 在受限环境尝试写沙箱外调试日志时报告 EPERM，但测试进程以退出码 0 完成 12/12 文件和 74/74 场景。
 
