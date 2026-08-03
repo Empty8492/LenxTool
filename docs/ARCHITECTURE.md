@@ -174,6 +174,12 @@ P2-12 在该历史通用边界之外增加一个客户端专用的 Eagle 本机�
 
 Eagle 官方 `item/add` 不接受资源库 ID/修订，也没有“当前库仍为 X 才写入”的条件参数，因此资源库探测与新增不能组成原子操作。写后探测能把保持在新库的切换报告为 `Conflict`，但不能撤销可能已经发生的写入；在写入窗口内切换后又切回原库的 ABA 变化也无法由该 API 观测。端点租约同样只协调本 LenxTool 进程内的设置保存，不覆盖另一个进程直接修改本机设置。用户必须在导出任务进入终态前保持 Eagle 当前资源库不变；受控真实 Eagle 验收需要专门覆盖这一人工约束，文档不得声称适配器能原子阻止误投。
 
+P2-13 把首个公网网络适配器接入 P2-08/P2-09 边界。Zotero 目标只表示个人库 User ID、显式 webpage/journalArticle 类型、摘要子笔记开关和默认关闭的附件开关；固定 API 根地址由 User ID 派生，不能配置任意主机。目标全部行为进入不透明队列修订，API key 仍由 `IEntryIntegrationCredentialStore` 的 DPAPI CurrentUser 槽位隔离。设置保存不联网，连接测试要求当前表单与已保存代际一致；健康服务先执行 ACTIVE 精确主机、HTTPS/443、DNS 全地址、冷却与超时，再由 Zotero 探针验证 `/keys/current` 的用户与 library/write/notes/files 权限。阅读器只有显式动作才入队，后台重新验证策略、代际、凭据和能力，并持有目标租约到最后一次上传结束。
+
+`ZoteroEntryExporter` 不推断条目类型，也不读取私人备注或正文：来源使用规范 HTTP(S) URL，作者保持不可可靠拆分的 single-field name，日期取 published/updated，categories 进入有界标签，可选子 note 仅来自 HTML 编码后的 Feed summary。父项、note 和 imported_file attachment 分别从耐久幂等键加角色盐生成官方字符集的 8 位 key，并携带角色化身份标记。`ZoteroApiClient` 对每个目标串行执行，固定 Web API v3、禁代理/跳转/Cookie/解压、钉住所有公网解析地址，并在创建前后读取 key 核对 itemType、父级、URL、附件元数据与标记；匹配对象直接完成，非匹配对象作为不可重试碰撞关闭。`version: 0` 与预分配 key 取代只能短期缓存的 Write Token，适配跨重启队列重放。
+
+附件链在创建 imported_file 子项前由 LenxTool 下载并交叉验证 URL、声明 MIME、响应 MIME、文件魔数和 12 MiB 实际流；支持 PNG/JPEG/GIF/WebP/BMP。创建成功后按 Zotero 官方三阶段上传：官方 file endpoint 返回一次性授权，客户端只把 `prefix + bytes + suffix` 发送到经独立 HTTPS/公网 DNS 钉住的地址且不携带 API key，再回官方 endpoint 登记 upload key。上传正文使用独立两分钟超时，JSON/授权字段/URL/响应仍有界。取消、超时或崩溃不能回滚已经创建的第三方对象；确定性 key、写前/写后身份复查和文件授权的 `exists=1` 语义使重试收敛。本切片复用 schema v21 和 Worker D1 0010，没有本地或云端迁移。
+
 P1 终验（2026-07-27）以两条独立数据流验证架构边界：真实 schema v17 SQLite 在重开后的离线库中覆盖 10,000 条 Feed、1,000 个收藏、混合媒体和全文/AI/规则/媒体活动引用，查询、搜索、预览和清理均满足既定预算；真实 workerd/D1 覆盖管理员发布目录/AI 策略/规则、普通用户写入 403、版本不变及应用表/字段内容隐私白名单。Release 回归为 .NET 648/648、Worker 52/52、strict typecheck 和 0 警告构建。该记录关闭 P1 架构交付，不替代生产部署与正式签名发布。
 
 ## 10. 统一 Feed 发现协调

@@ -11,7 +11,7 @@ namespace LenxTool.App.Tests.ViewModels;
 public sealed class IntegrationViewModelTests
 {
     [Fact]
-    public void PersonalSettingsOmitsDedicatedLocalExportKinds()
+    public void PersonalSettingsOmitsKindsWithDedicatedProviderCards()
     {
         Assert.DoesNotContain(
             IntegrationKindChoice.All,
@@ -19,6 +19,9 @@ public sealed class IntegrationViewModelTests
         Assert.DoesNotContain(
             IntegrationKindChoice.All,
             item => item.Kind == EntryIntegrationKind.Eagle);
+        Assert.DoesNotContain(
+            IntegrationKindChoice.All,
+            item => item.Kind == EntryIntegrationKind.Zotero);
         Assert.Contains(
             IntegrationKindChoice.All,
             item => item.Kind == EntryIntegrationKind.Webhook);

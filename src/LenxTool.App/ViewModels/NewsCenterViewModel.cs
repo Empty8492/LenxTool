@@ -71,7 +71,10 @@ public sealed partial class NewsCenterViewModel
         IEntryIntegrationPolicyService? entryIntegrationPolicyService = null,
         IObsidianExportTargetStore? obsidianExportTargetStore = null,
         IEagleExportTargetStore? eagleExportTargetStore = null,
-        IEagleApiClient? eagleApiClient = null)
+        IEagleApiClient? eagleApiClient = null,
+        IZoteroExportTargetStore? zoteroExportTargetStore = null,
+        IEntryIntegrationCredentialStore?
+            entryIntegrationCredentialStore = null)
         : base("资讯列表", "订阅资讯、每日早报、热点趋势与 AI 报告")
     {
         bool hasSharedMediaDependency =
@@ -138,7 +141,9 @@ public sealed partial class NewsCenterViewModel
             entryIntegrationPolicyService,
             obsidianExportTargetStore,
             eagleExportTargetStore,
-            eagleApiClient);
+            eagleApiClient,
+            zoteroExportTargetStore,
+            entryIntegrationCredentialStore);
     }
 
     public ObservableCollection<NewsArticle> Articles { get; } = [];

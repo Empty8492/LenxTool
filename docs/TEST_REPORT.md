@@ -9,8 +9,8 @@
 | 测试组 | 结果 |
 |---|---:|
 | LenxTool.Core.Tests | 177 passed |
-| LenxTool.Infrastructure.Tests | 538 passed |
-| LenxTool.App.Tests | 372 passed；1 个既有基线环境用例阻断 |
+| LenxTool.Infrastructure.Tests | 642 passed |
+| LenxTool.App.Tests | 389 passed；1 个既有基线环境用例阻断 |
 | Cloudflare Worker Vitest | 78 passed |
 | Worker TypeScript strict typecheck | passed |
 | .NET build warnings | 0 |
@@ -19,7 +19,11 @@
 
 Worker 发现用例曾在 60 次顺序请求跨越 UTC 分钟时把计数分到两个固定窗口，导致门禁把正确的 `200` 误判为产品限流回归；测试现只冻结 `Date`，精确用例 1/1、发现整文件 8/8 与 Worker 全量 78/78 均通过，不改变生产限流实现。
 
-当前 Release 结果为 Core 177/177、Infrastructure 538/538、App/WPF 372/372（使用 `FullyQualifiedName!~SelectionControlsWpfRuntimeTests` 排除下述既有环境缺陷），共 1087 个未阻断 .NET 用例通过；Worker workerd/D1 Vitest 78/78、Worker strict typecheck 与全解决方案 build 0 警告/0 错误。本轮未修改 NuGet/npm 依赖；NuGet 在线漏洞扫描与 `npm audit --audit-level=high` 均为 0 漏洞。凭据模式扫描只命中 `HistoryViewModelTests` 中用于验证脱敏的固定 `Bearer secret-must-not-be-shown` 测试哨兵，没有生产凭据命中。
+当前 Release 结果为 Core 177/177、Infrastructure 642/642、App/WPF 389/389（使用 `FullyQualifiedName!~SelectionControlsWpfRuntimeTests` 排除下述既有环境缺陷），共 1208 个未阻断 .NET 用例通过；Worker workerd/D1 Vitest 78/78、Worker strict typecheck 与全解决方案 build 0 警告/0 错误。本轮未修改 NuGet/npm 依赖；NuGet 在线漏洞扫描与 `npm audit --audit-level=high` 均为 0 漏洞。凭据模式扫描只命中 `HistoryViewModelTests`、`PasswordBoxAssistantTests` 与 `SettingsViewModelTests` 中用于验证脱敏/密钥输入的固定测试哨兵，没有生产凭据命中。
+
+P2-13 新增 Zotero 个人库目标、专用 Web API v3 客户端、网页/期刊条目导出器、设置卡、阅读器行内/详情显式入口和生产 DI。目标测试覆盖正整数 User ID、显式 item type、可选 Feed summary 笔记、默认关闭的首图附件、规范化配置修订、损坏/缺失设置安全回退，以及设置代际租约持续到最后一次 API 调用。设置与命令测试覆盖当前表单必须先保存再测试、API key 保存后立即清空且不回读、ACTIVE 策略必须精确允许 `api.zotero.org`、策略/目标/凭据任一缺失时零入队、指定行参数、内容版本和目标修订共同隔离队列键、可访问状态与 XAML/DI 可达性。
+
+Zotero API 假 HTTP 测试覆盖固定个人库根地址、`Zotero-API-Version: 3`、API key 仅发送至官方入口、`/keys/current` 的 User ID 与 library/write/notes/files 权限、HTTPS/443、公网 DNS 全地址钉住、禁代理/重定向/Cookie/解压、8 秒 JSON 请求、2 分钟附件正文、256 KiB JSON 上限、429 `Retry-After`/`Backoff` 和封闭错误映射。导出器使用按父项/note/attachment 角色分盐的确定性 8 位 Zotero key、`version: 0` 与完整 LenxTool 身份标记；写前/写后复查收敛响应丢失和崩溃重放，既有 key 身份不匹配时以冲突失败关闭。可选附件覆盖首个允许且已验证的 PNG/JPEG/GIF/WebP/BMP、声明/实际 12 MiB、MIME/魔数交叉校验、imported_file 子项和官方三阶段上传；一次性存储地址不携带 Zotero API key，并继续受到 HTTPS、公网 DNS 钉住、禁跳转/代理和有界响应约束。取消或超时后的第三方副作用不可回滚，测试只证明稳定对象重放收敛，不宣称事务回滚。Zotero 聚焦结果为 Infrastructure 104/104（其中 API 客户端 62/62、导出器 29/29）与 App 17/17；独立只读审查未发现 P0/P1。未新增依赖、SQLite schema 或 D1 migration；无受控真实 Zotero key/个人库，因此 P2-D 真实写入检查点仍待外部环境。
 
 P2-12 新增 Eagle 本机目标、专用 Web API V2 客户端、图片导出器、设置卡、共享策略语义、阅读器行内/详情显式入口和生产 DI。Worker/Core 固定 Obsidian/Eagle 空主机并拒绝两种本机集成的任意非空主机；其余七种网络类型仍需精确 DNS。目标/API 测试覆盖显式端口的数字 loopback HTTP、禁代理/重定向/Cookie/解压、Windows 4.0 Build 21+、资源库必需元数据、路径脱敏和不透明修订、未安装/错误端口、超限/畸形响应、408/429/5xx、调用方取消与固定错误。队列目标以端点与资源库修订共同隔离；端点代际测试证明同进程保存新配置会等待活动导出，目标快照保持到最后一次 Eagle 调用。已有条目查询、图片下载或新增期间持续到后续探测的切库会以 `Conflict` 关闭；官方 `item/add` 无资源库身份参数，因此测试不宣称原子阻止误投，写后冲突不能撤销可能的写入，ABA 切库也不可观测。导出器覆盖允许 URL、验证媒体类型、PNG/JPEG/GIF/WebP/BMP、声明/实际 12 MiB、MIME/魔数、data URI、标题/来源/标签、稳定自定义 ID、写前查询、已有条目跳过失效图片，以及 POST 不确定结果复查与未知状态可重试。App 覆盖保存/测试共享忙门、策略撤销、存储/策略/探测阶段超时、释放取消、命令参数使用指定行、未验证图片零副作用、资源库切换获得新队列键、可访问实时状态、设置卡安全提示和生产注册。P2-12 聚焦结果为 Infrastructure Eagle 54/54、App Eagle 23/23、设置卡结构 1/1、Core 集成策略 16/16 与 Worker 集成策略 8/8。
 
@@ -29,7 +33,7 @@ P2-11 新增安全 Obsidian Vault 目标、设置/目录选择、生产适配器
 
 队列回归确认 `FAILED`/`CANCELLED` 可由显式动作原子恢复为 `QUEUED`，包括 attempts、租约、取消、错误与时间字段全部复位；两个仓储并发复活时恰好一个返回新建，`COMPLETED` 仍去重。配置修订目标 ID 为不含路径明文的 `default.<24 位小写十六进制>`，仅预版本 `default` 任务保留迁移兼容；版本化任务必须精确匹配当前规范化作用域。App 覆盖目录选择只回填、保存后无需重启、无效路径/标签/模板提示、显式 Feed 视图覆盖自动分类、指定行及详情区动作入队、实际请求条目标题反馈与有界净化、同配置重复入队幂等、配置变化获得新幂等范围、未配置/策略关闭零入队和 XAML 绑定；DI 验证生产注册能力但启动不写文件。Worker 新增 Obsidian 空主机特例并确认其他启用的网络类型仍必须有主机。180 天保留测试确认 `QUEUED`/`RUNNING` 导出引用保护源条目，终态后恢复清理。唯一既有滚动时序用例改为直接断言动画会话和最终逻辑滚动，不再等待固定 80 ms；完整门禁为 Core 174/174、Infrastructure 484/484、App/WPF 347/347，共 1005/1005，Worker 75/75、strict typecheck 与 Release build 0 警告/0 错误。
 
-上段“其他启用的网络类型仍必须有主机”是 P2-11 完成时的历史语义；当前 P2-12 已把 Eagle 加入客户端本机空主机例外，现行契约为 Obsidian/Eagle 空主机、其余七种精确 DNS 主机。
+上段“其他启用的网络类型仍必须有主机”是 P2-11 完成时的历史语义；P2-12 已把 Eagle 加入客户端本机空主机例外，P2-13 未改变共享 schema：现行契约仍为 Obsidian/Eagle 空主机、其余七种精确 DNS 主机，其中 Zotero 客户端进一步固定为 `api.zotero.org`。
 
 P2-09/P2-10 新增持久导出队列、五态数据库约束、租约心跳、精确重试、跨进程合作取消和 Markdown 本地文件导出回归。真实 SQLite 场景覆盖并发防重领、租约续期、失败重试后取消并模拟崩溃恢复，以及第二个服务取消第一个服务的长运行适配器；Markdown 场景覆盖三种内容模式、UTF-8 无 BOM、Windows/Unicode 安全文件名、覆盖/跳过/稳定新版本、缓存图片白名单、原子转正和 junction/reparse 拒绝。完整门禁为 Core 173/173、Infrastructure 414/414、App/WPF 323/323，共 910/910；Worker 74/74、strict typecheck 与 Release build 0 警告/0 错误。Wrangler 在受限环境尝试写沙箱外调试日志时报告 EPERM，但测试进程以退出码 0 完成 12/12 文件和 74/74 场景。
 

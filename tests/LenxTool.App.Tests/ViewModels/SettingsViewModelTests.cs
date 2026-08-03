@@ -196,6 +196,39 @@ public sealed class SettingsViewModelTests
     }
 
     [Fact]
+    public async Task InitializeAlsoLoadsOptionalZoteroSettingsWithoutReadingKey()
+    {
+        var targetStore = new FakeZoteroExportTargetStore
+        {
+            Current = new(
+                ZoteroExportTarget.DefaultTargetId,
+                12345678,
+                ZoteroItemType.JournalArticle,
+                IncludeSummaryNote: true,
+                UploadFirstImageAttachment: false)
+        };
+        var credentialStore = new FakeEntryIntegrationCredentialStore();
+        var zotero = new ZoteroSettingsViewModel(
+            targetStore,
+            credentialStore,
+            new FakeEntryIntegrationHealthService());
+        var viewModel = CreateViewModel(
+            new FakeAccountSessionService(),
+            zoteroSettings: zotero);
+
+        await viewModel.InitializeAsync(CancellationToken.None);
+
+        Assert.Same(zotero, viewModel.ZoteroSettings);
+        Assert.Equal("12345678", zotero.UserIdText);
+        Assert.Equal(
+            ZoteroItemType.JournalArticle,
+            zotero.SelectedItemType.Value);
+        Assert.True(zotero.IncludeSummaryNote);
+        Assert.Equal(0, credentialStore.GetCount);
+        Assert.Equal(1, credentialStore.ExistsCount);
+    }
+
+    [Fact]
     public async Task StorageCleanupRequiresPreviewThenRefreshesUsage()
     {
         var maintenance = new FakeDatabaseMaintenanceService
@@ -282,7 +315,8 @@ public sealed class SettingsViewModelTests
         IAccountSessionService account,
         IFeedCatalogSyncService? sync = null,
         IDatabaseMaintenanceService? maintenance = null,
-        ObsidianSettingsViewModel? obsidianSettings = null) => new(
+        ObsidianSettingsViewModel? obsidianSettings = null,
+        ZoteroSettingsViewModel? zoteroSettings = null) => new(
         new FakeThemeService(),
         new FakeUpdateService(),
         new FakeSecretStore(),
@@ -290,7 +324,8 @@ public sealed class SettingsViewModelTests
         account,
         sync ?? new FakeFeedCatalogSyncService(),
         maintenance,
-        obsidianSettings: obsidianSettings);
+        obsidianSettings: obsidianSettings,
+        zoteroSettings: zoteroSettings);
 
     private static AccountSessionSnapshot SignedIn(AccountRole role) => new(
         AccountSessionStatus.SignedIn,
@@ -475,6 +510,72 @@ public sealed class SettingsViewModelTests
             ObsidianExportTarget target,
             CancellationToken cancellationToken) =>
             Task.CompletedTask;
+    }
+
+    private sealed class FakeZoteroExportTargetStore
+        : IZoteroExportTargetStore
+    {
+        public ZoteroExportTarget? Current { get; init; }
+
+        public Task<ZoteroExportTarget?> GetAsync(
+            CancellationToken cancellationToken) =>
+            Task.FromResult(Current);
+
+        public Task<IZoteroExportTargetLease> AcquireExportLeaseAsync(
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task SaveAsync(
+            ZoteroExportTarget target,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+    }
+
+    private sealed class FakeEntryIntegrationCredentialStore
+        : IEntryIntegrationCredentialStore
+    {
+        public int GetCount { get; private set; }
+        public int ExistsCount { get; private set; }
+
+        public Task<string?> GetAsync(
+            EntryIntegrationKind kind,
+            string targetId,
+            CancellationToken cancellationToken)
+        {
+            GetCount++;
+            return Task.FromResult<string?>(null);
+        }
+
+        public Task<bool> ExistsAsync(
+            EntryIntegrationKind kind,
+            string targetId,
+            CancellationToken cancellationToken)
+        {
+            ExistsCount++;
+            return Task.FromResult(true);
+        }
+
+        public Task SetAsync(
+            EntryIntegrationKind kind,
+            string targetId,
+            string credential,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task DeleteAsync(
+            EntryIntegrationKind kind,
+            string targetId,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+    }
+
+    private sealed class FakeEntryIntegrationHealthService
+        : IEntryIntegrationHealthService
+    {
+        public Task<EntryIntegrationHealthResult> CheckAsync(
+            EntryIntegrationTarget target,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
     }
 
     private sealed class FakeDesktopFileDialogService

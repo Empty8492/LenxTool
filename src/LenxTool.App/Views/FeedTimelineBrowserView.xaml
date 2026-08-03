@@ -46,6 +46,15 @@
                                                 Padding="4,0"
                                                 BorderThickness="0"
                                                 Background="Transparent"
+                                                Command="{Binding DataContext.ExportTimelineEntryToZoteroCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                CommandParameter="{Binding}"
+                                                Content="Z"
+                                                ToolTip="导出到 Zotero"
+                                                AutomationProperties.Name="导出该 Feed 到 Zotero" />
+                                        <Button Margin="4,0,0,0"
+                                                Padding="4,0"
+                                                BorderThickness="0"
+                                                Background="Transparent"
                                                 Command="{Binding DataContext.ExportTimelineEntryToEagleCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                 CommandParameter="{Binding}"
                                                 Content="E"
@@ -215,6 +224,13 @@
                                         CommandParameter="{Binding SelectedTimelineEntry}"
                                         Content="导出到 Eagle"
                                         AutomationProperties.Name="导出当前 Feed 到 Eagle" />
+                                <Button MinWidth="108"
+                                        Margin="8,0,0,0"
+                                        Padding="10,5"
+                                        Command="{Binding ExportTimelineEntryToZoteroCommand}"
+                                        CommandParameter="{Binding SelectedTimelineEntry}"
+                                        Content="导出到 Zotero"
+                                        AutomationProperties.Name="导出当前 Feed 到 Zotero" />
                             </WrapPanel>
                             <StackPanel Margin="0,8,0,0">
                                 <TextBlock Style="{StaticResource SectionTitleStyle}"
@@ -234,6 +250,11 @@
                                 <TextBlock Margin="0,3,12,0"
                                            Style="{StaticResource MetaTextStyle}"
                                            Text="{Binding EagleExportStatus}"
+                                           AutomationProperties.LiveSetting="Polite"
+                                           TextWrapping="Wrap" />
+                                <TextBlock Margin="0,3,12,0"
+                                           Style="{StaticResource MetaTextStyle}"
+                                           Text="{Binding ZoteroExportStatus}"
                                            AutomationProperties.LiveSetting="Polite"
                                            TextWrapping="Wrap" />
                             </StackPanel>

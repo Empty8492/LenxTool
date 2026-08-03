@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Globalization;
+using System.Text;
 using LenxTool.App.Controls;
 using LenxTool.App.ViewModels;
 using LenxTool.App.Services;
@@ -2203,6 +2204,166 @@ public sealed class NewsCenterViewModelTests
     }
 
     [Fact]
+    public async Task ZoteroExportExplicitlyEnqueuesCurrentRowWithVersionedTarget()
+    {
+        FeedEntry selectedEntry = CreateFeedEntry(14);
+        FeedEntry requestedEntry = CreateFeedEntry(15) with
+        {
+            Summary = "需要进入可选子笔记的摘要",
+            Enclosures =
+            [
+                new(
+                    "https://cdn.example.com/zotero-cover.png",
+                    "image/png",
+                    2048,
+                    "cover")
+            ]
+        };
+        ZoteroExportTarget target = CreateZoteroTarget(
+            includeSummaryNote: true,
+            uploadFirstImageAttachment: true);
+        var queue = new StubEntryExportQueueService();
+        var policies = new StubEntryIntegrationPolicyService(
+            isEnabled: true,
+            EntryIntegrationKind.Zotero);
+        var targets = new StubZoteroExportTargetStore(target);
+        var credentials = new StubEntryIntegrationCredentialStore(
+            exists: true);
+        using NewsCenterViewModel viewModel = CreateViewModel(
+            CreateSnapshot(),
+            feedEntries: new([selectedEntry, requestedEntry]),
+            exportQueue: queue,
+            integrationPolicies: policies,
+            zoteroTargets: targets,
+            integrationCredentials: credentials);
+        await viewModel.InitializeAsync(CancellationToken.None);
+        FeedTimelineItem selectedItem = Assert.Single(
+            viewModel.TimelineEntries,
+            item => item.Entry.Id == selectedEntry.Id);
+        FeedTimelineItem requestedItem = Assert.Single(
+            viewModel.TimelineEntries,
+            item => item.Entry.Id == requestedEntry.Id);
+        viewModel.SelectedTimelineEntry = selectedItem;
+
+        Assert.Empty(queue.Requests);
+        await viewModel.ExportTimelineEntryToZoteroCommand.ExecuteAsync(
+            requestedItem);
+
+        EntryExportRequest request = Assert.Single(queue.Requests);
+        Assert.Equal("zotero", request.ExporterId);
+        Assert.Equal(target.CreateQueueTargetId(), request.TargetId);
+        Assert.Equal(requestedEntry.Id, request.Entry.Id);
+        Assert.Equal(EntryViewKind.Picture, request.ViewKind);
+        Assert.Equal(
+            Encoding.UTF8.GetByteCount(requestedEntry.Summary) + 2048,
+            request.ContentBytes);
+        Assert.Equal(1, targets.GetCount);
+        Assert.Equal(1, credentials.ExistsCount);
+        Assert.Equal(
+            EntryIntegrationPolicyScope.Active,
+            Assert.Single(policies.Scopes));
+        Assert.Contains("已加入", viewModel.ZoteroExportStatus);
+        Assert.Contains(requestedEntry.Title, viewModel.ZoteroExportStatus);
+        Assert.DoesNotContain(selectedEntry.Title, viewModel.ZoteroExportStatus);
+    }
+
+    [Fact]
+    public async Task ZoteroExportDoesNotEnqueueWithoutSavedCredential()
+    {
+        FeedEntry entry = CreateFeedEntry(16);
+        var queue = new StubEntryExportQueueService();
+        var policies = new StubEntryIntegrationPolicyService(
+            isEnabled: true,
+            EntryIntegrationKind.Zotero);
+        var credentials = new StubEntryIntegrationCredentialStore(
+            exists: false);
+        using NewsCenterViewModel viewModel = CreateViewModel(
+            CreateSnapshot(),
+            feedEntries: new([entry]),
+            exportQueue: queue,
+            integrationPolicies: policies,
+            zoteroTargets: new StubZoteroExportTargetStore(
+                CreateZoteroTarget()),
+            integrationCredentials: credentials);
+        await viewModel.InitializeAsync(CancellationToken.None);
+
+        await viewModel.ExportTimelineEntryToZoteroCommand.ExecuteAsync(
+            Assert.Single(viewModel.TimelineEntries));
+
+        Assert.Empty(queue.Requests);
+        Assert.Equal(1, credentials.ExistsCount);
+        Assert.Contains("API key", viewModel.ZoteroExportStatus);
+    }
+
+    [Fact]
+    public async Task ZoteroExportDoesNotEnqueueWhenOfficialHostIsNotAllowed()
+    {
+        FeedEntry entry = CreateFeedEntry(18);
+        var queue = new StubEntryExportQueueService();
+        using NewsCenterViewModel viewModel = CreateViewModel(
+            CreateSnapshot(),
+            feedEntries: new([entry]),
+            exportQueue: queue,
+            integrationPolicies: new StubEntryIntegrationPolicyService(
+                isEnabled: true,
+                EntryIntegrationKind.Zotero,
+                allowedHosts: []),
+            zoteroTargets: new StubZoteroExportTargetStore(
+                CreateZoteroTarget()),
+            integrationCredentials:
+                new StubEntryIntegrationCredentialStore(exists: true));
+        await viewModel.InitializeAsync(CancellationToken.None);
+
+        await viewModel.ExportTimelineEntryToZoteroCommand.ExecuteAsync(
+            Assert.Single(viewModel.TimelineEntries));
+
+        Assert.Empty(queue.Requests);
+        Assert.Contains("管理员", viewModel.ZoteroExportStatus);
+    }
+
+    [Fact]
+    public async Task ZoteroExportUsesNewQueueScopeAfterConfigurationChanges()
+    {
+        FeedEntry entry = CreateFeedEntry(17);
+        var queue = new StubEntryExportQueueService();
+        var targets = new StubZoteroExportTargetStore(
+            CreateZoteroTarget());
+        using NewsCenterViewModel viewModel = CreateViewModel(
+            CreateSnapshot(),
+            feedEntries: new([entry]),
+            exportQueue: queue,
+            integrationPolicies: new StubEntryIntegrationPolicyService(
+                isEnabled: true,
+                EntryIntegrationKind.Zotero),
+            zoteroTargets: targets,
+            integrationCredentials:
+                new StubEntryIntegrationCredentialStore(exists: true));
+        await viewModel.InitializeAsync(CancellationToken.None);
+        FeedTimelineItem item = Assert.Single(viewModel.TimelineEntries);
+
+        await viewModel.ExportTimelineEntryToZoteroCommand.ExecuteAsync(item);
+        targets.Current = targets.Current! with
+        {
+            ItemType = ZoteroItemType.JournalArticle
+        };
+        await viewModel.ExportTimelineEntryToZoteroCommand.ExecuteAsync(item);
+
+        Assert.Equal(2, queue.Requests.Count);
+        Assert.Equal(
+            2,
+            queue.Requests
+                .Select(request => request.TargetId)
+                .Distinct(StringComparer.Ordinal)
+                .Count());
+        Assert.Equal(
+            2,
+            queue.Requests
+                .Select(request => request.IdempotencyKey)
+                .Distinct(StringComparer.Ordinal)
+                .Count());
+    }
+
+    [Fact]
     public async Task EntityNavigationOpensFeedEntryInTheReader()
     {
         FeedEntry entry = CreateFeedEntry(42);
@@ -2243,7 +2404,9 @@ public sealed class NewsCenterViewModelTests
         IEntryIntegrationPolicyService? integrationPolicies = null,
         IObsidianExportTargetStore? obsidianTargets = null,
         IEagleExportTargetStore? eagleTargets = null,
-        IEagleApiClient? eagleApi = null) =>
+        IEagleApiClient? eagleApi = null,
+        IZoteroExportTargetStore? zoteroTargets = null,
+        IEntryIntegrationCredentialStore? integrationCredentials = null) =>
         new(
             new StubNewsCenterService(snapshot),
             new StubAiReportService(null),
@@ -2273,7 +2436,18 @@ public sealed class NewsCenterViewModelTests
             eagleTargets,
             eagleApi ?? (eagleTargets is null
                 ? null
-                : new StubEagleApiClient()));
+                : new StubEagleApiClient()),
+            zoteroTargets,
+            integrationCredentials);
+
+    private static ZoteroExportTarget CreateZoteroTarget(
+        bool includeSummaryNote = false,
+        bool uploadFirstImageAttachment = false) => new(
+            ZoteroExportTarget.DefaultTargetId,
+            12345678,
+            ZoteroItemType.Webpage,
+            includeSummaryNote,
+            uploadFirstImageAttachment);
 
     private static NewsCenterViewModel CreateObsidianEnabledViewModel(
         FeedEntry entry,
@@ -3169,7 +3343,8 @@ public sealed class NewsCenterViewModelTests
 
     private sealed class StubEntryIntegrationPolicyService(
         bool isEnabled,
-        EntryIntegrationKind kind = EntryIntegrationKind.Obsidian)
+        EntryIntegrationKind kind = EntryIntegrationKind.Obsidian,
+        IReadOnlyList<string>? allowedHosts = null)
         : IEntryIntegrationPolicyService
     {
         public int GetCount { get; private set; }
@@ -3183,7 +3358,16 @@ public sealed class NewsCenterViewModelTests
             GetCount++;
             Scopes.Add(scope);
             IReadOnlyList<EntryIntegrationPolicy> policies = isEnabled
-                ? [new(kind, true, [])]
+                ?
+                [
+                    new(
+                        kind,
+                        true,
+                        allowedHosts
+                        ?? (kind == EntryIntegrationKind.Zotero
+                            ? ["api.zotero.org"]
+                            : []))
+                ]
                 : [];
             return Task.FromResult(new EntryIntegrationPolicySnapshot(
                 1,
@@ -3290,6 +3474,68 @@ public sealed class NewsCenterViewModelTests
 
         public Task SaveAsync(
             ObsidianExportTarget target,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+    }
+
+    private sealed class StubZoteroExportTargetStore(
+        ZoteroExportTarget? target)
+        : IZoteroExportTargetStore
+    {
+        public ZoteroExportTarget? Current { get; set; } = target;
+        public int GetCount { get; private set; }
+
+        public Task<ZoteroExportTarget?> GetAsync(
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            GetCount++;
+            return Task.FromResult(Current);
+        }
+
+        public Task<IZoteroExportTargetLease> AcquireExportLeaseAsync(
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task SaveAsync(
+            ZoteroExportTarget target,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+    }
+
+    private sealed class StubEntryIntegrationCredentialStore(bool exists)
+        : IEntryIntegrationCredentialStore
+    {
+        public int ExistsCount { get; private set; }
+
+        public Task<string?> GetAsync(
+            EntryIntegrationKind kind,
+            string targetId,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<bool> ExistsAsync(
+            EntryIntegrationKind kind,
+            string targetId,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            Assert.Equal(EntryIntegrationKind.Zotero, kind);
+            Assert.Equal(ZoteroExportTarget.DefaultTargetId, targetId);
+            ExistsCount++;
+            return Task.FromResult(exists);
+        }
+
+        public Task SetAsync(
+            EntryIntegrationKind kind,
+            string targetId,
+            string credential,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task DeleteAsync(
+            EntryIntegrationKind kind,
+            string targetId,
             CancellationToken cancellationToken) =>
             throw new NotSupportedException();
     }

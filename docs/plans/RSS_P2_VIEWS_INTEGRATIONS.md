@@ -1,6 +1,6 @@
 # P2 详细计划：内容视图、导出与定时摘要
 
-状态：P2-01～P2-12 与 [统一发现及原生控件视觉插入计划](RSS_DISCOVERY_AND_CONTROL_UX.md)已完成；P2-13 及以后仍需明确选择
+状态：P2-01～P2-13 与 [统一发现及原生控件视觉插入计划](RSS_DISCOVERY_AND_CONTROL_UX.md)已完成；P2-14 及以后仍需明确选择
 最后核对：2026-08-03
 开始条件：P1 最终检查点通过，统一 `FeedEntry`、私人状态、规则和搜索契约稳定。
 参考项目：RSSNext/Folo（内容视图、条目动作、AI 定时任务的行为参考），LenxTool 当前 WPF/DPAPI/媒体/更新与审计基础
@@ -368,13 +368,21 @@ P2 不引入 Folo 社区、关注关系、钱包、支付、移动端或完整 A
 
 **验收：**
 
-- [ ] 使用官方认证和版本/并发控制，重复条目策略明确。
-- [ ] 作者、日期、来源、标签和笔记字段可预测映射。
-- [ ] 附件上传默认关闭，启用后仍受类型、大小和取消限制。
+- [x] 使用官方认证和版本/并发控制，重复条目策略明确。
+- [x] 作者、日期、来源、标签和笔记字段可预测映射。
+- [x] 附件上传默认关闭，启用后仍受类型、大小和取消限制。
 
 **验证：** 字段映射、401/403/409/429、幂等和取消测试。
 
 **参考：** Folo Zotero 动作；实现时仅依据 Zotero 官方 API。
+
+**完成记录（2026-08-03）：** 首版只支持用户个人库，设置卡显式保存正整数 User ID、webpage/journalArticle 选择、可选摘要子笔记和默认关闭的首张图片附件开关；非敏感目标进入单一版本化本机设置，API key 只进入 `Zotero/default` 的 Windows DPAPI 槽位，保存后清空且从不回读。全部行为选项与 User ID 共同生成不泄露 ID 的 24 位目标修订；显式阅读器动作只有在 ACTIVE Zotero 策略包含精确 `api.zotero.org`、目标与凭据都存在时才入队，后台再次按相同顺序校验并持有目标代际租约到最后一次 API 调用。私人备注、正文和 AI 私人状态不进入 Zotero；父条目只确定映射 HTTP(S) 来源、single-field 作者、发布日期/更新时间、categories 与可选 Feed 摘要子笔记。
+
+客户端固定 `https://api.zotero.org/users/{id}/` 与 `Zotero-API-Version: 3`，API key 只使用请求头；`/keys/current` 必须返回相同 User ID、library/write 权限及本目标需要的 notes/files 权限。父项、note 和 imported_file attachment 使用官方 32 字符集中的本地确定性 8 位 key 与 LenxTool 身份标记，新对象使用 `version: 0`；每次 POST 前后按 key 读取并核对身份，匹配对象视为幂等完成，碰撞失败关闭，HTTP 200 内逐项失败、401/403/409/412/413/428/429、5xx、`Backoff` 与 `Retry-After` 均有封闭映射。条目与附件请求在每目标单并发、禁代理/跳转/Cookie/解压、DNS 全地址公网钉住和有界响应下执行。
+
+附件只有开关启用且首个候选同时通过 URL、声明媒体类型、PNG/JPEG/GIF/WebP/BMP 白名单与声明 12 MiB 上限时才下载；实际流再次受 12 MiB、响应 MIME 与文件魔数交叉校验。LenxTool 先创建确定性 imported_file 子项，再按官方三阶段协议请求上传授权、把 `prefix + bytes + suffix` 发送到经 HTTPS/公网 DNS 钉住的一次性地址、最后向官方 file endpoint 登记 upload key；一次性地址绝不取得 Zotero API key。MD5 仅因官方文件协议作为内容标识使用，不承担认证或完整性信任。取消可能发生在远端父项/附件项已经创建之后，不能回滚第三方副作用；稳定 key、身份复查和 `exists=1` 上传重放把后续重试收敛到同一对象。
+
+实现依据为 Zotero 官方 [API v3 基础与认证](https://www.zotero.org/support/dev/web_api/v3/basics)、[写请求](https://www.zotero.org/support/dev/web_api/v3/write_requests)、[类型与字段](https://www.zotero.org/support/dev/web_api/v3/types_and_fields)、[同步/version 语义](https://www.zotero.org/support/dev/web_api/v3/syncing) 和 [文件上传](https://www.zotero.org/support/dev/web_api/v3/file_upload)。本切片未新增依赖、SQLite schema 或 D1 migration。假 HTTP、导出器、目标、设置、DI 与 XAML 聚焦测试已通过，但没有使用受控真实 Zotero key/个人库完成外部写入，因此检查点 P2-D 仍保持未勾选。
 
 ### P2-14：Readwise 适配器
 

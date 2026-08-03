@@ -248,6 +248,7 @@ public partial class App : Application
         services.AddSingleton<IOpmlFileService, OpmlFileService>();
         services.AddFeedDiscovery(CreateFeedDiscoveryOptions());
         services.AddEntryIntegrationInfrastructure();
+        services.AddZoteroExportInfrastructure();
         // Obsidian 适配器始终可解析，但只有用户显式入队、目标已配置且
         // ACTIVE 管理策略允许时才会写入本地 Vault。
         services.AddSingleton<
@@ -261,6 +262,9 @@ public partial class App : Application
             AppSettingsEagleExportTargetStore>();
         services.AddSingleton<IEagleApiClient, EagleApiClient>();
         services.AddSingleton<IEntryExporter, EagleEntryExporter>();
+        // Zotero 固定官方个人库根地址；API key 只从 DPAPI 读取，
+        // 导出器在每次耐久任务执行时重验 ACTIVE 主机白名单与目标代际。
+        services.AddSingleton<IEntryExporter, ZoteroEntryExporter>();
         services.AddSingleton<IEntryExportCoordinator>(static provider =>
             new EntryExportCoordinator(
                 provider.GetServices<IEntryExporter>()));
@@ -347,6 +351,7 @@ public partial class App : Application
         services.AddSingleton<IntegrationSettingsViewModel>();
         services.AddSingleton<ObsidianSettingsViewModel>();
         services.AddSingleton<EagleSettingsViewModel>();
+        services.AddSingleton<ZoteroSettingsViewModel>();
         // 发现页发布复用现有目录管理员服务、版本同步和服务端 RBAC。
         services.AddSingleton<FeedDiscoveryViewModel>();
         services.AddSingleton<FeedAdminViewModel>();

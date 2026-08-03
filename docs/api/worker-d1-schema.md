@@ -130,7 +130,7 @@ D1 默认在查询和迁移中强制外键。分类关系使用 `RESTRICT`，因
 - `integration_policies` 以九种受支持类型为主键，只保存启用开关和主机 JSON，以及发布管理员、时间和事务标记。Obsidian/Eagle 的主机数组必须为空；两种本机集成的任意非空主机都会由 Worker 拒绝。其余七种启用类型必须保存 1～32 个精确 DNS 主机，协议、端口、路径、通配符、IP、localhost 和保留后缀由 Worker 在写入前拒绝。
 - `integration_policy_versions` 保存每次完整替换后的有界不可变快照；`integration_policy_idempotency` 仅保存 24 小时有效的请求摘要和成功响应；`integration_policy_mutation_guards` 保证版本、当前策略、历史、审计和幂等结果属于同一原子 batch。
 
-成功 PUT 比较并只递增一次策略集版本，整组替换当前策略并记录 `integration_policy.replaced`。普通用户只能读取 ACTIVE，管理员可读取 ALL 并发布。D1 不保存个人 TargetId、完整端点、Eagle loopback 地址或资源库修订、API Key、Cookie、DPAPI 密文、DNS 结果、健康检查状态或外部响应。P2-12 没有新增表或列，最新迁移仍为 `0010_integration_policies.sql`。
+成功 PUT 比较并只递增一次策略集版本，整组替换当前策略并记录 `integration_policy.replaced`。普通用户只能读取 ACTIVE，管理员可读取 ALL 并发布。D1 不保存个人 TargetId、完整端点、Eagle loopback 地址或资源库修订、Zotero User ID 或目标修订、API Key、Cookie、DPAPI 密文、DNS 结果、健康检查状态或外部响应。P2-12/P2-13 没有新增表或列，最新迁移仍为 `0010_integration_policies.sql`。
 
 严格本机校验部署前由旧入口写入的 Obsidian/Eagle 精确 DNS 行不需要追加破坏性迁移：Worker 读取时验证旧数组并仅投影空主机；查询范围内仍有非空旧行时会忽略相等的缓存条件并返回 200，损坏数组则在 304 判断前失败关闭为 503。管理员下一次以 ALL 快照执行完整 PUT 时会把当前两行自愈为 `[]`，之后相等条件恢复 304。历史版本快照保持不可变；新写入从入口继续拒绝两种本机策略的非空主机。
 

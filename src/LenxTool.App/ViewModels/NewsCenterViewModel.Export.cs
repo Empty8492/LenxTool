@@ -16,10 +16,15 @@ public sealed partial class NewsCenterViewModel
     private IObsidianExportTargetStore? _obsidianExportTargetStore;
     private IEagleExportTargetStore? _eagleExportTargetStore;
     private IEagleApiClient? _eagleApiClient;
+    private IZoteroExportTargetStore? _zoteroExportTargetStore;
+    private IEntryIntegrationCredentialStore?
+        _entryIntegrationCredentialStore;
     private string _obsidianExportStatus =
         "仅在点击后检查 Obsidian 配置与管理员策略。";
     private string _eagleExportStatus =
         "仅对已验证图片提供显式 Eagle 导出。";
+    private string _zoteroExportStatus =
+        "仅在显式点击后检查 Zotero 个人库、ACTIVE 策略与本机 API key。";
 
     public AsyncRelayCommand<FeedTimelineItem>
         ExportTimelineEntryToObsidianCommand
@@ -47,24 +52,160 @@ public sealed partial class NewsCenterViewModel
         private set => SetProperty(ref _eagleExportStatus, value);
     }
 
+    public AsyncRelayCommand<FeedTimelineItem>
+        ExportTimelineEntryToZoteroCommand
+    {
+        get;
+        private set;
+    } = null!;
+
+    public string ZoteroExportStatus
+    {
+        get => _zoteroExportStatus;
+        private set => SetProperty(ref _zoteroExportStatus, value);
+    }
+
     private void ConfigureEntryExports(
         IEntryExportQueueService? entryExportQueueService,
         IEntryIntegrationPolicyService? entryIntegrationPolicyService,
         IObsidianExportTargetStore? obsidianExportTargetStore,
         IEagleExportTargetStore? eagleExportTargetStore,
-        IEagleApiClient? eagleApiClient)
+        IEagleApiClient? eagleApiClient,
+        IZoteroExportTargetStore? zoteroExportTargetStore,
+        IEntryIntegrationCredentialStore?
+            entryIntegrationCredentialStore)
     {
         _entryExportQueueService = entryExportQueueService;
         _entryIntegrationPolicyService = entryIntegrationPolicyService;
         _obsidianExportTargetStore = obsidianExportTargetStore;
         _eagleExportTargetStore = eagleExportTargetStore;
         _eagleApiClient = eagleApiClient;
+        _zoteroExportTargetStore = zoteroExportTargetStore;
+        _entryIntegrationCredentialStore =
+            entryIntegrationCredentialStore;
         ExportTimelineEntryToObsidianCommand = new(
             ExportTimelineEntryToObsidianAsync,
             CanExportTimelineEntryToObsidian);
         ExportTimelineEntryToEagleCommand = new(
             ExportTimelineEntryToEagleAsync,
             CanExportTimelineEntryToEagle);
+        ExportTimelineEntryToZoteroCommand = new(
+            ExportTimelineEntryToZoteroAsync,
+            CanExportTimelineEntryToZotero);
+    }
+
+    private bool CanExportTimelineEntryToZotero(
+        FeedTimelineItem? item) =>
+        item is not null
+        && _entryExportQueueService is not null
+        && _entryIntegrationPolicyService is not null
+        && _zoteroExportTargetStore is not null
+        && _entryIntegrationCredentialStore is not null;
+
+    private async Task ExportTimelineEntryToZoteroAsync(
+        FeedTimelineItem? item,
+        CancellationToken cancellationToken)
+    {
+        if (item is null
+            || _entryExportQueueService is null
+            || _entryIntegrationPolicyService is null
+            || _zoteroExportTargetStore is null
+            || _entryIntegrationCredentialStore is null)
+        {
+            return;
+        }
+
+        string targetLabel = GetExportTargetLabel(item);
+        try
+        {
+            // 入队只读取不含凭据的个人库目标；User ID 不进入状态文本或队列标识。
+            ZoteroExportTarget? target =
+                await _zoteroExportTargetStore.GetAsync(
+                    cancellationToken);
+            if (target is null
+                || !string.Equals(
+                    target.TargetId,
+                    ZoteroExportTarget.DefaultTargetId,
+                    StringComparison.Ordinal))
+            {
+                ZoteroExportStatus =
+                    $"条目“{targetLabel}”：尚未配置 Zotero 个人库，未加入导出队列。";
+                return;
+            }
+
+            // 管理策略优先于安全存储读取；禁用后显式点击也不能探测凭据或第三方。
+            EntryIntegrationPolicySnapshot snapshot =
+                await _entryIntegrationPolicyService.GetAsync(
+                    EntryIntegrationPolicyScope.Active,
+                    cancellationToken);
+            if (!snapshot.Policies.Any(policy =>
+                    policy.Kind == EntryIntegrationKind.Zotero
+                    && policy.IsEnabled
+                    && policy.AllowedHosts.Contains(
+                        "api.zotero.org",
+                        StringComparer.Ordinal)))
+            {
+                ZoteroExportStatus =
+                    $"条目“{targetLabel}”：管理员尚未启用 Zotero 集成，未加入导出队列。";
+                return;
+            }
+
+            bool hasCredential =
+                await _entryIntegrationCredentialStore.ExistsAsync(
+                    EntryIntegrationKind.Zotero,
+                    ZoteroExportTarget.DefaultTargetId,
+                    cancellationToken);
+            if (!hasCredential)
+            {
+                ZoteroExportStatus =
+                    $"条目“{targetLabel}”：请先在设置中保存 Zotero API key。";
+                return;
+            }
+
+            EntryExportRequest request = EntryExportRequest.Create(
+                "zotero",
+                target.CreateQueueTargetId(),
+                item.Entry,
+                ClassifyExportView(item.Entry),
+                GetZoteroExportContentBytes(item.Entry, target));
+            EntryExportEnqueueResult result =
+                await _entryExportQueueService.EnqueueAsync(
+                    request,
+                    cancellationToken);
+            ZoteroExportStatus = result.Created
+                ? $"条目“{targetLabel}”已加入 Zotero 导出队列。"
+                : $"条目“{targetLabel}”的当前 Zotero 导出版本已存在于队列或历史中。";
+        }
+        catch (OperationCanceledException)
+            when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            // 第三方正文、凭据与 User ID 都不得通过页面状态回显。
+            ZoteroExportStatus =
+                $"条目“{targetLabel}”：Zotero 导出暂时不可用，请稍后重试。";
+        }
+    }
+
+    private static long GetZoteroExportContentBytes(
+        FeedEntry entry,
+        ZoteroExportTarget target)
+    {
+        long contentBytes = target.IncludeSummaryNote
+            ? Encoding.UTF8.GetByteCount(entry.Summary)
+            : 0;
+        if (!target.UploadFirstImageAttachment)
+        {
+            return contentBytes;
+        }
+
+        // 首版 Zotero 与 Eagle 共用已经过 URL、声明类型和大小门控的图片判定；
+        // 后台导出仍会重新下载并校验实际 MIME、魔数和字节数。
+        FeedAttachmentClassification? attachment =
+            EagleEntryExporter.SelectSupportedAttachment(entry);
+        return checked(contentBytes + (attachment?.Length ?? 0));
     }
 
     private bool CanExportTimelineEntryToEagle(
@@ -355,5 +496,6 @@ public sealed partial class NewsCenterViewModel
     {
         ExportTimelineEntryToObsidianCommand.Dispose();
         ExportTimelineEntryToEagleCommand.Dispose();
+        ExportTimelineEntryToZoteroCommand.Dispose();
     }
 }

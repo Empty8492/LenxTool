@@ -1496,6 +1496,87 @@
                             </StackPanel>
                         </Border>
                         <Border Margin="0,16,0,0"
+                                DataContext="{Binding ZoteroSettings}"
+                                Style="{StaticResource BentoCardStyle}">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource SectionTitleStyle}"
+                                           Text="Zotero 文献导出" />
+                                <TextBlock Margin="0,7,0,0"
+                                           Style="{StaticResource MetaTextStyle}"
+                                           Text="仅支持个人库；API 根地址固定为 https://api.zotero.org/users/&lt;UserId&gt;/，不能配置任意主机。保存只更新本机目标与 DPAPI API key，不会连接 Zotero。"
+                                           TextWrapping="Wrap" />
+                                <Grid Margin="0,16,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="16" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel>
+                                        <TextBlock Style="{StaticResource MetaTextStyle}"
+                                                   Text="个人库 User ID" />
+                                        <TextBox Margin="0,7,0,0"
+                                                 AutomationProperties.Name="Zotero 个人库 User ID"
+                                                 Text="{Binding UserIdText, UpdateSourceTrigger=PropertyChanged}" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="2">
+                                        <TextBlock Style="{StaticResource MetaTextStyle}"
+                                                   Text="创建的条目类型" />
+                                        <ComboBox Margin="0,7,0,0"
+                                                  AutomationProperties.Name="Zotero 导出条目类型"
+                                                  DisplayMemberPath="Label"
+                                                  ItemsSource="{Binding ItemTypes}"
+                                                  SelectedItem="{Binding SelectedItemType}" />
+                                    </StackPanel>
+                                </Grid>
+                                <CheckBox Margin="0,14,0,0"
+                                          AutomationProperties.Name="Zotero 导出附带摘要笔记"
+                                          Content="把条目摘要作为独立笔记附带到文献"
+                                          IsChecked="{Binding IncludeSummaryNote}" />
+                                <CheckBox Margin="0,8,0,0"
+                                          AutomationProperties.Name="Zotero 导出上传首张图片附件，默认关闭"
+                                          Content="上传首张兼容图片附件（默认关闭）"
+                                          IsChecked="{Binding UploadFirstImageAttachment}" />
+                                <TextBlock Margin="0,14,0,0"
+                                           Style="{StaticResource MetaTextStyle}"
+                                           Text="API key（保存后立即从界面清空，不支持回读）" />
+                                <PasswordBox Margin="0,7,0,0"
+                                             AutomationProperties.Name="Zotero 个人库 API key"
+                                             controls:PasswordBoxAssistant.BoundPassword="{Binding CredentialInput, Mode=TwoWay}" />
+                                <ProgressBar Height="3"
+                                             Margin="0,14,0,0"
+                                             IsIndeterminate="True"
+                                             Visibility="{Binding IsBusy, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                <DockPanel Margin="0,16,0,0"
+                                           LastChildFill="False">
+                                    <StackPanel>
+                                        <TextBlock AutomationProperties.LiveSetting="Polite"
+                                                   Style="{StaticResource MetaTextStyle}"
+                                                   Text="{Binding Status}"
+                                                   TextWrapping="Wrap" />
+                                        <TextBlock Margin="0,4,0,0"
+                                                   Style="{StaticResource MetaTextStyle}"
+                                                   Text="{Binding HasCredential, StringFormat=已保存 API key：{0}}" />
+                                    </StackPanel>
+                                    <StackPanel DockPanel.Dock="Right"
+                                                Margin="16,0,0,0"
+                                                Orientation="Horizontal">
+                                        <Button Margin="0,0,8,0"
+                                                AutomationProperties.Name="删除 Zotero API key"
+                                                Command="{Binding DeleteCredentialCommand}"
+                                                Content="删除 API key" />
+                                        <Button Margin="0,0,8,0"
+                                                AutomationProperties.Name="测试 Zotero 个人库连接"
+                                                Command="{Binding TestCommand}"
+                                                Content="测试连接" />
+                                        <Button Style="{StaticResource AccentButtonStyle}"
+                                                AutomationProperties.Name="保存 Zotero 个人库设置"
+                                                Command="{Binding SaveCommand}"
+                                                Content="保存设置" />
+                                    </StackPanel>
+                                </DockPanel>
+                            </StackPanel>
+                        </Border>
+                        <Border Margin="0,16,0,0"
                                 DataContext="{Binding EagleSettings}"
                                 Style="{StaticResource BentoCardStyle}">
                             <StackPanel>

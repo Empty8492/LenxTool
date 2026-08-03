@@ -152,8 +152,9 @@ public sealed class DependencyInjectionTests
             IEntryIntegrationCredentialStore>());
         Assert.NotNull(provider.GetRequiredService<
             IEntryIntegrationHealthService>());
-        Assert.Empty(provider.GetServices<
-            IEntryIntegrationHealthProbe>());
+        IEntryIntegrationHealthProbe zoteroProbe = Assert.Single(
+            provider.GetServices<IEntryIntegrationHealthProbe>());
+        Assert.Equal(EntryIntegrationKind.Zotero, zoteroProbe.Kind);
         Assert.IsType<EntryExportTaskRepository>(
             provider.GetRequiredService<IEntryExportTaskRepository>());
         Assert.IsType<EntryExportCoordinator>(
@@ -167,19 +168,27 @@ public sealed class DependencyInjectionTests
             provider.GetRequiredService<IEagleExportTargetStore>());
         Assert.IsType<EagleApiClient>(
             provider.GetRequiredService<IEagleApiClient>());
+        Assert.IsType<AppSettingsZoteroExportTargetStore>(
+            provider.GetRequiredService<IZoteroExportTargetStore>());
+        Assert.NotNull(provider.GetRequiredService<IZoteroApiClient>());
         IEntryExporter[] exporters = provider
             .GetServices<IEntryExporter>()
             .ToArray();
-        Assert.Equal(2, exporters.Length);
+        Assert.Equal(3, exporters.Length);
         Assert.Contains(exporters, item => item is ObsidianEntryExporter);
         Assert.Contains(exporters, item => item is EagleEntryExporter);
+        Assert.Contains(exporters, item => item is ZoteroEntryExporter);
         EntryExportCapability[] capabilities = provider
             .GetRequiredService<IEntryExportCoordinator>()
             .Capabilities
             .OrderBy(item => item.ExporterId, StringComparer.Ordinal)
             .ToArray();
         Assert.Equal(
-            [EagleEntryExporter.ExporterId, ObsidianEntryExporter.ExporterId],
+            [
+                EagleEntryExporter.ExporterId,
+                ObsidianEntryExporter.ExporterId,
+                ZoteroEntryExporter.ExporterId
+            ],
             capabilities.Select(item => item.ExporterId));
         Assert.All(capabilities, capability =>
             Assert.True(capability.IsIdempotent));
@@ -189,6 +198,8 @@ public sealed class DependencyInjectionTests
             ObsidianSettingsViewModel>());
         Assert.NotNull(provider.GetRequiredService<
             EagleSettingsViewModel>());
+        Assert.NotNull(provider.GetRequiredService<
+            ZoteroSettingsViewModel>());
         Assert.NotNull(provider.GetRequiredService<
             IntegrationAdminViewModel>());
 
