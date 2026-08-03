@@ -1,7 +1,7 @@
 # Worker v1 账号、共享订阅目录与发现 API 契约
 
 状态：v1 基线已冻结；P0 身份/目录、P1 AI 策略与受限自动化规则、DISC-02 已知目录发现、P2 智能视图与外部集成策略均已实现
-最后核对：2026-07-29
+最后核对：2026-08-03
 适用范围：LenxTool 桌面端与 `cloud/LenxTool.Worker` 之间的账号、会话、管理员策展目录、已知目录发现、AI 策略和自动化规则接口
 
 本文是 P0/P1 Worker 契约的真相源。实现顺序和验收见 [P0 详细计划](../plans/RSS_P0_ADMIN_CATALOG.md)与 [P1 详细计划](../plans/RSS_P1_READING_INTELLIGENCE.md)，安全边界见 [威胁模型](../THREAT_MODEL.md)，云端只保存共享目录配置的决策见 [ADR-001](../decisions/ADR-001-admin-curated-rss.md)。
@@ -249,7 +249,7 @@ Idempotency-Key: 018f87d4-0f7e-7ad0-9c06-b285e52e7664
 | `POST /v1/admin/automation-rules` | admin | JSON 64 KiB；规则/条件/动作受限 | 201 `AutomationMutation` | `AUTOMATION_VERSION_CONFLICT`、`AUTOMATION_RULE_LIMIT_REACHED` | `automation_rule.created` |
 | `PATCH /v1/admin/automation-rules/{id}` | admin | JSON 64 KiB；ID 36；规则/条件/动作受限 | 200 `AutomationMutation` | `AUTOMATION_VERSION_CONFLICT`、`RESOURCE_NOT_FOUND` | `automation_rule.updated` |
 | `GET /v1/integration-policies` | user/admin | URL 2 KiB；`afterVersion` 0～2^53-1；`scope` 枚举 | 200 `IntegrationPolicySnapshot` 或 304 | `INTEGRATION_POLICY_VERSION_AHEAD`、`ADMIN_REQUIRED` | 无 |
-| `PUT /v1/admin/integration-policies` | admin | JSON 64 KiB；最多 9 种策略、每种最多 32 个精确 DNS 主机 | 200 `IntegrationPolicyMutation` | `INTEGRATION_POLICY_VERSION_CONFLICT`、幂等/校验错误 | `integration_policy.replaced` |
+| `PUT /v1/admin/integration-policies` | admin | JSON 64 KiB；最多 9 种策略；本机类型主机为空，其余类型最多 32 个精确 DNS 主机 | 200 `IntegrationPolicyMutation` | `INTEGRATION_POLICY_VERSION_CONFLICT`、幂等/校验错误 | `integration_policy.replaced` |
 
 所有端点还可能返回第 1.2 节的通用校验、认证、限流和服务不可用错误。
 
@@ -570,4 +570,6 @@ Worker 只验证、版本化和发布规则，不执行正文匹配，也不把�
 
 管理员 PUT 必须同时发送 `If-Match: "integration-policies-all-n"` 和 16～128 字符的 `Idempotency-Key`，请求体是完整 `policies` 集合。成功整组替换并只递增一次版本；同 key/同请求重放原成功响应，同 key/不同请求或旧版本返回 409。支持类型固定为 `OBSIDIAN`、`EAGLE`、`ZOTERO`、`READWISE`、`CUBOX`、`READECK`、`OUTLINE`、`QBITTORRENT`、`WEBHOOK`。
 
-每种策略只有 `kind`、`isEnabled` 和 `allowedHosts`。白名单最多 32 个精确、可公开解析的 DNS 主机名，拒绝协议、端口、路径、通配符、IP、localhost 与保留后缀；启用策略至少需要一个主机。Worker/D1 只发布共享许可，不保存个人 TargetId、完整端点、API Key、Cookie、DPAPI 密文、DNS 结果、健康检查状态或外部响应。桌面端凭据只进入本机 DPAPI；P2-08 不注册真实外部探测器或导出适配器，因此策略发布不会触发外部请求。
+每种策略只有 `kind`、`isEnabled` 和 `allowedHosts`。Obsidian 与 Eagle 的 `allowedHosts` 必须为空，任一类型携带非空主机都会被拒绝：前者只写客户端 Vault，后者的 loopback HTTP 端点和当前资源库作用域也只存在于客户端。其余七种类型启用时至少需要一个、最多 32 个精确且可公开解析的 DNS 主机名，并拒绝协议、端口、路径、通配符、IP、localhost 与保留后缀。Worker/D1 只发布共享许可，不保存个人 TargetId、完整端点、API Key、Cookie、DPAPI 密文、DNS 结果、健康检查状态或外部响应。桌面端凭据只进入本机 DPAPI；P2-08 完成时尚未注册真实外部探测器或导出适配器，后续 P2-11/P2-12 已分别接入受控 Obsidian 和 Eagle，但策略发布本身仍不会触发外部请求。
+
+为兼容严格本机校验上线前旧入口可能写入 D1 的 Obsidian/Eagle 精确 DNS，GET 会先按旧约束验证数组，再按当前契约投影为 `allowedHosts: []`；只要当前查询范围内仍有这种非空旧行，即使 `afterVersion` 或 ETag 与服务端版本相等也返回 200，避免旧缓存永久保留主机。管理员可把 `scope=ALL` 返回的完整快照直接 PUT，从当前两种本机策略行移除旧主机；自愈产生新版本后，相等条件恢复 304。存量校验发生在 304 判断前，损坏数组仍返回 503。这个读取兼容层不放宽写入规则，新 PUT 中 Obsidian 或 Eagle 的任意非空 `allowedHosts` 仍返回 400。

@@ -26,6 +26,15 @@ public static class EntryIntegrationPolicyValidator
         ArgumentNullException.ThrowIfNull(input);
         EnsureDefinedKind(input.Kind);
         ArgumentNullException.ThrowIfNull(input.AllowedHosts);
+        if (!RequiresAllowedHosts(input.Kind)
+            && input.AllowedHosts.Count != 0)
+        {
+            // 本机集成目标只属于桌面设置；禁止把 Vault、loopback 或任意
+            // 替代主机上传到共享 D1，以免泄露本机信息或形成伪白名单。
+            throw new ArgumentException(
+                "本机集成的共享策略不能配置目标主机。",
+                nameof(input));
+        }
         if (input.AllowedHosts.Count > MaximumAllowedHosts)
         {
             throw new ArgumentOutOfRangeException(
@@ -80,12 +89,14 @@ public static class EntryIntegrationPolicyValidator
     }
 
     /// <summary>
-    /// Obsidian 首版只写用户显式授权的本地 Vault，不连接网络端点；
+    /// Obsidian 与 Eagle 都只使用用户显式授权的本机目标；
     /// 其他集成仍必须由精确 DNS 白名单约束。
     /// </summary>
     private static bool RequiresAllowedHosts(
         EntryIntegrationKind kind) =>
-        kind != EntryIntegrationKind.Obsidian;
+        kind is not (
+            EntryIntegrationKind.Obsidian
+            or EntryIntegrationKind.Eagle);
 
     private static string NormalizeExactHost(string value)
     {

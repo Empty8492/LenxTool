@@ -59,7 +59,8 @@ public sealed partial class SettingsViewModel : PageViewModel
         IFeedCatalogSyncService catalogSync,
         IDatabaseMaintenanceService? databaseMaintenance = null,
         IntegrationSettingsViewModel? integrationSettings = null,
-        ObsidianSettingsViewModel? obsidianSettings = null)
+        ObsidianSettingsViewModel? obsidianSettings = null,
+        EagleSettingsViewModel? eagleSettings = null)
         : base("设置", "外观、服务凭据、数据与更新")
     {
         _themeService = themeService;
@@ -71,6 +72,7 @@ public sealed partial class SettingsViewModel : PageViewModel
         _databaseMaintenance = databaseMaintenance;
         IntegrationSettings = integrationSettings;
         ObsidianSettings = obsidianSettings;
+        EagleSettings = eagleSettings;
         _synchronizationContext = SynchronizationContext.Current;
         CheckForUpdatesCommand = new(CheckForUpdatesAsync);
         DownloadUpdateCommand = new(DownloadUpdateAsync, () => _candidate is not null);
@@ -137,6 +139,7 @@ public sealed partial class SettingsViewModel : PageViewModel
     public AsyncRelayCommand RefreshAccountCommand { get; }
     public IntegrationSettingsViewModel? IntegrationSettings { get; }
     public ObsidianSettingsViewModel? ObsidianSettings { get; }
+    public EagleSettingsViewModel? EagleSettings { get; }
     public string AppearanceStatus
     {
         get => _appearanceStatus;
@@ -237,6 +240,10 @@ public sealed partial class SettingsViewModel : PageViewModel
         if (ObsidianSettings is not null)
         {
             await ObsidianSettings.InitializeAsync(cancellationToken);
+        }
+        if (EagleSettings is not null)
+        {
+            await EagleSettings.InitializeAsync(cancellationToken);
         }
     }
 

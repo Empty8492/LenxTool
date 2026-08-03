@@ -1496,6 +1496,53 @@
                             </StackPanel>
                         </Border>
                         <Border Margin="0,16,0,0"
+                                DataContext="{Binding EagleSettings}"
+                                Style="{StaticResource BentoCardStyle}">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource SectionTitleStyle}"
+                                           Text="Eagle 图片导出" />
+                                <TextBlock Margin="0,7,0,0"
+                                           Style="{StaticResource MetaTextStyle}"
+                                           Text="仅连接显式配置的 loopback HTTP 根地址；默认端点为 http://127.0.0.1:41595/。保存只更新本机配置，管理员启用后才会探测 Eagle 应用和当前资源库。"
+                                           TextWrapping="Wrap" />
+                                <TextBlock Margin="0,7,0,0"
+                                           AutomationProperties.Name="Eagle 导出资源库安全提示"
+                                           FontWeight="SemiBold"
+                                           Style="{StaticResource MetaTextStyle}"
+                                           Text="重要：导出任务进入终态前保持当前资源库不变；保存新端点会等待活动导出完成。Eagle API 不支持按资源库原子写入。"
+                                           TextWrapping="Wrap" />
+                                <TextBlock Margin="0,14,0,0"
+                                           Style="{StaticResource MetaTextStyle}"
+                                           Text="Eagle Web API V2 端点" />
+                                <TextBox Margin="0,7,0,0"
+                                         AutomationProperties.Name="Eagle Web API V2 本机端点，默认端口 41595"
+                                         Text="{Binding EndpointText, UpdateSourceTrigger=PropertyChanged}" />
+                                <ProgressBar Height="3"
+                                             Margin="0,14,0,0"
+                                             IsIndeterminate="True"
+                                             Visibility="{Binding IsBusy, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                <DockPanel Margin="0,16,0,0"
+                                           LastChildFill="False">
+                                    <TextBlock AutomationProperties.LiveSetting="Polite"
+                                               Style="{StaticResource MetaTextStyle}"
+                                               Text="{Binding Status}"
+                                               TextWrapping="Wrap" />
+                                    <StackPanel DockPanel.Dock="Right"
+                                                Margin="16,0,0,0"
+                                                Orientation="Horizontal">
+                                        <Button Margin="0,0,8,0"
+                                                AutomationProperties.Name="测试 Eagle 应用与资源库"
+                                                Command="{Binding TestCommand}"
+                                                Content="测试连接" />
+                                        <Button Style="{StaticResource AccentButtonStyle}"
+                                                AutomationProperties.Name="保存 Eagle 本机端点"
+                                                Command="{Binding SaveCommand}"
+                                                Content="保存设置" />
+                                    </StackPanel>
+                                </DockPanel>
+                            </StackPanel>
+                        </Border>
+                        <Border Margin="0,16,0,0"
                                 DataContext="{Binding ObsidianSettings}"
                                 Style="{StaticResource BentoCardStyle}">
                             <StackPanel>

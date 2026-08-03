@@ -38,6 +38,11 @@ interface PolicyRow {
   allowed_hosts_json: string;
 }
 
+interface StoredPolicyMapping {
+  policy: IntegrationPolicy;
+  requiresCompatibilityProjection: boolean;
+}
+
 interface IdempotencyRow {
   request_hash: string;
   status_code: number;
@@ -161,7 +166,13 @@ async function readPolicies(
       true
     );
   }
-  if (conditional === state.policy_set_version) {
+  const storedPolicies = (policyResult?.results ?? [])
+    .map(row => mapStoredPolicy(row as PolicyRow));
+  const requiresCompatibilityProjection = storedPolicies.some(
+    value => value.requiresCompatibilityProjection
+  );
+  if (conditional === state.policy_set_version
+      && !requiresCompatibilityProjection) {
     return new Response(null, {
       status: 304,
       headers: {
@@ -172,8 +183,8 @@ async function readPolicies(
     });
   }
 
-  const policies = (policyResult?.results ?? [])
-    .map(row => mapStoredPolicy(row as PolicyRow))
+  const policies = storedPolicies
+    .map(value => value.policy)
     .sort(comparePolicies);
   return policyJson(
     JSON.stringify({
@@ -380,14 +391,11 @@ function normalizePolicySet(values: unknown[]): IntegrationPolicy[] {
     }
     const kind = input.kind as IntegrationKind;
     if (!seen.add(kind)) throw validationError("集成类型不能重复");
-    if (!Array.isArray(input.allowedHosts)
-        || input.allowedHosts.length > 32) {
-      throw validationError("目标主机列表无效");
-    }
-    const allowedHosts = [...new Set(
-      input.allowedHosts.map(normalizeExactHost)
-    )].sort();
+    const allowedHosts = normalizeAllowedHosts(input.allowedHosts);
     const isEnabled = requireBoolean(input.isEnabled, "启用状态");
+    if (!requiresAllowedHosts(kind) && allowedHosts.length !== 0) {
+      throw validationError("本机集成目标不能写入共享目标主机");
+    }
     if (isEnabled
         && requiresAllowedHosts(kind)
         && allowedHosts.length === 0) {
@@ -398,9 +406,16 @@ function normalizePolicySet(values: unknown[]): IntegrationPolicy[] {
   return policies.sort(comparePolicies);
 }
 
-// Obsidian 只写用户授权的本地 Vault；其余集成仍受精确 DNS 白名单约束。
+// Obsidian 与 Eagle 只访问用户本机目标；其余集成仍受精确 DNS 白名单约束。
 function requiresAllowedHosts(kind: IntegrationKind): boolean {
-  return kind !== "OBSIDIAN";
+  return kind !== "OBSIDIAN" && kind !== "EAGLE";
+}
+
+function normalizeAllowedHosts(value: unknown): string[] {
+  if (!Array.isArray(value) || value.length > 32) {
+    throw validationError("目标主机列表无效");
+  }
+  return [...new Set(value.map(normalizeExactHost))].sort();
 }
 
 function normalizeExactHost(value: unknown): string {
@@ -445,7 +460,7 @@ function isIpv4Literal(value: string): boolean {
     );
 }
 
-function mapStoredPolicy(row: PolicyRow): IntegrationPolicy {
+function mapStoredPolicy(row: PolicyRow): StoredPolicyMapping {
   let hosts: unknown;
   try {
     hosts = JSON.parse(row.allowed_hosts_json);
@@ -453,11 +468,30 @@ function mapStoredPolicy(row: PolicyRow): IntegrationPolicy {
     throw serviceUnavailable();
   }
   try {
-    return normalizePolicySet([{
-      kind: row.kind,
-      isEnabled: row.is_enabled === 1,
-      allowedHosts: hosts
-    }])[0]!;
+    if (row.kind === "OBSIDIAN" || row.kind === "EAGLE") {
+      // 严格本机契约前，旧入口允许 Obsidian 主机且启用的 Eagle 还要求主机；
+      // 读取时验证旧值后只发布空主机，让管理员可直接 PUT 完成一次性自愈。
+      const allowedHosts = normalizeAllowedHosts(hosts);
+      if (row.is_enabled !== 0 && row.is_enabled !== 1) {
+        throw validationError("启用状态无效");
+      }
+      return {
+        policy: {
+          kind: row.kind,
+          isEnabled: row.is_enabled === 1,
+          allowedHosts: []
+        },
+        requiresCompatibilityProjection: allowedHosts.length !== 0
+      };
+    }
+    return {
+      policy: normalizePolicySet([{
+        kind: row.kind,
+        isEnabled: row.is_enabled === 1,
+        allowedHosts: hosts
+      }])[0]!,
+      requiresCompatibilityProjection: false
+    };
   } catch {
     throw serviceUnavailable();
   }

@@ -11,6 +11,40 @@ namespace LenxTool.App.Tests.ViewModels;
 public sealed class IntegrationViewModelTests
 {
     [Fact]
+    public void PersonalSettingsOmitsDedicatedLocalExportKinds()
+    {
+        Assert.DoesNotContain(
+            IntegrationKindChoice.All,
+            item => item.Kind == EntryIntegrationKind.Obsidian);
+        Assert.DoesNotContain(
+            IntegrationKindChoice.All,
+            item => item.Kind == EntryIntegrationKind.Eagle);
+        Assert.Contains(
+            IntegrationKindChoice.All,
+            item => item.Kind == EntryIntegrationKind.Webhook);
+    }
+
+    [Theory]
+    [InlineData(EntryIntegrationKind.Obsidian)]
+    [InlineData(EntryIntegrationKind.Eagle)]
+    public void AdminLocalIntegrationPolicyForcesSharedHostsEmpty(
+        EntryIntegrationKind kind)
+    {
+        var item = new IntegrationPolicyEditorItem(
+            kind,
+            IntegrationKindChoice.LabelFor(kind),
+            isEnabled: true,
+            "should-not-be-uploaded.example.com");
+
+        Assert.False(item.RequiresAllowedHosts);
+        Assert.Empty(item.AllowedHostsText);
+        Assert.Contains("本机", item.HostGuidance, StringComparison.Ordinal);
+
+        item.AllowedHostsText = "still-not-allowed.example.com";
+        Assert.Empty(item.AllowedHostsText);
+    }
+
+    [Fact]
     public async Task AdminPageNeverReadsAllOrWritesForOrdinaryUser()
     {
         var policies = new FakePolicyService();

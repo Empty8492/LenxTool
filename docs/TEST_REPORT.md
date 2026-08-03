@@ -1,6 +1,6 @@
 # 测试报告
 
-测试日期：.NET / Worker 2026-07-30（Asia/Shanghai）
+测试日期：.NET / Worker 2026-08-03（Asia/Shanghai）
 版本：0.1.0  
 配置：Release / win-x64 / .NET SDK 10.0.302
 
@@ -8,20 +8,28 @@
 
 | 测试组 | 结果 |
 |---|---:|
-| LenxTool.Core.Tests | 174 passed |
-| LenxTool.Infrastructure.Tests | 484 passed |
-| LenxTool.App.Tests | 347 passed |
-| Cloudflare Worker Vitest | 75 passed |
+| LenxTool.Core.Tests | 177 passed |
+| LenxTool.Infrastructure.Tests | 538 passed |
+| LenxTool.App.Tests | 372 passed；1 个既有基线环境用例阻断 |
+| Cloudflare Worker Vitest | 78 passed |
 | Worker TypeScript strict typecheck | passed |
 | .NET build warnings | 0 |
 | NuGet vulnerable packages | 0 detected |
 | npm audit vulnerabilities | 0 detected |
 
-当前分组 Release 结果为 Core 174/174、Infrastructure 484/484、App/WPF 347/347，共 1005/1005；Worker workerd/D1 Vitest 75/75、Worker strict typecheck 与全解决方案 build 0 警告/0 错误。本轮未修改 NuGet/npm 依赖；最近一次 NuGet 在线漏洞扫描与 `npm audit` 均为 0 漏洞。
+Worker 发现用例曾在 60 次顺序请求跨越 UTC 分钟时把计数分到两个固定窗口，导致门禁把正确的 `200` 误判为产品限流回归；测试现只冻结 `Date`，精确用例 1/1、发现整文件 8/8 与 Worker 全量 78/78 均通过，不改变生产限流实现。
+
+当前 Release 结果为 Core 177/177、Infrastructure 538/538、App/WPF 372/372（使用 `FullyQualifiedName!~SelectionControlsWpfRuntimeTests` 排除下述既有环境缺陷），共 1087 个未阻断 .NET 用例通过；Worker workerd/D1 Vitest 78/78、Worker strict typecheck 与全解决方案 build 0 警告/0 错误。本轮未修改 NuGet/npm 依赖；NuGet 在线漏洞扫描与 `npm audit --audit-level=high` 均为 0 漏洞。凭据模式扫描只命中 `HistoryViewModelTests` 中用于验证脱敏的固定 `Bearer secret-must-not-be-shown` 测试哨兵，没有生产凭据命中。
+
+P2-12 新增 Eagle 本机目标、专用 Web API V2 客户端、图片导出器、设置卡、共享策略语义、阅读器行内/详情显式入口和生产 DI。Worker/Core 固定 Obsidian/Eagle 空主机并拒绝两种本机集成的任意非空主机；其余七种网络类型仍需精确 DNS。目标/API 测试覆盖显式端口的数字 loopback HTTP、禁代理/重定向/Cookie/解压、Windows 4.0 Build 21+、资源库必需元数据、路径脱敏和不透明修订、未安装/错误端口、超限/畸形响应、408/429/5xx、调用方取消与固定错误。队列目标以端点与资源库修订共同隔离；端点代际测试证明同进程保存新配置会等待活动导出，目标快照保持到最后一次 Eagle 调用。已有条目查询、图片下载或新增期间持续到后续探测的切库会以 `Conflict` 关闭；官方 `item/add` 无资源库身份参数，因此测试不宣称原子阻止误投，写后冲突不能撤销可能的写入，ABA 切库也不可观测。导出器覆盖允许 URL、验证媒体类型、PNG/JPEG/GIF/WebP/BMP、声明/实际 12 MiB、MIME/魔数、data URI、标题/来源/标签、稳定自定义 ID、写前查询、已有条目跳过失效图片，以及 POST 不确定结果复查与未知状态可重试。App 覆盖保存/测试共享忙门、策略撤销、存储/策略/探测阶段超时、释放取消、命令参数使用指定行、未验证图片零副作用、资源库切换获得新队列键、可访问实时状态、设置卡安全提示和生产注册。P2-12 聚焦结果为 Infrastructure Eagle 54/54、App Eagle 23/23、设置卡结构 1/1、Core 集成策略 16/16 与 Worker 集成策略 8/8。
+
+端点竞态加固前的最终全解决方案同进程运行得到 App 366/373、Core 177/177、Infrastructure 534/535。App 的 7 个失败均为 `CalendarAutomationPeer.GetChildrenCore` 对空 element 抛出同一 `ArgumentNullException`；精确、独立进程复跑其中 6 项均为 1/1 通过，唯一仍失败的 `SelectionControlsWpfRuntimeTests.FeedSelectionControlsKeepNativeBehaviorAcrossThemesAndLayoutScales` 在未修改的基线提交 `1a1cd057` 临时 worktree 中也于同一文件第 124 行、同一调用栈复现。Infrastructure 的单项失败是未改动的 `FeedAutomationRunRepositoryTests` 遇到 SQLitePCL 全局句柄已释放；该项随后独立 1/1 通过，竞态加固后的 Infrastructure 独立全量 538/538 通过，归为同进程宿主串扰。排除已证明的 Calendar 类后 App 全量 372/372 通过；本次接口与设置卡改动另由 App Eagle 23/23、设置卡结构 1/1 和 Release build 0 警告/0 错误覆盖。因此当前以独立项目门禁为准，不把全解决方案环境阻断伪报为全绿。临时基线 worktree已移除。无受控真实 Eagle 进程，真实连通验收仍待外部环境。
 
 P2-11 新增安全 Obsidian Vault 目标、设置/目录选择、生产适配器注册、阅读器行内及详情区显式入队和 ACTIVE 策略复核场景。目标存储覆盖单一版本 JSON、缺失/损坏安全回退、空模板规范化、暂时读取失败的可重试映射、绝对已存在且非磁盘根的本地目录，以及 UNC/device/network/reparse/逃逸/ADS/保留名拒绝。模板覆盖 64 KiB 上限、五种允许占位符且每种最多一次、未知占位符、单遍非递归替换、空白保真、8 MiB 实际输入和 12 MiB 最终 UTF-8 上限；Markdown 回归覆盖原始图片、链接、`obsidian://`、自动链接、危险右括号目标、标点扩容和含反引号代码均不能突破纯文本边界，标签覆盖复数 `tags` 转义。解析边界新增 DOM 构建前标记洪泛、解析期未闭合嵌套、16,384 节点、128 层深度、深度加权工作量、特殊代码/脚本节点短路和精确边界测试；扩容失败确认在目标目录创建与缓存图片流打开前返回 `ContentTooLarge`。文件导出覆盖中文路径、只读或暂时消失的 Vault、同配置同内容幂等、规范化等价 Windows 路径保持同一作用域、实际输出配置变化生成新作用域、过期版本任务零写盘 `Conflict`、不同内容确定性 `CreateNewVersion`、不覆盖用户文件，以及配置或策略在入队后撤销时执行阶段失败关闭。
 
 队列回归确认 `FAILED`/`CANCELLED` 可由显式动作原子恢复为 `QUEUED`，包括 attempts、租约、取消、错误与时间字段全部复位；两个仓储并发复活时恰好一个返回新建，`COMPLETED` 仍去重。配置修订目标 ID 为不含路径明文的 `default.<24 位小写十六进制>`，仅预版本 `default` 任务保留迁移兼容；版本化任务必须精确匹配当前规范化作用域。App 覆盖目录选择只回填、保存后无需重启、无效路径/标签/模板提示、显式 Feed 视图覆盖自动分类、指定行及详情区动作入队、实际请求条目标题反馈与有界净化、同配置重复入队幂等、配置变化获得新幂等范围、未配置/策略关闭零入队和 XAML 绑定；DI 验证生产注册能力但启动不写文件。Worker 新增 Obsidian 空主机特例并确认其他启用的网络类型仍必须有主机。180 天保留测试确认 `QUEUED`/`RUNNING` 导出引用保护源条目，终态后恢复清理。唯一既有滚动时序用例改为直接断言动画会话和最终逻辑滚动，不再等待固定 80 ms；完整门禁为 Core 174/174、Infrastructure 484/484、App/WPF 347/347，共 1005/1005，Worker 75/75、strict typecheck 与 Release build 0 警告/0 错误。
+
+上段“其他启用的网络类型仍必须有主机”是 P2-11 完成时的历史语义；当前 P2-12 已把 Eagle 加入客户端本机空主机例外，现行契约为 Obsidian/Eagle 空主机、其余七种精确 DNS 主机。
 
 P2-09/P2-10 新增持久导出队列、五态数据库约束、租约心跳、精确重试、跨进程合作取消和 Markdown 本地文件导出回归。真实 SQLite 场景覆盖并发防重领、租约续期、失败重试后取消并模拟崩溃恢复，以及第二个服务取消第一个服务的长运行适配器；Markdown 场景覆盖三种内容模式、UTF-8 无 BOM、Windows/Unicode 安全文件名、覆盖/跳过/稳定新版本、缓存图片白名单、原子转正和 junction/reparse 拒绝。完整门禁为 Core 173/173、Infrastructure 414/414、App/WPF 323/323，共 910/910；Worker 74/74、strict typecheck 与 Release build 0 警告/0 错误。Wrangler 在受限环境尝试写沙箱外调试日志时报告 EPERM，但测试进程以退出码 0 完成 12/12 文件和 74/74 场景。
 

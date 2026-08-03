@@ -13,6 +13,11 @@ public sealed record IntegrationKindChoice(
 {
     public static IReadOnlyList<IntegrationKindChoice> All { get; } =
         Enum.GetValues<EntryIntegrationKind>()
+            // Obsidian 与 Eagle 都有独立、本机且无凭据的设置卡；继续放在
+            // 通用 HTTPS/DPAPI 表单中只会形成无法工作的重复配置入口。
+            .Where(kind => kind is not (
+                EntryIntegrationKind.Obsidian
+                or EntryIntegrationKind.Eagle))
             .Select(kind => new IntegrationKindChoice(
                 kind,
                 LabelFor(kind)))
@@ -147,9 +152,13 @@ public sealed class IntegrationSettingsViewModel
                 kindText,
                 ignoreCase: false,
                 out EntryIntegrationKind kind)
-            && Enum.IsDefined(kind))
+            && Enum.IsDefined(kind)
+            && Kinds.SingleOrDefault(item => item.Kind == kind)
+                is { } selectedKind)
         {
-            SelectedKind = Kinds.Single(item => item.Kind == kind);
+            // 旧版本若误存了本机导出器类型，保持默认 Webhook，不再把它
+            // 带入只接受 HTTPS 与 DPAPI 凭据的通用表单。
+            SelectedKind = selectedKind;
         }
         TargetId =
             await _settings.GetAsync(TargetIdKey, cancellationToken)

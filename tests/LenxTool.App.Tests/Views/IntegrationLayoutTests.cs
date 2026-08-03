@@ -36,8 +36,14 @@ public sealed class IntegrationLayoutTests
         Assert.Contains(
             root.Descendants(),
             element => element.Name.LocalName == "TextBox"
-                && element.Attribute("AcceptsReturn")?.Value
-                    == "True");
+                && element.Attribute("AcceptsReturn")?.Value == "True"
+                && element.Attribute("IsEnabled")?.Value
+                    == "{Binding RequiresAllowedHosts}");
+        Assert.Contains(
+            root.Descendants(),
+            element => element.Name.LocalName == "TextBlock"
+                && element.Attribute("Text")?.Value
+                    == "{Binding HostGuidance}");
     }
 
     [Fact]

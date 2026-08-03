@@ -8,11 +8,17 @@ using LenxTool.Core.Errors;
 using LenxTool.Core.Feeds;
 using LenxTool.Core.Models;
 using LenxTool.Infrastructure.Exports;
+using LenxTool.Infrastructure.Networking;
 
 namespace LenxTool.App.Tests.ViewModels;
 
 public sealed class NewsCenterViewModelTests
 {
+    private const string EagleLibraryRevisionA =
+        "111111111111111111111111";
+    private const string EagleLibraryRevisionB =
+        "222222222222222222222222";
+
     [Fact]
     public async Task PictureFeedLoadsOnlyAfterSelectingItsTab()
     {
@@ -1955,6 +1961,248 @@ public sealed class NewsCenterViewModelTests
     }
 
     [Fact]
+    public async Task EagleExportExplicitlyEnqueuesVerifiedPictureOnly()
+    {
+        FeedEntry entry = CreateFeedEntry(8) with
+        {
+            Enclosures =
+            [
+                new(
+                    "https://cdn.example.com/oversized.png",
+                    "image/png",
+                    12L * 1024 * 1024 + 1,
+                    "oversized"),
+                new(
+                    "https://cdn.example.com/unsupported.avif",
+                    "image/avif",
+                    9999,
+                    "unsupported"),
+                new(
+                    "https://cdn.example.com/picture.png",
+                    "image/png",
+                    2048,
+                    "cover")
+            ]
+        };
+        var queue = new StubEntryExportQueueService();
+        var policies = new StubEntryIntegrationPolicyService(
+            isEnabled: true,
+            EntryIntegrationKind.Eagle);
+        var targets = new StubEagleExportTargetStore(new(
+            EagleExportTarget.DefaultTargetId,
+            new Uri("http://127.0.0.1:41595/")));
+        var api = new StubEagleApiClient();
+        using NewsCenterViewModel viewModel = CreateViewModel(
+            CreateSnapshot(),
+            feedEntries: new([entry]),
+            exportQueue: queue,
+            integrationPolicies: policies,
+            eagleTargets: targets,
+            eagleApi: api);
+        await viewModel.InitializeAsync(CancellationToken.None);
+        FeedTimelineItem item = Assert.Single(viewModel.TimelineEntries);
+
+        // 初始化、选中和刷新都不能隐式投递；只有显式命令才跨过本机边界。
+        Assert.Empty(queue.Requests);
+        Assert.True(viewModel.ExportTimelineEntryToEagleCommand.CanExecute(item));
+        await viewModel.ExportTimelineEntryToEagleCommand.ExecuteAsync(item);
+
+        EntryExportRequest request = Assert.Single(queue.Requests);
+        Assert.Equal(EagleEntryExporter.ExporterId, request.ExporterId);
+        Assert.Matches(
+            "^default\\.[0-9a-f]{24}\\.[0-9a-f]{24}$",
+            request.TargetId);
+        Assert.Equal(EntryViewKind.Picture, request.ViewKind);
+        Assert.Equal(2048, request.ContentBytes);
+        Assert.Equal(
+            EntryIntegrationPolicyScope.Active,
+            Assert.Single(policies.Scopes));
+        Assert.Equal(1, targets.GetCount);
+        Assert.Equal(1, api.ProbeCount);
+        Assert.Contains("已加入", viewModel.EagleExportStatus);
+    }
+
+    [Fact]
+    public async Task EagleExportScopesQueueToCurrentLibraryRevision()
+    {
+        FeedEntry entry = CreateFeedEntry(13) with
+        {
+            Enclosures =
+            [
+                new(
+                    "https://cdn.example.com/library-scope.png",
+                    "image/png",
+                    2048,
+                    "scope")
+            ]
+        };
+        var queue = new StubEntryExportQueueService();
+        var api = new StubEagleApiClient();
+        using NewsCenterViewModel viewModel = CreateViewModel(
+            CreateSnapshot(),
+            feedEntries: new([entry]),
+            exportQueue: queue,
+            integrationPolicies: new StubEntryIntegrationPolicyService(
+                isEnabled: true,
+                EntryIntegrationKind.Eagle),
+            eagleTargets: new StubEagleExportTargetStore(new(
+                EagleExportTarget.DefaultTargetId,
+                new Uri("http://127.0.0.1:41595/"))),
+            eagleApi: api);
+        await viewModel.InitializeAsync(CancellationToken.None);
+        FeedTimelineItem item = Assert.Single(viewModel.TimelineEntries);
+
+        await viewModel.ExportTimelineEntryToEagleCommand.ExecuteAsync(item);
+        api.LibraryRevision = EagleLibraryRevisionB;
+        await viewModel.ExportTimelineEntryToEagleCommand.ExecuteAsync(item);
+
+        Assert.Equal(2, api.ProbeCount);
+        Assert.Equal(2, queue.Requests.Count);
+        Assert.NotEqual(queue.Requests[0].TargetId, queue.Requests[1].TargetId);
+        Assert.NotEqual(
+            queue.Requests[0].IdempotencyKey,
+            queue.Requests[1].IdempotencyKey);
+        Assert.Contains("已加入", viewModel.EagleExportStatus);
+    }
+
+    [Fact]
+    public async Task EagleRowExportUsesCommandParameterInsteadOfSelectedEntry()
+    {
+        FeedEntry selectedEntry = CreateFeedEntry(11) with
+        {
+            Enclosures =
+            [
+                new(
+                    "https://cdn.example.com/selected.png",
+                    "image/png",
+                    1024,
+                    "selected")
+            ]
+        };
+        FeedEntry rowEntry = CreateFeedEntry(12) with
+        {
+            Enclosures =
+            [
+                new(
+                    "https://cdn.example.com/row.png",
+                    "image/png",
+                    2048,
+                    "row")
+            ]
+        };
+        var queue = new StubEntryExportQueueService();
+        using NewsCenterViewModel viewModel = CreateViewModel(
+            CreateSnapshot(),
+            feedEntries: new([selectedEntry, rowEntry]),
+            exportQueue: queue,
+            integrationPolicies: new StubEntryIntegrationPolicyService(
+                isEnabled: true,
+                EntryIntegrationKind.Eagle),
+            eagleTargets: new StubEagleExportTargetStore(new(
+                EagleExportTarget.DefaultTargetId,
+                new Uri("http://127.0.0.1:41595/"))));
+        await viewModel.InitializeAsync(CancellationToken.None);
+        FeedTimelineItem selectedItem = Assert.Single(
+            viewModel.TimelineEntries,
+            item => item.Entry.Id == selectedEntry.Id);
+        FeedTimelineItem rowItem = Assert.Single(
+            viewModel.TimelineEntries,
+            item => item.Entry.Id == rowEntry.Id);
+        viewModel.SelectedTimelineEntry = selectedItem;
+
+        // 行内按钮必须使用自己的 CommandParameter，不能误投当前详情选中的另一条记录。
+        await viewModel.ExportTimelineEntryToEagleCommand.ExecuteAsync(
+            rowItem);
+
+        EntryExportRequest request = Assert.Single(queue.Requests);
+        Assert.Equal(rowEntry.Id, request.Entry.Id);
+        Assert.Equal(2048, request.ContentBytes);
+        Assert.Contains(rowEntry.Title, viewModel.EagleExportStatus);
+    }
+
+    [Fact]
+    public async Task EagleExportDoesNotEnqueueWhenActivePolicyIsDisabled()
+    {
+        FeedEntry entry = CreateFeedEntry(9) with
+        {
+            Enclosures =
+            [
+                new(
+                    "https://cdn.example.com/picture.jpg",
+                    "image/jpeg",
+                    1024,
+                    "cover")
+            ]
+        };
+        var queue = new StubEntryExportQueueService();
+        using NewsCenterViewModel viewModel = CreateViewModel(
+            CreateSnapshot(),
+            feedEntries: new([entry]),
+            exportQueue: queue,
+            integrationPolicies: new StubEntryIntegrationPolicyService(
+                isEnabled: false,
+                EntryIntegrationKind.Eagle),
+            eagleTargets: new StubEagleExportTargetStore(new(
+                EagleExportTarget.DefaultTargetId,
+                new Uri("http://127.0.0.1:41595/"))));
+        await viewModel.InitializeAsync(CancellationToken.None);
+
+        await viewModel.ExportTimelineEntryToEagleCommand.ExecuteAsync(
+            Assert.Single(viewModel.TimelineEntries));
+
+        Assert.Empty(queue.Requests);
+        Assert.Contains("管理员", viewModel.EagleExportStatus);
+    }
+
+    [Fact]
+    public async Task EagleExportCommandRejectsUnsupportedOrUnverifiedImagesWithoutSideEffects()
+    {
+        FeedEntry entry = CreateFeedEntry(10) with
+        {
+            Enclosures =
+            [
+                new(
+                    "https://cdn.example.com/oversized.png",
+                    "image/png",
+                    12L * 1024 * 1024 + 1,
+                    "oversized"),
+                new(
+                    "https://cdn.example.com/picture.avif",
+                    "image/avif",
+                    512,
+                    "unsupported"),
+                new(
+                    "https://cdn.example.com/no-extension",
+                    "image/png",
+                    512,
+                    "unverified")
+            ]
+        };
+        var queue = new StubEntryExportQueueService();
+        var policies = new StubEntryIntegrationPolicyService(
+            isEnabled: true,
+            EntryIntegrationKind.Eagle);
+        var targets = new StubEagleExportTargetStore(new(
+            EagleExportTarget.DefaultTargetId,
+            new Uri("http://127.0.0.1:41595/")));
+        using NewsCenterViewModel viewModel = CreateViewModel(
+            CreateSnapshot(),
+            feedEntries: new([entry]),
+            exportQueue: queue,
+            integrationPolicies: policies,
+            eagleTargets: targets);
+        await viewModel.InitializeAsync(CancellationToken.None);
+        FeedTimelineItem item = Assert.Single(viewModel.TimelineEntries);
+
+        Assert.False(viewModel.ExportTimelineEntryToEagleCommand.CanExecute(item));
+        await viewModel.ExportTimelineEntryToEagleCommand.ExecuteAsync(item);
+
+        Assert.Empty(queue.Requests);
+        Assert.Equal(0, targets.GetCount);
+        Assert.Equal(0, policies.GetCount);
+    }
+
+    [Fact]
     public async Task EntityNavigationOpensFeedEntryInTheReader()
     {
         FeedEntry entry = CreateFeedEntry(42);
@@ -1993,7 +2241,9 @@ public sealed class NewsCenterViewModelTests
         TimeProvider? timeProvider = null,
         IEntryExportQueueService? exportQueue = null,
         IEntryIntegrationPolicyService? integrationPolicies = null,
-        IObsidianExportTargetStore? obsidianTargets = null) =>
+        IObsidianExportTargetStore? obsidianTargets = null,
+        IEagleExportTargetStore? eagleTargets = null,
+        IEagleApiClient? eagleApi = null) =>
         new(
             new StubNewsCenterService(snapshot),
             new StubAiReportService(null),
@@ -2019,7 +2269,11 @@ public sealed class NewsCenterViewModelTests
             timeProvider,
             exportQueue,
             integrationPolicies,
-            obsidianTargets);
+            obsidianTargets,
+            eagleTargets,
+            eagleApi ?? (eagleTargets is null
+                ? null
+                : new StubEagleApiClient()));
 
     private static NewsCenterViewModel CreateObsidianEnabledViewModel(
         FeedEntry entry,
@@ -2913,7 +3167,9 @@ public sealed class NewsCenterViewModelTests
             throw new NotSupportedException();
     }
 
-    private sealed class StubEntryIntegrationPolicyService(bool isEnabled)
+    private sealed class StubEntryIntegrationPolicyService(
+        bool isEnabled,
+        EntryIntegrationKind kind = EntryIntegrationKind.Obsidian)
         : IEntryIntegrationPolicyService
     {
         public int GetCount { get; private set; }
@@ -2927,7 +3183,7 @@ public sealed class NewsCenterViewModelTests
             GetCount++;
             Scopes.Add(scope);
             IReadOnlyList<EntryIntegrationPolicy> policies = isEnabled
-                ? [new(EntryIntegrationKind.Obsidian, true, [])]
+                ? [new(kind, true, [])]
                 : [];
             return Task.FromResult(new EntryIntegrationPolicySnapshot(
                 1,
@@ -2939,6 +3195,74 @@ public sealed class NewsCenterViewModelTests
         public Task<EntryIntegrationPolicyMutationResult> ReplaceAsync(
             IReadOnlyList<EntryIntegrationPolicyInput> inputs,
             long expectedVersion,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+    }
+
+    private sealed class StubEagleExportTargetStore(
+        EagleExportTarget? target)
+        : IEagleExportTargetStore
+    {
+        public EagleExportTarget? Current { get; set; } = target;
+        public int GetCount { get; private set; }
+
+        public Task<EagleExportTarget?> GetAsync(
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            GetCount++;
+            return Task.FromResult(Current);
+        }
+
+        public Task<IEagleExportTargetLease> AcquireExportLeaseAsync(
+            CancellationToken cancellationToken) =>
+            Task.FromResult<IEagleExportTargetLease>(
+                new StubTargetLease(Current));
+
+        public Task SaveAsync(
+            EagleExportTarget target,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        private sealed class StubTargetLease(
+            EagleExportTarget? target)
+            : IEagleExportTargetLease
+        {
+            public EagleExportTarget? Target { get; } = target;
+
+            public ValueTask DisposeAsync() =>
+                ValueTask.CompletedTask;
+        }
+    }
+
+    private sealed class StubEagleApiClient : IEagleApiClient
+    {
+        public string LibraryRevision { get; set; } =
+            EagleLibraryRevisionA;
+
+        public int ProbeCount { get; private set; }
+
+        public Task<EagleApiCapability> ProbeAsync(
+            Uri endpoint,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            ProbeCount++;
+            return Task.FromResult(new EagleApiCapability(
+                "4.0.0",
+                21,
+                LibraryRevision));
+        }
+
+        public Task<bool> ExistsAsync(
+            Uri endpoint,
+            string itemId,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<string> AddAsync(
+            Uri endpoint,
+            EagleAddItem item,
             CancellationToken cancellationToken) =>
             throw new NotSupportedException();
     }

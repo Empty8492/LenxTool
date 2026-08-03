@@ -161,7 +161,7 @@ npm.cmd test -- --run
 
 ## 10. 当前版本边界与交付状态
 
-本节是当前交付状态的唯一准绳，最后核对日期为 **2026-07-31**。`IMPLEMENTATION_PLAN.md` 保留完整任务与验收条件；其中未勾选的任务可能已有部分实现，但表示尚未满足该任务的全部验收条件。
+本节是当前交付状态的唯一准绳，最后核对日期为 **2026-08-03**。`IMPLEMENTATION_PLAN.md` 保留完整任务与验收条件；其中未勾选的任务可能已有部分实现，但表示尚未满足该任务的全部验收条件。
 
 ### 10.1 本轮已完成
 
@@ -243,17 +243,20 @@ npm.cmd test -- --run
 - DISC-05 管理员发布闭环已完成：候选先按 ALL 管理目录的规范化 URL 标记为“加入共享目录”或“查看现有项”；发布面板完整显示规范化地址、分类、刷新、视图与全文策略，只有管理员显式勾选确认后才可提交。写入复用现有 `If-Match`、同次令牌刷新幂等键、Worker RBAC 与审计；版本冲突会刷新目录且不自动重放，网络中断或写后刷新失败会锁住后续发布并要求先确认目录状态。成功刷新到新版本后，当前候选立即转成现有项。
 - DISC-06 最终检查点已完成：已知目录关键词来源和直接探测的默认预算分别锁定为 8 秒与 20 秒，真实 5,000 条 workerd/D1 目录首批 50 条测试用例耗时 188 ms，100 个候选/2,500 条本地条目的 SQLite 预览投影实测 55 ms。全源不可用显示可重试离线状态，慢源超时不丢健康来源；D1/响应字段白名单和发现日志静态审计确认正文、私人状态、令牌、敏感查询和本地路径不进入云端或日志。普通用户写入 403、管理员并发冲突、恶意 URL/重定向/XXE/压缩炸弹均由真实传输或 workerd/D1 测试覆盖。最终门禁为 .NET Release 755/755、Worker 64/64、strict typecheck、依赖 0 漏洞与构建 0 警告/0 错误。
 
-- P2-08 集成策略与安全健康检查已完成：Worker/D1 0010 只保存九种封闭类型、启用状态和精确主机白名单，ACTIVE 可由认证用户读取，ALL/PUT 由服务端 admin RBAC 隔离，并使用独立版本、幂等、事务守卫、不可变快照和最小审计。个人 TargetId/HTTPS 地址留在本机设置，凭据经 SHA-256 派生槽位进入 DPAPI CurrentUser，不写 SQLite/D1/日志/导出文件且界面不回读。连接测试在任何适配器前执行精确主机、HTTPS/443、DNS 全地址分类、私网/保留地址阻断、8 秒超时、取消、30 秒目标冷却和并发 2，结果只使用封闭状态。生产没有注册真实探针或导出适配器，所以当前默认零第三方外联；Core 173/173、Infrastructure 397/397、App/WPF 312/312、Worker 74/74、typecheck 与 Release 0 警告/0 错误通过。
+- P2-08 集成策略与安全健康检查已完成：Worker/D1 0010 只保存九种封闭类型、启用状态和精确主机白名单，ACTIVE 可由认证用户读取，ALL/PUT 由服务端 admin RBAC 隔离，并使用独立版本、幂等、事务守卫、不可变快照和最小审计。个人 TargetId/HTTPS 地址留在本机设置，凭据经 SHA-256 派生槽位进入 DPAPI CurrentUser，不写 SQLite/D1/日志/导出文件且界面不回读。连接测试在任何适配器前执行精确主机、HTTPS/443、DNS 全地址分类、私网/保留地址阻断、8 秒超时、取消、30 秒目标冷却和并发 2，结果只使用封闭状态。P2-08 完成当时生产没有注册真实探针或导出适配器，因此该历史切片默认零第三方外联；后续 P2-11/P2-12 已分别接入受控 Obsidian 与 Eagle 适配器。Core 173/173、Infrastructure 397/397、App/WPF 312/312、Worker 74/74、typecheck 与 Release 0 警告/0 错误通过。
 - P2-09 导出队列与历史已完成：schema v21 使用稳定幂等键、五态互斥约束、租约令牌和续期心跳持久化任务；单进程并发固定为 1，跨服务在租约有效期内不能重复领取，心跳还会把其他进程写入的持久取消桥接给当前适配器，应用退出可释放或等待租约恢复。队列只接受可安全重放的幂等适配器，429 精确尊重 0～7 天内的 Retry-After；历史不保存正文、凭据、请求/响应或任意 RemoteId/RemoteUrl，只展示非秘密目标引用、条目/内容版本、状态、次数、时间和封闭错误码。取消在副作用成功前合作终止，适配器已返回成功后由 Completed 优先，避免把真实成功伪装为撤销。决策和限制见 ADR-003。
 - P2-10 Markdown 文件导出已完成：固定 front matter 与 UTF-8 无 BOM 输出支持仅链接、清洗正文、正文加已缓存栅格图片；缺失图片不会触发下载。中文、Windows 保留名、恶意分隔符和 Unicode 截断统一清理，根目录及目标组件拒绝 symlink/junction reparse point，正文和图片均通过同目录临时文件转正。覆盖/跳过使用稳定条目文件名，新版本由幂等键派生，同一内容版本重启重试不会制造副本。生产仍未注册任何目标实例，所以当前不会静默写文件。
 - P2-09/P2-10 完整门禁为 Core 173/173、Infrastructure 414/414、App/WPF 323/323，共 910/910；Worker 74/74、strict typecheck 与 Release build 0 警告/0 错误。
 - P2-11 Obsidian 适配器已完成：生产始终注册适配器能力，但本机目标只保存为单条版本化 JSON；只有 Vault 已明确保存、管理员 ACTIVE 策略启用且用户点击阅读器行内或详情区“导出到 Obsidian”后才入队，后台执行时再次读取当前配置和策略。队列目标使用不泄露路径的 `default.<24 位小写十六进制>` 配置修订标识；版本化任务在任何目录操作前必须与当前规范化配置精确匹配，旧配置任务以非重试 `Conflict` 关闭，重新点击会按新配置作用域入队。Windows 路径大小写、分隔符和尾随分隔符等价形式保持同一作用域，实际目标或渲染输出变化才生成新作用域；只有预版本 `default` 任务为迁移兼容读取当前配置。失败或取消任务可由用户显式重试，已完成任务仍保持去重。显式 Feed 视图覆盖自动分类。
-- Vault 必须是已存在且不能为磁盘根的绝对本地目录，拒绝 UNC/device/network、reparse point、目录逃逸、ADS、保留名和尾随空格/点。64 KiB 内联模板只允许五种正文占位符且每种最多一次，并以单遍、非递归方式替换；空模板统一为未设置。实际输入最多 8 MiB、最终 UTF-8 文件最多 12 MiB；HTML 在建 DOM 前受标记预算保护，解析阶段限制嵌套，解析后再限制 16,384 个来源节点、128 层深度和深度加权渲染工作量。Feed 文本中的 Markdown 控制符、原始图片/链接和自定义 URI 按纯文本安全输出，代码区保留字面内容并动态选择围栏，只有通过校验的 HTTP(S) 来源链接由渲染器以安全目标形式生成。渲染与输出预算全部成功后才创建目标目录或复制缓存图片。标签进入逐项转义的复数 YAML `tags`。每个内容版本创建确定性新文件且从不覆盖，不读取 Vault 模板文件、不安装插件，也不实现或调用 `obsidian://`。临时设置存储或 Vault I/O 故障进入可重试状态，权限、无效配置、旧版本作用域和撤销策略失败关闭。只有本地 Obsidian 策略允许空主机列表，其他网络集成仍要求精确 DNS 主机。180 天清理新增对 `QUEUED`/`RUNNING` 导出引用的保护。
+- Vault 必须是已存在且不能为磁盘根的绝对本地目录，拒绝 UNC/device/network、reparse point、目录逃逸、ADS、保留名和尾随空格/点。64 KiB 内联模板只允许五种正文占位符且每种最多一次，并以单遍、非递归方式替换；空模板统一为未设置。实际输入最多 8 MiB、最终 UTF-8 文件最多 12 MiB；HTML 在建 DOM 前受标记预算保护，解析阶段限制嵌套，解析后再限制 16,384 个来源节点、128 层深度和深度加权渲染工作量。Feed 文本中的 Markdown 控制符、原始图片/链接和自定义 URI 按纯文本安全输出，代码区保留字面内容并动态选择围栏，只有通过校验的 HTTP(S) 来源链接由渲染器以安全目标形式生成。渲染与输出预算全部成功后才创建目标目录或复制缓存图片。标签进入逐项转义的复数 YAML `tags`。每个内容版本创建确定性新文件且从不覆盖，不读取 Vault 模板文件、不安装插件，也不实现或调用 `obsidian://`。临时设置存储或 Vault I/O 故障进入可重试状态，权限、无效配置、旧版本作用域和撤销策略失败关闭。客户端本机 Obsidian/Eagle 策略都使用空主机列表，其余七种网络集成仍要求精确 DNS 主机。180 天清理新增对 `QUEUED`/`RUNNING` 导出引用的保护。
 - P2-11 当前完整门禁为 Core 174/174、Infrastructure 484/484、App/WPF 347/347，共 1005/1005；Worker 75/75、strict typecheck 与 Release build 0 警告/0 错误。滚动运行时验收不再依赖固定等待 80 ms，而是直接断言动画会话与最终逻辑滚动，避免离屏 WPF 帧时钟抖动改变产品契约。
+- P2-12 Eagle 适配器已完成：Worker 的 Eagle 策略只能使用空 `allowedHosts`，端点仅保存在本机版本化设置中。专用 HTTP 客户端只接受带显式端口的 IP-literal loopback HTTP 根地址，关闭代理、自动重定向、Cookie 和自动解压，并以官方 Web API V2 的 `app/info`、`library/info` 验证 Windows 4.0 Build 21+ 与当前资源库。保存设置本身可不探测；只有 ACTIVE 策略启用后的连接测试或阅读器显式导出才越过本机 API 边界。
+- 图片候选必须同时通过 URL、声明媒体类型、格式白名单、MIME/魔数和声明/实际 12 MiB 上限；远程图片由 LenxTool 下载后以 data URI 发送，Eagle 不取得源图 URL。标题、HTTP(S) 来源和有界标签确定映射。资源库原始名称/路径不会保存或显示，只在内存生成不透明修订；队列目标 `default.<端点修订>.<资源库修订>` 同时隔离端点、当前资源库和幂等键。执行器持有端点进程内代际租约，同进程保存新端点会等待；资源库在查询、下载与新增边界复核，探测到的变化以 `Conflict` 关闭。稳定自定义 ID、写前查询和不确定 POST 后复查共同收敛崩溃重放；408/429/5xx 与未知写入结果保持可重试。官方 `item/add` 不支持按资源库身份条件写入，故不能原子阻止探测与新增之间的外部切库；写后持续切库只能报冲突，无法撤销可能的误写，ABA 切库也不可观测。端点代际门不跨 LenxTool 进程，实际使用和真实验收必须在任务终态前保持当前资源库不变且避免其他进程改设置。
+- P2-12 当前独立项目门禁为 Core 177/177、Infrastructure 538/538、App 372/372（排除一个在基线 `1a1cd057` 同样失败的既有 `SelectionControlsWpfRuntimeTests` Calendar AutomationPeer 环境缺陷）、Worker 78/78、strict typecheck、NuGet/npm 0 漏洞和 Release build 0 警告/0 错误。全解决方案同进程 App 运行因该 Calendar peer 污染表现为 366/373；竞态加固前的最终同进程 Infrastructure 另有 1 项 SQLitePCL 已释放的宿主串扰，精确复跑 1/1、竞态加固后独立全量 538/538 均通过。未把环境阻断写成全绿。未新增依赖、SQLite schema、D1 migration 或凭据存储，且无受控真实 Eagle 连通证据。
 
 ### 10.2 下一里程碑
 
-Gate 0 字幕闭环、P0“管理员策展 RSS”、P1“阅读增强、AI 与自动化”、P2-01～P2-11，以及插入计划 DISC-01～DISC-06、UX-03 均已完成。[P2 内容视图与集成计划](plans/RSS_P2_VIEWS_INTEGRATIONS.md) 的 P2-12 Eagle 适配器是尚未启动的候选后续项。P1/P2 源码进度不等于正式签名发布完成。
+Gate 0 字幕闭环、P0“管理员策展 RSS”、P1“阅读增强、AI 与自动化”、P2-01～P2-12，以及插入计划 DISC-01～DISC-06、UX-03 均已完成。[P2 内容视图与集成计划](plans/RSS_P2_VIEWS_INTEGRATIONS.md) 的 P2-13 及以后仍需逐项明确选择。P1/P2 源码进度不等于正式签名发布完成。
 
 字幕闭环完成后的产品主路线已确定为“管理员策展 RSS”：管理员维护共享 RSS/Atom 目录，普通用户只能同步和阅读，不得修改共享订阅、分类、抓取策略或自动化规则。为保持现有“云端不存新闻正文”边界，首版采用 Worker/D1 保存权威目录、各桌面客户端本地抓取和 SQLite 缓存的模式。
 
@@ -262,8 +265,8 @@ Gate 0 字幕闭环、P0“管理员策展 RSS”、P1“阅读增强、AI 与�
 1. Gate 0 字幕闭环已完成；验收记录见 [`plans/EXISTING_BACKLOG_ALIGNMENT.md`](plans/EXISTING_BACKLOG_ALIGNMENT.md)。
 2. P0-01～P0-20、P0-B/P0-C 及最终检查点已完成；P0 关闭记录见 [`plans/RSS_P0_ADMIN_CATALOG.md`](plans/RSS_P0_ADMIN_CATALOG.md)。
 3. P1-01～P1-20、P1-A/P1-B/P1-C/P1-D 及最终检查点已完成；关闭记录见 [`plans/RSS_P1_READING_INTELLIGENCE.md`](plans/RSS_P1_READING_INTELLIGENCE.md)。
-4. P2-01～P2-11 已完成五视图、智能视图、统一导出契约、安全集成策略、持久化队列、本地 Markdown 导出与受控 Obsidian Vault 适配器；[`plans/RSS_DISCOVERY_AND_CONTROL_UX.md`](plans/RSS_DISCOVERY_AND_CONTROL_UX.md) 的 DISC-01～DISC-06 已交付独立发现索引、安全可替换 provider、管理员统一发现页、确认发布闭环和最终检查点，UX-03 已交付原生 WPF 共享控件模板，不依赖 Folo 私有 API 或复制其源码。
-5. P2-12 Eagle 适配器、其他桌面/外部导出适配器、本地定时摘要和 Windows 系统通知仍是未启动的候选后续项；具体见 [`plans/RSS_P2_VIEWS_INTEGRATIONS.md`](plans/RSS_P2_VIEWS_INTEGRATIONS.md)。
+4. P2-01～P2-12 已完成五视图、智能视图、统一导出契约、安全集成策略、持久化队列、本地 Markdown、受控 Obsidian Vault 与 Eagle 图片导出；[`plans/RSS_DISCOVERY_AND_CONTROL_UX.md`](plans/RSS_DISCOVERY_AND_CONTROL_UX.md) 的 DISC-01～DISC-06 已交付独立发现索引、安全可替换 provider、管理员统一发现页、确认发布闭环和最终检查点，UX-03 已交付原生 WPF 共享控件模板，不依赖 Folo 私有 API 或复制其源码。
+5. P2-13 及以后桌面/外部导出适配器、本地定时摘要和 Windows 系统通知仍需逐项推进；具体见 [`plans/RSS_P2_VIEWS_INTEGRATIONS.md`](plans/RSS_P2_VIEWS_INTEGRATIONS.md)。
 6. “洛克王国世界每日清体力自动化”只登记为独立候选调研项，尚未批准 MaaFramework 依赖或任何实现。它不属于 RSS P2 编号；若后续启动，必须先完成条款核对、前台手动登录边界、识别 PoC、进程隔离、停止/失败保护与许可证审查，具体见 [`plans/GAME_AUTOMATION_BACKLOG.md`](plans/GAME_AUTOMATION_BACKLOG.md)。
 
 总路线、参考项目和许可证边界见 [`plans/RSS_MASTER_ROADMAP.md`](plans/RSS_MASTER_ROADMAP.md)，架构决策见 [`decisions/ADR-001-admin-curated-rss.md`](decisions/ADR-001-admin-curated-rss.md)、[`decisions/ADR-002-article-content-extraction.md`](decisions/ADR-002-article-content-extraction.md) 与 [`decisions/ADR-003-durable-entry-export-queue.md`](decisions/ADR-003-durable-entry-export-queue.md)。P0 与 P1 可作为已验收基础；生产 Worker/D1、正式安装包、签名、升级和跨物理机矩阵仍按 10.5～10.7 节单独验收。
@@ -290,6 +293,7 @@ Gate 0 字幕闭环、P0“管理员策展 RSS”、P1“阅读增强、AI 与�
 - 离线转写：导入兼容 whisper.cpp、文件大于 1 MiB 的 `ggml-*.bin` 模型。
 - DeepSeek Key：生成单条解读或每日趋势报告时需要；在设置页保存后由 DPAPI CurrentUser 加密，报告正文和 token 用量写入本地 SQLite。
 - Obsidian：管理员先在“外部集成”中启用 Obsidian；本机再从设置页选择一个已存在的本地 Vault 根目录并保存相对子目录、标签、可选内联模板和来源链接开关。只有阅读器中的显式导出按钮会入队，保存设置本身不会写入 Vault。
+- Eagle：管理员先在“外部集成”中启用 Eagle；本机设置页默认使用 `http://127.0.0.1:41595/`，也可保存其他带显式端口的数字 loopback HTTP 根地址。Eagle 4.0 Build 21+ 必须正在 Windows 上运行并打开目标资源库；阅读器只对已验证图片显示显式导出动作。
 - 共享账号：部署 Worker 后，以 `LENXTOOL_WORKER_BASE_URL` 配置其 HTTPS 根地址；登录界面才会启用。该变量不是凭据，账号 refresh token 仍只由 DPAPI CurrentUser 保存。
 - WebView2 Runtime：当前电脑已安装；早报正文已不再依赖它，安装器和未来富文本能力仍保留运行时检查。
 - Microsoft Word：当前电脑已安装，Word 转 PDF 无需额外配置。

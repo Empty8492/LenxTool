@@ -1,5 +1,5 @@
 import { env, exports } from "cloudflare:workers";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const baseUrl = "https://worker.test";
 const generatedAt = "2026-07-27T12:00:00.000Z";
@@ -76,6 +76,10 @@ beforeEach(async () => {
     env.DB.prepare("DELETE FROM auth_attempts"),
     env.DB.prepare("DELETE FROM users")
   ]);
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 describe("Worker v1 known feed discovery route", () => {
@@ -270,6 +274,10 @@ describe("Worker v1 known feed discovery route", () => {
   });
 
   it("rate limits each authenticated reader without mutating catalog state", async () => {
+    // 限流按 UTC 分钟分桶；固定 Date 可避免 60 次请求刚好跨分钟时把计数落入两个桶。
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-08-03T12:34:30.000Z"));
+
     const user = await seedSession("user");
     await seedDiscoveryCatalog();
 

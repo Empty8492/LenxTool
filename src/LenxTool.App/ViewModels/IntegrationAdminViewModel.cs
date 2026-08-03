@@ -19,10 +19,17 @@ public sealed class IntegrationPolicyEditorItem(
     : ObservableObject
 {
     private bool _isEnabled = isEnabled;
-    private string _allowedHostsText = allowedHostsText;
+    private string _allowedHostsText = RequiresAllowedHostsFor(kind)
+        ? allowedHostsText
+        : string.Empty;
 
     public EntryIntegrationKind Kind { get; } = kind;
     public string Label { get; } = label;
+    public bool RequiresAllowedHosts { get; } =
+        RequiresAllowedHostsFor(kind);
+    public string HostGuidance => RequiresAllowedHosts
+        ? "网络集成：每行填写一个精确 DNS 主机。"
+        : "本机集成：目标只保存在客户端，此处必须留空。";
 
     public bool IsEnabled
     {
@@ -35,8 +42,16 @@ public sealed class IntegrationPolicyEditorItem(
         get => _allowedHostsText;
         set => SetProperty(
             ref _allowedHostsText,
-            value ?? string.Empty);
+            RequiresAllowedHosts
+                ? value ?? string.Empty
+                : string.Empty);
     }
+
+    private static bool RequiresAllowedHostsFor(
+        EntryIntegrationKind value) =>
+        value is not (
+            EntryIntegrationKind.Obsidian
+            or EntryIntegrationKind.Eagle);
 }
 
 /// <summary>

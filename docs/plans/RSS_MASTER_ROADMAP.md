@@ -1,7 +1,7 @@
 # 管理员策展 RSS 集成总路线图
 
-状态：Gate 0、P0、P1、P2-01～P2-11、DISC-01～DISC-06 与 UX-03 已完成；P2-12 是尚未启动的候选后续项
-最后核对：2026-07-31
+状态：Gate 0、P0、P1、P2-01～P2-12、DISC-01～DISC-06 与 UX-03 已完成；P2-13 及以后仍需明确选择
+最后核对：2026-08-03
 参考基线：[RSSNext/Folo](https://github.com/RSSNext/Folo) `dev` 分支提交 [`773f1bfe`](https://github.com/RSSNext/Folo/commit/773f1bfe218ac349b9fb9b5cbd982c320f6b414f)
 
 ## 1. 目标与验收边界
@@ -52,7 +52,7 @@ flowchart LR
 | 1 | [P0：管理员订阅与只读目录](RSS_P0_ADMIN_CATALOG.md) | 管理员可管订阅，普通用户可同步、抓取、阅读 | 已完成 |
 | 2 | [P1：阅读增强、AI 与自动化](RSS_P1_READING_INTELLIGENCE.md) | 收藏/标签/备注、全文、图片缓存、AI、规则、媒体衔接 | 已完成 |
 | 3 | [统一发现与原生控件视觉体系](RSS_DISCOVERY_AND_CONTROL_UX.md) | Folo 风格统一发现的清洁室实现；修复资讯页默认 WPF 控件视觉 | 已完成 |
-| 4 | [P2：内容视图、导出与定时摘要](RSS_P2_VIEWS_INTEGRATIONS.md) | 多内容视图、外部导出、Windows 通知和摘要 | 进行中；P2-01～P2-11 已完成，P2-12 为未启动候选 |
+| 4 | [P2：内容视图、导出与定时摘要](RSS_P2_VIEWS_INTEGRATIONS.md) | 多内容视图、外部导出、Windows 通知和摘要 | 进行中；P2-01～P2-12 已完成，P2-13 及以后待逐项选择 |
 
 执行原则：
 
@@ -61,7 +61,7 @@ flowchart LR
 3. 每 2～3 个任务执行一次构建、测试和手动检查点。
 4. P0/P1/P2 不是三个大提交；各专项计划中的任务才是实现和提交单位。
 5. 未满足完整验收条件前，不在总清单中勾选完成。
-6. 统一发现与原生控件视觉插入计划已经关闭，P2-01～P2-11 已验收；P2-12 及后续适配器只在明确选定后按独立垂直切片推进。
+6. 统一发现与原生控件视觉插入计划已经关闭，P2-01～P2-12 已验收；P2-13 及后续适配器只在明确选定后按独立垂直切片推进。
 
 ## 4. 数据所有权与领域模型
 
@@ -113,7 +113,7 @@ D1 不在本路线默认保存文章正文、AI 结果、字幕、用户文件�
 ### P2：多形态和生态连接
 
 - 文章、图片、音频、视频、通知等内容视图和智能视图。
-- Markdown/Obsidian/Eagle/Zotero/Readwise/Cubox/Readeck/Outline/qBittorrent 等适配器；按统一导出接口逐个交付。
+- Markdown、Obsidian 与 Eagle 已按统一导出接口完成；Zotero/Readwise/Cubox/Readeck/Outline/qBittorrent 等后续适配器仍需逐个选择和交付。
 - 受控自定义 Webhook、目标健康检查、失败重试和审计。
 - 本地每日/每周摘要、定时 AI 任务、勿扰策略和 Windows 系统通知；P1 已完成的应用内通知收件箱继续复用。
 - 服务端邮件摘要只作为独立隐私决策后的可选扩展，不混入默认路线。

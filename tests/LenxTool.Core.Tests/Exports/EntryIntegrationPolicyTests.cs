@@ -5,7 +5,7 @@ using LenxTool.Core.Models;
 namespace LenxTool.Core.Tests.Exports;
 
 /// <summary>
-/// 冻结共享策略的精确主机、不可变集合和无凭据公共模型边界。
+/// 冻结本机集成零主机、网络集成精确主机、不可变集合和无凭据公共模型边界。
 /// </summary>
 public sealed class EntryIntegrationPolicyTests
 {
@@ -53,12 +53,18 @@ public sealed class EntryIntegrationPolicyTests
     }
 
     [Fact]
-    public void ValidatorOnlyAllowsHostlessEnabledObsidianPolicy()
+    public void ValidatorAllowsHostlessLocalPoliciesAndRequiresHostsForNetworkKinds()
     {
         EntryIntegrationPolicy obsidian =
             EntryIntegrationPolicyValidator.ValidateAndNormalize(
                 new(
                     EntryIntegrationKind.Obsidian,
+                    IsEnabled: true,
+                    []));
+        EntryIntegrationPolicy eagle =
+            EntryIntegrationPolicyValidator.ValidateAndNormalize(
+                new(
+                    EntryIntegrationKind.Eagle,
                     IsEnabled: true,
                     []));
         EntryIntegrationPolicy disabledNetwork =
@@ -70,14 +76,44 @@ public sealed class EntryIntegrationPolicyTests
 
         Assert.True(obsidian.IsEnabled);
         Assert.Empty(obsidian.AllowedHosts);
+        Assert.True(eagle.IsEnabled);
+        Assert.Empty(eagle.AllowedHosts);
         Assert.False(disabledNetwork.IsEnabled);
         Assert.Empty(disabledNetwork.AllowedHosts);
-        Assert.Throws<ArgumentException>(
-            () => EntryIntegrationPolicyValidator.ValidateAndNormalize(
-                new(
-                    EntryIntegrationKind.Webhook,
-                    IsEnabled: true,
-                    [])));
+        EntryIntegrationKind[] networkKinds =
+        [
+            EntryIntegrationKind.Zotero,
+            EntryIntegrationKind.Readwise,
+            EntryIntegrationKind.Cubox,
+            EntryIntegrationKind.Readeck,
+            EntryIntegrationKind.Outline,
+            EntryIntegrationKind.QBittorrent,
+            EntryIntegrationKind.Webhook
+        ];
+        Assert.All(
+            networkKinds,
+            kind => Assert.Throws<ArgumentException>(
+                () => EntryIntegrationPolicyValidator.ValidateAndNormalize(
+                    new(kind, IsEnabled: true, []))));
+    }
+
+    [Theory]
+    [InlineData("localhost")]
+    [InlineData("127.0.0.1")]
+    [InlineData("eagle.example.com")]
+    public void ValidatorRejectsEveryLocalIntegrationAllowedHost(string host)
+    {
+        // Vault 与 Eagle 端点都属于用户本机设置，任何主机值都不得进入共享策略。
+        EntryIntegrationKind[] localKinds =
+        [
+            EntryIntegrationKind.Obsidian,
+            EntryIntegrationKind.Eagle
+        ];
+        Assert.All(
+            localKinds,
+            kind => Assert.Throws<ArgumentException>(
+                () => EntryIntegrationPolicyValidator.ValidateAndNormalize(
+                    new(kind, IsEnabled: true, [host]))));
     }
 
     [Fact]

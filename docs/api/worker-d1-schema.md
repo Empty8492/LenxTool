@@ -3,13 +3,13 @@
 最新权威迁移：[0009_smart_views.sql](../../cloud/LenxTool.Worker/migrations/0009_smart_views.sql)、[0010_integration_policies.sql](../../cloud/LenxTool.Worker/migrations/0010_integration_policies.sql)。生产发布必须按序先应用迁移，再部署读取新表的 Worker；顺序颠倒会使智能视图或集成策略查询因 schema 尚不存在而失败。
 
 状态：P0 目录、P1 AI 策略和受限自动化规则、DISC-02 已知目录发现、P2 智能视图与外部集成策略 schema/读写均已实现
-最后核对：2026-07-29
+最后核对：2026-08-03
 权威迁移：[0001_initial.sql](../../cloud/LenxTool.Worker/migrations/0001_initial.sql)、[0002_feed_catalog.sql](../../cloud/LenxTool.Worker/migrations/0002_feed_catalog.sql)、[0003_catalog_mutations.sql](../../cloud/LenxTool.Worker/migrations/0003_catalog_mutations.sql)、[0004_feed_full_text_policy.sql](../../cloud/LenxTool.Worker/migrations/0004_feed_full_text_policy.sql)、[0005_feed_ai_policy.sql](../../cloud/LenxTool.Worker/migrations/0005_feed_ai_policy.sql)、[0006_automation_rules.sql](../../cloud/LenxTool.Worker/migrations/0006_automation_rules.sql)、[0007_explicit_feed_view_kind.sql](../../cloud/LenxTool.Worker/migrations/0007_explicit_feed_view_kind.sql)、[0008_feed_discovery_index.sql](../../cloud/LenxTool.Worker/migrations/0008_feed_discovery_index.sql)、[0009_smart_views.sql](../../cloud/LenxTool.Worker/migrations/0009_smart_views.sql)、[0010_integration_policies.sql](../../cloud/LenxTool.Worker/migrations/0010_integration_policies.sql)
 接口语义：[Worker v1 API 契约](worker-v1.md)
 
 ## 1. 数据边界
 
-D1 是账号和管理员发布的共享订阅配置/受限规则的权威来源。它保存账号、会话摘要、额度、审计、分类、Feed/AI 策略、目录版本和自动化规则/版本，但不保存：
+D1 是账号和管理员发布的共享订阅配置/受限规则的权威来源。它保存账号、会话摘要、额度、审计、分类、Feed/AI 策略、目录版本、自动化规则/版本、智能视图和九种集成的共享开关/主机 JSON，但不保存：
 
 - RSS/Atom/XML/HTML 响应或文章标题、摘要、正文、附件正文。
 - AI 结果、字幕、音视频、用户文件名、Windows 路径或 DPAPI 数据。
@@ -127,10 +127,12 @@ D1 默认在查询和迁移中强制外键。分类关系使用 `RESTRICT`，因
 ## 5. 外部集成策略表
 
 - `integration_policy_state` 只有 `singleton_id=1` 一行，保存独立的非负 `policy_set_version`、更新时间和事务内 `last_mutation_id`。
-- `integration_policies` 以九种受支持类型为主键，只保存启用开关和最多 32 个精确 DNS 主机组成的 JSON 白名单，以及发布管理员、时间和事务标记。启用策略必须至少有一个主机；协议、端口、路径、通配符、IP、localhost 和保留后缀由 Worker 在写入前拒绝。
+- `integration_policies` 以九种受支持类型为主键，只保存启用开关和主机 JSON，以及发布管理员、时间和事务标记。Obsidian/Eagle 的主机数组必须为空；两种本机集成的任意非空主机都会由 Worker 拒绝。其余七种启用类型必须保存 1～32 个精确 DNS 主机，协议、端口、路径、通配符、IP、localhost 和保留后缀由 Worker 在写入前拒绝。
 - `integration_policy_versions` 保存每次完整替换后的有界不可变快照；`integration_policy_idempotency` 仅保存 24 小时有效的请求摘要和成功响应；`integration_policy_mutation_guards` 保证版本、当前策略、历史、审计和幂等结果属于同一原子 batch。
 
-成功 PUT 比较并只递增一次策略集版本，整组替换当前策略并记录 `integration_policy.replaced`。普通用户只能读取 ACTIVE，管理员可读取 ALL 并发布。D1 不保存个人 TargetId、完整端点、API Key、Cookie、DPAPI 密文、DNS 结果、健康检查状态或外部响应。
+成功 PUT 比较并只递增一次策略集版本，整组替换当前策略并记录 `integration_policy.replaced`。普通用户只能读取 ACTIVE，管理员可读取 ALL 并发布。D1 不保存个人 TargetId、完整端点、Eagle loopback 地址或资源库修订、API Key、Cookie、DPAPI 密文、DNS 结果、健康检查状态或外部响应。P2-12 没有新增表或列，最新迁移仍为 `0010_integration_policies.sql`。
+
+严格本机校验部署前由旧入口写入的 Obsidian/Eagle 精确 DNS 行不需要追加破坏性迁移：Worker 读取时验证旧数组并仅投影空主机；查询范围内仍有非空旧行时会忽略相等的缓存条件并返回 200，损坏数组则在 304 判断前失败关闭为 503。管理员下一次以 ALL 快照执行完整 PUT 时会把当前两行自愈为 `[]`，之后相等条件恢复 304。历史版本快照保持不可变；新写入从入口继续拒绝两种本机策略的非空主机。
 
 ## 6. 数据库约束与应用约束
 

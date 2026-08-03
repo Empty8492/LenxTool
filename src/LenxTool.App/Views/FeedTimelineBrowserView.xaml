@@ -46,6 +46,15 @@
                                                 Padding="4,0"
                                                 BorderThickness="0"
                                                 Background="Transparent"
+                                                Command="{Binding DataContext.ExportTimelineEntryToEagleCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                CommandParameter="{Binding}"
+                                                Content="E"
+                                                ToolTip="导出图片到 Eagle"
+                                                AutomationProperties.Name="导出该 Feed 到 Eagle" />
+                                        <Button Margin="4,0,0,0"
+                                                Padding="4,0"
+                                                BorderThickness="0"
+                                                Background="Transparent"
                                                 Command="{Binding DataContext.ExportTimelineEntryToObsidianCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                 CommandParameter="{Binding}"
                                                 Content="↗"
@@ -171,9 +180,7 @@
                             BorderBrush="{DynamicResource Brush.Border}"
                             BorderThickness="0,0,0,1">
                         <StackPanel>
-                        <DockPanel LastChildFill="True">
-                            <StackPanel DockPanel.Dock="Right"
-                                        Orientation="Horizontal">
+                            <WrapPanel HorizontalAlignment="Right">
                                 <Button MinWidth="72"
                                         Padding="10,5"
                                         Command="{Binding ToggleTimelineStarCommand}"
@@ -201,8 +208,15 @@
                                         CommandParameter="{Binding SelectedTimelineEntry}"
                                         Content="导出到 Obsidian"
                                         AutomationProperties.Name="导出当前 Feed 到 Obsidian" />
-                            </StackPanel>
-                            <StackPanel>
+                                <Button MinWidth="104"
+                                        Margin="8,0,0,0"
+                                        Padding="10,5"
+                                        Command="{Binding ExportTimelineEntryToEagleCommand}"
+                                        CommandParameter="{Binding SelectedTimelineEntry}"
+                                        Content="导出到 Eagle"
+                                        AutomationProperties.Name="导出当前 Feed 到 Eagle" />
+                            </WrapPanel>
+                            <StackPanel Margin="0,8,0,0">
                                 <TextBlock Style="{StaticResource SectionTitleStyle}"
                                            Text="私人阅读状态" />
                                 <TextBlock Margin="0,3,12,0"
@@ -215,10 +229,14 @@
                                 <TextBlock Margin="0,3,12,0"
                                            Style="{StaticResource MetaTextStyle}"
                                            Text="{Binding ObsidianExportStatus}"
+                                           AutomationProperties.LiveSetting="Polite"
+                                           TextWrapping="Wrap" />
+                                <TextBlock Margin="0,3,12,0"
+                                           Style="{StaticResource MetaTextStyle}"
+                                           Text="{Binding EagleExportStatus}"
+                                           AutomationProperties.LiveSetting="Polite"
                                            TextWrapping="Wrap" />
                             </StackPanel>
-                        </DockPanel>
-
                         <TextBlock Margin="0,12,0,5"
                                    FontWeight="SemiBold"
                                    Text="私人备注" />

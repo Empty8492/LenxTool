@@ -163,18 +163,32 @@ public sealed class DependencyInjectionTests
             provider.GetRequiredService<IEntryExportQueueProcessor>());
         Assert.IsType<AppSettingsObsidianExportTargetStore>(
             provider.GetRequiredService<IObsidianExportTargetStore>());
-        IEntryExporter exporter = Assert.Single(
-            provider.GetServices<IEntryExporter>());
-        Assert.IsType<ObsidianEntryExporter>(exporter);
-        EntryExportCapability capability = Assert.Single(
-            provider.GetRequiredService<IEntryExportCoordinator>()
-                .Capabilities);
-        Assert.Equal(ObsidianEntryExporter.ExporterId, capability.ExporterId);
-        Assert.True(capability.IsIdempotent);
+        Assert.IsType<AppSettingsEagleExportTargetStore>(
+            provider.GetRequiredService<IEagleExportTargetStore>());
+        Assert.IsType<EagleApiClient>(
+            provider.GetRequiredService<IEagleApiClient>());
+        IEntryExporter[] exporters = provider
+            .GetServices<IEntryExporter>()
+            .ToArray();
+        Assert.Equal(2, exporters.Length);
+        Assert.Contains(exporters, item => item is ObsidianEntryExporter);
+        Assert.Contains(exporters, item => item is EagleEntryExporter);
+        EntryExportCapability[] capabilities = provider
+            .GetRequiredService<IEntryExportCoordinator>()
+            .Capabilities
+            .OrderBy(item => item.ExporterId, StringComparer.Ordinal)
+            .ToArray();
+        Assert.Equal(
+            [EagleEntryExporter.ExporterId, ObsidianEntryExporter.ExporterId],
+            capabilities.Select(item => item.ExporterId));
+        Assert.All(capabilities, capability =>
+            Assert.True(capability.IsIdempotent));
         Assert.NotNull(provider.GetRequiredService<
             IntegrationSettingsViewModel>());
         Assert.NotNull(provider.GetRequiredService<
             ObsidianSettingsViewModel>());
+        Assert.NotNull(provider.GetRequiredService<
+            EagleSettingsViewModel>());
         Assert.NotNull(provider.GetRequiredService<
             IntegrationAdminViewModel>());
 

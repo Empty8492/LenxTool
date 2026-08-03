@@ -254,6 +254,13 @@ public partial class App : Application
             IObsidianExportTargetStore,
             AppSettingsObsidianExportTargetStore>();
         services.AddSingleton<IEntryExporter, ObsidianEntryExporter>();
+        // Eagle 仅接收 LenxTool 已下载并验证的 Base64 图片；端点只能是
+        // 用户显式保存的 loopback HTTP，且入队与执行均受 ACTIVE 策略门控。
+        services.AddSingleton<
+            IEagleExportTargetStore,
+            AppSettingsEagleExportTargetStore>();
+        services.AddSingleton<IEagleApiClient, EagleApiClient>();
+        services.AddSingleton<IEntryExporter, EagleEntryExporter>();
         services.AddSingleton<IEntryExportCoordinator>(static provider =>
             new EntryExportCoordinator(
                 provider.GetServices<IEntryExporter>()));
@@ -325,6 +332,11 @@ public partial class App : Application
         services.AddHttpClient("LenxTool.DeepSeek", client => client.Timeout = TimeSpan.FromSeconds(90));
         services.AddHttpClient("LenxTool.Update", client => client.Timeout = TimeSpan.FromMinutes(10));
         services.AddHttpClient("LenxTool.Account", client => client.Timeout = TimeSpan.FromSeconds(30));
+        services.AddHttpClient(
+            "LenxTool.Eagle",
+            client => client.Timeout = Timeout.InfiniteTimeSpan)
+            .ConfigurePrimaryHttpMessageHandler(
+                EagleHttpClientSecurity.CreatePrimaryHandler);
 
         services.AddSingleton<DashboardViewModel>();
         services.AddSingleton<NewsCenterViewModel>();
@@ -334,6 +346,7 @@ public partial class App : Application
         services.AddSingleton<SettingsViewModel>();
         services.AddSingleton<IntegrationSettingsViewModel>();
         services.AddSingleton<ObsidianSettingsViewModel>();
+        services.AddSingleton<EagleSettingsViewModel>();
         // 发现页发布复用现有目录管理员服务、版本同步和服务端 RBAC。
         services.AddSingleton<FeedDiscoveryViewModel>();
         services.AddSingleton<FeedAdminViewModel>();

@@ -6,6 +6,7 @@ using LenxTool.Core.Contracts;
 using LenxTool.Core.Errors;
 using LenxTool.Core.Models;
 using LenxTool.Infrastructure.Exports;
+using LenxTool.Infrastructure.Networking;
 
 namespace LenxTool.App.ViewModels;
 
@@ -68,7 +69,9 @@ public sealed partial class NewsCenterViewModel
         TimeProvider? timeProvider = null,
         IEntryExportQueueService? entryExportQueueService = null,
         IEntryIntegrationPolicyService? entryIntegrationPolicyService = null,
-        IObsidianExportTargetStore? obsidianExportTargetStore = null)
+        IObsidianExportTargetStore? obsidianExportTargetStore = null,
+        IEagleExportTargetStore? eagleExportTargetStore = null,
+        IEagleApiClient? eagleApiClient = null)
         : base("资讯列表", "订阅资讯、每日早报、热点趋势与 AI 报告")
     {
         bool hasSharedMediaDependency =
@@ -130,10 +133,12 @@ public sealed partial class NewsCenterViewModel
             () => SourceFilters.Any(filter => !filter.IsSelected));
         ConfigureTimeline();
         ConfigureFeedReader();
-        ConfigureObsidianExport(
+        ConfigureEntryExports(
             entryExportQueueService,
             entryIntegrationPolicyService,
-            obsidianExportTargetStore);
+            obsidianExportTargetStore,
+            eagleExportTargetStore,
+            eagleApiClient);
     }
 
     public ObservableCollection<NewsArticle> Articles { get; } = [];
@@ -297,7 +302,7 @@ public sealed partial class NewsCenterViewModel
         AudioFeed?.Dispose();
         VideoFeed?.Dispose();
         NotificationFeed?.Dispose();
-        DisposeObsidianExport();
+        DisposeEntryExports();
         DisposeTimeline();
     }
 

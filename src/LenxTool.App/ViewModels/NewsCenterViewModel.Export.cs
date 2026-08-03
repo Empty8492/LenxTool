@@ -5,6 +5,7 @@ using LenxTool.Core.Contracts;
 using LenxTool.Core.Feeds;
 using LenxTool.Core.Models;
 using LenxTool.Infrastructure.Exports;
+using LenxTool.Infrastructure.Networking;
 
 namespace LenxTool.App.ViewModels;
 
@@ -13,8 +14,12 @@ public sealed partial class NewsCenterViewModel
     private IEntryExportQueueService? _entryExportQueueService;
     private IEntryIntegrationPolicyService? _entryIntegrationPolicyService;
     private IObsidianExportTargetStore? _obsidianExportTargetStore;
+    private IEagleExportTargetStore? _eagleExportTargetStore;
+    private IEagleApiClient? _eagleApiClient;
     private string _obsidianExportStatus =
         "仅在点击后检查 Obsidian 配置与管理员策略。";
+    private string _eagleExportStatus =
+        "仅对已验证图片提供显式 Eagle 导出。";
 
     public AsyncRelayCommand<FeedTimelineItem>
         ExportTimelineEntryToObsidianCommand
@@ -29,17 +34,152 @@ public sealed partial class NewsCenterViewModel
         private set => SetProperty(ref _obsidianExportStatus, value);
     }
 
-    private void ConfigureObsidianExport(
+    public AsyncRelayCommand<FeedTimelineItem>
+        ExportTimelineEntryToEagleCommand
+    {
+        get;
+        private set;
+    } = null!;
+
+    public string EagleExportStatus
+    {
+        get => _eagleExportStatus;
+        private set => SetProperty(ref _eagleExportStatus, value);
+    }
+
+    private void ConfigureEntryExports(
         IEntryExportQueueService? entryExportQueueService,
         IEntryIntegrationPolicyService? entryIntegrationPolicyService,
-        IObsidianExportTargetStore? obsidianExportTargetStore)
+        IObsidianExportTargetStore? obsidianExportTargetStore,
+        IEagleExportTargetStore? eagleExportTargetStore,
+        IEagleApiClient? eagleApiClient)
     {
         _entryExportQueueService = entryExportQueueService;
         _entryIntegrationPolicyService = entryIntegrationPolicyService;
         _obsidianExportTargetStore = obsidianExportTargetStore;
+        _eagleExportTargetStore = eagleExportTargetStore;
+        _eagleApiClient = eagleApiClient;
         ExportTimelineEntryToObsidianCommand = new(
             ExportTimelineEntryToObsidianAsync,
             CanExportTimelineEntryToObsidian);
+        ExportTimelineEntryToEagleCommand = new(
+            ExportTimelineEntryToEagleAsync,
+            CanExportTimelineEntryToEagle);
+    }
+
+    private bool CanExportTimelineEntryToEagle(
+        FeedTimelineItem? item) =>
+        item is not null
+        && _entryExportQueueService is not null
+        && _entryIntegrationPolicyService is not null
+        && _eagleExportTargetStore is not null
+        && _eagleApiClient is not null
+        && TryGetSupportedEaglePicture(
+            item.Entry,
+            out _);
+
+    private async Task ExportTimelineEntryToEagleAsync(
+        FeedTimelineItem? item,
+        CancellationToken cancellationToken)
+    {
+        if (item is null
+            || _entryExportQueueService is null
+            || _entryIntegrationPolicyService is null
+            || _eagleExportTargetStore is null
+            || _eagleApiClient is null)
+        {
+            return;
+        }
+
+        string targetLabel = GetExportTargetLabel(item);
+        try
+        {
+            // 入队与真正执行都重新校验目标作用域，防止端口切换后旧任务误投递。
+            EagleExportTarget? target =
+                await _eagleExportTargetStore.GetAsync(
+                    cancellationToken);
+            if (target is null
+                || !string.Equals(
+                    target.TargetId,
+                    EagleExportTarget.DefaultTargetId,
+                    StringComparison.Ordinal))
+            {
+                EagleExportStatus =
+                    $"条目“{targetLabel}”：尚未配置本机 Eagle 端点，未加入导出队列。";
+                return;
+            }
+
+            EntryIntegrationPolicySnapshot snapshot =
+                await _entryIntegrationPolicyService.GetAsync(
+                    EntryIntegrationPolicyScope.Active,
+                    cancellationToken);
+            bool isEnabled = snapshot.Policies.Any(
+                policy =>
+                    policy.Kind == EntryIntegrationKind.Eagle
+                    && policy.IsEnabled);
+            if (!isEnabled)
+            {
+                EagleExportStatus =
+                    $"条目“{targetLabel}”：管理员尚未启用 Eagle 集成，未加入导出队列。";
+                return;
+            }
+
+            if (!TryGetSupportedEaglePicture(
+                    item.Entry,
+                    out long declaredLength))
+            {
+                EagleExportStatus =
+                    $"条目“{targetLabel}”：没有通过类型验证的图片附件。";
+                return;
+            }
+
+            // 显式点击时读取当前资源库的不透明修订，使同端点切库后的任务拥有
+            // 新的幂等作用域；名称和路径不会进入队列、界面或日志。
+            EagleApiCapability capability = await _eagleApiClient.ProbeAsync(
+                target.Endpoint,
+                cancellationToken);
+
+            EntryExportRequest request = EntryExportRequest.Create(
+                EagleEntryExporter.ExporterId,
+                target.CreateQueueTargetId(capability.LibraryRevision),
+                item.Entry,
+                EntryViewKind.Picture,
+                declaredLength);
+            EntryExportEnqueueResult result =
+                await _entryExportQueueService.EnqueueAsync(
+                    request,
+                    cancellationToken);
+            EagleExportStatus = result.Created
+                ? $"条目“{targetLabel}”已加入 Eagle 导出队列。"
+                : $"条目“{targetLabel}”的当前图片版本已存在于 Eagle 导出队列或历史中。";
+        }
+        catch (OperationCanceledException)
+            when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            // 不把本机 Eagle 响应正文、端口之外的配置或图片地址回显到界面。
+            EagleExportStatus =
+                $"条目“{targetLabel}”：Eagle 导出暂时不可用，请稍后重试。";
+        }
+    }
+
+    private static bool TryGetSupportedEaglePicture(
+        FeedEntry entry,
+        out long declaredLength)
+    {
+        FeedAttachmentClassification? classification =
+            EagleEntryExporter.SelectSupportedAttachment(entry);
+        if (classification is not null)
+        {
+            declaredLength = classification.Length ?? 0;
+            return true;
+        }
+
+        declaredLength = 0;
+        return false;
     }
 
     private bool CanExportTimelineEntryToObsidian(
@@ -61,7 +201,7 @@ public sealed partial class NewsCenterViewModel
             return;
         }
 
-        string targetLabel = GetObsidianExportTargetLabel(item);
+        string targetLabel = GetExportTargetLabel(item);
         try
         {
             // 每次显式点击都重新读取本机目标，避免使用过期设置。
@@ -122,7 +262,7 @@ public sealed partial class NewsCenterViewModel
         }
     }
 
-    private static string GetObsidianExportTargetLabel(
+    private static string GetExportTargetLabel(
         FeedTimelineItem item)
     {
         string source = string.IsNullOrWhiteSpace(item.Entry.Title)
@@ -211,6 +351,9 @@ public sealed partial class NewsCenterViewModel
         return Encoding.UTF8.GetByteCount(content);
     }
 
-    private void DisposeObsidianExport() =>
+    private void DisposeEntryExports()
+    {
         ExportTimelineEntryToObsidianCommand.Dispose();
+        ExportTimelineEntryToEagleCommand.Dispose();
+    }
 }

@@ -117,9 +117,10 @@ describe("Worker integration policies", () => {
     }>())).policies).toEqual([]);
   });
 
-  it("allows hostless Obsidian but keeps network integrations host-bound", async () => {
+  it("allows hostless local integrations but keeps network integrations host-bound", async () => {
     const admin = await seedSession("admin");
     const user = await seedSession("user");
+    // Obsidian 与 Eagle 的实际端点只存在于本机，D1 只能保存启用状态。
     const accepted = await replace(
       admin,
       0,
@@ -127,6 +128,11 @@ describe("Worker integration policies", () => {
       [
         {
           kind: "OBSIDIAN",
+          isEnabled: true,
+          allowedHosts: []
+        },
+        {
+          kind: "EAGLE",
           isEnabled: true,
           allowedHosts: []
         },
@@ -148,6 +154,11 @@ describe("Worker integration policies", () => {
           allowedHosts: []
         },
         {
+          kind: "EAGLE",
+          isEnabled: true,
+          allowedHosts: []
+        },
+        {
           kind: "WEBHOOK",
           isEnabled: false,
           allowedHosts: []
@@ -161,21 +172,168 @@ describe("Worker integration policies", () => {
         kind: "OBSIDIAN",
         isEnabled: true,
         allowedHosts: []
-      }]
-    });
-
-    const rejected = await replace(
-      admin,
-      1,
-      "integration-hostless-webhook",
-      [{
-        kind: "WEBHOOK",
+      }, {
+        kind: "EAGLE",
         isEnabled: true,
         allowedHosts: []
       }]
+    });
+
+    const networkKinds = [
+      "ZOTERO",
+      "READWISE",
+      "CUBOX",
+      "READECK",
+      "OUTLINE",
+      "QBITTORRENT",
+      "WEBHOOK"
+    ] as const;
+    for (const [index, kind] of networkKinds.entries()) {
+      const rejected = await replace(
+        admin,
+        1,
+        `integration-hostless-network-${index}`,
+        [{ kind, isEnabled: true, allowedHosts: [] }]
+      );
+      expect(rejected.status).toBe(400);
+      expect(await errorCode(rejected)).toBe("VALIDATION_ERROR");
+    }
+  });
+
+  it("rejects every local integration host so endpoints never reach D1", async () => {
+    const admin = await seedSession("admin");
+    // 同时覆盖两种本机集成与回环名、IP、普通 DNS，防止本机信息被上传。
+    const localKinds = ["OBSIDIAN", "EAGLE"] as const;
+    const forbiddenHosts = [
+      "localhost",
+      "127.0.0.1",
+      "eagle.example.com"
+    ];
+    const responses: Response[] = [];
+    for (const kind of localKinds) {
+      for (const [index, host] of forbiddenHosts.entries()) {
+        responses.push(await replace(
+          admin,
+          0,
+          `integration-${kind.toLowerCase()}-host-${index}`,
+          [{ kind, isEnabled: true, allowedHosts: [host] }]
+        ));
+      }
+    }
+
+    expect(await scalar(
+      "SELECT COUNT(*) AS value FROM integration_policies"
+    )).toBe(0);
+    expect(await scalar(
+      "SELECT policy_set_version AS value FROM integration_policy_state"
+    )).toBe(0);
+    expect(responses.map(response => response.status)).toEqual([
+      400, 400, 400, 400, 400, 400
+    ]);
+    for (const response of responses) {
+      expect(await errorCode(response)).toBe("VALIDATION_ERROR");
+    }
+  });
+
+  it("reads legacy local hosts as hostless so an administrator can repair both rows", async () => {
+    const admin = await seedSession("admin");
+    const user = await seedSession("user");
+    const updatedAt = new Date().toISOString();
+    const mutationId = crypto.randomUUID();
+    // 严格本机契约落地前，旧入口可能为 Obsidian 与 Eagle 保存精确 DNS 主机。
+    await env.DB.batch([
+      env.DB.prepare(
+        "UPDATE integration_policy_state SET policy_set_version=1," +
+        "updated_at=?,last_mutation_id=? WHERE singleton_id=1"
+      ).bind(updatedAt, mutationId),
+      env.DB.prepare(
+        "INSERT INTO integration_policies(" +
+        "kind,is_enabled,allowed_hosts_json,updated_by,updated_at,last_mutation_id) " +
+        "VALUES('OBSIDIAN',1,?,?,?,?)"
+      ).bind(
+        JSON.stringify(["vault.example.com"]),
+        admin.userId,
+        updatedAt,
+        mutationId
+      ),
+      env.DB.prepare(
+        "INSERT INTO integration_policies(" +
+        "kind,is_enabled,allowed_hosts_json,updated_by,updated_at,last_mutation_id) " +
+        "VALUES('EAGLE',1,?,?,?,?)"
+      ).bind(
+        JSON.stringify(["api.eagle.cool"]),
+        admin.userId,
+        updatedAt,
+        mutationId
+      )
+    ]);
+
+    const legacyRead = await read(user, "ACTIVE", 1);
+    expect(legacyRead.status).toBe(200);
+    const legacySnapshot = await legacyRead.json<{
+      policies: unknown[];
+    }>();
+    expect(legacySnapshot.policies).toEqual([
+      {
+        kind: "OBSIDIAN",
+        isEnabled: true,
+        allowedHosts: []
+      },
+      {
+        kind: "EAGLE",
+        isEnabled: true,
+        allowedHosts: []
+      }
+    ]);
+
+    const adminRead = await read(admin, "ALL");
+    expect(adminRead.status).toBe(200);
+    const adminSnapshot = await adminRead.json<{
+      policies: unknown[];
+    }>();
+    expect(adminSnapshot.policies).toEqual(legacySnapshot.policies);
+
+    const repaired = await replace(
+      admin,
+      1,
+      "integration-local-legacy-repair",
+      adminSnapshot.policies
     );
-    expect(rejected.status).toBe(400);
-    expect(await errorCode(rejected)).toBe("VALIDATION_ERROR");
+    expect(repaired.status).toBe(200);
+    expect((await env.DB.prepare(
+      "SELECT kind,allowed_hosts_json FROM integration_policies ORDER BY kind"
+    ).all<{ kind: string; allowed_hosts_json: string }>()).results).toEqual([
+      { kind: "EAGLE", allowed_hosts_json: "[]" },
+      { kind: "OBSIDIAN", allowed_hosts_json: "[]" }
+    ]);
+    expect((await read(user, "ACTIVE", 2)).status).toBe(304);
+  });
+
+  it("fails closed on a malformed legacy local host even when the cache version matches", async () => {
+    const admin = await seedSession("admin");
+    const updatedAt = new Date().toISOString();
+    const mutationId = crypto.randomUUID();
+    // 相等版本不能绕过存量值校验，否则损坏行会被旧缓存永久掩盖。
+    await env.DB.batch([
+      env.DB.prepare(
+        "UPDATE integration_policy_state SET policy_set_version=1," +
+        "updated_at=?,last_mutation_id=? WHERE singleton_id=1"
+      ).bind(updatedAt, mutationId),
+      env.DB.prepare(
+        "INSERT INTO integration_policies(" +
+        "kind,is_enabled,allowed_hosts_json,updated_by,updated_at,last_mutation_id) " +
+        "VALUES('OBSIDIAN',1,?,?,?,?)"
+      ).bind(
+        JSON.stringify(["localhost"]),
+        admin.userId,
+        updatedAt,
+        mutationId
+      )
+    ]);
+
+    const response = await read(admin, "ALL", 1);
+    expect(response.status).toBe(503);
+    expect(await errorCode(response)).toBe("SERVICE_UNAVAILABLE");
   });
 
   it("rejects ambiguous targets and preserves version/idempotency semantics", async () => {
@@ -266,11 +424,18 @@ function replace(
 
 function read(
   session: Session,
-  scope: "ACTIVE" | "ALL"
+  scope: "ACTIVE" | "ALL",
+  afterVersion?: number
 ): Promise<Response> {
-  return workerRequest(`/v1/integration-policies?scope=${scope}`, {
-    headers: { authorization: `Bearer ${session.accessToken}` }
-  });
+  const versionQuery = afterVersion === undefined
+    ? ""
+    : `&afterVersion=${afterVersion}`;
+  return workerRequest(
+    `/v1/integration-policies?scope=${scope}${versionQuery}`,
+    {
+      headers: { authorization: `Bearer ${session.accessToken}` }
+    }
+  );
 }
 
 function workerRequest(path: string, init?: RequestInit): Promise<Response> {
