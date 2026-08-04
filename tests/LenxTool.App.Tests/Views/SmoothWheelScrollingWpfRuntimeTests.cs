@@ -18,9 +18,10 @@ namespace LenxTool.App.Tests.Views;
 public sealed class SmoothWheelScrollingWpfRuntimeTests
 {
     [Fact]
-    public void HeavyPhysicalPageCommitsWheelOffsetImmediately()
+    public void HeavyPhysicalPageUsesCompositedFluentInertia()
     {
         Exception? failure = null;
+        string stage = "starting";
         WpfRuntimeHost.Run(
             () =>
             {
@@ -28,7 +29,9 @@ public sealed class SmoothWheelScrollingWpfRuntimeTests
                 var themeService = new ThemeService();
                 try
                 {
+                    stage = "applying motion settings";
                     themeService.ApplyReduceMotion(reduceMotion: false);
+                    stage = "building heavy content";
                     var content = new StackPanel();
                     for (int index = 0; index < 130; index++)
                     {
@@ -46,6 +49,7 @@ public sealed class SmoothWheelScrollingWpfRuntimeTests
                         HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
                         Content = content
                     };
+                    stage = "creating offscreen window";
                     window = new Window
                     {
                         Title = "Heavy smooth wheel runtime acceptance",
@@ -56,9 +60,13 @@ public sealed class SmoothWheelScrollingWpfRuntimeTests
                         ShowInTaskbar = false,
                         Content = viewer
                     };
+                    stage = "showing offscreen window";
                     window.Show();
+                    stage = "updating initial layout";
                     window.UpdateLayout();
+                    stage = "pumping initial dispatcher work";
                     PumpDispatcher();
+                    stage = "raising wheel";
 
                     int logicalScrollUpdates = 0;
                     viewer.ScrollChanged += (_, eventArgs) =>
@@ -70,16 +78,45 @@ public sealed class SmoothWheelScrollingWpfRuntimeTests
                     };
 
                     double expectedTarget = ExpectedTarget(viewer);
+                    bool expectsAnimation = RuntimeMotionAllowed()
+                                            && expectedTarget > 0.01d;
                     RaiseWheel(content.Children[0]);
-                    Assert.False(
-                        SmoothWheelScrolling.HasActiveAnimation(viewer),
-                        "滚轮输入不得启动视觉补间，位置应直接提交。");
+                    Assert.Equal(
+                        expectsAnimation,
+                        SmoothWheelScrolling.HasActiveAnimation(viewer));
+                    if (!expectsAnimation)
+                    {
+                        // Windows 关闭客户端动画或把滚轮行数设为 0 时，生产代码应尊重系统设置并直接落位。
+                        Assert.InRange(
+                            viewer.VerticalOffset,
+                            expectedTarget - 0.5d,
+                            expectedTarget + 0.5d);
+                        Assert.Equal(expectedTarget > 0.01d ? 1 : 0,
+                            logicalScrollUpdates);
+                        stage = "completed system-motion fallback assertions";
+                        return;
+                    }
                     viewer.UpdateLayout();
+                    Assert.InRange(
+                        GetVisualOffset(viewer, content),
+                        0d,
+                        1d);
+                    PumpFor(TimeSpan.FromMilliseconds(45d));
+                    double intermediateOffset = GetVisualOffset(viewer, content);
+                    Assert.InRange(
+                        intermediateOffset,
+                        1d,
+                        expectedTarget - 1d);
+                    stage = "waiting for inertia completion";
+                    PumpUntil(
+                        () => !SmoothWheelScrolling.HasActiveAnimation(viewer),
+                        TimeSpan.FromSeconds(2d));
                     Assert.InRange(
                         viewer.VerticalOffset,
                         expectedTarget - 0.5d,
                         expectedTarget + 0.5d);
                     Assert.Equal(1, logicalScrollUpdates);
+                    stage = "completed assertions";
                 }
                 catch (Exception exception)
                 {
@@ -94,7 +131,7 @@ public sealed class SmoothWheelScrollingWpfRuntimeTests
                 }
             },
             TimeSpan.FromSeconds(10),
-            () => "重页面即时滚动验收超时。");
+            () => $"重页面 Fluent 滚动验收在阶段“{stage}”超时。");
 
         if (failure is not null)
         {
@@ -186,7 +223,7 @@ public sealed class SmoothWheelScrollingWpfRuntimeTests
     }
 
     [Fact]
-    public void VirtualizedListCommitsBurstWheelInputWithoutTransition()
+    public void VirtualizedListReusesOneFluentMotionSessionForBurstInput()
     {
         Exception? failure = null;
         WpfRuntimeHost.Run(
@@ -231,18 +268,82 @@ public sealed class SmoothWheelScrollingWpfRuntimeTests
                     ScrollViewer viewer = FindDescendant<ScrollViewer>(list);
                     ListBoxItem firstItem = Assert.IsType<ListBoxItem>(
                         list.ItemContainerGenerator.ContainerFromIndex(0));
+                    double startingOffset = viewer.VerticalOffset;
+                    bool motionAllowed = RuntimeMotionAllowed();
+                    double expectedTarget = startingOffset;
+                    double expectedVelocity = 0d;
+                    bool expectsAnimation = false;
+                    object? motionSession = null;
                     for (int notch = 0; notch < 10; notch++)
                     {
+                        WheelMotionPlan expectedPlan =
+                            SmoothWheelScrolling.CreateWheelMotionPlan(
+                                motionAllowed
+                                    ? startingOffset
+                                    : expectedTarget,
+                                pendingTargetOffset: expectedTarget,
+                                currentVelocity: motionAllowed
+                                    ? expectedVelocity
+                                    : 0d,
+                                viewer.ScrollableHeight,
+                                viewer.ViewportHeight,
+                                wheelDelta: -120,
+                                SystemParameters.WheelScrollLines,
+                                usesLogicalUnits: false,
+                                motionAllowed,
+                                WheelInputMode.Inertial);
+                        expectedTarget = expectedPlan.TargetOffset;
+                        expectedVelocity = expectedPlan.Velocity;
                         RaiseWheel(firstItem);
+                        if (expectedPlan.ShouldAnimate)
+                        {
+                            expectsAnimation = true;
+                            motionSession ??=
+                                SmoothWheelScrolling
+                                    .GetActiveAnimationSession(viewer);
+                            Assert.Same(
+                                motionSession,
+                                SmoothWheelScrolling
+                                    .GetActiveAnimationSession(viewer));
+                        }
                     }
                     viewer.UpdateLayout();
 
-                    double offsetBeforeFrames = viewer.VerticalOffset;
+                    if (!expectsAnimation)
+                    {
+                        Assert.False(
+                            SmoothWheelScrolling.HasActiveAnimation(viewer));
+                        Assert.InRange(
+                            viewer.VerticalOffset,
+                            expectedTarget - 0.5d,
+                            expectedTarget + 0.5d);
+                        return;
+                    }
 
                     Assert.True(
-                        offsetBeforeFrames > 1d,
-                        "连续滚轮应在输入时直接提交累计位置。");
-                    Assert.False(SmoothWheelScrolling.HasActiveAnimation(viewer));
+                        SmoothWheelScrolling.HasActiveAnimation(viewer));
+                    UIElement compositedContent =
+                        Assert.IsAssignableFrom<UIElement>(viewer.Content);
+                    Assert.InRange(
+                        GetVisualOffset(viewer, compositedContent),
+                        startingOffset - 0.5d,
+                        startingOffset + 0.5d);
+                    if (Math.Abs(expectedTarget - startingOffset)
+                        > viewer.ViewportHeight + 0.5d)
+                    {
+                        // 连续输入越过一屏缓存后必须无跳变地交给逐帧逻辑路径，不能继续预提交不可见容器。
+                        Assert.InRange(
+                            viewer.VerticalOffset,
+                            startingOffset - 0.5d,
+                            startingOffset + 0.5d);
+                    }
+                    PumpUntil(
+                        () => !SmoothWheelScrolling.HasActiveAnimation(viewer),
+                        TimeSpan.FromSeconds(3d));
+                    Assert.InRange(
+                        viewer.VerticalOffset,
+                        expectedTarget - 1d,
+                        expectedTarget + 1d);
                 }
                 catch (Exception exception)
                 {
@@ -257,7 +358,7 @@ public sealed class SmoothWheelScrollingWpfRuntimeTests
                 }
             },
             TimeSpan.FromSeconds(10),
-            () => "虚拟列表连续即时滚动验收超时。");
+            () => "虚拟列表连续 Fluent 滚动验收超时。");
 
         if (failure is not null)
         {
@@ -266,7 +367,7 @@ public sealed class SmoothWheelScrollingWpfRuntimeTests
     }
 
     [Fact]
-    public void ExternalRenderTransformDoesNotInterfereWithImmediateWheelOffset()
+    public void ExternalRenderTransformUsesLogicalFallbackWithoutBeingReplaced()
     {
         Exception? failure = null;
         WpfRuntimeHost.Run(
@@ -316,6 +417,7 @@ public sealed class SmoothWheelScrollingWpfRuntimeTests
                         viewer.VerticalOffset,
                         offsetBeforeExternalTakeover - 0.5d,
                         offsetBeforeExternalTakeover + 0.5d);
+                    double expectedTarget = ExpectedTarget(viewer);
                     int logicalScrollUpdates = 0;
                     viewer.ScrollChanged += (_, eventArgs) =>
                     {
@@ -326,12 +428,33 @@ public sealed class SmoothWheelScrollingWpfRuntimeTests
                     };
 
                     RaiseWheel(content.Children[0]);
-                    PumpDispatcher();
+                    bool expectsAnimation = RuntimeMotionAllowed()
+                                            && Math.Abs(
+                                                expectedTarget
+                                                - viewer.VerticalOffset)
+                                            > 0.01d;
+                    Assert.Equal(
+                        expectsAnimation,
+                        SmoothWheelScrolling.HasActiveAnimation(viewer));
+                    if (!expectsAnimation)
+                    {
+                        Assert.Same(
+                            externalTransform,
+                            content.RenderTransform);
+                        return;
+                    }
+                    PumpUntil(
+                        () => !SmoothWheelScrolling.HasActiveAnimation(viewer),
+                        TimeSpan.FromSeconds(2d));
 
                     Assert.Same(externalTransform, content.RenderTransform);
+                    Assert.InRange(
+                        viewer.VerticalOffset,
+                        expectedTarget - 0.5d,
+                        expectedTarget + 0.5d);
                     Assert.True(
-                        logicalScrollUpdates == 1,
-                        "滚轮只应直接提交一次偏移，不能接管外部渲染变换。");
+                        logicalScrollUpdates > 1,
+                        "外部占用 RenderTransform 时应回退到逐帧逻辑偏移，不能替换调用方的变换。");
                 }
                 catch (Exception exception)
                 {
@@ -346,7 +469,7 @@ public sealed class SmoothWheelScrollingWpfRuntimeTests
                 }
             },
             TimeSpan.FromSeconds(10),
-            () => "外部渲染变换即时滚动验收超时。");
+            () => "外部渲染变换 Fluent 回退验收超时。");
 
         if (failure is not null)
         {
@@ -421,22 +544,60 @@ public sealed class SmoothWheelScrollingWpfRuntimeTests
                     long evaluationCountBeforeWheel =
                         ViewportDeferredContentControl
                             .GetDeferredViewportEvaluationCount(viewer);
-                    RaiseWheel(articleView);
-                    Assert.False(SmoothWheelScrolling.HasActiveAnimation(viewer));
-                    viewer.UpdateLayout();
-                    long evaluationDelta =
-                        ViewportDeferredContentControl
-                            .GetDeferredViewportEvaluationCount(viewer)
-                        - evaluationCountBeforeWheel;
-                    // 即时滚轮只需对最终逻辑视口评估一轮，不能扫描整篇正文两次。
-                    Assert.Equal(
-                        (long)deferredControlCount,
-                        evaluationDelta);
-                    PumpDispatcher();
-                    Assert.Equal(
-                        evaluationCountBeforeWheel + deferredControlCount,
-                        ViewportDeferredContentControl
-                            .GetDeferredViewportEvaluationCount(viewer));
+                    bool canExerciseAnimatedViewport =
+                        RuntimeMotionAllowed()
+                        && SystemParameters.WheelScrollLines != 0;
+                    if (canExerciseAnimatedViewport)
+                    {
+                        double refreshTravel = Math.Min(
+                            120d,
+                            Math.Max(1d, viewer.ViewportHeight * 0.25d));
+                        int precisionStep = Math.Max(
+                            1,
+                            (int)Math.Ceiling(refreshTravel / 2d));
+
+                        // 使用高分辨率 delta 构造与系统滚轮行数无关的半阈值位移，第一段完成后不应扫描全文。
+                        RaiseWheel(articleView, delta: -precisionStep);
+                        Assert.True(
+                            SmoothWheelScrolling.HasActiveAnimation(viewer));
+                        PumpFor(TimeSpan.FromMilliseconds(100d));
+                        PumpUntil(
+                            () => !SmoothWheelScrolling
+                                .HasActiveAnimation(viewer),
+                            TimeSpan.FromSeconds(2d));
+                        Assert.Equal(
+                            evaluationCountBeforeWheel,
+                            ViewportDeferredContentControl
+                                .GetDeferredViewportEvaluationCount(viewer));
+
+                        // 第二段让累计视觉位移越过四分之一屏阈值，只允许协调器统一评估一轮。
+                        RaiseWheel(articleView, delta: -precisionStep);
+                        PumpUntil(
+                            () => !SmoothWheelScrolling
+                                .HasActiveAnimation(viewer),
+                            TimeSpan.FromSeconds(2d));
+                        long evaluationDeltaAfterThreshold =
+                            ViewportDeferredContentControl
+                                .GetDeferredViewportEvaluationCount(viewer)
+                            - evaluationCountBeforeWheel;
+                        Assert.Equal(
+                            (long)deferredControlCount,
+                            evaluationDeltaAfterThreshold);
+                        PumpDispatcher();
+                        Assert.Equal(
+                            evaluationCountBeforeWheel
+                            + deferredControlCount,
+                            ViewportDeferredContentControl
+                                .GetDeferredViewportEvaluationCount(viewer));
+                    }
+                    else
+                    {
+                        // 远程桌面/辅助功能关闭客户端动画时，只校验系统策略被尊重；合并扫描由纯逻辑测试冻结。
+                        RaiseWheel(articleView, delta: -60);
+                        PumpDispatcher();
+                        Assert.False(
+                            SmoothWheelScrolling.HasActiveAnimation(viewer));
+                    }
 
                     SmoothWheelScrolling.ScrollToImmediately(
                         viewer,
@@ -460,7 +621,6 @@ public sealed class SmoothWheelScrollingWpfRuntimeTests
                     AnimatedScrollViewer.SmoothScrollToTopCommand.Execute(
                         parameter: null,
                         target: viewer);
-                    PumpFor(TimeSpan.FromMilliseconds(520d));
                     PumpUntil(
                         () => FindTextBlock(
                             articleView,
@@ -613,7 +773,7 @@ public sealed class SmoothWheelScrollingWpfRuntimeTests
     }
 
     [Fact]
-    public void PlainAndDailyBriefingScrollViewersShareImmediateWheelBehavior()
+    public void PlainAndDailyBriefingScrollViewersShareFluentWheelBehavior()
     {
         Exception? failure = null;
         string stage = "starting";
@@ -664,12 +824,16 @@ public sealed class SmoothWheelScrollingWpfRuntimeTests
                         ScrollUnit.Pixel,
                         VirtualizingPanel.GetScrollUnit(virtualizedList));
 
-                    stage = "checking plain ScrollViewer immediate offset";
+                    stage = "checking plain ScrollViewer Fluent landing target";
                     double expectedPlain = ExpectedTarget(plain);
+                    bool expectsRuntimeAnimation = RuntimeMotionAllowed()
+                                                   && expectedPlain > 0.01d;
                     RaiseWheel(plainContent);
                     plain.UpdateLayout();
                     Assert.InRange(plain.VerticalOffset, expectedPlain - 1d, expectedPlain + 1d);
-                    Assert.False(SmoothWheelScrolling.HasActiveAnimation(plain));
+                    Assert.Equal(
+                        expectsRuntimeAnimation,
+                        SmoothWheelScrolling.HasActiveAnimation(plain));
 
                     stage = "checking accumulated wheel target";
                     // 测试重置先终止上一段动画，避免把前一格滚轮计入本场景。
@@ -687,20 +851,36 @@ public sealed class SmoothWheelScrollingWpfRuntimeTests
                         expectedAccumulated - 1d,
                         expectedAccumulated + 1d);
 
-                    stage = "checking repeated wheel input commits each offset";
+                    stage = "checking repeated wheel input retargets one session";
                     SmoothWheelScrolling.ScrollToImmediately(plain, 0d);
                     PumpDispatcher();
                     RaiseWheel(plainContent);
                     plain.UpdateLayout();
                     Assert.InRange(plain.VerticalOffset, expectedPlain - 1d, expectedPlain + 1d);
+                    object? firstSession = SmoothWheelScrolling
+                        .GetActiveAnimationSession(plain);
                     RaiseWheel(plainContent);
                     plain.UpdateLayout();
+                    if (expectsRuntimeAnimation)
+                    {
+                        Assert.NotNull(firstSession);
+                        Assert.Same(
+                            firstSession,
+                            SmoothWheelScrolling
+                                .GetActiveAnimationSession(plain));
+                    }
+                    else
+                    {
+                        Assert.Null(firstSession);
+                        Assert.False(
+                            SmoothWheelScrolling.HasActiveAnimation(plain));
+                    }
                     Assert.InRange(
                         plain.VerticalOffset,
                         expectedAccumulated - 1d,
                         expectedAccumulated + 1d);
 
-                    stage = "checking immediate direction reversal";
+                    stage = "checking additive direction reversal";
                     SmoothWheelScrolling.ScrollToImmediately(plain, 0d);
                     PumpDispatcher();
                     RaiseWheel(plainContent, delta: -120);
@@ -722,11 +902,24 @@ public sealed class SmoothWheelScrollingWpfRuntimeTests
                     plain.ScrollToVerticalOffset(200d);
                     PumpFor(TimeSpan.FromMilliseconds(300));
                     Assert.InRange(plain.VerticalOffset, 199d, 201d);
+                    double expectedAfterNativeScroll = Math.Min(
+                        plain.ScrollableHeight,
+                        200d + expectedPlain);
+                    RaiseWheel(plainContent, delta: -120);
+                    plain.UpdateLayout();
+                    Assert.InRange(
+                        plain.VerticalOffset,
+                        expectedAfterNativeScroll - 1d,
+                        expectedAfterNativeScroll + 1d);
+                    SmoothWheelScrolling.Cancel(plain);
 
                     stage = "checking daily briefing parity";
                     double expectedBriefing = ExpectedTarget(briefing);
                     RaiseWheel(briefingContent);
                     briefing.UpdateLayout();
+                    Assert.Equal(
+                        expectsRuntimeAnimation,
+                        SmoothWheelScrolling.HasActiveAnimation(briefing));
                     Assert.InRange(
                         briefing.VerticalOffset,
                         expectedBriefing - 1d,
@@ -739,6 +932,7 @@ public sealed class SmoothWheelScrollingWpfRuntimeTests
                     stage = "checking wheel to immediate back-to-top handoff";
                     SmoothWheelScrolling.ScrollToImmediately(briefing, 300d);
                     PumpDispatcher();
+                    double expectedHandoffTarget = ExpectedTarget(briefing);
                     var handoffOffsets = new List<double>();
                     briefing.ScrollChanged += (_, _) =>
                         handoffOffsets.Add(briefing.VerticalOffset);
@@ -753,7 +947,10 @@ public sealed class SmoothWheelScrollingWpfRuntimeTests
                         SmoothWheelScrolling.HasActiveAnimation(briefing));
                     Assert.All(
                         handoffOffsets,
-                        offset => Assert.InRange(offset, 0d, 400d));
+                        offset => Assert.InRange(
+                            offset,
+                            0d,
+                            Math.Max(300d, expectedHandoffTarget) + 1d));
 
                     stage = "checking reduced motion fallback";
                     themeService.ApplyReduceMotion(reduceMotion: true);
@@ -772,7 +969,8 @@ public sealed class SmoothWheelScrollingWpfRuntimeTests
                     stage = "checking unload releases the render session";
                     themeService.ApplyReduceMotion(reduceMotion: false);
                     RaiseWheel(plainContent);
-                    Assert.False(
+                    Assert.Equal(
+                        expectsRuntimeAnimation,
                         SmoothWheelScrolling.HasActiveAnimation(plain));
                     window.Close();
                     window = null;
@@ -795,7 +993,7 @@ public sealed class SmoothWheelScrollingWpfRuntimeTests
                 }
             },
             TimeSpan.FromSeconds(15),
-            () => $"即时滚轮 WPF 验收在阶段“{stage}”超时。");
+            () => $"Fluent 滚轮 WPF 验收在阶段“{stage}”超时。");
 
         if (failure is not null)
         {
@@ -821,16 +1019,37 @@ public sealed class SmoothWheelScrollingWpfRuntimeTests
 
     private static double ExpectedTarget(ScrollViewer viewer)
     {
-        WheelScrollPlan plan = SmoothWheelScrolling.CreateWheelPlan(
+        WheelMotionPlan plan = SmoothWheelScrolling.CreateWheelMotionPlan(
             viewer.VerticalOffset,
-            viewer.VerticalOffset,
+            pendingTargetOffset: viewer.VerticalOffset,
+            currentVelocity: 0d,
             viewer.ScrollableHeight,
             viewer.ViewportHeight,
             wheelDelta: -120,
             SystemParameters.WheelScrollLines,
             usesLogicalUnits: false,
-            motionAllowed: true);
+            motionAllowed: true,
+            WheelInputMode.Inertial);
         return plan.TargetOffset;
+    }
+
+    private static bool RuntimeMotionAllowed()
+    {
+        object? reduceMotion =
+            Application.Current?.Resources["LenxTool.ReduceMotion"];
+        return SystemParameters.ClientAreaAnimation
+               && reduceMotion is not true;
+    }
+
+    private static double GetVisualOffset(
+        ScrollViewer viewer,
+        UIElement content)
+    {
+        double translation = content.RenderTransform
+            is TranslateTransform transform
+                ? transform.Y
+                : 0d;
+        return viewer.VerticalOffset - translation;
     }
 
     private static void RaiseWheel(

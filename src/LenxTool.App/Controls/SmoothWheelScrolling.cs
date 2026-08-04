@@ -7,13 +7,22 @@ using System.Windows.Media;
 namespace LenxTool.App.Controls;
 
 /// <summary>
-/// 为所有原生 ScrollViewer 提供统一的滚轮灵敏度和目标累计；滚轮位置立即提交。
+/// 为所有原生 ScrollViewer 提供统一的 Fluent 惯性滚轮，并在重页面优先使用合成层过渡。
 /// </summary>
 internal static class SmoothWheelScrolling
 {
     internal const double DailyBriefingWheelMultiplier = 1.45d;
-    private const double PhysicalLineHeight = 16d;
-    private const double SettleTimeFactor = 3.3d;
+    // 手感参数参考 TwilightLemon/FluentScrollViewer；积分、边界与合成层接入均按 LenxTool 场景独立实现。
+    // https://github.com/TwilightLemon/FluentScrollViewer/blob/63f07a972bfde3d9a517f5c0f13f105df5a64b34/MyScrollViewer.cs
+    private const double FluentVelocityFactor = 2d;
+    private const double FluentFriction = 0.92d;
+    private const double FluentPrecisionLerpFactor = 0.5d;
+    private const double FluentTargetFrameSeconds = 1d / 144d;
+    private const double FluentVelocityStopThreshold = 0.1d;
+    private const double FluentPrecisionStopDistance = 0.5d;
+    private const double DefaultSystemWheelLines = 3d;
+    private const double FluentTravelPerVelocityUnit =
+        FluentFriction / (24d * (1d - FluentFriction));
     private const double MaximumFrameIntervalSeconds = 0.05d;
     private static int _initialized;
 
@@ -64,97 +73,199 @@ internal static class SmoothWheelScrolling
     }
 
     /// <summary>
-    /// 计算独立于 WPF 动画时钟的滚动计划，便于冻结灵敏度和降级规则。
+    /// 区分标准鼠标滚轮与高分辨率触控板输入；短时间内跟随精确 delta 的整格事件仍归入同一触控板手势。
     /// </summary>
-    internal static WheelScrollPlan CreateWheelPlan(
+    internal static WheelInputMode ClassifyWheelInput(
+        int wheelDelta,
+        int previousWheelDelta,
+        TimeSpan elapsedSincePreviousInput)
+    {
+        bool followsPrecisionInput =
+            elapsedSincePreviousInput >= TimeSpan.Zero
+            && elapsedSincePreviousInput
+            < TimeSpan.FromMilliseconds(100d)
+            && previousWheelDelta % Mouse.MouseWheelDeltaForOneLine != 0;
+        return wheelDelta % Mouse.MouseWheelDeltaForOneLine != 0
+               || followsPrecisionInput
+            ? WheelInputMode.Precision
+            : WheelInputMode.Inertial;
+    }
+
+    /// <summary>
+    /// 将一次滚轮输入转换为可持续复用的运动状态；标准三行鼠标设置保持参考项目的 2.0 速度力度。
+    /// </summary>
+    internal static WheelMotionPlan CreateWheelMotionPlan(
         double currentOffset,
-        double targetOffset,
+        double pendingTargetOffset,
+        double currentVelocity,
         double scrollableHeight,
         double viewportHeight,
         int wheelDelta,
         int systemWheelLines,
         bool usesLogicalUnits,
-        bool motionAllowed)
+        bool motionAllowed,
+        WheelInputMode mode)
     {
         double maximumOffset = NormalizeNonNegative(scrollableHeight);
         double current = Math.Clamp(
             NormalizeNonNegative(currentOffset),
             0d,
             maximumOffset);
-        double pendingTarget = double.IsFinite(targetOffset)
-            ? Math.Clamp(targetOffset, 0d, maximumOffset)
-            : current;
         if (wheelDelta == 0 || systemWheelLines == 0)
         {
-            return new(current, TimeSpan.Zero);
+            return new(mode, current, 0d, false);
         }
 
-        double baseDistance = systemWheelLines < 0
-            ? Math.Max(1d, NormalizeNonNegative(viewportHeight))
-            : Math.Max(1d, systemWheelLines)
-              * (usesLogicalUnits ? 1d : PhysicalLineHeight);
-        double requestedTarget = pendingTarget
-            - wheelDelta / 120d
-            * baseDistance
-            * DailyBriefingWheelMultiplier;
-        double target = Math.Clamp(requestedTarget, 0d, maximumOffset);
-        double distance = Math.Abs(target - current);
-        if (!motionAllowed || distance < 0.01d)
+        if (mode == WheelInputMode.Precision)
         {
-            return new(target, TimeSpan.Zero);
+            double pendingTarget = double.IsFinite(pendingTargetOffset)
+                ? Math.Clamp(pendingTargetOffset, 0d, maximumOffset)
+                : current;
+            double target = Math.Clamp(
+                pendingTarget - wheelDelta,
+                0d,
+                maximumOffset);
+            bool shouldAnimate = motionAllowed
+                                 && Math.Abs(target - current)
+                                 >= FluentPrecisionStopDistance;
+            return new(mode, target, 0d, shouldAnimate);
         }
 
-        // 鼠标滚轮必须跟随输入立即落位；保留目标累计和灵敏度，但不再制造视觉拖尾。
-        return new(target, TimeSpan.Zero);
+        double velocityImpulse = CreateVelocityImpulse(
+            wheelDelta,
+            systemWheelLines,
+            usesLogicalUnits,
+            viewportHeight);
+        double inheritedVelocity = double.IsFinite(currentVelocity)
+            ? currentVelocity
+            : 0d;
+        if (inheritedVelocity * velocityImpulse < 0d)
+        {
+            // 反向输入代表新的明确意图：丢弃旧方向动量，再从当前视觉位置施加一格新冲量。
+            inheritedVelocity = 0d;
+        }
+        double velocity = inheritedVelocity + velocityImpulse;
+        double targetOffset = Math.Clamp(
+            current + velocity * FluentTravelPerVelocityUnit,
+            0d,
+            maximumOffset);
+        bool canAnimate = motionAllowed
+                          && Math.Abs(velocity)
+                          >= FluentVelocityStopThreshold
+                          && Math.Abs(targetOffset - current) >= 0.01d;
+        return new(
+            mode,
+            targetOffset,
+            canAnimate ? velocity : 0d,
+            canAnimate);
     }
 
     /// <summary>
-    /// 按一个真实渲染帧推进持久滚轮动画；临界阻尼使连续输入扩展目标时速度保持连续。
+    /// 以 144Hz 下每帧保留 92% 速度为基准推进惯性，并用解析积分消除不同刷新率造成的落点漂移。
     /// </summary>
-    internal static WheelAnimationFrame AdvanceFrame(
+    internal static WheelAnimationFrame AdvanceInertialFrame(
         double currentOffset,
         double targetOffset,
         double currentVelocity,
-        TimeSpan frameInterval,
-        TimeSpan responseDuration)
+        TimeSpan frameInterval)
     {
         double current = double.IsFinite(currentOffset) ? currentOffset : 0d;
         double target = double.IsFinite(targetOffset) ? targetOffset : current;
-        double velocity = double.IsFinite(currentVelocity) ? currentVelocity : 0d;
+        double velocity = double.IsFinite(currentVelocity)
+            ? currentVelocity
+            : 0d;
         double deltaSeconds = Math.Clamp(
             frameInterval.TotalSeconds,
             0d,
             MaximumFrameIntervalSeconds);
-        if (deltaSeconds <= 0d || Math.Abs(target - current) < 0.001d)
+        if (Math.Abs(target - current) < 0.01d
+            || Math.Abs(velocity) < FluentVelocityStopThreshold)
         {
-            return new(
-                Math.Abs(target - current) < 0.001d ? target : current,
-                Math.Abs(target - current) < 0.001d ? 0d : velocity);
+            return new(target, 0d, true);
+        }
+        if (deltaSeconds <= 0d)
+        {
+            return new(current, velocity, false);
         }
 
-        double durationSeconds = Math.Max(
-            responseDuration.TotalSeconds,
-            0.001d);
-        double smoothTime = durationSeconds / SettleTimeFactor;
-        double omega = 2d / smoothTime;
-        double scaledInterval = omega * deltaSeconds;
-        double decay = 1d
-                       / (1d
-                          + scaledInterval
-                          + 0.48d * scaledInterval * scaledInterval
-                          + 0.235d * scaledInterval * scaledInterval
-                          * scaledInterval);
-        double displacement = current - target;
-        double momentum = (velocity + omega * displacement) * deltaSeconds;
-        double nextVelocity = (velocity - omega * momentum) * decay;
-        double nextOffset = target + (displacement + momentum) * decay;
-
+        double timeFactor = deltaSeconds / FluentTargetFrameSeconds;
+        double decay = Math.Pow(FluentFriction, timeFactor);
+        double nextVelocity = velocity * decay;
+        double nextOffset = current
+                            + velocity
+                            * (1d - decay)
+                            * FluentTravelPerVelocityUnit;
         bool crossedTarget = target > current
-            ? nextOffset > target
-            : nextOffset < target;
-        return crossedTarget
-            ? new(target, 0d)
-            : new(nextOffset, nextVelocity);
+            ? nextOffset >= target
+            : nextOffset <= target;
+        bool isComplete = crossedTarget
+                          || Math.Abs(target - nextOffset) < 0.01d
+                          || Math.Abs(nextVelocity)
+                          < FluentVelocityStopThreshold;
+        return isComplete
+            ? new(target, 0d, true)
+            : new(nextOffset, nextVelocity, false);
+    }
+
+    /// <summary>
+    /// 高分辨率输入每个 144Hz 基准帧消除一半剩余距离，连续 delta 只扩展目标而不重启动画时钟。
+    /// </summary>
+    internal static WheelAnimationFrame AdvancePrecisionFrame(
+        double currentOffset,
+        double targetOffset,
+        TimeSpan frameInterval)
+    {
+        double current = double.IsFinite(currentOffset) ? currentOffset : 0d;
+        double target = double.IsFinite(targetOffset) ? targetOffset : current;
+        double remaining = target - current;
+        if (Math.Abs(remaining) < FluentPrecisionStopDistance)
+        {
+            return new(target, 0d, true);
+        }
+
+        double deltaSeconds = Math.Clamp(
+            frameInterval.TotalSeconds,
+            0d,
+            MaximumFrameIntervalSeconds);
+        if (deltaSeconds <= 0d)
+        {
+            return new(current, 0d, false);
+        }
+
+        double timeFactor = deltaSeconds / FluentTargetFrameSeconds;
+        double lerpAmount = 1d
+                            - Math.Pow(
+                                1d - FluentPrecisionLerpFactor,
+                                timeFactor);
+        double nextOffset = current + remaining * lerpAmount;
+        return Math.Abs(target - nextOffset)
+               < FluentPrecisionStopDistance
+            ? new(target, 0d, true)
+            : new(nextOffset, 0d, false);
+    }
+
+    private static double CreateVelocityImpulse(
+        int wheelDelta,
+        int systemWheelLines,
+        bool usesLogicalUnits,
+        double viewportHeight)
+    {
+        if (systemWheelLines > 0 && !usesLogicalUnits)
+        {
+            // 默认三行设置与参考实现完全一致；其他系统行数按比例缩放，尊重用户的滚轮偏好。
+            return -wheelDelta
+                   * FluentVelocityFactor
+                   * systemWheelLines
+                   / DefaultSystemWheelLines;
+        }
+
+        double desiredTravel = systemWheelLines < 0
+            ? -wheelDelta / 120d
+              * Math.Max(1d, NormalizeNonNegative(viewportHeight))
+            : -wheelDelta / 120d
+              * Math.Max(1d, systemWheelLines)
+              * DailyBriefingWheelMultiplier;
+        return desiredTravel / FluentTravelPerVelocityUnit;
     }
 
     /// <summary>
@@ -178,43 +289,36 @@ internal static class SmoothWheelScrolling
             eventArgs.Delta);
         if (!ReferenceEquals(target, viewer)) return false;
 
-        WheelAnimationState? activeState =
-            GetIsAnimationActive(viewer)
-                ? GetAnimationState(viewer)
-                : null;
-        double pendingTarget = GetTargetVerticalOffset(viewer);
-        double currentOffset = viewer.VerticalOffset;
-        if (activeState is not null)
-        {
-            double visualOffset =
-                activeState.GetCurrentVisualOffset();
-            // 目标可以连续累计，但响应时长必须按屏幕当前真实位置计算，否则每次输入都会错误地当成全新单格。
-            currentOffset = visualOffset;
-            int incomingDirection = Math.Sign(-eventArgs.Delta);
-            int activeDirection = Math.Sign(
-                pendingTarget - visualOffset);
-            if (incomingDirection != 0
-                && activeDirection != 0
-                && incomingDirection != activeDirection)
-            {
-                // 反向滚轮从屏幕当前真实位置重新规划，不能继续沿用旧目标累计。
-                Cancel(viewer);
-                // WPF 可能延后应用 ScrollTo；反向接管仅发生一次，这里同步提交可避免新动画从旧目标起步。
-                viewer.UpdateLayout();
-                currentOffset = visualOffset;
-                pendingTarget = visualOffset;
-            }
-        }
-        WheelScrollPlan plan = CreateWheelPlan(
+        WheelAnimationState state = GetOrCreateAnimationState(viewer);
+        bool hasActiveMotion = GetIsAnimationActive(viewer);
+        double currentOffset = hasActiveMotion
+            ? state.GetCurrentVisualOffset()
+            : viewer.VerticalOffset;
+        WheelInputMode mode = state.ClassifyInput(
+            eventArgs.Delta,
+            eventArgs.Timestamp);
+        double pendingTarget = hasActiveMotion
+                               && mode == WheelInputMode.Precision
+                               && state.Mode == WheelInputMode.Precision
+            ? GetTargetVerticalOffset(viewer)
+            : currentOffset;
+        double currentVelocity = hasActiveMotion
+                                 && mode == WheelInputMode.Inertial
+                                 && state.Mode == WheelInputMode.Inertial
+            ? state.Velocity
+            : 0d;
+        WheelMotionPlan plan = CreateWheelMotionPlan(
             currentOffset,
             pendingTarget,
+            currentVelocity,
             viewer.ScrollableHeight,
             viewer.ViewportHeight,
             eventArgs.Delta,
             SystemParameters.WheelScrollLines,
             viewer.CanContentScroll && !UsesPixelScrollUnit(viewer),
-            IsMotionAllowed());
-        ApplyPlan(viewer, plan);
+            IsMotionAllowed(),
+            mode);
+        ApplyWheelPlan(viewer, state, plan);
         eventArgs.Handled = true;
         return true;
     }
@@ -251,28 +355,6 @@ internal static class SmoothWheelScrolling
     }
 
     /// <summary>
-    /// 程序化定位与滚轮保持一致，直接提交目标位置。
-    /// </summary>
-    internal static void ScrollToSmoothly(
-        ScrollViewer viewer,
-        double targetOffset,
-        TimeSpan duration)
-    {
-        ArgumentNullException.ThrowIfNull(viewer);
-        double normalizedTarget = Math.Clamp(
-            NormalizeNonNegative(targetOffset),
-            0d,
-            NormalizeNonNegative(viewer.ScrollableHeight));
-        // 阅读页不再使用自定义滚动补间；调用方保留参数以兼容现有命令入口。
-        TimeSpan normalizedDuration = TimeSpan.Zero;
-        ApplyPlan(
-            viewer,
-            new WheelScrollPlan(
-                normalizedTarget,
-                normalizedDuration));
-    }
-
-    /// <summary>
     /// 暴露只读动画状态，供派生控件协作与真实 WPF 验收使用。
     /// </summary>
     internal static bool HasActiveAnimation(ScrollViewer viewer)
@@ -304,11 +386,28 @@ internal static class SmoothWheelScrolling
             : null;
     }
 
+    /// <summary>
+    /// 视口协调器每次真正完成扫描后统一回报位置，覆盖合成、逐帧、程序化定位和尺寸变化等所有入口。
+    /// </summary>
+    internal static void RecordDeferredViewportRefresh(
+        ScrollViewer viewer)
+    {
+        ArgumentNullException.ThrowIfNull(viewer);
+        WheelAnimationState? state = GetAnimationState(viewer);
+        if (state is null) return;
+
+        double refreshOffset = GetIsAnimationActive(viewer)
+                               && state.UsesCompositedTransition
+            ? state.GetCurrentVisualOffset()
+            : viewer.VerticalOffset;
+        state.RecordDeferredViewportRefresh(refreshOffset);
+    }
+
     private static void OnPreviewMouseWheel(
         object sender,
         MouseWheelEventArgs eventArgs)
     {
-        // 派生控件需要先取消自己的“回到顶部”动画，再由其重写入口调用共享计划。
+        // AnimatedScrollViewer 由重写入口调用共享处理，避免类处理器和派生控件重复消费同一事件。
         if (sender is ScrollViewer viewer
             && viewer is not AnimatedScrollViewer)
         {
@@ -328,22 +427,22 @@ internal static class SmoothWheelScrolling
         }
     }
 
-    private static void ApplyPlan(
+    private static void ApplyWheelPlan(
         ScrollViewer viewer,
-        WheelScrollPlan plan)
+        WheelAnimationState state,
+        WheelMotionPlan plan)
     {
         SetTargetVerticalOffset(viewer, plan.TargetOffset);
         if (!plan.ShouldAnimate)
         {
-            GetAnimationState(viewer)?.StopAndCommitVisualOffset();
+            state.StopAndCommitVisualOffset();
             SetIsAnimationActive(viewer, false);
             viewer.ScrollToVerticalOffset(plan.TargetOffset);
             return;
         }
 
-        WheelAnimationState state = GetOrCreateAnimationState(viewer);
         SetIsAnimationActive(viewer, true);
-        state.StartOrRetarget(plan.TargetOffset, plan.Duration);
+        state.StartOrRetarget(plan);
     }
 
     private static ScrollViewer? FindScrollTarget(
@@ -365,12 +464,42 @@ internal static class SmoothWheelScrolling
 
     private static bool CanScroll(ScrollViewer viewer, int wheelDelta)
     {
-        // 即时滚动在下一次布局前可能尚未更新 VerticalOffset，使用同步维护的目标位置判断方向。
-        double effectiveOffset = GetTargetVerticalOffset(viewer);
-        return viewer.ScrollableHeight > 0.01d
-               && (wheelDelta < 0
-                   ? effectiveOffset < viewer.ScrollableHeight - 0.01d
-                   : effectiveOffset > 0.01d);
+        // 合成滚动会预提交逻辑目标，嵌套路由必须看屏幕当前视觉位置；没有会话时只信任原生偏移，避免陈旧附加目标反向跳动。
+        WheelAnimationState? state = GetAnimationState(viewer);
+        bool hasActiveMotion = GetIsAnimationActive(viewer)
+                               && state is not null;
+        double effectiveOffset = hasActiveMotion
+            && state is not null
+                ? state.GetCurrentVisualOffset()
+                : viewer.VerticalOffset;
+        return CanRouteWheel(
+            viewer.ScrollableHeight,
+            effectiveOffset,
+            wheelDelta,
+            hasActiveMotion);
+    }
+
+    /// <summary>
+    /// 活动会话即使视觉位置仍贴着边界，也必须先接收反向输入以取消旧动量；会话结束后才恢复原生边界冒泡。
+    /// </summary>
+    internal static bool CanRouteWheel(
+        double scrollableHeight,
+        double effectiveOffset,
+        int wheelDelta,
+        bool hasActiveMotion)
+    {
+        if (wheelDelta == 0) return false;
+        if (hasActiveMotion) return true;
+
+        double maximumOffset = NormalizeNonNegative(scrollableHeight);
+        if (maximumOffset <= 0.01d) return false;
+        double offset = Math.Clamp(
+            NormalizeNonNegative(effectiveOffset),
+            0d,
+            maximumOffset);
+        return wheelDelta < 0
+            ? offset < maximumOffset - 0.01d
+            : offset > 0.01d;
     }
 
     private static DependencyObject? GetParent(DependencyObject child)
@@ -403,6 +532,17 @@ internal static class SmoothWheelScrolling
         }
         return false;
     }
+
+    /// <summary>
+    /// 合成层先把逻辑视口提交到目标；向下动画显示目标之前的来路，必须使用前缓存，向上则使用后缓存。
+    /// </summary>
+    internal static double GetDirectionalCacheLength(
+        VirtualizationCacheLength cacheLength,
+        double currentVisualOffset,
+        double targetOffset) =>
+        targetOffset >= currentVisualOffset
+            ? cacheLength.CacheBeforeViewport
+            : cacheLength.CacheAfterViewport;
 
     private static bool IsMotionAllowed()
     {
@@ -455,10 +595,12 @@ internal static class SmoothWheelScrolling
         private bool _isRunning;
         private bool _isTelemetryRunning;
         private long _lastFrameTimestamp;
-        private long _completionTimestamp;
         private double _targetOffset;
         private double _velocity;
-        private TimeSpan _responseDuration;
+        private WheelInputMode _mode;
+        private bool _hasWheelInput;
+        private int _lastWheelDelta;
+        private int _lastWheelTimestamp;
         private long _deferredViewportEvaluationBaseline;
         private double _lastDeferredViewportRefreshOffset = double.NaN;
         private UIElement? _compositedContent;
@@ -477,43 +619,47 @@ internal static class SmoothWheelScrolling
         internal bool UsesCompositedTransition =>
             _isRunning && _usesCompositedTransition;
 
-        internal void StartOrRetarget(
-            double targetOffset,
-            TimeSpan responseDuration)
+        internal WheelInputMode Mode => _mode;
+
+        internal double Velocity => _velocity;
+
+        internal WheelInputMode ClassifyInput(
+            int wheelDelta,
+            int timestamp)
         {
-            if (TryStartOrRetargetComposited(
-                    targetOffset,
-                    responseDuration))
+            TimeSpan elapsed = _hasWheelInput
+                ? TimeSpan.FromMilliseconds(
+                    unchecked((uint)(timestamp - _lastWheelTimestamp)))
+                : TimeSpan.MaxValue;
+            WheelInputMode mode = ClassifyWheelInput(
+                wheelDelta,
+                _lastWheelDelta,
+                elapsed);
+            _hasWheelInput = true;
+            _lastWheelDelta = wheelDelta;
+            _lastWheelTimestamp = timestamp;
+            return mode;
+        }
+
+        internal void StartOrRetarget(WheelMotionPlan plan)
+        {
+            if (TryStartOrRetargetComposited(plan))
             {
                 return;
             }
 
             if (_usesCompositedTransition)
             {
-                double visualOffset = StopCompositedTransition();
-                _viewer.ScrollToVerticalOffset(visualOffset);
-                // 跨出虚拟缓存后只发生一次同步交接，确保逐帧路径从当前画面继续。
-                _viewer.UpdateLayout();
-                StopTelemetry();
+                StopAndCommitVisualOffset();
+                // 跨出合成缓存后只做一次逻辑交接，后续仍由同一 Fluent 会话逐帧推进。
             }
 
             long now = Stopwatch.GetTimestamp();
-            double currentOffset = _viewer.VerticalOffset;
-            if (_isRunning
-                && (targetOffset - currentOffset) * _velocity < 0d)
-            {
-                // 反向输入立即清除旧方向动量，避免画面继续偏离用户的新目标。
-                _velocity = 0d;
-            }
-
-            _targetOffset = targetOffset;
-            _responseDuration = responseDuration;
-            _completionTimestamp = now
-                                   + (long)(responseDuration.TotalSeconds
-                                            * Stopwatch.Frequency);
+            _targetOffset = plan.TargetOffset;
+            _velocity = plan.Velocity;
+            _mode = plan.Mode;
             if (_isRunning) return;
 
-            _velocity = 0d;
             _lastFrameTimestamp = now;
             _isRunning = true;
             StartTelemetry();
@@ -525,6 +671,14 @@ internal static class SmoothWheelScrolling
             if (_usesCompositedTransition)
             {
                 double visualOffset = StopCompositedTransition();
+                _viewer.ScrollToVerticalOffset(visualOffset);
+                if (_viewer.IsLoaded)
+                {
+                    // ScrollViewer 可能延后应用命令；刷新视口前必须让逻辑偏移与刚清除的合成变换一致。
+                    _viewer.UpdateLayout();
+                }
+                // 先提交屏幕真实位置并合并待处理刷新，再结束遥测；安全位移内仍不额外扫描全文。
+                CompleteDeferredViewport(visualOffset);
                 StopTelemetry();
                 return visualOffset;
             }
@@ -567,12 +721,6 @@ internal static class SmoothWheelScrolling
             }
 
             long now = Stopwatch.GetTimestamp();
-            if (now >= _completionTimestamp)
-            {
-                Complete();
-                return;
-            }
-
             TimeSpan elapsed = Stopwatch.GetElapsedTime(
                 _lastFrameTimestamp,
                 now);
@@ -583,19 +731,17 @@ internal static class SmoothWheelScrolling
                 _targetOffset,
                 0d,
                 maximumOffset);
-            WheelAnimationFrame frame = AdvanceFrame(
+            WheelAnimationFrame frame = AdvanceCurrentFrame(
                 _viewer.VerticalOffset,
-                _targetOffset,
-                _velocity,
-                elapsed,
-                _responseDuration);
+                elapsed);
             _velocity = frame.Velocity;
             double nextOffset = Math.Clamp(
                 frame.Offset,
                 0d,
                 maximumOffset);
             _viewer.ScrollToVerticalOffset(nextOffset);
-            if (Math.Abs(nextOffset - _targetOffset) < 0.05d)
+            if (frame.IsComplete
+                || Math.Abs(nextOffset - _targetOffset) < 0.05d)
             {
                 Complete();
             }
@@ -607,6 +753,7 @@ internal static class SmoothWheelScrolling
         {
             Cancel(_viewer);
             RestoreOriginalRenderTransform();
+            _hasWheelInput = false;
         }
 
         private void Complete()
@@ -629,9 +776,7 @@ internal static class SmoothWheelScrolling
                 _isRunning = false;
                 _usesCompositedTransition = false;
                 _velocity = 0d;
-                ViewportDeferredContentControl
-                    .RefreshCompositedViewport(_viewer);
-                _lastDeferredViewportRefreshOffset = _targetOffset;
+                CompleteDeferredViewport(_targetOffset);
                 StopTelemetry();
                 SetTargetVerticalOffset(_viewer, _targetOffset);
                 SetIsAnimationActive(_viewer, false);
@@ -643,6 +788,19 @@ internal static class SmoothWheelScrolling
             _viewer.ScrollToVerticalOffset(_targetOffset);
             SetTargetVerticalOffset(_viewer, _targetOffset);
             SetIsAnimationActive(_viewer, false);
+        }
+
+        private void CompleteDeferredViewport(double visualOffset)
+        {
+            bool travelRequiresRefresh =
+                ViewportDeferredContentControl
+                    .ShouldRefreshCompositedViewport(
+                        _lastDeferredViewportRefreshOffset,
+                        visualOffset,
+                        _viewer.ViewportHeight);
+            ViewportDeferredContentControl.CompleteCompositedViewport(
+                _viewer,
+                travelRequiresRefresh);
         }
 
         private void AdvanceCompositedFrame()
@@ -659,12 +817,6 @@ internal static class SmoothWheelScrolling
             }
 
             long now = Stopwatch.GetTimestamp();
-            if (now >= _completionTimestamp)
-            {
-                Complete();
-                return;
-            }
-
             TimeSpan elapsed = Stopwatch.GetElapsedTime(
                 _lastFrameTimestamp,
                 now);
@@ -676,12 +828,9 @@ internal static class SmoothWheelScrolling
                 0d,
                 maximumOffset);
             double currentVisualOffset = GetCurrentVisualOffset();
-            WheelAnimationFrame frame = AdvanceFrame(
+            WheelAnimationFrame frame = AdvanceCurrentFrame(
                 currentVisualOffset,
-                _targetOffset,
-                _velocity,
-                elapsed,
-                _responseDuration);
+                elapsed);
             _velocity = frame.Velocity;
             double nextVisualOffset = Math.Clamp(
                 frame.Offset,
@@ -690,20 +839,43 @@ internal static class SmoothWheelScrolling
 
             // 每帧只改合成变换，不触发布局；同一状态中的速度会自然跨越连续滚轮输入。
             transform.Y = _viewer.VerticalOffset - nextVisualOffset;
-            if (Math.Abs(nextVisualOffset - _targetOffset) < 0.05d)
+            if (frame.IsComplete
+                || Math.Abs(nextVisualOffset - _targetOffset) < 0.05d)
             {
                 Complete();
             }
         }
 
+        private WheelAnimationFrame AdvanceCurrentFrame(
+            double currentOffset,
+            TimeSpan elapsed) =>
+            _mode == WheelInputMode.Precision
+                ? AdvancePrecisionFrame(
+                    currentOffset,
+                    _targetOffset,
+                    elapsed)
+                : AdvanceInertialFrame(
+                    currentOffset,
+                    _targetOffset,
+                    _velocity,
+                    elapsed);
+
+        internal void RecordDeferredViewportRefresh(double visualOffset)
+        {
+            if (!double.IsFinite(visualOffset)) return;
+            _lastDeferredViewportRefreshOffset = Math.Clamp(
+                visualOffset,
+                0d,
+                NormalizeNonNegative(_viewer.ScrollableHeight));
+        }
+
         private bool TryStartOrRetargetComposited(
-            double targetOffset,
-            TimeSpan responseDuration)
+            WheelMotionPlan plan)
         {
             double currentVisualOffset = GetCurrentVisualOffset();
             if (!TryGetCompositedTransform(
                     currentVisualOffset,
-                    targetOffset,
+                    plan.TargetOffset,
                     out TranslateTransform transform))
             {
                 return false;
@@ -719,7 +891,9 @@ internal static class SmoothWheelScrolling
                 : 0d;
             bool continuesExistingSession =
                 _isRunning && _usesCompositedTransition;
-            if (!continuesExistingSession)
+            if (!continuesExistingSession
+                && !double.IsFinite(
+                    _lastDeferredViewportRefreshOffset))
             {
                 _lastDeferredViewportRefreshOffset =
                     currentVisualOffset;
@@ -731,34 +905,23 @@ internal static class SmoothWheelScrolling
             transform.BeginAnimation(
                 TranslateTransform.YProperty,
                 null);
-            double startingTranslation = targetOffset
-                                         - currentVisualOffset;
-            transform.Y = startingTranslation;
+            transform.Y = plan.TargetOffset - currentVisualOffset;
+
             long now = Stopwatch.GetTimestamp();
-            if (continuesExistingSession
-                && (targetOffset - currentVisualOffset) * _velocity < 0d)
-            {
-                // 反向目标不能沿用旧方向速度，否则第一帧会继续背离用户输入。
-                _velocity = 0d;
-            }
-            _targetOffset = targetOffset;
-            _responseDuration = responseDuration;
-            _completionTimestamp = now
-                                   + (long)(responseDuration.TotalSeconds
-                                            * Stopwatch.Frequency);
+            _targetOffset = plan.TargetOffset;
+            _velocity = plan.Velocity;
+            _mode = plan.Mode;
             _isRunning = true;
             _usesCompositedTransition = true;
             if (!continuesExistingSession)
             {
-                _velocity = 0d;
                 _lastFrameTimestamp = now;
                 CompositionTarget.Rendering += _renderingHandler;
                 StartTelemetry();
             }
 
-            // 先一次性提交真实滚动位置，再只动画内容的渲染变换。
-            // RenderTransform 不触发布局，复杂页面不会再为每个动画帧重排视觉树。
-            _viewer.ScrollToVerticalOffset(targetOffset);
+            // 逻辑位置预提交到解析得到的落点，后续每帧只调整合成位移，不重排长篇早报。
+            _viewer.ScrollToVerticalOffset(plan.TargetOffset);
             return true;
         }
 
@@ -825,10 +988,10 @@ internal static class SmoothWheelScrolling
 
             VirtualizationCacheLength cacheLength =
                 VirtualizingPanel.GetCacheLength(itemsControl);
-            double directionalCache =
-                targetOffset >= currentVisualOffset
-                    ? cacheLength.CacheBeforeViewport
-                    : cacheLength.CacheAfterViewport;
+            double directionalCache = GetDirectionalCacheLength(
+                cacheLength,
+                currentVisualOffset,
+                targetOffset);
             double cacheCapacity =
                 VirtualizingPanel.GetCacheLengthUnit(itemsControl) switch
                 {
@@ -932,8 +1095,6 @@ internal static class SmoothWheelScrolling
                     // 长距离滚动按安全位移采样，避免 Rendering 每帧遍历整篇早报。
                     ViewportDeferredContentControl
                         .RefreshCompositedViewport(_viewer);
-                    _lastDeferredViewportRefreshOffset =
-                        currentVisualOffset;
                 }
             }
             TimeSpan renderingTime =
@@ -1003,18 +1164,27 @@ internal static class SmoothWheelScrolling
 }
 
 /// <summary>
-/// 描述单次滚轮输入的最终目标与过渡时长。
-/// </summary>
-internal readonly record struct WheelScrollPlan(
-    double TargetOffset,
-    TimeSpan Duration)
-{
-    public bool ShouldAnimate => Duration > TimeSpan.Zero;
-}
-
-/// <summary>
 /// 描述单个真实渲染帧产生的偏移与速度。
 /// </summary>
 internal readonly record struct WheelAnimationFrame(
     double Offset,
-    double Velocity);
+    double Velocity,
+    bool IsComplete = false);
+
+/// <summary>
+/// 描述当前滚轮手势采用鼠标惯性还是触控板精确跟随。
+/// </summary>
+internal enum WheelInputMode
+{
+    Inertial,
+    Precision
+}
+
+/// <summary>
+/// 描述输入合并后的运动状态；TargetOffset 同时是合成层预提交位置和最终精确落点。
+/// </summary>
+internal readonly record struct WheelMotionPlan(
+    WheelInputMode Mode,
+    double TargetOffset,
+    double Velocity,
+    bool ShouldAnimate);

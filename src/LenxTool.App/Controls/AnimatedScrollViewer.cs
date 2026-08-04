@@ -24,7 +24,7 @@ public sealed class AnimatedScrollViewer : ScrollViewer
         IsBackToTopVisiblePropertyKey.DependencyProperty;
 
     public static readonly RoutedUICommand SmoothScrollToTopCommand = new(
-        "平滑回到顶部",
+        "回到顶部",
         nameof(SmoothScrollToTopCommand),
         typeof(AnimatedScrollViewer));
 
@@ -57,7 +57,7 @@ public sealed class AnimatedScrollViewer : ScrollViewer
 
     protected override void OnPreviewMouseWheel(MouseWheelEventArgs e)
     {
-        // 每日早报也复用全局滚轮计划，确保所有页面拥有同一灵敏度与过渡。
+        // 每日早报复用全局 Fluent 运动会话，确保所有页面拥有一致的滚轮手感。
         if (SmoothWheelScrolling.TryHandleWheel(this, e)) return;
         base.OnPreviewMouseWheel(e);
     }
@@ -65,11 +65,8 @@ public sealed class AnimatedScrollViewer : ScrollViewer
     private void SmoothScrollToTop()
     {
         if (VerticalOffset <= 0) return;
-        // 回顶沿用滚轮合成路径：逻辑位置一次提交，过渡期间只变更内容渲染变换。
-        SmoothWheelScrolling.ScrollToSmoothly(
-            this,
-            targetOffset: 0d,
-            TimeSpan.FromMilliseconds(420d));
+        // 回顶属于明确定位命令，立即提交并终止残余滚轮动量，避免长文跨越大量延迟块时制造额外扫描。
+        SmoothWheelScrolling.ScrollToImmediately(this, 0d);
     }
 
     private static void OnScrollResetKeyChanged(

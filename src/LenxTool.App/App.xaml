@@ -1791,7 +1791,7 @@
 
             <DataTemplate DataType="{x:Type vm:NewsCenterViewModel}">
                 <Grid>
-                    <!-- 滚轮灵敏度与缓动由全局 ScrollViewer 类处理，此处只保留早报页的回顶能力。 -->
+                    <!-- Fluent 惯性与触控板精确跟随由全局 ScrollViewer 类处理，此处只保留早报页的立即回顶能力。 -->
                     <controls:AnimatedScrollViewer x:Name="NewsPageScrollViewer"
                                                    VerticalScrollBarVisibility="Visible"
                                                    HorizontalScrollBarVisibility="Disabled"

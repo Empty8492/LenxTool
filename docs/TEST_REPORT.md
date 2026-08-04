@@ -1,6 +1,6 @@
 # 测试报告
 
-测试日期：.NET / Worker 2026-08-03（Asia/Shanghai）
+测试日期：.NET 2026-08-04 / Worker 2026-08-03（Asia/Shanghai）
 版本：0.1.0  
 配置：Release / win-x64 / .NET SDK 10.0.302
 
@@ -10,7 +10,7 @@
 |---|---:|
 | LenxTool.Core.Tests | 177 passed |
 | LenxTool.Infrastructure.Tests | 714 passed |
-| LenxTool.App.Tests | 397 passed；1 个既有基线环境用例阻断 |
+| LenxTool.App.Tests（排除 WpfRuntime） | 410 passed |
 | Cloudflare Worker Vitest | 78 passed |
 | Worker TypeScript strict typecheck | passed |
 | .NET build warnings | 0 |
@@ -19,7 +19,7 @@
 
 Worker 发现用例曾在 60 次顺序请求跨越 UTC 分钟时把计数分到两个固定窗口，导致门禁把正确的 `200` 误判为产品限流回归；测试现只冻结 `Date`，精确用例 1/1、发现整文件 8/8 与 Worker 全量 78/78 均通过，不改变生产限流实现。
 
-当前 Release 结果为 Core 177/177、Infrastructure 714/714、App/WPF 397/397（使用 `FullyQualifiedName!~SelectionControlsWpfRuntimeTests` 排除下述既有环境缺陷），共 1288 个未阻断 .NET 用例通过；Worker workerd/D1 Vitest 78/78、Worker strict typecheck 与全解决方案 build 0 警告/0 错误。本轮未修改 NuGet/npm 依赖；NuGet 在线漏洞扫描与 `npm audit --audit-level=high` 均为 0 漏洞。凭据模式扫描只命中既有 `HistoryViewModelTests`、`PasswordBoxAssistantTests`、`SettingsViewModelTests` 及新增 Readwise API/导出器测试中用于验证脱敏/密钥输入的固定哨兵，没有生产凭据命中。
+当前本轮 Release 结果为 Core 177/177、Infrastructure 714/714、App 非 WPF-runtime 410/410，共 1301 个未阻断 .NET 用例通过；全解决方案 build 为 0 警告/0 错误。滚动专项真实 WPF 用例可完成 App 初始化、离屏窗口创建和初始布局，但共享宿主在首次 `PumpDispatcher` 阶段超过 10 秒，测试动作尚未进入滚轮输入，因此该项记录为宿主环境阻断而不是产品断言失败。最新 Release 程序已在真实桌面打开“每日早报”实测单格、连续两格、动量中的反向一格和回顶；画面连续衰减、连续输入会累加速度，反向输入会立即接管且未出现逻辑位置瞬跳，点击回顶后 60 ms 取样已准确位于顶部。Worker 本轮未修改也未重跑，沿用 2026-08-03 的 workerd/D1 Vitest 78/78 与 strict typecheck 证据。本轮未修改 NuGet/npm 依赖。
 
 P2-14 新增固定官方目标的 Readwise Reader API 客户端、五视图导出器、无副作用健康探针、通用设置卡固定模式、阅读器行内/详情显式入口、精确摘要预览和生产 DI。API 假 HTTP 覆盖 `https://readwise.io/api/v2/auth/` 的 `Authorization: Token` 与 204、`POST /api/v3/save/` 的 201 新建/200 已有、合法 ID/`read.readwise.io` 地址、401/403、400/422、408/429/5xx、`Retry-After`、POST 未知写结果、禁代理/重定向/Cookie/解压、全部公网 DNS 钉住、单并发与 1.2 秒主动节流、超限/畸形 JSON、响应头后正文卡死、调用方取消和响应/token 脱敏。长服务端暂停不会在适配器内睡眠，而是立即把剩余 RetryAfter 交给持久队列重排，避免占住单槽全局导出 worker。
 
@@ -63,7 +63,11 @@ DISC-06 最终检查点新增 2 项 Infrastructure、1 项 App 和 1 项 Worker 
 
 DISC-05 新增 7 项发布 ViewModel 场景，并把既有 2 项结构场景和 1 项真实 WPF 场景扩展到确认发布。覆盖未勾选不能写入、规范化 URL 与四类策略可见、ALL 目录重复项只查看、快速双击只到达管理员服务一次、成功写入只调用一次并刷新到新版本、双管理员版本冲突刷新且不自动重放、网络中断锁住后续写入、服务端 403 保持权威，以及成功后候选同步变为现有项。真实 WPF 运行时继续覆盖原生 Button/CheckBox/ComboBox Automation Peer、Tab 焦点、900×620 窄窗、等效 200% 缩放和深浅主题。既有 Infrastructure 测试同时证明目录写入携带 `If-Match` 和幂等键、401 刷新只重放同一幂等键、普通用户直调得到 403、冲突只发送一次。
 
-全局滚轮体验现有 12 项纯逻辑/帧统计测试、1 项 XAML 结构测试和 9 项真实 WPF 运行时测试。所有显式或模板内部的原生 `ScrollViewer` 统一采用每日早报既有的 1.45 倍灵敏度与 160～220 ms 平滑过渡。普通页面和 420 ms 回顶均先提交一次逻辑滚动，再用内容 `RenderTransform` 在合成阶段补间；包含 130 个按钮的重页面回归把单格滚轮的 `ScrollChanged` 逻辑更新从修复前 12 次降为 1 次，回顶同样只提交 1 次。ListBox、ListView、PagedListBox 与普通/增强下拉列表使用 Recycling 像素虚拟化，并以前后各一屏缓存支持模板内部合成式滚动；500 项实窗列表回归确认只提交 1 次逻辑偏移且已实现容器保持有界，连续输入超过缓存覆盖距离时会退回安全的逐帧偏移。每日早报 180 段长文只实现视口前后一屏，初始文本视觉由修复前 182 个降至不超过 80 个；首尾滚动与合成式回顶保持滚动范围稳定，离开缓冲区的图片会取消对应下载和解码。热点 13 个平台组只实现当前视口和半屏缓冲，首尾滚动都保持 2～8 个重卡片。每次实窗动画记录平均 FPS、P95/最差帧间隔和长帧数；纯逻辑回归分别校准稳定与掉帧的 60Hz/120Hz 输入，未取得显示器刷新率时不会误报“达到帧预算”。连续滚轮、反向输入、外部渲染变换接管、程序化定位、鼠标/键盘/触控接管、回顶交接、卸载清理和“减少动画”继续覆盖。本轮分组 .NET 856/856 与 Release build 0 警告/0 错误通过；一次组合进程运行出现定时取消超时与全局 SQLite 句柄污染，失败项隔离复跑 2/2、Infrastructure 独立全量 390/390 均通过。Worker 和依赖未修改。
+全局滚轮已改为 Fluent 双模式运动模型。标准鼠标参考 `TwilightLemon/FluentScrollViewer` 的 2.0 速度倍率、0.92 摩擦和 144 Hz 时间基准，在同一会话中累加同向速度；反向输入会先丢弃旧方向动量，再从当前视觉位置立即反转。高分辨率触控板按 0.5 插值系数连续追随累计目标。LenxTool 另行实现解析积分，使 60/144 Hz 的最终落点一致，并保留 Windows 滚轮行数、整页滚动、嵌套边界冒泡和系统“减少动画”语义。活动会话在首帧前仍贴边时会优先接收反向输入，防止旧动量逃逸到外层滚动区。
+
+热点和每日早报等物理滚动页面仍只预提交一次解析落点，渲染帧仅修改内容 `RenderTransform`；虚拟列表预提交目标视口后按来路选择缓存（下滚使用目标前缓存、上滚使用目标后缓存），超过缓存才无跳变切换到逐帧逻辑路径。每日早报的延迟正文协调器不再每格完成都扫描 180 个块，而是按四分之一屏且最高 120 px 的跨会话累计位移统一刷新；结构或尺寸变化仍会强制刷新。回到顶部属于明确定位命令，现为立即提交并取消残余滚轮动量。
+
+滚动模型专项 32/32 通过，覆盖参考帧摩擦、跨刷新率积分、触控板插值、同向累速、不等量反转、上下边界活动会话接管、系统行数/整页/逻辑单位、缓存来路方向和正文刷新阈值；既有 3 项帧统计测试包含在 App 非 WPF-runtime 410/410 中。7 项真实 WPF 场景已同步为 Fluent 语义并移除固定系统行数/动画环境假设，但本机共享 WPF 宿主在首次 dispatcher pump 阶段超时，未取得自动化滚轮断言结果；真实 Release 软件桌面体验已覆盖单格、连续和反向滚动。全解决方案非 WPF-runtime 1301/1301 与 Release build 0 警告/0 错误通过，Worker 和依赖未修改。
 
 DISC-04 新增管理员订阅管理内的只读发现基础、请求状态机和专用本地预览投影。8 项 ViewModel 场景覆盖识别/防抖/提交/取消、旧 provider 忽略取消、手动取消及时释放命令、非法输入立即终止、部分成功零候选、限流、角色降权和预览故障隔离；结构与真实 WPF 场景冻结管理页签、Automation 名称、实时状态、窄窗滚动、原生 Automation Peer、键盘焦点、900×620、等效 200% 缩放和深浅主题。真实 SQLite 场景以单次窗口查询验证多 Feed 稳定排序、隐藏过滤和每 Feed 4 条上限；查询只读取标题和时间，不物化摘要、正文或附件。
 

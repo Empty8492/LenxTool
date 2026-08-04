@@ -152,7 +152,7 @@ public sealed class ViewportDeferredContentControl : ContentControl
             _measuredWidth = eventArgs.NewSize.Width;
             _measuredHeight = eventArgs.NewSize.Height;
         }
-        _coordinator?.QueueUpdate();
+        _coordinator?.QueueUpdate(force: true);
     }
 
     private void UpdateViewportRealization(ScrollViewer viewer)
@@ -268,15 +268,30 @@ public sealed class ViewportDeferredContentControl : ContentControl
     /// <summary>
     /// 合成滚动不产生逐帧 ScrollChanged，由滚动会话按安全位移统一刷新延迟内容。
     /// </summary>
-    internal static void RefreshCompositedViewport(
+    internal static bool RefreshCompositedViewport(
         ScrollViewer viewer)
     {
         if (Coordinators.TryGetValue(
                 viewer,
                 out ViewportCoordinator? coordinator))
         {
-            coordinator.UpdateNow();
+            return coordinator.UpdateNow();
         }
+        return false;
+    }
+
+    /// <summary>
+    /// 合成会话结束时仅在累计位移越过安全阈值或期间发生结构变化时扫描，避免每格滚轮同步遍历整篇正文。
+    /// </summary>
+    internal static bool CompleteCompositedViewport(
+        ScrollViewer viewer,
+        bool travelRequiresRefresh)
+    {
+        return Coordinators.TryGetValue(
+                   viewer,
+                   out ViewportCoordinator? coordinator)
+               && coordinator.CompleteCompositedUpdate(
+                   travelRequiresRefresh);
     }
 
     internal static long GetDeferredViewportEvaluationCount(
@@ -316,6 +331,7 @@ public sealed class ViewportDeferredContentControl : ContentControl
         private readonly HashSet<ViewportDeferredContentControl> _controls =
             [];
         private bool _updateQueued;
+        private bool _forceUpdatePending;
         private bool _disposed;
 
         internal ViewportCoordinator(ScrollViewer viewer)
@@ -332,7 +348,7 @@ public sealed class ViewportDeferredContentControl : ContentControl
         {
             if (_disposed) return;
             _controls.Add(control);
-            QueueUpdate();
+            QueueUpdate(force: true);
         }
 
         internal bool Unregister(
@@ -342,10 +358,14 @@ public sealed class ViewportDeferredContentControl : ContentControl
             return _controls.Count == 0;
         }
 
-        internal void QueueUpdate()
+        internal void QueueUpdate(bool force = false)
         {
-            if (_disposed
-                || SmoothWheelScrolling
+            if (_disposed)
+            {
+                return;
+            }
+            _forceUpdatePending |= force;
+            if (SmoothWheelScrolling
                     .HasActiveCompositedTransition(Viewer)
                 || _updateQueued)
             {
@@ -361,18 +381,31 @@ public sealed class ViewportDeferredContentControl : ContentControl
                     if (SmoothWheelScrolling
                         .HasActiveCompositedTransition(Viewer))
                     {
-                        // 目标位置已经预提交，但屏幕仍位于缓冲区中的视觉位置；完成时会统一刷新一次。
+                        // 目标位置已预提交但屏幕仍位于视觉位置；结构变化标记保留到合成会话退出时再处理。
                         return;
                     }
                     UpdateNow();
                 }));
         }
 
-        internal void UpdateNow()
+        internal bool CompleteCompositedUpdate(
+            bool travelRequiresRefresh)
+        {
+            // 合成开始前排入的普通 Loaded 回调可能尚未执行；即使本次无需刷新，也要令其到达时直接退出。
+            _updateQueued = false;
+            if (!_forceUpdatePending && !travelRequiresRefresh)
+            {
+                return false;
+            }
+            return UpdateNow();
+        }
+
+        internal bool UpdateNow()
         {
             // 同步刷新同时合并尚未执行的 Loaded 回调，防止动画收尾后迟到地再扫描整篇正文。
             _updateQueued = false;
-            if (_disposed || !Viewer.IsLoaded) return;
+            if (_disposed || !Viewer.IsLoaded) return false;
+            _forceUpdatePending = false;
             int evaluationCount = 0;
             foreach (ViewportDeferredContentControl control
                      in _controls)
@@ -380,7 +413,7 @@ public sealed class ViewportDeferredContentControl : ContentControl
                 control.UpdateViewportRealization(Viewer);
                 evaluationCount++;
             }
-            if (evaluationCount == 0) return;
+            if (evaluationCount == 0) return false;
 
             // 所有同步与排队刷新最终都经过此入口，统一计数才能真实覆盖滚动会话的工作量。
             long currentCount = GetDeferredViewportEvaluationCount(Viewer);
@@ -390,6 +423,8 @@ public sealed class ViewportDeferredContentControl : ContentControl
             Viewer.SetValue(
                 DeferredViewportEvaluationCountProperty,
                 nextCount);
+            SmoothWheelScrolling.RecordDeferredViewportRefresh(Viewer);
+            return true;
         }
 
         public void Dispose()
@@ -399,6 +434,7 @@ public sealed class ViewportDeferredContentControl : ContentControl
             Viewer.ScrollChanged -= OnViewportChanged;
             Viewer.SizeChanged -= OnViewportSizeChanged;
             _controls.Clear();
+            _forceUpdatePending = false;
         }
 
         private void OnViewportChanged(
@@ -409,6 +445,6 @@ public sealed class ViewportDeferredContentControl : ContentControl
         private void OnViewportSizeChanged(
             object sender,
             SizeChangedEventArgs eventArgs) =>
-            QueueUpdate();
+            QueueUpdate(force: true);
     }
 }
