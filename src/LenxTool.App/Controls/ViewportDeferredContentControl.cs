@@ -11,9 +11,18 @@ namespace LenxTool.App.Controls;
 /// </summary>
 public sealed class ViewportDeferredContentControl : ContentControl
 {
+    private const double MaximumViewportRefreshTravel = 120d;
     private static readonly ConditionalWeakTable<
         ScrollViewer,
         ViewportCoordinator> Coordinators = new();
+
+    private static readonly DependencyProperty
+        DeferredViewportEvaluationCountProperty =
+            DependencyProperty.RegisterAttached(
+                "DeferredViewportEvaluationCount",
+                typeof(long),
+                typeof(ViewportDeferredContentControl),
+                new PropertyMetadata(0L));
 
     private ViewportCoordinator? _coordinator;
     private double _measuredWidth;
@@ -257,7 +266,7 @@ public sealed class ViewportDeferredContentControl : ContentControl
     }
 
     /// <summary>
-    /// 合成滚动不产生逐帧 ScrollChanged，由滚动区唯一的渲染回调统一刷新延迟内容。
+    /// 合成滚动不产生逐帧 ScrollChanged，由滚动会话按安全位移统一刷新延迟内容。
     /// </summary>
     internal static void RefreshCompositedViewport(
         ScrollViewer viewer)
@@ -268,6 +277,38 @@ public sealed class ViewportDeferredContentControl : ContentControl
         {
             coordinator.UpdateNow();
         }
+    }
+
+    internal static long GetDeferredViewportEvaluationCount(
+        ScrollViewer viewer)
+    {
+        ArgumentNullException.ThrowIfNull(viewer);
+        return (long)viewer.GetValue(
+            DeferredViewportEvaluationCountProperty);
+    }
+
+    /// <summary>
+    /// 当前正文与热点卡片至少预载半屏，只在视觉位置走出四分之一屏后重新评估视口。
+    /// </summary>
+    internal static bool ShouldRefreshCompositedViewport(
+        double lastRefreshOffset,
+        double currentVisualOffset,
+        double viewportHeight)
+    {
+        if (!double.IsFinite(lastRefreshOffset)
+            || !double.IsFinite(currentVisualOffset))
+        {
+            return true;
+        }
+
+        double normalizedViewport = double.IsFinite(viewportHeight)
+            ? Math.Max(0d, viewportHeight)
+            : 0d;
+        double refreshTravel = Math.Min(
+            MaximumViewportRefreshTravel,
+            Math.Max(1d, normalizedViewport * 0.25d));
+        return Math.Abs(currentVisualOffset - lastRefreshOffset)
+               >= refreshTravel;
     }
 
     private sealed class ViewportCoordinator : IDisposable
@@ -303,25 +344,52 @@ public sealed class ViewportDeferredContentControl : ContentControl
 
         internal void QueueUpdate()
         {
-            if (_disposed || _updateQueued) return;
+            if (_disposed
+                || SmoothWheelScrolling
+                    .HasActiveCompositedTransition(Viewer)
+                || _updateQueued)
+            {
+                return;
+            }
             _updateQueued = true;
             Viewer.Dispatcher.BeginInvoke(
                 DispatcherPriority.Loaded,
                 new Action(() =>
                 {
+                    if (!_updateQueued) return;
                     _updateQueued = false;
+                    if (SmoothWheelScrolling
+                        .HasActiveCompositedTransition(Viewer))
+                    {
+                        // 目标位置已经预提交，但屏幕仍位于缓冲区中的视觉位置；完成时会统一刷新一次。
+                        return;
+                    }
                     UpdateNow();
                 }));
         }
 
         internal void UpdateNow()
         {
+            // 同步刷新同时合并尚未执行的 Loaded 回调，防止动画收尾后迟到地再扫描整篇正文。
+            _updateQueued = false;
             if (_disposed || !Viewer.IsLoaded) return;
+            int evaluationCount = 0;
             foreach (ViewportDeferredContentControl control
                      in _controls)
             {
                 control.UpdateViewportRealization(Viewer);
+                evaluationCount++;
             }
+            if (evaluationCount == 0) return;
+
+            // 所有同步与排队刷新最终都经过此入口，统一计数才能真实覆盖滚动会话的工作量。
+            long currentCount = GetDeferredViewportEvaluationCount(Viewer);
+            long nextCount = currentCount > long.MaxValue - evaluationCount
+                ? long.MaxValue
+                : currentCount + evaluationCount;
+            Viewer.SetValue(
+                DeferredViewportEvaluationCountProperty,
+                nextCount);
         }
 
         public void Dispose()

@@ -23,7 +23,9 @@ public sealed class ScrollFrameTelemetryTests
         }
 
         ScrollFrameTelemetrySnapshot snapshot =
-            tracker.Complete(refreshRate);
+            tracker.Complete(
+                refreshRate,
+                deferredViewportEvaluationCount: 42);
 
         Assert.InRange(
             snapshot.AverageFramesPerSecond,
@@ -32,6 +34,7 @@ public sealed class ScrollFrameTelemetryTests
         Assert.Equal(0, snapshot.LongFrameCount);
         Assert.True(snapshot.MeetsFrameBudget);
         Assert.Equal(refreshRate, snapshot.TargetRefreshRate);
+        Assert.Equal(42, snapshot.DeferredViewportEvaluationCount);
     }
 
     [Theory]

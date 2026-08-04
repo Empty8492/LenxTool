@@ -4,7 +4,7 @@ using System.Windows.Controls;
 namespace LenxTool.App.Controls;
 
 /// <summary>
-/// 汇总一次真实滚动动画会话的显示帧节奏。
+/// 汇总一次真实滚动动画会话的显示帧节奏与延迟视口评估量。
 /// </summary>
 internal sealed record ScrollFrameTelemetrySnapshot(
     int FrameCount,
@@ -13,6 +13,7 @@ internal sealed record ScrollFrameTelemetrySnapshot(
     TimeSpan P95FrameInterval,
     TimeSpan WorstFrameInterval,
     int LongFrameCount,
+    int DeferredViewportEvaluationCount,
     int TargetRefreshRate,
     bool HasExplicitFrameBudget,
     bool MeetsFrameBudget);
@@ -52,8 +53,12 @@ internal sealed class ScrollFrameCadenceTracker
     }
 
     internal ScrollFrameTelemetrySnapshot Complete(
-        int? targetRefreshRate = null)
+        int? targetRefreshRate = null,
+        int deferredViewportEvaluationCount = 0)
     {
+        int viewportEvaluationCount = Math.Max(
+            0,
+            deferredViewportEvaluationCount);
         if (_intervalCount == 0)
         {
             int emptyTarget = targetRefreshRate.GetValueOrDefault(60);
@@ -64,6 +69,8 @@ internal sealed class ScrollFrameCadenceTracker
                 P95FrameInterval: TimeSpan.Zero,
                 WorstFrameInterval: TimeSpan.Zero,
                 LongFrameCount: 0,
+                DeferredViewportEvaluationCount:
+                    viewportEvaluationCount,
                 TargetRefreshRate: emptyTarget,
                 HasExplicitFrameBudget: targetRefreshRate.HasValue,
                 MeetsFrameBudget: false);
@@ -112,6 +119,8 @@ internal sealed class ScrollFrameCadenceTracker
             WorstFrameInterval:
                 TimeSpan.FromTicks(sortedIntervals[^1]),
             LongFrameCount: longFrames,
+            DeferredViewportEvaluationCount:
+                viewportEvaluationCount,
             TargetRefreshRate: target,
             HasExplicitFrameBudget: targetRefreshRate.HasValue,
             MeetsFrameBudget: meetsBudget);

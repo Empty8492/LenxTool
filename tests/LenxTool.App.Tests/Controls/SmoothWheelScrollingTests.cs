@@ -3,12 +3,12 @@ using LenxTool.App.Controls;
 namespace LenxTool.App.Tests.Controls;
 
 /// <summary>
-/// 冻结全局滚轮与每日早报一致的灵敏度，以及平滑过渡的降级边界。
+/// 冻结全局滚轮与每日早报一致的灵敏度，以及即时提交边界。
 /// </summary>
 public sealed class SmoothWheelScrollingTests
 {
     [Fact]
-    public void PhysicalWheelStepMatchesDailyBriefingAndUsesModernTransition()
+    public void PhysicalWheelStepMatchesDailyBriefingAndCommitsWithoutTransition()
     {
         WheelScrollPlan plan = SmoothWheelScrolling.CreateWheelPlan(
             currentOffset: 100d,
@@ -21,8 +21,8 @@ public sealed class SmoothWheelScrollingTests
             motionAllowed: true);
 
         Assert.Equal(169.6d, plan.TargetOffset, precision: 3);
-        Assert.True(plan.ShouldAnimate);
-        Assert.InRange(plan.Duration.TotalMilliseconds, 160d, 220d);
+        Assert.False(plan.ShouldAnimate);
+        Assert.Equal(TimeSpan.Zero, plan.Duration);
     }
 
     [Fact]
@@ -39,7 +39,7 @@ public sealed class SmoothWheelScrollingTests
             motionAllowed: true);
 
         Assert.Equal(210d, plan.TargetOffset);
-        Assert.True(plan.ShouldAnimate);
+        Assert.False(plan.ShouldAnimate);
     }
 
     [Fact]
@@ -127,6 +127,62 @@ public sealed class SmoothWheelScrollingTests
             Math.Abs(sixtyHertz.Velocity - oneHundredTwentyHertz.Velocity),
             0d,
             5d);
+    }
+
+    [Theory]
+    [InlineData(0d, 119.99d, 520d, false)]
+    [InlineData(0d, 120d, 520d, true)]
+    [InlineData(0d, 49.99d, 200d, false)]
+    [InlineData(0d, 50d, 200d, true)]
+    [InlineData(200d, 150.01d, 200d, false)]
+    [InlineData(200d, 150d, 200d, true)]
+    public void CompositedViewportRefreshUsesQuarterViewportCappedAt120Pixels(
+        double lastRefreshOffset,
+        double currentVisualOffset,
+        double viewportHeight,
+        bool expected)
+    {
+        bool actual = ViewportDeferredContentControl
+            .ShouldRefreshCompositedViewport(
+                lastRefreshOffset,
+                currentVisualOffset,
+                viewportHeight);
+
+        Assert.Equal(expected, actual);
+    }
+
+    [Fact]
+    public void InvalidCompositedOffsetsForceAViewportRefresh()
+    {
+        Assert.True(ViewportDeferredContentControl
+            .ShouldRefreshCompositedViewport(
+                double.NaN,
+                currentVisualOffset: 20d,
+                viewportHeight: 520d));
+        Assert.True(ViewportDeferredContentControl
+            .ShouldRefreshCompositedViewport(
+                lastRefreshOffset: 0d,
+                double.PositiveInfinity,
+                viewportHeight: 520d));
+    }
+
+    [Theory]
+    [InlineData(0d)]
+    [InlineData(double.NaN)]
+    [InlineData(double.PositiveInfinity)]
+    public void EmptyOrInvalidViewportUsesOnePixelRefreshFloor(
+        double viewportHeight)
+    {
+        Assert.False(ViewportDeferredContentControl
+            .ShouldRefreshCompositedViewport(
+                lastRefreshOffset: 0d,
+                currentVisualOffset: 0.99d,
+                viewportHeight));
+        Assert.True(ViewportDeferredContentControl
+            .ShouldRefreshCompositedViewport(
+                lastRefreshOffset: 0d,
+                currentVisualOffset: 1d,
+                viewportHeight));
     }
 
     [Fact]
