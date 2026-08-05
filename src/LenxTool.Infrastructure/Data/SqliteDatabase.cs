@@ -10,7 +10,7 @@ public sealed partial class SqliteDatabase(
     AppPaths paths,
     ILogger<SqliteDatabase> logger) : IDisposable
 {
-    private const int CurrentSchemaVersion = 22;
+    private const int CurrentSchemaVersion = 23;
     private readonly SemaphoreSlim _initializationGate = new(1, 1);
     private bool _initialized;
     private bool _disposed;
@@ -440,6 +440,24 @@ public sealed partial class SqliteDatabase(
                 command.Parameters.AddWithValue(
                     "$checksum",
                     "lenx-schema-v22-local-scheduled-tasks");
+                await command.ExecuteNonQueryAsync(cancellationToken)
+                    .ConfigureAwait(false);
+                version = 22;
+            }
+
+            if (version < 23)
+            {
+                command.CommandText = MigrationTwentyThreeSql;
+                command.Parameters.Clear();
+                await command.ExecuteNonQueryAsync(cancellationToken)
+                    .ConfigureAwait(false);
+                command.CommandText = "INSERT INTO schema_versions(version, applied_at, checksum) VALUES (23, $appliedAt, $checksum);";
+                command.Parameters.AddWithValue(
+                    "$appliedAt",
+                    DateTimeOffset.UtcNow.ToString("O"));
+                command.Parameters.AddWithValue(
+                    "$checksum",
+                    "lenx-schema-v23-local-schedule-runs");
                 await command.ExecuteNonQueryAsync(cancellationToken)
                     .ConfigureAwait(false);
             }
@@ -1366,6 +1384,72 @@ public sealed partial class SqliteDatabase(
         CREATE INDEX ix_local_scheduled_tasks_due
             ON local_scheduled_tasks(next_run_at, id)
             WHERE is_enabled = 1;
+        """;
+
+    private const string MigrationTwentyThreeSql = """
+        -- 计划定义只表达未来游标；每个实际执行窗口单独持久化，
+        -- 以 (schedule_id, scheduled_for) 唯一标识避免重复领取。
+        CREATE TABLE local_schedule_runs(
+            schedule_id TEXT NOT NULL
+                CHECK(length(schedule_id) = 36
+                    AND schedule_id = lower(schedule_id)),
+            scheduled_for TEXT NOT NULL
+                CHECK(length(scheduled_for) = 33
+                    AND substr(scheduled_for, -6) = '+00:00'),
+            status TEXT NOT NULL
+                CHECK(status IN (
+                    'PENDING', 'RUNNING', 'COMPLETED', 'CANCELLED')),
+            attempt_count INTEGER NOT NULL
+                CHECK(typeof(attempt_count) = 'integer'
+                    AND attempt_count >= 1),
+            lease_token TEXT
+                CHECK(lease_token IS NULL OR (
+                    length(lease_token) = 32
+                    AND lease_token = lower(lease_token))),
+            lease_expires_at TEXT
+                CHECK(lease_expires_at IS NULL OR (
+                    length(lease_expires_at) = 33
+                    AND substr(lease_expires_at, -6) = '+00:00')),
+            created_at TEXT NOT NULL
+                CHECK(length(created_at) = 33
+                    AND substr(created_at, -6) = '+00:00'),
+            updated_at TEXT NOT NULL
+                CHECK(length(updated_at) = 33
+                    AND substr(updated_at, -6) = '+00:00'),
+            completed_at TEXT
+                CHECK(completed_at IS NULL OR (
+                    length(completed_at) = 33
+                    AND substr(completed_at, -6) = '+00:00')),
+            PRIMARY KEY(schedule_id, scheduled_for),
+            CHECK(created_at <= updated_at),
+            CHECK(completed_at IS NULL OR completed_at >= created_at),
+            CHECK(
+                (status = 'PENDING'
+                    AND lease_token IS NULL
+                    AND lease_expires_at IS NULL
+                    AND completed_at IS NULL)
+                OR
+                (status = 'RUNNING'
+                    AND lease_token IS NOT NULL
+                    AND lease_expires_at IS NOT NULL
+                    AND lease_expires_at > updated_at
+                    AND completed_at IS NULL)
+                OR
+                (status IN ('COMPLETED', 'CANCELLED')
+                    AND lease_token IS NULL
+                    AND lease_expires_at IS NULL
+                    AND completed_at IS NOT NULL
+                    AND completed_at = updated_at))
+        ) WITHOUT ROWID;
+
+        CREATE INDEX ix_local_schedule_runs_claim
+            ON local_schedule_runs(
+                status, lease_expires_at, updated_at,
+                scheduled_for, schedule_id)
+            WHERE status IN ('PENDING', 'RUNNING');
+
+        CREATE INDEX ix_local_schedule_runs_history
+            ON local_schedule_runs(schedule_id, scheduled_for DESC);
         """;
 
 }

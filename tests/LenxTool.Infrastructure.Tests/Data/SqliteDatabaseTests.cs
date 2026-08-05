@@ -52,7 +52,8 @@ public sealed class SqliteDatabaseTests : IDisposable
             "feed_automation_rule_state", "feed_automation_rules",
             "feed_media_deliveries", "app_notifications",
             "feed_smart_view_state", "feed_smart_views",
-            "entry_export_tasks", "local_scheduled_tasks"
+            "entry_export_tasks", "local_scheduled_tasks",
+            "local_schedule_runs"
         ];
         Assert.All(required, table => Assert.Contains(table, names));
 
@@ -90,6 +91,8 @@ public sealed class SqliteDatabaseTests : IDisposable
         Assert.Contains("ix_entry_export_tasks_due", indexes);
         Assert.Contains("ix_entry_export_tasks_history", indexes);
         Assert.Contains("ix_local_scheduled_tasks_due", indexes);
+        Assert.Contains("ix_local_schedule_runs_claim", indexes);
+        Assert.Contains("ix_local_schedule_runs_history", indexes);
 
         await using SqliteCommand catalogStateCommand = connection.CreateCommand();
         catalogStateCommand.CommandText =
@@ -108,7 +111,7 @@ public sealed class SqliteDatabaseTests : IDisposable
 
         await using SqliteCommand versionCommand = connection.CreateCommand();
         versionCommand.CommandText = "SELECT COUNT(*) FROM schema_versions";
-        Assert.Equal(22L, (long)(await versionCommand.ExecuteScalarAsync(
+        Assert.Equal(23L, (long)(await versionCommand.ExecuteScalarAsync(
             CancellationToken.None))!);
     }
 
@@ -134,8 +137,68 @@ public sealed class SqliteDatabaseTests : IDisposable
         await using SqliteConnection connection = await upgraded.OpenConnectionAsync(CancellationToken.None);
         await using SqliteCommand version = connection.CreateCommand();
         version.CommandText = "SELECT MAX(version) FROM schema_versions;";
-        Assert.Equal(22L, (long)(await version.ExecuteScalarAsync(CancellationToken.None))!);
+        Assert.Equal(23L, (long)(await version.ExecuteScalarAsync(CancellationToken.None))!);
         Assert.Single(Directory.GetFiles(CreatePaths().BackupDirectory, "lenx-pre-migration-*.db"));
+    }
+
+    [Fact]
+    public async Task SchemaVersionTwentyTwoUpgradeAddsRunWindowsAndPreservesSchedule()
+    {
+        LocalScheduledTask expected;
+        using (SqliteDatabase versionTwentyTwo = CreateDatabase())
+        {
+            await versionTwentyTwo.InitializeAsync(CancellationToken.None);
+            expected = await new LocalScheduledTaskRepository(versionTwentyTwo)
+                .SaveAsync(
+                    "10000000-0000-4000-8000-000000000023",
+                    new LocalScheduleDefinition(
+                        LocalScheduleFrequency.Daily,
+                        "UTC",
+                        new TimeOnly(8, 0)),
+                    LocalScheduleMissedRunPolicy.RunOnce,
+                    isEnabled: true,
+                    new DateTimeOffset(
+                        2026,
+                        8,
+                        5,
+                        7,
+                        0,
+                        0,
+                        TimeSpan.Zero),
+                    CancellationToken.None);
+            await using SqliteConnection connection =
+                await versionTwentyTwo.OpenConnectionAsync(
+                    CancellationToken.None);
+            await using SqliteCommand command = connection.CreateCommand();
+            command.CommandText = """
+                DROP TABLE local_schedule_runs;
+                DELETE FROM schema_versions WHERE version=23;
+                """;
+            await command.ExecuteNonQueryAsync(CancellationToken.None);
+        }
+
+        using SqliteDatabase upgraded = CreateDatabase();
+        await upgraded.InitializeAsync(CancellationToken.None);
+        Assert.Equal(
+            expected,
+            await new LocalScheduledTaskRepository(upgraded).GetAsync(
+                expected.Id,
+                CancellationToken.None));
+        await using SqliteConnection verification =
+            await upgraded.OpenConnectionAsync(CancellationToken.None);
+        await using SqliteCommand check = verification.CreateCommand();
+        check.CommandText = """
+            SELECT COUNT(*)
+            FROM sqlite_master
+            WHERE type='table' AND name='local_schedule_runs';
+            """;
+        Assert.Equal(
+            1L,
+            (long)(await check.ExecuteScalarAsync(CancellationToken.None))!);
+        check.CommandText = "SELECT MAX(version) FROM schema_versions;";
+        Assert.Equal(
+            23L,
+            (long)(await check.ExecuteScalarAsync(CancellationToken.None))!);
     }
 
     [Fact]
@@ -174,13 +237,14 @@ public sealed class SqliteDatabaseTests : IDisposable
                 DROP TABLE feed_smart_views;
                 DROP TABLE feed_smart_view_state;
                 DROP TABLE entry_export_tasks;
+                DROP TABLE local_schedule_runs;
                 DROP TABLE local_scheduled_tasks;
                 DROP INDEX ix_user_entry_states_profile_hidden;
                 ALTER TABLE user_entry_states DROP COLUMN is_hidden;
                 ALTER TABLE feed_catalog DROP COLUMN view_kind_explicit;
                 ALTER TABLE feed_catalog DROP COLUMN full_text_policy;
                 ALTER TABLE feed_entries DROP COLUMN has_full_content;
-                DELETE FROM schema_versions WHERE version IN (8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22);
+                DELETE FROM schema_versions WHERE version IN (8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23);
                 INSERT INTO feed_catalog(
                     id, original_url, normalized_url, display_name, view_kind,
                     refresh_interval_minutes, sort_order, is_enabled, version, created_at, updated_at)
@@ -237,7 +301,7 @@ public sealed class SqliteDatabaseTests : IDisposable
             """;
         Assert.Equal(0L, (long)(await check.ExecuteScalarAsync(CancellationToken.None))!);
         check.CommandText = "SELECT MAX(version) FROM schema_versions;";
-        Assert.Equal(22L, (long)(await check.ExecuteScalarAsync(CancellationToken.None))!);
+        Assert.Equal(23L, (long)(await check.ExecuteScalarAsync(CancellationToken.None))!);
     }
 
     [Fact]
@@ -331,13 +395,14 @@ public sealed class SqliteDatabaseTests : IDisposable
                 DROP TABLE feed_smart_views;
                 DROP TABLE feed_smart_view_state;
                 DROP TABLE entry_export_tasks;
+                DROP TABLE local_schedule_runs;
                 DROP TABLE local_scheduled_tasks;
                 DROP INDEX ix_user_entry_states_profile_hidden;
                 ALTER TABLE user_entry_states DROP COLUMN is_hidden;
                 ALTER TABLE feed_catalog DROP COLUMN view_kind_explicit;
                 ALTER TABLE feed_catalog DROP COLUMN full_text_policy;
                 ALTER TABLE feed_entries DROP COLUMN has_full_content;
-                DELETE FROM schema_versions WHERE version IN (5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22);
+                DELETE FROM schema_versions WHERE version IN (5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23);
                 DELETE FROM content_fts WHERE entity_type='feed_entry';
                 INSERT INTO feed_entries(
                     id, feed_id, external_id, title, summary, sanitized_content,
@@ -363,7 +428,7 @@ public sealed class SqliteDatabaseTests : IDisposable
         check.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE type='trigger' AND name LIKE 'feed_entries_fts_%';";
         Assert.Equal(3L, (long)(await check.ExecuteScalarAsync(CancellationToken.None))!);
         check.CommandText = "SELECT MAX(version) FROM schema_versions;";
-        Assert.Equal(22L, (long)(await check.ExecuteScalarAsync(CancellationToken.None))!);
+        Assert.Equal(23L, (long)(await check.ExecuteScalarAsync(CancellationToken.None))!);
     }
 
     [Fact]
@@ -388,11 +453,12 @@ public sealed class SqliteDatabaseTests : IDisposable
                 DROP TABLE feed_smart_views;
                 DROP TABLE feed_smart_view_state;
                 DROP TABLE entry_export_tasks;
+                DROP TABLE local_schedule_runs;
                 DROP TABLE local_scheduled_tasks;
                 DROP INDEX ix_user_entry_states_profile_hidden;
                 ALTER TABLE user_entry_states DROP COLUMN is_hidden;
                 ALTER TABLE feed_catalog DROP COLUMN view_kind_explicit;
-                DELETE FROM schema_versions WHERE version IN (5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22);
+                DELETE FROM schema_versions WHERE version IN (5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23);
                 DELETE FROM content_fts WHERE entity_type='feed_entry';
                 INSERT INTO feed_entries(
                     id, feed_id, external_id, title, summary, sanitized_content,
