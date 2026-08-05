@@ -1,6 +1,6 @@
 # 管理员策展 RSS 集成总路线图
 
-状态：Gate 0、P0、P1、P2-01～P2-14、DISC-01～DISC-06 与 UX-03 已完成；P2-15 已取消实施，P2-16 及以后仍需明确选择
+状态：Gate 0、P0、P1、P2-01～P2-14、P2-20、DISC-01～DISC-06 与 UX-03 已完成；P2-15 已取消实施，P2-16～P2-19 待逐项选择，下一片为 P2-21
 最后核对：2026-08-05
 参考基线：[RSSNext/Folo](https://github.com/RSSNext/Folo) `dev` 分支提交 [`773f1bfe`](https://github.com/RSSNext/Folo/commit/773f1bfe218ac349b9fb9b5cbd982c320f6b414f)
 
