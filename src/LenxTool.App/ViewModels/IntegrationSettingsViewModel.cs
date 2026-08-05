@@ -14,12 +14,13 @@ public sealed record IntegrationKindChoice(
 {
     public static IReadOnlyList<IntegrationKindChoice> All { get; } =
         Enum.GetValues<EntryIntegrationKind>()
-            // Obsidian、Eagle 与 Zotero 都有提供商专用设置卡；继续放在
-            // 通用 HTTPS/DPAPI 表单中只会形成无法工作的重复配置入口。
+            // Obsidian、Eagle 与 Zotero 都有提供商专用设置卡；Cubox 已
+            // 取消实施。继续显示这些类型只会形成无法工作的凭据入口。
             .Where(kind => kind is not (
                 EntryIntegrationKind.Obsidian
                 or EntryIntegrationKind.Eagle
-                or EntryIntegrationKind.Zotero))
+                or EntryIntegrationKind.Zotero
+                or EntryIntegrationKind.Cubox))
             .Select(kind => new IntegrationKindChoice(
                 kind,
                 LabelFor(kind)))

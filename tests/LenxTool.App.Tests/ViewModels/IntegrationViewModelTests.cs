@@ -23,6 +23,9 @@ public sealed class IntegrationViewModelTests
         Assert.DoesNotContain(
             IntegrationKindChoice.All,
             item => item.Kind == EntryIntegrationKind.Zotero);
+        Assert.DoesNotContain(
+            IntegrationKindChoice.All,
+            item => item.Kind == EntryIntegrationKind.Cubox);
         Assert.Contains(
             IntegrationKindChoice.All,
             item => item.Kind == EntryIntegrationKind.Webhook);

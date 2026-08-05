@@ -1,6 +1,6 @@
 # 测试报告
 
-测试日期：.NET 2026-08-04 / Worker 2026-08-03（Asia/Shanghai）
+测试日期：.NET 2026-08-05 / Worker 2026-08-05（Asia/Shanghai）
 版本：0.1.0  
 配置：Release / win-x64 / .NET SDK 10.0.302
 
@@ -15,7 +15,13 @@
 | Worker TypeScript strict typecheck | passed |
 | .NET build warnings | 0 |
 | NuGet vulnerable packages | 0 detected |
-| npm audit vulnerabilities | 0 detected |
+| npm audit vulnerabilities | 5 detected（1 high / 4 moderate；均在开发/测试工具链） |
+
+P2-15 Cubox 于 2026-08-05 取消实施，未提交的凭据解析、只读健康探针、设置 UI 与对应测试已撤回；生产代码不保存 Cubox API 凭据，也不注册 Cubox 客户端、探针或导出器。设置选项聚焦测试 10/10、Core 177/177、Infrastructure 714/714、App 非 WPF-runtime 399/399、Worker 78/78、strict typecheck 与 Release build 0 警告/0 错误通过。完整 WPF runtime 为 5/9；4 项失败均位于既有 `CalendarAutomationPeer.GetChildrenCore` 空元素调用栈，其中 3 项在独立宿主精确复跑通过，余下 `SelectionControlsWpfRuntimeTests` 在干净提交 `17c0f2e` 上以同一行和调用栈复现，因此记录为基线环境门禁，不归因于本次设置选项修改。
+
+NuGet 在线审计未发现漏洞；npm 在线审计报告 5 项开发/测试工具链问题（`undici` 1 high，`@cloudflare/vitest-pool-workers`、`miniflare`、`postcss`、`wrangler` 4 moderate）。`npm audit fix --dry-run` 对 `postcss` 给出传递更新，同时对其余链只给出回退到不兼容的 Cloudflare 测试池/Wrangler 版本，dry-run 汇总仍为 5 项；本轮未改依赖、未运行 `audit fix --force`，正式安全发布门禁保持开放。
+
+## 历史结果
 
 Worker 发现用例曾在 60 次顺序请求跨越 UTC 分钟时把计数分到两个固定窗口，导致门禁把正确的 `200` 误判为产品限流回归；测试现只冻结 `Date`，精确用例 1/1、发现整文件 8/8 与 Worker 全量 78/78 均通过，不改变生产限流实现。
 

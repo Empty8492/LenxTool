@@ -1,7 +1,7 @@
 # P2 详细计划：内容视图、导出与定时摘要
 
-状态：P2-01～P2-14 与 [统一发现及原生控件视觉插入计划](RSS_DISCOVERY_AND_CONTROL_UX.md)已完成；P2-15 及以后仍需明确选择
-最后核对：2026-08-03
+状态：P2-01～P2-14 与 [统一发现及原生控件视觉插入计划](RSS_DISCOVERY_AND_CONTROL_UX.md)已完成；P2-15 已取消实施，P2-16 及以后仍需明确选择
+最后核对：2026-08-05
 开始条件：P1 最终检查点通过，统一 `FeedEntry`、私人状态、规则和搜索契约稳定。
 参考项目：RSSNext/Folo（内容视图、条目动作、AI 定时任务的行为参考），LenxTool 当前 WPF/DPAPI/媒体/更新与审计基础
 
@@ -410,6 +410,8 @@ P2 不引入 Folo 社区、关注关系、钱包、支付、移动端或完整 A
 
 ### P2-15：Cubox 适配器
 
+**状态：** 取消实施（2026-08-05）。
+
 **目标：** 将条目链接、标题、摘要和标签保存到 Cubox。
 
 **依赖：** P2-08、P2-09。
@@ -425,6 +427,8 @@ P2 不引入 Folo 社区、关注关系、钱包、支付、移动端或完整 A
 **验证：** URL/标签映射、401/429/5xx、重试和日志测试。
 
 **参考：** Folo Cubox 动作；实现时核对 Cubox 官方 API。
+
+**取消记录（2026-08-05）：** Cubox 与已交付的 Readwise、Obsidian、Zotero 和 Markdown 导出能力高度重叠；同时官方公开材料没有给出足以支撑现有至少一次耐久队列的幂等、重复 URL 和安全重试契约。产品决定不收集 Cubox API 凭据、不提供只读连接占位或导出入口，相关未提交基础片已撤回。上述验收项保留未勾选，仅作为取消前的历史规格，不计入后续完成定义。
 
 ### P2-16：Readeck 适配器
 
@@ -443,6 +447,14 @@ P2 不引入 Folo 社区、关注关系、钱包、支付、移动端或完整 A
 **验证：** 私网/重定向、证书错误、重复、401/429 和取消测试。
 
 **参考：** Folo Readeck 动作；实现时核对 Readeck 官方 API。
+
+**实施前契约核对（2026-08-05）：** Readeck 官方 API 在提交
+[`145a52fc`](https://codeberg.org/readeck/readeck/commit/145a52fcf0db57082c2705f38388471cf303cdf0)
+中仍由 `POST /api/bookmarks` 每次创建服务器生成的书签 ID；创建契约没有客户端幂等键或外部 ID，书签列表也没有精确 URL 过滤，数据库仅索引而不唯一约束 `initial_url`。因此直接接入至少一次耐久队列无法证明“响应丢失后重放不生成多份记录”，本项在以下任一前提成立前保持未启动：上游提供幂等/外部 ID 契约；产品明确接受用户可见的稳定技术标签；或另行批准本地远端 ID 映射及其隐私、迁移和清理策略。当前不得注册 Readeck 凭据入口、健康探针或导出器。核对依据见官方
+[`routes-bookmarks.yaml`](https://codeberg.org/readeck/readeck/src/commit/145a52fcf0db57082c2705f38388471cf303cdf0/docs/api/bookmarks/routes-bookmarks.yaml)、
+[`types.yaml`](https://codeberg.org/readeck/readeck/src/commit/145a52fcf0db57082c2705f38388471cf303cdf0/docs/api/bookmarks/types.yaml)
+与
+[`schema.sql`](https://codeberg.org/readeck/readeck/src/commit/145a52fcf0db57082c2705f38388471cf303cdf0/internal/db/migrations/sqlite3/schema.sql)。
 
 ### P2-17：Outline 适配器
 

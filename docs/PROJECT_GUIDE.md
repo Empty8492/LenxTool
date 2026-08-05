@@ -161,7 +161,7 @@ npm.cmd test -- --run
 
 ## 10. 当前版本边界与交付状态
 
-本节是当前交付状态的唯一准绳，最后核对日期为 **2026-08-04**。`IMPLEMENTATION_PLAN.md` 保留完整任务与验收条件；其中未勾选的任务可能已有部分实现，但表示尚未满足该任务的全部验收条件。
+本节是当前交付状态的唯一准绳，最后核对日期为 **2026-08-05**。`IMPLEMENTATION_PLAN.md` 保留完整任务与验收条件；其中未勾选的任务可能已有部分实现，但表示尚未满足该任务的全部验收条件。
 
 ### 10.1 本轮已完成
 
@@ -263,7 +263,7 @@ npm.cmd test -- --run
 
 ### 10.2 下一里程碑
 
-Gate 0 字幕闭环、P0“管理员策展 RSS”、P1“阅读增强、AI 与自动化”、P2-01～P2-14，以及插入计划 DISC-01～DISC-06、UX-03 均已完成。[P2 内容视图与集成计划](plans/RSS_P2_VIEWS_INTEGRATIONS.md) 的下一个窄切片为 P2-15 Cubox 适配器；P2-15 及以后仍需逐项明确选择，当前未启动。P1/P2 源码进度不等于正式签名发布完成。
+Gate 0 字幕闭环、P0“管理员策展 RSS”、P1“阅读增强、AI 与自动化”、P2-01～P2-14，以及插入计划 DISC-01～DISC-06、UX-03 均已完成。[P2 内容视图与集成计划](plans/RSS_P2_VIEWS_INTEGRATIONS.md) 的 P2-15 Cubox 因与既有导出能力重叠、官方幂等与安全重试契约不足而取消实施；客户端不保存 Cubox API 凭据，也不注册连接探针或导出器。P2-16 及以后仍需逐项明确选择。P1/P2 源码进度不等于正式签名发布完成。
 
 字幕闭环完成后的产品主路线已确定为“管理员策展 RSS”：管理员维护共享 RSS/Atom 目录，普通用户只能同步和阅读，不得修改共享订阅、分类、抓取策略或自动化规则。为保持现有“云端不存新闻正文”边界，首版采用 Worker/D1 保存权威目录、各桌面客户端本地抓取和 SQLite 缓存的模式。
 
@@ -273,7 +273,7 @@ Gate 0 字幕闭环、P0“管理员策展 RSS”、P1“阅读增强、AI 与�
 2. P0-01～P0-20、P0-B/P0-C 及最终检查点已完成；P0 关闭记录见 [`plans/RSS_P0_ADMIN_CATALOG.md`](plans/RSS_P0_ADMIN_CATALOG.md)。
 3. P1-01～P1-20、P1-A/P1-B/P1-C/P1-D 及最终检查点已完成；关闭记录见 [`plans/RSS_P1_READING_INTELLIGENCE.md`](plans/RSS_P1_READING_INTELLIGENCE.md)。
 4. P2-01～P2-14 已完成五视图、智能视图、统一导出契约、安全集成策略、持久化队列、本地 Markdown、受控 Obsidian Vault、Eagle 图片、Zotero 个人库与 Readwise Reader 导出；[`plans/RSS_DISCOVERY_AND_CONTROL_UX.md`](plans/RSS_DISCOVERY_AND_CONTROL_UX.md) 的 DISC-01～DISC-06 已交付独立发现索引、安全可替换 provider、管理员统一发现页、确认发布闭环和最终检查点，UX-03 已交付原生 WPF 共享控件模板，不依赖 Folo 私有 API 或复制其源码。
-5. P2-15 及以后桌面/外部导出适配器、本地定时摘要和 Windows 系统通知仍需逐项推进；具体见 [`plans/RSS_P2_VIEWS_INTEGRATIONS.md`](plans/RSS_P2_VIEWS_INTEGRATIONS.md)。
+5. P2-15 Cubox 已取消实施；P2-16 及以后桌面/外部导出适配器、本地定时摘要和 Windows 系统通知仍需逐项推进，具体见 [`plans/RSS_P2_VIEWS_INTEGRATIONS.md`](plans/RSS_P2_VIEWS_INTEGRATIONS.md)。
 6. “洛克王国世界每日清体力自动化”只登记为独立候选调研项，尚未批准 MaaFramework 依赖或任何实现。它不属于 RSS P2 编号；若后续启动，必须先完成条款核对、前台手动登录边界、识别 PoC、进程隔离、停止/失败保护与许可证审查，具体见 [`plans/GAME_AUTOMATION_BACKLOG.md`](plans/GAME_AUTOMATION_BACKLOG.md)。
 
 总路线、参考项目和许可证边界见 [`plans/RSS_MASTER_ROADMAP.md`](plans/RSS_MASTER_ROADMAP.md)，架构决策见 [`decisions/ADR-001-admin-curated-rss.md`](decisions/ADR-001-admin-curated-rss.md)、[`decisions/ADR-002-article-content-extraction.md`](decisions/ADR-002-article-content-extraction.md) 与 [`decisions/ADR-003-durable-entry-export-queue.md`](decisions/ADR-003-durable-entry-export-queue.md)。P0 与 P1 可作为已验收基础；生产 Worker/D1、正式安装包、签名、升级和跨物理机矩阵仍按 10.5～10.7 节单独验收。

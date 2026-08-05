@@ -214,7 +214,7 @@ Feed 的“视图类型”默认选择“自动识别”，客户端会根据经
 - 普通用户不能进入或调用共享策略写入。Worker 只向普通用户提供 ACTIVE 策略，ALL 与发布操作仍由服务端管理员角色校验，客户端隐藏入口不是授权边界。
 - “设置 → 个人外部集成”只在本机保存尚未提供专用设置卡的通用网络类型 TargetId 与 HTTPS 地址。凭据保存后立即清空输入框，不支持明文回读，并由 Windows DPAPI CurrentUser 加密；删除凭据不会改变共享策略。选择 Readwise 后该卡会把 TargetId 固定为 `default`、端点固定为只读 `https://readwise.io/`，token 使用 `Readwise/default` DPAPI 槽位。Obsidian、Eagle 和 Zotero 使用各自的本机设置卡；Eagle 不需要凭据，Zotero API key 只使用固定 `Zotero/default` DPAPI 槽位。
 - 通用网络类型的“测试连接”会先校验管理员策略、精确主机、HTTPS/443、凭据和 DNS 公网地址，再应用 8 秒超时与 30 秒冷却。Readwise 只调用无写入副作用的官方 auth 端点；Zotero 继续经过该共享边界，并额外核对个人库 User ID 与 write/按需 notes/files 权限。当前表单必须先保存，避免测试另一代目标。Eagle 使用独立的 loopback 探测，不走公网 DNS 白名单。界面只显示固定状态，不显示第三方响应、异常、请求头、token、API key 或资源库路径。
-- 当前生产已注册的适配器为 Obsidian 本地文件导出、Eagle 本机 Web API 图片导出、Zotero Web API v3 个人库导出和 Readwise Reader 导出；Cubox 等其余外部服务适配器仍未安装，不会静默发出第三方请求。
+- 当前生产已注册的适配器为 Obsidian 本地文件导出、Eagle 本机 Web API 图片导出、Zotero Web API v3 个人库导出和 Readwise Reader 导出；Cubox 已取消实施，Readeck 等其余外部服务适配器仍未安装，不会静默发出第三方请求。
 
 ### 导出到 Obsidian
 
@@ -258,6 +258,6 @@ Eagle 未启动、端口错误、版本不兼容、没有打开资源库或响�
 
 401/403 表示 token 或账户状态不允许请求；429 会尊重有界 Retry-After，408/5xx 和无法判断的写入结果由持久队列重试。界面、队列历史和异常不会显示 token 或 Reader 响应正文。当前自动化只证明官方 API 的假 HTTP 契约，尚未使用受控真实 token/账户完成外部写入验收。
 
-## 当前验收状态（2026-08-03）
+## 当前验收状态（2026-08-05）
 
-Gate 0、P0、P1、P2-01～P2-14 与统一发现 DISC-01～DISC-06、UX-03 已通过本地自动化验收：管理员目录/AI 策略/规则/智能视图/集成策略发布、普通用户 ACTIVE 只读与写入 403、OPML、断网与坏源隔离、私人状态、全文/图片、摘要/翻译、媒体投递、应用内通知、七类搜索、180 天安全清理、内容类型分类，以及时间线/图片/音频/视频/通知五视图均有覆盖。五视图会各自保留筛选和滚动位置，按需分页加载；其中“通知”页签显示管理员归类为通知的 Feed 条目，顶部铃铛仍只显示本机应用事件，两者不会混用。统一导出接口、安全集成策略、持久任务队列、本地 Markdown、受控 Obsidian Vault、Eagle 图片、Zotero 个人库与 Readwise Reader 适配器已经就绪；队列只执行可安全重放的适配器，支持跨进程租约、重试和合作取消。生产 Worker/D1、受控真实 Eagle/Zotero/Readwise 连通和正式签名安装包仍需单独发布验收；P2-15 及以后仍需逐项推进。最新自动化门禁数字以 [`TEST_REPORT.md`](TEST_REPORT.md) 为准。
+Gate 0、P0、P1、P2-01～P2-14 与统一发现 DISC-01～DISC-06、UX-03 已通过本地自动化验收：管理员目录/AI 策略/规则/智能视图/集成策略发布、普通用户 ACTIVE 只读与写入 403、OPML、断网与坏源隔离、私人状态、全文/图片、摘要/翻译、媒体投递、应用内通知、七类搜索、180 天安全清理、内容类型分类，以及时间线/图片/音频/视频/通知五视图均有覆盖。五视图会各自保留筛选和滚动位置，按需分页加载；其中“通知”页签显示管理员归类为通知的 Feed 条目，顶部铃铛仍只显示本机应用事件，两者不会混用。统一导出接口、安全集成策略、持久任务队列、本地 Markdown、受控 Obsidian Vault、Eagle 图片、Zotero 个人库与 Readwise Reader 适配器已经就绪；队列只执行可安全重放的适配器，支持跨进程租约、重试和合作取消。生产 Worker/D1、受控真实 Eagle/Zotero/Readwise 连通和正式签名安装包仍需单独发布验收；P2-15 Cubox 已取消，P2-16 及以后仍需逐项推进。最新自动化门禁数字以 [`TEST_REPORT.md`](TEST_REPORT.md) 为准。
