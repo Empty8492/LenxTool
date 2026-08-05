@@ -13,7 +13,36 @@ public sealed class LocalScheduleRunRepository(SqliteDatabase database)
     private const string TimeFormat = "HH:mm:ss.fffffff";
     private const string DateFormat = "yyyy-MM-dd";
 
-    public async Task<LocalScheduleRunLease?> ClaimDueAsync(
+    public Task<LocalScheduleRunLease?> ClaimDueAsync(
+        DateTimeOffset nowUtc,
+        DateTimeOffset missedBeforeUtc,
+        TimeSpan leaseDuration,
+        CancellationToken cancellationToken) =>
+        ClaimDueCoreAsync(
+            eligibleScheduleIds: null,
+            nowUtc,
+            missedBeforeUtc,
+            leaseDuration,
+            cancellationToken);
+
+    public Task<LocalScheduleRunLease?> ClaimDueAsync(
+        IReadOnlyCollection<string> eligibleScheduleIds,
+        DateTimeOffset nowUtc,
+        DateTimeOffset missedBeforeUtc,
+        TimeSpan leaseDuration,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(eligibleScheduleIds);
+        return ClaimDueCoreAsync(
+            ValidateEligibleScheduleIds(eligibleScheduleIds),
+            nowUtc,
+            missedBeforeUtc,
+            leaseDuration,
+            cancellationToken);
+    }
+
+    private async Task<LocalScheduleRunLease?> ClaimDueCoreAsync(
+        IReadOnlyList<string>? eligibleScheduleIds,
         DateTimeOffset nowUtc,
         DateTimeOffset missedBeforeUtc,
         TimeSpan leaseDuration,
@@ -25,12 +54,22 @@ public sealed class LocalScheduleRunRepository(SqliteDatabase database)
             missedBeforeUtc,
             nowUtc);
         ValidateLeaseDuration(leaseDuration);
+        if (eligibleScheduleIds is { Count: 0 })
+        {
+            return null;
+        }
 
         await using SqliteConnection connection =
             await database.OpenConnectionAsync(cancellationToken)
                 .ConfigureAwait(false);
         await using SqliteTransaction transaction =
             connection.BeginTransaction(deferred: false);
+        await CancelInvalidatedUnownedRunsAsync(
+            connection,
+            transaction,
+            eligibleScheduleIds,
+            nowUtc,
+            cancellationToken).ConfigureAwait(false);
 
         for (int scan = 0;
              scan < MaximumSkippedSchedulesPerClaim;
@@ -39,6 +78,7 @@ public sealed class LocalScheduleRunRepository(SqliteDatabase database)
             ExistingRunCandidate? existing = await ReadClaimableRunAsync(
                 connection,
                 transaction,
+                eligibleScheduleIds,
                 nowUtc,
                 cancellationToken).ConfigureAwait(false);
             if (existing is not null)
@@ -62,6 +102,7 @@ public sealed class LocalScheduleRunRepository(SqliteDatabase database)
             ScheduledTaskCandidate? candidate = await ReadDueScheduleAsync(
                 connection,
                 transaction,
+                eligibleScheduleIds,
                 nowUtc,
                 cancellationToken).ConfigureAwait(false);
             if (candidate is null)
@@ -109,6 +150,47 @@ public sealed class LocalScheduleRunRepository(SqliteDatabase database)
         await transaction.CommitAsync(cancellationToken)
             .ConfigureAwait(false);
         return null;
+    }
+
+    public async Task<bool> IsCancellationRequestedAsync(
+        LocalScheduleRunLease lease,
+        DateTimeOffset observedAtUtc,
+        CancellationToken cancellationToken)
+    {
+        ValidateLease(lease);
+        ValidateTimestamp(observedAtUtc, nameof(observedAtUtc));
+        await using SqliteConnection connection =
+            await database.OpenConnectionAsync(cancellationToken)
+                .ConfigureAwait(false);
+        await using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT CASE
+                WHEN task.id IS NULL
+                  OR task.updated_at>run.created_at
+                THEN 1
+                ELSE 0
+            END
+            FROM local_schedule_runs AS run
+            LEFT JOIN local_scheduled_tasks AS task
+              ON task.id=run.schedule_id
+            WHERE run.schedule_id=$scheduleId
+              AND run.scheduled_for=$scheduledFor
+              AND run.status='RUNNING'
+              AND run.lease_token=$leaseToken
+              AND run.lease_expires_at>$observedAt
+              AND run.updated_at<=$observedAt;
+            """;
+        command.Parameters.AddWithValue(
+            "$observedAt",
+            Format(observedAtUtc));
+        AddLeaseParameters(command, lease);
+        object? value = await command.ExecuteScalarAsync(cancellationToken)
+            .ConfigureAwait(false);
+        if (value is null)
+        {
+            throw StaleLease();
+        }
+        return (long)value == 1;
     }
 
     public async Task<bool> RenewLeaseAsync(
@@ -162,6 +244,7 @@ public sealed class LocalScheduleRunRepository(SqliteDatabase database)
             "COMPLETED",
             completedAtUtc,
             isTerminal: true,
+            allowScheduleMutation: false,
             cancellationToken);
 
     public Task CancelAsync(
@@ -173,6 +256,7 @@ public sealed class LocalScheduleRunRepository(SqliteDatabase database)
             "CANCELLED",
             cancelledAtUtc,
             isTerminal: true,
+            allowScheduleMutation: true,
             cancellationToken);
 
     public Task ReleaseAsync(
@@ -184,6 +268,7 @@ public sealed class LocalScheduleRunRepository(SqliteDatabase database)
             "PENDING",
             releasedAtUtc,
             isTerminal: false,
+            allowScheduleMutation: false,
             cancellationToken);
 
     public async Task<IReadOnlyList<LocalScheduleRun>> GetRecentAsync(
@@ -221,9 +306,42 @@ public sealed class LocalScheduleRunRepository(SqliteDatabase database)
         return Array.AsReadOnly(runs.ToArray());
     }
 
+    private static async Task CancelInvalidatedUnownedRunsAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        IReadOnlyList<string>? eligibleScheduleIds,
+        DateTimeOffset nowUtc,
+        CancellationToken cancellationToken)
+    {
+        await using SqliteCommand command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            UPDATE local_schedule_runs
+            SET status='CANCELLED',
+                lease_token=NULL,
+                lease_expires_at=NULL,
+                updated_at=$now,
+                completed_at=$now
+            WHERE ((status='PENDING' AND updated_at<=$now)
+                OR (status='RUNNING' AND lease_expires_at<=$now))
+              AND NOT EXISTS(
+                  SELECT 1
+                  FROM local_scheduled_tasks AS task
+                  WHERE task.id=local_schedule_runs.schedule_id
+                    AND task.updated_at<=local_schedule_runs.created_at)
+            """ + BuildEligiblePredicate(
+                command,
+                "local_schedule_runs.schedule_id",
+                eligibleScheduleIds) + ";";
+        command.Parameters.AddWithValue("$now", Format(nowUtc));
+        await command.ExecuteNonQueryAsync(cancellationToken)
+            .ConfigureAwait(false);
+    }
+
     private static async Task<ExistingRunCandidate?> ReadClaimableRunAsync(
         SqliteConnection connection,
         SqliteTransaction transaction,
+        IReadOnlyList<string>? eligibleScheduleIds,
         DateTimeOffset nowUtc,
         CancellationToken cancellationToken)
     {
@@ -232,8 +350,13 @@ public sealed class LocalScheduleRunRepository(SqliteDatabase database)
         command.CommandText = """
             SELECT schedule_id, scheduled_for, attempt_count
             FROM local_schedule_runs
-            WHERE (status='PENDING' AND updated_at<=$now)
-               OR (status='RUNNING' AND lease_expires_at<=$now)
+            WHERE ((status='PENDING' AND updated_at<=$now)
+               OR (status='RUNNING' AND lease_expires_at<=$now))
+            """ + BuildEligiblePredicate(
+                command,
+                "schedule_id",
+                eligibleScheduleIds) + """
+
             ORDER BY scheduled_for, schedule_id
             LIMIT 1;
             """;
@@ -298,6 +421,7 @@ public sealed class LocalScheduleRunRepository(SqliteDatabase database)
     private static async Task<ScheduledTaskCandidate?> ReadDueScheduleAsync(
         SqliteConnection connection,
         SqliteTransaction transaction,
+        IReadOnlyList<string>? eligibleScheduleIds,
         DateTimeOffset nowUtc,
         CancellationToken cancellationToken)
     {
@@ -316,6 +440,11 @@ public sealed class LocalScheduleRunRepository(SqliteDatabase database)
                   FROM local_schedule_runs AS run
                   WHERE run.schedule_id=task.id
                     AND run.status IN ('PENDING', 'RUNNING'))
+            """ + BuildEligiblePredicate(
+                command,
+                "task.id",
+                eligibleScheduleIds) + """
+
             ORDER BY task.next_run_at, task.id
             LIMIT 1;
             """;
@@ -439,6 +568,7 @@ public sealed class LocalScheduleRunRepository(SqliteDatabase database)
         string status,
         DateTimeOffset updatedAtUtc,
         bool isTerminal,
+        bool allowScheduleMutation,
         CancellationToken cancellationToken)
     {
         ValidateLease(lease);
@@ -459,13 +589,21 @@ public sealed class LocalScheduleRunRepository(SqliteDatabase database)
               AND status='RUNNING'
               AND lease_token=$leaseToken
               AND lease_expires_at>$updatedAt
-              AND updated_at<=$updatedAt;
+              AND updated_at<=$updatedAt
+              AND ($allowScheduleMutation=1 OR EXISTS(
+                  SELECT 1
+                  FROM local_scheduled_tasks AS task
+                  WHERE task.id=local_schedule_runs.schedule_id
+                    AND task.updated_at<=local_schedule_runs.created_at));
             """;
         command.Parameters.AddWithValue("$status", status);
         command.Parameters.AddWithValue("$updatedAt", Format(updatedAtUtc));
         command.Parameters.AddWithValue(
             "$completedAt",
             isTerminal ? Format(updatedAtUtc) : DBNull.Value);
+        command.Parameters.AddWithValue(
+            "$allowScheduleMutation",
+            allowScheduleMutation ? 1 : 0);
         AddLeaseParameters(command, lease);
         if (await command.ExecuteNonQueryAsync(cancellationToken)
                 .ConfigureAwait(false) != 1)
@@ -495,6 +633,28 @@ public sealed class LocalScheduleRunRepository(SqliteDatabase database)
             "$scheduledFor",
             Format(lease.ScheduledForUtc));
         command.Parameters.AddWithValue("$leaseToken", lease.LeaseToken);
+    }
+
+    private static string BuildEligiblePredicate(
+        SqliteCommand command,
+        string columnName,
+        IReadOnlyList<string>? eligibleScheduleIds)
+    {
+        if (eligibleScheduleIds is null)
+        {
+            return string.Empty;
+        }
+
+        var parameterNames = new string[eligibleScheduleIds.Count];
+        for (int index = 0; index < eligibleScheduleIds.Count; index++)
+        {
+            string parameterName = $"$eligibleSchedule{index}";
+            parameterNames[index] = parameterName;
+            command.Parameters.AddWithValue(
+                parameterName,
+                eligibleScheduleIds[index]);
+        }
+        return $" AND {columnName} IN ({string.Join(", ", parameterNames)})";
     }
 
     private static void ValidateLease(LocalScheduleRunLease lease)
@@ -529,6 +689,21 @@ public sealed class LocalScheduleRunRepository(SqliteDatabase database)
                 nameof(scheduleId));
         }
         return scheduleId;
+    }
+
+    private static string[] ValidateEligibleScheduleIds(
+        IReadOnlyCollection<string> scheduleIds)
+    {
+        if (scheduleIds.Count > 500)
+        {
+            throw new ArgumentOutOfRangeException(nameof(scheduleIds));
+        }
+
+        return scheduleIds
+            .Select(ValidateScheduleId)
+            .Distinct(StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
     }
 
     private static void ValidateLeaseDuration(TimeSpan leaseDuration)

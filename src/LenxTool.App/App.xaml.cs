@@ -238,6 +238,17 @@ public partial class App : Application
         services.AddHostedService<FeedFullTextBackgroundService>();
         services.AddSingleton(FeedCatalogSyncOptions.Default);
         services.AddSingleton(TimeProvider.System);
+        services.AddSingleton<
+            ILocalScheduledTaskRepository,
+            LocalScheduledTaskRepository>();
+        services.AddSingleton<
+            ILocalScheduleRunRepository,
+            LocalScheduleRunRepository>();
+        services.AddSingleton(LocalScheduleProcessorOptions.Default);
+        services.AddSingleton<LocalScheduleProcessor>();
+        services.AddSingleton<ILocalScheduleProcessor>(static services =>
+            services.GetRequiredService<LocalScheduleProcessor>());
+        services.AddHostedService<LocalScheduleBackgroundService>();
         services.AddSingleton<IFeedCatalogSyncService, FeedCatalogSyncService>();
         services.AddSingleton<FeedCatalogAdminService>();
         services.AddSingleton<IFeedCatalogAdminService>(static services =>

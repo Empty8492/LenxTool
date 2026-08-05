@@ -132,6 +132,12 @@ public sealed class DependencyInjectionTests
             provider.GetRequiredService<IFeedAiAutomationQueueService>());
         Assert.IsType<FeedFullTextQueueService>(
             provider.GetRequiredService<IFeedFullTextQueueService>());
+        Assert.IsType<LocalScheduledTaskRepository>(
+            provider.GetRequiredService<ILocalScheduledTaskRepository>());
+        Assert.IsType<LocalScheduleRunRepository>(
+            provider.GetRequiredService<ILocalScheduleRunRepository>());
+        Assert.IsType<LocalScheduleProcessor>(
+            provider.GetRequiredService<ILocalScheduleProcessor>());
         Assert.NotNull(provider.GetRequiredService<IFeedRefreshService>());
         Assert.NotNull(provider.GetRequiredService<NewsCenterViewModel>());
         Assert.IsType<FavoriteRepository>(provider.GetRequiredService<IFavoriteRepository>());

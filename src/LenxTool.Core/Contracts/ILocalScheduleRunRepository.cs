@@ -15,6 +15,26 @@ public interface ILocalScheduleRunRepository
         TimeSpan leaseDuration,
         CancellationToken cancellationToken);
 
+    /// <summary>
+    /// 只在拥有已注册幂等处理器的计划中领取窗口，避免未知计划阻塞
+    /// 其他可执行计划，或被错误地当作已成功处理。
+    /// </summary>
+    Task<LocalScheduleRunLease?> ClaimDueAsync(
+        IReadOnlyCollection<string> eligibleScheduleIds,
+        DateTimeOffset nowUtc,
+        DateTimeOffset missedBeforeUtc,
+        TimeSpan leaseDuration,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// 计划在窗口领取之后发生任何持久变更时，旧窗口必须合作取消；
+    /// 即使计划先禁用后快速重新启用，也不能恢复旧 owner。
+    /// </summary>
+    Task<bool> IsCancellationRequestedAsync(
+        LocalScheduleRunLease lease,
+        DateTimeOffset observedAtUtc,
+        CancellationToken cancellationToken);
+
     Task<bool> RenewLeaseAsync(
         LocalScheduleRunLease lease,
         DateTimeOffset renewedAtUtc,

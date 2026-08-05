@@ -413,6 +413,216 @@ public sealed class LocalScheduleRunRepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task ScheduleMutationRequestsCancellationAndRejectsCompletion()
+    {
+        using SqliteDatabase database = CreateDatabase();
+        await database.InitializeAsync(CancellationToken.None);
+        await SaveDailyAsync(database, LocalScheduleMissedRunPolicy.RunOnce);
+        var runs = new LocalScheduleRunRepository(database);
+        var schedules = new LocalScheduledTaskRepository(database);
+        DateTimeOffset dueAt = CreatedAt.AddHours(1);
+        LocalScheduleRunLease lease = Assert.IsType<LocalScheduleRunLease>(
+            await runs.ClaimDueAsync(
+                dueAt,
+                dueAt.AddMinutes(-1),
+                LeaseDuration,
+                CancellationToken.None));
+        DateTimeOffset disabledAt = dueAt.AddMinutes(1);
+
+        await schedules.SetEnabledAsync(
+            TaskId,
+            isEnabled: false,
+            disabledAt,
+            CancellationToken.None);
+
+        Assert.True(await runs.IsCancellationRequestedAsync(
+            lease,
+            disabledAt,
+            CancellationToken.None));
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            runs.CompleteAsync(
+                lease,
+                disabledAt,
+                CancellationToken.None));
+        await runs.CancelAsync(
+            lease,
+            disabledAt,
+            CancellationToken.None);
+        Assert.Equal(
+            LocalScheduleRunStatus.Cancelled,
+            Assert.Single(await runs.GetRecentAsync(
+                TaskId,
+                10,
+                CancellationToken.None)).Status);
+    }
+
+    [Fact]
+    public async Task DisableThenReenableStillCancelsAlreadyClaimedWindow()
+    {
+        using SqliteDatabase database = CreateDatabase();
+        await database.InitializeAsync(CancellationToken.None);
+        await SaveDailyAsync(database, LocalScheduleMissedRunPolicy.RunOnce);
+        var runs = new LocalScheduleRunRepository(database);
+        var schedules = new LocalScheduledTaskRepository(database);
+        DateTimeOffset dueAt = CreatedAt.AddHours(1);
+        LocalScheduleRunLease lease = Assert.IsType<LocalScheduleRunLease>(
+            await runs.ClaimDueAsync(
+                dueAt,
+                dueAt.AddMinutes(-1),
+                LeaseDuration,
+                CancellationToken.None));
+
+        await schedules.SetEnabledAsync(
+            TaskId,
+            isEnabled: false,
+            dueAt.AddMinutes(1),
+            CancellationToken.None);
+        await schedules.SetEnabledAsync(
+            TaskId,
+            isEnabled: true,
+            dueAt.AddMinutes(2),
+            CancellationToken.None);
+
+        Assert.True(await runs.IsCancellationRequestedAsync(
+            lease,
+            dueAt.AddMinutes(2),
+            CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task ExpiredWindowCancelledByScheduleMutationIsNotReclaimed()
+    {
+        using SqliteDatabase database = CreateDatabase();
+        await database.InitializeAsync(CancellationToken.None);
+        await SaveDailyAsync(database, LocalScheduleMissedRunPolicy.RunOnce);
+        var runs = new LocalScheduleRunRepository(database);
+        var schedules = new LocalScheduledTaskRepository(database);
+        DateTimeOffset dueAt = CreatedAt.AddHours(1);
+        _ = Assert.IsType<LocalScheduleRunLease>(
+            await runs.ClaimDueAsync(
+                dueAt,
+                dueAt.AddMinutes(-1),
+                LeaseDuration,
+                CancellationToken.None));
+        await schedules.SetEnabledAsync(
+            TaskId,
+            isEnabled: false,
+            dueAt.AddMinutes(1),
+            CancellationToken.None);
+
+        Assert.Null(await runs.ClaimDueAsync(
+            dueAt.Add(LeaseDuration),
+            dueAt.AddMinutes(-1),
+            LeaseDuration,
+            CancellationToken.None));
+        Assert.Equal(
+            LocalScheduleRunStatus.Cancelled,
+            Assert.Single(await runs.GetRecentAsync(
+                TaskId,
+                10,
+                CancellationToken.None)).Status);
+    }
+
+    [Fact]
+    public async Task MissingScheduleRequestsCancellationAndRejectsNonCancelFinish()
+    {
+        using SqliteDatabase database = CreateDatabase();
+        await database.InitializeAsync(CancellationToken.None);
+        await SaveDailyAsync(database, LocalScheduleMissedRunPolicy.RunOnce);
+        var repository = new LocalScheduleRunRepository(database);
+        DateTimeOffset dueAt = CreatedAt.AddHours(1);
+        LocalScheduleRunLease lease = Assert.IsType<LocalScheduleRunLease>(
+            await repository.ClaimDueAsync(
+                dueAt,
+                dueAt.AddMinutes(-1),
+                LeaseDuration,
+                CancellationToken.None));
+        await DeleteScheduleAsync(database);
+        DateTimeOffset observedAt = dueAt.AddMinutes(1);
+
+        Assert.True(await repository.IsCancellationRequestedAsync(
+            lease,
+            observedAt,
+            CancellationToken.None));
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            repository.CompleteAsync(
+                lease,
+                observedAt,
+                CancellationToken.None));
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            repository.ReleaseAsync(
+                lease,
+                observedAt,
+                CancellationToken.None));
+        await repository.CancelAsync(
+            lease,
+            observedAt,
+            CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task ExpiredOrphanWindowIsCancelledInsteadOfReclaimed()
+    {
+        using SqliteDatabase database = CreateDatabase();
+        await database.InitializeAsync(CancellationToken.None);
+        await SaveDailyAsync(database, LocalScheduleMissedRunPolicy.RunOnce);
+        var repository = new LocalScheduleRunRepository(database);
+        DateTimeOffset dueAt = CreatedAt.AddHours(1);
+        _ = Assert.IsType<LocalScheduleRunLease>(
+            await repository.ClaimDueAsync(
+                dueAt,
+                dueAt.AddMinutes(-1),
+                LeaseDuration,
+                CancellationToken.None));
+        await DeleteScheduleAsync(database);
+
+        Assert.Null(await repository.ClaimDueAsync(
+            dueAt.Add(LeaseDuration),
+            dueAt.AddMinutes(-1),
+            LeaseDuration,
+            CancellationToken.None));
+        Assert.Equal(
+            LocalScheduleRunStatus.Cancelled,
+            Assert.Single(await repository.GetRecentAsync(
+                TaskId,
+                10,
+                CancellationToken.None)).Status);
+    }
+
+    [Fact]
+    public async Task EligibleScheduleFilterDoesNotClaimUnknownHandlers()
+    {
+        const string eligibleId =
+            "10000000-0000-4000-8000-000000000024";
+        using SqliteDatabase database = CreateDatabase();
+        await database.InitializeAsync(CancellationToken.None);
+        await SaveDailyAsync(database, LocalScheduleMissedRunPolicy.RunOnce);
+        await new LocalScheduledTaskRepository(database).SaveAsync(
+            eligibleId,
+            DailyAtEight(),
+            LocalScheduleMissedRunPolicy.RunOnce,
+            isEnabled: true,
+            CreatedAt,
+            CancellationToken.None);
+        var repository = new LocalScheduleRunRepository(database);
+        DateTimeOffset dueAt = CreatedAt.AddHours(1);
+
+        LocalScheduleRunLease lease = Assert.IsType<LocalScheduleRunLease>(
+            await repository.ClaimDueAsync(
+                [eligibleId],
+                dueAt,
+                dueAt.AddMinutes(-1),
+                LeaseDuration,
+                CancellationToken.None));
+
+        Assert.Equal(eligibleId, lease.ScheduleId);
+        Assert.Empty(await repository.GetRecentAsync(
+            TaskId,
+            10,
+            CancellationToken.None));
+    }
+
+    [Fact]
     public async Task RenewLeaseIsMonotonicAndSameTimestampIsIdempotent()
     {
         using SqliteDatabase database = CreateDatabase();
@@ -570,6 +780,24 @@ public sealed class LocalScheduleRunRepositoryTests : IDisposable
             isEnabled: true,
             CreatedAt,
             CancellationToken.None);
+    }
+
+    private static LocalScheduleDefinition DailyAtEight() => new(
+        LocalScheduleFrequency.Daily,
+        "UTC",
+        new TimeOnly(8, 0));
+
+    private static async Task DeleteScheduleAsync(SqliteDatabase database)
+    {
+        await using SqliteConnection connection =
+            await database.OpenConnectionAsync(CancellationToken.None);
+        await using SqliteCommand command = connection.CreateCommand();
+        command.CommandText =
+            "DELETE FROM local_scheduled_tasks WHERE id=$scheduleId;";
+        command.Parameters.AddWithValue("$scheduleId", TaskId);
+        Assert.Equal(
+            1,
+            await command.ExecuteNonQueryAsync(CancellationToken.None));
     }
 
     private SqliteDatabase CreateDatabase() => new(

@@ -33,3 +33,27 @@ public sealed record LocalScheduleRunLease(
     DateTimeOffset ScheduledForUtc,
     int AttemptCount,
     string LeaseToken);
+
+/// <summary>
+/// 交给具体计划处理器的最小执行上下文。租约令牌只属于调度内核，
+/// 不向任务实现暴露，避免业务代码绕过所有权检查提交窗口状态。
+/// </summary>
+public sealed record LocalScheduleExecution(
+    string ScheduleId,
+    DateTimeOffset ScheduledForUtc,
+    int AttemptCount);
+
+/// <summary>
+/// 本地计划处理器的恢复、租约和轮询边界。错过阈值表示计划时刻
+/// 严格早于“当前时间减去宽限期”时才应用 RunOnce/Skip 策略。
+/// </summary>
+public sealed record LocalScheduleProcessorOptions(
+    TimeSpan LeaseDuration,
+    TimeSpan MissedRunGracePeriod,
+    TimeSpan PollInterval)
+{
+    public static LocalScheduleProcessorOptions Default { get; } = new(
+        LeaseDuration: TimeSpan.FromMinutes(10),
+        MissedRunGracePeriod: TimeSpan.FromMinutes(5),
+        PollInterval: TimeSpan.FromSeconds(10));
+}

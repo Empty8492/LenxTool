@@ -86,6 +86,12 @@ public sealed class LocalScheduledTaskRepository(SqliteDatabase database)
             throw new InvalidOperationException(
                 "较旧的本地计划变更不能覆盖新状态。");
         }
+        await CancelUnownedInvalidatedRunsAsync(
+            connection,
+            transaction,
+            validatedId,
+            changedAtUtc,
+            cancellationToken).ConfigureAwait(false);
         LocalScheduledTask saved =
             await ReadOneAsync(
                 connection,
@@ -204,6 +210,12 @@ public sealed class LocalScheduledTaskRepository(SqliteDatabase database)
         command.Parameters.AddWithValue("$updatedAt", Format(changedAtUtc));
         await command.ExecuteNonQueryAsync(cancellationToken)
             .ConfigureAwait(false);
+        await CancelUnownedInvalidatedRunsAsync(
+            connection,
+            transaction,
+            validatedId,
+            changedAtUtc,
+            cancellationToken).ConfigureAwait(false);
         LocalScheduledTask updated =
             await ReadOneAsync(
                 connection,
@@ -215,6 +227,34 @@ public sealed class LocalScheduledTaskRepository(SqliteDatabase database)
         await transaction.CommitAsync(cancellationToken)
             .ConfigureAwait(false);
         return updated;
+    }
+
+    private static async Task CancelUnownedInvalidatedRunsAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        string scheduleId,
+        DateTimeOffset changedAtUtc,
+        CancellationToken cancellationToken)
+    {
+        await using SqliteCommand command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            UPDATE local_schedule_runs
+            SET status='CANCELLED',
+                lease_token=NULL,
+                lease_expires_at=NULL,
+                updated_at=$changedAt,
+                completed_at=$changedAt
+            WHERE schedule_id=$scheduleId
+              AND created_at<$changedAt
+              AND updated_at<=$changedAt
+              AND (status='PENDING'
+                OR (status='RUNNING' AND lease_expires_at<=$changedAt));
+            """;
+        command.Parameters.AddWithValue("$scheduleId", scheduleId);
+        command.Parameters.AddWithValue("$changedAt", Format(changedAtUtc));
+        await command.ExecuteNonQueryAsync(cancellationToken)
+            .ConfigureAwait(false);
     }
 
     private static async Task<LocalScheduledTask?> ReadOneAsync(

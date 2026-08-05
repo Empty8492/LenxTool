@@ -106,7 +106,9 @@ P2-20 已在 Core 建立本地日历计划换算，并由 schema v22 和 `ILocal
 
 schema v23 和 `ILocalScheduleRunRepository` 将实际执行窗口与计划定义分离。`scheduled_for` 严格早于调用方给定的 `missedBeforeUtc` 才属于漏跑：RunOnce 只领取持久游标代表的一个窗口并把下一游标推进到 `nowUtc` 之后，Skip 只推进游标且不写伪执行历史；等于边界的窗口仍正常领取。窗口插入与计划游标推进处于同一 `BEGIN IMMEDIATE` 事务，插入失败会一起回滚；`(schedule_id, scheduled_for)` 主键和活动窗口排除保证重复启动只产生一个逻辑窗口。领取优先恢复 PENDING 或租约到期窗口，每次接管生成新令牌并增加尝试次数；到期即失权，旧令牌的续租、完成、取消和释放都会拒绝。续租时间单调不缩短，相同更新时间只允许相同到期时间幂等重放。单次计划在窗口落盘或按 Skip 推进后自动禁用，但已落盘窗口仍可独立恢复。
 
-当前仍没有轮询后台处理器、具体任务处理器、禁用与在途窗口的取消协同、生产 DI 或 UI，因此上述能力是已验证的持久化执行契约，不代表定时摘要已经可用。
+`LocalScheduleProcessor` 只领取已注册 `ILocalScheduledTaskHandler.ScheduleId` 对应的窗口，并在注册时拒绝非法/重复 ID 和非幂等实现；持久租约只能提供至少一次执行，具体处理器不能取得租约令牌或自行提交窗口状态。处理器按租约三分之一周期续租，业务完成前再次检查计划代际，异常把窗口释放为 PENDING，宿主停止尽力释放，所有权丢失则旧 owner 静默退出。计划领取与游标推进使用同一时间戳，之后任意计划写入都会使 `local_scheduled_tasks.updated_at` 大于窗口 `created_at`，形成无需新字段的持久取消代际；即使先禁用后快速重新启用，旧窗口仍必须取消。Complete/Release 的单条 SQL 还要求计划行存在且代际未变，删除、新代际和迟到 owner 都不能越过最终护栏；未持有或过期的旧代际/孤儿窗口会直接收敛为 Cancelled。
+
+生产组合根已注册两个计划仓储、通用处理器和 `LocalScheduleBackgroundService`。当前没有注册具体 `ILocalScheduledTaskHandler`，因此后台安全空转，不读取或执行未知计划；P2-21 将提供每日/每周摘要处理器、稳定计划 ID、输入边界和管理 UI。在此之前定时摘要仍不是可用产品功能。
 
 ## 4. 密钥与认证
 

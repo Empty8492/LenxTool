@@ -52,7 +52,7 @@ flowchart LR
 | 1 | [P0：管理员订阅与只读目录](RSS_P0_ADMIN_CATALOG.md) | 管理员可管订阅，普通用户可同步、抓取、阅读 | 已完成 |
 | 2 | [P1：阅读增强、AI 与自动化](RSS_P1_READING_INTELLIGENCE.md) | 收藏/标签/备注、全文、图片缓存、AI、规则、媒体衔接 | 已完成 |
 | 3 | [统一发现与原生控件视觉体系](RSS_DISCOVERY_AND_CONTROL_UX.md) | Folo 风格统一发现的清洁室实现；修复资讯页默认 WPF 控件视觉 | 已完成 |
-| 4 | [P2：内容视图、导出与定时摘要](RSS_P2_VIEWS_INTEGRATIONS.md) | 多内容视图、外部导出、Windows 通知和摘要 | 进行中；P2-01～P2-14 已完成，P2-15 已取消，P2-16 及以后待逐项选择 |
+| 4 | [P2：内容视图、导出与定时摘要](RSS_P2_VIEWS_INTEGRATIONS.md) | 多内容视图、外部导出、Windows 通知和摘要 | 进行中；P2-01～P2-14、P2-20 已完成，P2-15 已取消，下一片 P2-21；P2-16～P2-19 待逐项选择 |
 
 执行原则：
 
