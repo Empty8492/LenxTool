@@ -100,6 +100,8 @@ P1-20 的保留候选由 `FeedRetentionSql` 统一投影，严格排除 favorite
 
 参数化语句与事务由仓储负责；页面无法取得原始数据库连接。
 
+P2-20 的首个基础片只在 Core 建立本地日历计划换算，不写数据库也不启动后台任务。计划显式保存时区 ID，once/daily/weekly/monthly 都计算严格晚于给定时刻的下一次 UTC；月末收敛到短月最后一天，春季 DST 缺口移动到第一个有效分钟，秋季重叠固定选择较早的 UTC 时刻。持久化计划、错过执行、窗口幂等领取、禁用/取消和任务处理器属于后续片，在这些边界落地前不得把定时摘要描述为可用功能。
+
 ## 4. 密钥与认证
 
 - 自备 Groq/DeepSeek Key 写入 `%LocalAppData%\LenxTool\Secrets\secrets.dat`，使用 Windows DPAPI `CurrentUser` 加密并通过产品 entropy 隔离。

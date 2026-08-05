@@ -8,7 +8,7 @@
 
 | 测试组 | 结果 |
 |---|---:|
-| LenxTool.Core.Tests | 177 passed |
+| LenxTool.Core.Tests | 184 passed |
 | LenxTool.Infrastructure.Tests | 714 passed |
 | LenxTool.App.Tests（排除 WpfRuntime） | 399 passed |
 | Cloudflare Worker Vitest | 78 passed |
@@ -18,6 +18,8 @@
 | npm audit vulnerabilities | 5 detected（1 high / 4 moderate；均在开发/测试工具链） |
 
 P2-15 Cubox 于 2026-08-05 取消实施，未提交的凭据解析、只读健康探针、设置 UI 与对应测试已撤回；生产代码不保存 Cubox API 凭据，也不注册 Cubox 客户端、探针或导出器。设置选项聚焦测试 10/10、Core 177/177、Infrastructure 714/714、App 非 WPF-runtime 399/399、Worker 78/78、strict typecheck 与 Release build 0 警告/0 错误通过。完整 WPF runtime 为 5/9；4 项失败均位于既有 `CalendarAutomationPeer.GetChildrenCore` 空元素调用栈，其中 3 项在独立宿主精确复跑通过，余下 `SelectionControlsWpfRuntimeTests` 在干净提交 `17c0f2e` 上以同一行和调用栈复现，因此记录为基线环境门禁，不归因于本次设置选项修改。
+
+P2-20 本地定时任务首个基础片新增 7 项 Core 测试，覆盖 once/daily/weekly/monthly 严格下一次 UTC、月末收敛、DST 缺口与重叠、字段形状和时区拒绝；聚焦 7/7、Core 全量 184/184 与 Release build 0 警告/0 错误通过。独立审查发现并修复了 monthly 缺少执行日时绕过入口校验的问题。该片未新增 schema、仓储、后台服务、UI、依赖或 Worker 代码；Infrastructure、App、WPF runtime、Worker 与依赖审计沿用同日 P2-15 门禁结果，没有把它们描述为本片重跑。
 
 NuGet 在线审计未发现漏洞；npm 在线审计报告 5 项开发/测试工具链问题（`undici` 1 high，`@cloudflare/vitest-pool-workers`、`miniflare`、`postcss`、`wrangler` 4 moderate）。`npm audit fix --dry-run` 对 `postcss` 给出传递更新，同时对其余链只给出回退到不兼容的 Cloudflare 测试池/Wrangler 版本，dry-run 汇总仍为 5 项；本轮未改依赖、未运行 `audit fix --force`，正式安全发布门禁保持开放。
 
