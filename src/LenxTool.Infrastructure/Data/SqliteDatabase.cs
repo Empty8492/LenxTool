@@ -10,7 +10,7 @@ public sealed partial class SqliteDatabase(
     AppPaths paths,
     ILogger<SqliteDatabase> logger) : IDisposable
 {
-    private const int CurrentSchemaVersion = 21;
+    private const int CurrentSchemaVersion = 22;
     private readonly SemaphoreSlim _initializationGate = new(1, 1);
     private bool _initialized;
     private bool _disposed;
@@ -422,6 +422,24 @@ public sealed partial class SqliteDatabase(
                 command.Parameters.AddWithValue(
                     "$checksum",
                     "lenx-schema-v21-entry-export-queue");
+                await command.ExecuteNonQueryAsync(cancellationToken)
+                    .ConfigureAwait(false);
+                version = 21;
+            }
+
+            if (version < 22)
+            {
+                command.CommandText = MigrationTwentyTwoSql;
+                command.Parameters.Clear();
+                await command.ExecuteNonQueryAsync(cancellationToken)
+                    .ConfigureAwait(false);
+                command.CommandText = "INSERT INTO schema_versions(version, applied_at, checksum) VALUES (22, $appliedAt, $checksum);";
+                command.Parameters.AddWithValue(
+                    "$appliedAt",
+                    DateTimeOffset.UtcNow.ToString("O"));
+                command.Parameters.AddWithValue(
+                    "$checksum",
+                    "lenx-schema-v22-local-scheduled-tasks");
                 await command.ExecuteNonQueryAsync(cancellationToken)
                     .ConfigureAwait(false);
             }
@@ -1279,6 +1297,75 @@ public sealed partial class SqliteDatabase(
         CREATE INDEX ix_entry_export_tasks_history
             ON entry_export_tasks(
                 updated_at DESC, idempotency_key);
+        """;
+
+    private const string MigrationTwentyTwoSql = """
+        -- P2-20 首个持久化片只保存调度定义和下一次 UTC 游标；
+        -- 运行窗口、租约和执行结果将在后续迁移中独立建立。
+        CREATE TABLE local_scheduled_tasks(
+            id TEXT PRIMARY KEY
+                CHECK(length(id) = 36 AND id = lower(id)),
+            frequency TEXT NOT NULL
+                CHECK(frequency IN ('ONCE', 'DAILY', 'WEEKLY', 'MONTHLY')),
+            time_zone_id TEXT NOT NULL
+                CHECK(length(time_zone_id) BETWEEN 1 AND 128
+                    AND time_zone_id = trim(time_zone_id)),
+            local_time TEXT NOT NULL
+                CHECK(length(local_time) = 16),
+            once_date TEXT
+                CHECK(once_date IS NULL OR length(once_date) = 10),
+            weekly_day INTEGER
+                CHECK(weekly_day IS NULL OR (
+                    typeof(weekly_day) = 'integer'
+                    AND weekly_day BETWEEN 0 AND 6)),
+            monthly_day INTEGER
+                CHECK(monthly_day IS NULL OR (
+                    typeof(monthly_day) = 'integer'
+                    AND monthly_day BETWEEN 1 AND 31)),
+            missed_run_policy TEXT NOT NULL
+                CHECK(missed_run_policy IN ('RUN_ONCE', 'SKIP')),
+            is_enabled INTEGER NOT NULL
+                CHECK(is_enabled IN (0, 1)),
+            next_run_at TEXT
+                CHECK(next_run_at IS NULL OR (
+                    length(next_run_at) = 33
+                    AND substr(next_run_at, -6) = '+00:00')),
+            created_at TEXT NOT NULL
+                CHECK(length(created_at) = 33
+                    AND substr(created_at, -6) = '+00:00'),
+            updated_at TEXT NOT NULL
+                CHECK(length(updated_at) = 33
+                    AND substr(updated_at, -6) = '+00:00'),
+            CHECK(
+                (frequency = 'ONCE'
+                    AND once_date IS NOT NULL
+                    AND weekly_day IS NULL
+                    AND monthly_day IS NULL)
+                OR
+                (frequency = 'DAILY'
+                    AND once_date IS NULL
+                    AND weekly_day IS NULL
+                    AND monthly_day IS NULL)
+                OR
+                (frequency = 'WEEKLY'
+                    AND once_date IS NULL
+                    AND weekly_day IS NOT NULL
+                    AND monthly_day IS NULL)
+                OR
+                (frequency = 'MONTHLY'
+                    AND once_date IS NULL
+                    AND weekly_day IS NULL
+                    AND monthly_day IS NOT NULL)),
+            CHECK(
+                (is_enabled = 1 AND next_run_at IS NOT NULL)
+                OR
+                (is_enabled = 0 AND next_run_at IS NULL)),
+            CHECK(created_at <= updated_at)
+        ) WITHOUT ROWID;
+
+        CREATE INDEX ix_local_scheduled_tasks_due
+            ON local_scheduled_tasks(next_run_at, id)
+            WHERE is_enabled = 1;
         """;
 
 }
