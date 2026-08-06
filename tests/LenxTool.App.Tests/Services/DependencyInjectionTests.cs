@@ -43,6 +43,11 @@ public sealed class DependencyInjectionTests
         Assert.Same(
             provider.GetRequiredService<IDesktopFileDialogService>(),
             provider.GetRequiredService<IOpmlFileDialogService>());
+        Assert.Same(
+            provider.GetRequiredService<IDesktopFileDialogService>(),
+            provider.GetRequiredService<IAiReportFileDialogService>());
+        Assert.IsType<AiReportTextExportService>(
+            provider.GetRequiredService<IAiReportTextExportService>());
         // 统一发现页必须消费 DISC-03 的协调服务，而不是旧 URL 单候选服务。
         Assert.NotNull(provider.GetRequiredService<FeedDiscoveryViewModel>());
         Assert.NotNull(provider.GetRequiredService<FeedAdminViewModel>());
@@ -138,7 +143,27 @@ public sealed class DependencyInjectionTests
             provider.GetRequiredService<ILocalScheduleRunRepository>());
         Assert.IsType<LocalScheduleProcessor>(
             provider.GetRequiredService<ILocalScheduleProcessor>());
+        Assert.IsType<FeedDigestExecutionStore>(
+            provider.GetRequiredService<IFeedDigestExecutionStore>());
+        Assert.IsType<FeedDigestScheduleService>(
+            provider.GetRequiredService<IFeedDigestScheduleService>());
+        ILocalScheduledTaskHandler[] scheduledTaskHandlers = provider
+            .GetServices<ILocalScheduledTaskHandler>()
+            .ToArray();
+        Assert.Collection(
+            scheduledTaskHandlers.OrderBy(handler => handler.ScheduleId),
+            handler =>
+            {
+                Assert.Equal(FeedDigestScheduleIds.Daily, handler.ScheduleId);
+                Assert.True(handler.IsIdempotent);
+            },
+            handler =>
+            {
+                Assert.Equal(FeedDigestScheduleIds.Weekly, handler.ScheduleId);
+                Assert.True(handler.IsIdempotent);
+            });
         Assert.NotNull(provider.GetRequiredService<IFeedRefreshService>());
+        Assert.NotNull(provider.GetRequiredService<FeedDigestScheduleViewModel>());
         Assert.NotNull(provider.GetRequiredService<NewsCenterViewModel>());
         Assert.IsType<FavoriteRepository>(provider.GetRequiredService<IFavoriteRepository>());
         Assert.NotNull(provider.GetRequiredService<DashboardViewModel>());

@@ -262,6 +262,55 @@ public sealed class LocalScheduledTaskRepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task PayloadRoundTripsAtomicallyAndParticipatesInReplayIdentity()
+    {
+        using SqliteDatabase database = CreateDatabase();
+        await database.InitializeAsync(CancellationToken.None);
+        var repository = new LocalScheduledTaskRepository(database);
+        DateTimeOffset changedAt = Now.AddHours(2);
+        string payload = FeedDigestScopePayload.Serialize(new(
+            "10000000-0000-4000-8000-000000000001",
+            null,
+            "security"));
+
+        LocalScheduledTask created = await repository.SaveAsync(
+            TaskId,
+            DailyAtEight(),
+            LocalScheduleMissedRunPolicy.RunOnce,
+            isEnabled: true,
+            changedAt,
+            CancellationToken.None,
+            payload);
+
+        Assert.Equal(payload, created.Payload);
+        Assert.Equal(
+            "security",
+            FeedDigestScopePayload.Deserialize(created.Payload).SearchText);
+        Assert.Equal(created, await repository.SaveAsync(
+            TaskId,
+            DailyAtEight(),
+            LocalScheduleMissedRunPolicy.RunOnce,
+            isEnabled: true,
+            changedAt,
+            CancellationToken.None,
+            payload));
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            repository.SaveAsync(
+                TaskId,
+                DailyAtEight(),
+                LocalScheduleMissedRunPolicy.RunOnce,
+                isEnabled: true,
+                changedAt,
+                CancellationToken.None,
+                FeedDigestScopePayload.Serialize(
+                    FeedDigestScope.AllActive)));
+
+        Assert.Equal(payload, (await repository.GetAsync(
+            TaskId,
+            CancellationToken.None))!.Payload);
+    }
+
+    [Fact]
     public async Task InvalidWritesAndExpiredEnabledOnceAreRejected()
     {
         using SqliteDatabase database = CreateDatabase();

@@ -54,7 +54,8 @@ public interface ILocalScheduleRunRepository
     Task ReleaseAsync(
         LocalScheduleRunLease lease,
         DateTimeOffset releasedAtUtc,
-        CancellationToken cancellationToken);
+        CancellationToken cancellationToken,
+        DateTimeOffset? retryNotBeforeUtc = null);
 
     Task<IReadOnlyList<LocalScheduleRun>> GetRecentAsync(
         string scheduleId,

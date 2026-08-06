@@ -244,6 +244,15 @@ public partial class App : Application
         services.AddSingleton<
             ILocalScheduleRunRepository,
             LocalScheduleRunRepository>();
+        services.AddSingleton(FeedDigestOptions.Default);
+        services.AddSingleton<
+            IFeedDigestExecutionStore,
+            FeedDigestExecutionStore>();
+        services.AddSingleton<IFeedDigestScheduleService, FeedDigestScheduleService>();
+        services.AddSingleton<ILocalScheduledTaskHandler>(static services =>
+            CreateFeedDigestHandler(services, FeedDigestPeriod.Daily));
+        services.AddSingleton<ILocalScheduledTaskHandler>(static services =>
+            CreateFeedDigestHandler(services, FeedDigestPeriod.Weekly));
         services.AddSingleton(LocalScheduleProcessorOptions.Default);
         services.AddSingleton<LocalScheduleProcessor>();
         services.AddSingleton<ILocalScheduleProcessor>(static services =>
@@ -338,6 +347,9 @@ public partial class App : Application
             services.GetRequiredService<DesktopFileDialogService>());
         services.AddSingleton<IOpmlFileDialogService>(static services =>
             services.GetRequiredService<DesktopFileDialogService>());
+        services.AddSingleton<IAiReportFileDialogService>(static services =>
+            services.GetRequiredService<DesktopFileDialogService>());
+        services.AddSingleton<IAiReportTextExportService, AiReportTextExportService>();
         services.AddSingleton<AppNavigationService>();
         services.AddSingleton<IAppNavigationService>(static services =>
             services.GetRequiredService<AppNavigationService>());
@@ -358,6 +370,7 @@ public partial class App : Application
                 EagleHttpClientSecurity.CreatePrimaryHandler);
 
         services.AddSingleton<DashboardViewModel>();
+        services.AddSingleton<FeedDigestScheduleViewModel>();
         services.AddSingleton<NewsCenterViewModel>();
         services.AddSingleton<MediaWorkbenchViewModel>();
         services.AddSingleton<HistoryViewModel>();
@@ -377,6 +390,19 @@ public partial class App : Application
         services.AddSingleton(CreateShellViewModel);
         services.AddSingleton<MainWindow>();
     }
+
+    private static FeedDigestScheduledTaskHandler CreateFeedDigestHandler(
+        IServiceProvider services,
+        FeedDigestPeriod period) =>
+        new(
+            period,
+            services.GetRequiredService<ILocalScheduledTaskRepository>(),
+            services.GetRequiredService<IFeedEntryRepository>(),
+            services.GetRequiredService<INewsRepository>(),
+            services.GetRequiredService<IAiReportService>(),
+            services.GetRequiredService<IFeedDigestExecutionStore>(),
+            services.GetRequiredService<FeedDigestOptions>(),
+            services.GetRequiredService<TimeProvider>());
 
     private static ShellViewModel CreateShellViewModel(IServiceProvider services)
     {

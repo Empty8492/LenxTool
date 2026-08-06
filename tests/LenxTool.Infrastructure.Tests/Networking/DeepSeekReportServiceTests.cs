@@ -67,8 +67,129 @@ public sealed class DeepSeekReportServiceTests
         Assert.Equal("DeepSeek", exception.Error.Provider);
     }
 
-    private static DeepSeekReportService CreateService(HttpMessageHandler handler, string? apiKey) =>
-        new(new StubHttpClientFactory(handler), new StubSecretStore(apiKey));
+    [Fact]
+    public async Task GenerateFeedDigestPreservesDeterministicIdentityAndBoundsRequest()
+    {
+        string reportId = $"feed-digest-{new string('a', 64)}";
+        var handler = new StubHandler(async request =>
+        {
+            using JsonDocument requestBody = JsonDocument.Parse(
+                await request.Content!.ReadAsStringAsync(CancellationToken.None));
+            Assert.Equal("deepseek-v4-flash", requestBody.RootElement.GetProperty("model").GetString());
+            Assert.Equal(1200, requestBody.RootElement.GetProperty("max_tokens").GetInt32());
+            string prompt = requestBody.RootElement
+                .GetProperty("messages")[1]
+                .GetProperty("content")
+                .GetString()!;
+            Assert.Contains("<DATA>", prompt, StringComparison.Ordinal);
+            Assert.Contains("[1] 第一条", prompt, StringComparison.Ordinal);
+            Assert.Contains("[2] 第二条", prompt, StringComparison.Ordinal);
+            Assert.True(prompt.Length < 17_000);
+
+            return JsonResponse(HttpStatusCode.OK, """
+                {
+                  "id":"chat-digest",
+                  "model":"deepseek-v4-flash",
+                  "choices":[{"finish_reason":"stop","message":{"role":"assistant","content":"核心判断：本窗口有两条新增内容。"}}],
+                  "usage":{"prompt_tokens":80,"completion_tokens":20,"total_tokens":100}
+                }
+                """);
+        });
+        DeepSeekReportService service = CreateService(handler, "test-deepseek-key");
+        FeedDigestPlan plan = new(
+            reportId,
+            FeedDigestScheduleIds.Daily,
+            FeedDigestPeriod.Daily,
+            FeedDigestScope.AllActive,
+            new(
+                new DateTimeOffset(2026, 8, 5, 0, 0, 0, TimeSpan.Zero),
+                new DateTimeOffset(2026, 8, 6, 0, 0, 0, TimeSpan.Zero)),
+            2,
+            new string('b', 64),
+            "每日订阅摘要 · 2026-08-06",
+            "[1] 第一条\n正文一\n\n[2] 第二条\n正文二");
+
+        AiReport report = await service.GenerateFeedDigestAsync(plan, CancellationToken.None);
+
+        Assert.Equal(reportId, report.Id);
+        Assert.Equal("feed_digest", report.EntityType);
+        Assert.Equal(FeedDigestScheduleIds.Daily, report.EntityId);
+        Assert.Equal("daily_feed_digest", report.ReportType);
+        Assert.Equal(100, report.TokenUsage);
+    }
+
+    [Fact]
+    public async Task GenerateFeedDigestMapsRateLimitToRetryableFailure()
+    {
+        var response = JsonResponse(HttpStatusCode.TooManyRequests, """
+            {"error":{"message":"slow down"}}
+            """);
+        response.Headers.RetryAfter = new(TimeSpan.FromSeconds(30));
+        DeepSeekReportService service = CreateService(
+            new StubHandler(_ => response),
+            "test-deepseek-key");
+        FeedDigestPlan plan = new(
+            $"feed-digest-{new string('a', 64)}",
+            FeedDigestScheduleIds.Weekly,
+            FeedDigestPeriod.Weekly,
+            FeedDigestScope.AllActive,
+            new(
+                new DateTimeOffset(2026, 7, 30, 0, 0, 0, TimeSpan.Zero),
+                new DateTimeOffset(2026, 8, 6, 0, 0, 0, TimeSpan.Zero)),
+            1,
+            new string('b', 64),
+            "每周订阅摘要 · 2026-08-06",
+            "[1] 第一条\n正文");
+
+        AppException exception = await Assert.ThrowsAsync<AppException>(() =>
+            service.GenerateFeedDigestAsync(plan, CancellationToken.None));
+
+        Assert.Equal(AppErrorCode.ProviderRateLimited, exception.Error.Code);
+        Assert.True(exception.Error.IsRetryable);
+        Assert.Equal(TimeSpan.FromSeconds(30), exception.Error.RetryAfter);
+    }
+
+    [Fact]
+    public async Task GenerateFeedDigestMapsHttpDateRetryAfterToRelativeDelay()
+    {
+        DateTimeOffset responseAtUtc =
+            new(2026, 8, 6, 8, 0, 0, TimeSpan.Zero);
+        var response = JsonResponse(HttpStatusCode.TooManyRequests, """
+            {"error":{"message":"slow down"}}
+            """);
+        response.Headers.RetryAfter = new(responseAtUtc.AddMinutes(2));
+        DeepSeekReportService service = CreateService(
+            new StubHandler(_ => response),
+            "test-deepseek-key",
+            new FrozenTimeProvider(responseAtUtc));
+        FeedDigestPlan plan = new(
+            $"feed-digest-{new string('a', 64)}",
+            FeedDigestScheduleIds.Weekly,
+            FeedDigestPeriod.Weekly,
+            FeedDigestScope.AllActive,
+            new(
+                new DateTimeOffset(2026, 7, 30, 0, 0, 0, TimeSpan.Zero),
+                new DateTimeOffset(2026, 8, 6, 0, 0, 0, TimeSpan.Zero)),
+            1,
+            new string('b', 64),
+            "每周订阅摘要 · 2026-08-06",
+            "[1] 第一条\n正文");
+
+        AppException exception = await Assert.ThrowsAsync<AppException>(() =>
+            service.GenerateFeedDigestAsync(plan, CancellationToken.None));
+
+        Assert.Equal(AppErrorCode.ProviderRateLimited, exception.Error.Code);
+        Assert.Equal(TimeSpan.FromMinutes(2), exception.Error.RetryAfter);
+    }
+
+    private static DeepSeekReportService CreateService(
+        HttpMessageHandler handler,
+        string? apiKey,
+        TimeProvider? timeProvider = null) =>
+        new(
+            new StubHttpClientFactory(handler),
+            new StubSecretStore(apiKey),
+            timeProvider ?? TimeProvider.System);
 
     private static HttpResponseMessage JsonResponse(HttpStatusCode status, string json) =>
         new(status) { Content = new StringContent(json, Encoding.UTF8, "application/json") };
@@ -101,5 +222,11 @@ public sealed class DeepSeekReportServiceTests
             Task.CompletedTask;
 
         public Task DeleteAsync(string name, CancellationToken cancellationToken) => Task.CompletedTask;
+    }
+
+    private sealed class FrozenTimeProvider(DateTimeOffset utcNow)
+        : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => utcNow;
     }
 }

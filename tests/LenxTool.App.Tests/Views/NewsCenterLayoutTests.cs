@@ -51,6 +51,54 @@ public sealed class NewsCenterLayoutTests
     }
 
     [Fact]
+    public void AiReportPageHostsAccessibleDailyAndWeeklyScheduleEditors()
+    {
+        XElement template = LoadNewsCenterTemplate();
+        XElement reportTab = Assert.Single(
+            template.Descendants(),
+            element => element.Name.LocalName == "TabItem"
+                && element.Attribute("Header")?.Value == "AI 报告");
+        XElement scheduleHost = Assert.Single(
+            reportTab.Descendants(),
+            element => element.Name.LocalName == "FeedDigestScheduleView");
+        Assert.Equal(
+            "{Binding FeedDigestSchedule}",
+            scheduleHost.Attribute("DataContext")?.Value);
+
+        XElement scheduleView = LoadFixture("FeedDigestScheduleView.xaml");
+        string[] requiredControls =
+        [
+            "启用每日摘要计划",
+            "每日摘要执行时间",
+            "每日摘要订阅范围",
+            "保存每日摘要计划",
+            "启用每周摘要计划",
+            "每周摘要执行星期",
+            "每周摘要执行时间",
+            "每周摘要订阅范围",
+            "保存每周摘要计划"
+        ];
+        Assert.All(
+            requiredControls,
+            name => Assert.Contains(
+                scheduleView.Descendants(),
+                element => element.Attribute("AutomationProperties.Name")?.Value == name));
+        Assert.Contains(
+            scheduleView.Descendants(),
+            element => element.Attribute("AutomationProperties.LiveSetting")?.Value == "Polite");
+        Assert.Contains(
+            reportTab.Descendants(),
+            element => element.Name.LocalName == "Button"
+                && element.Attribute("Command")?.Value == "{Binding ExportSelectedReportCommand}"
+                && element.Attribute("AutomationProperties.Name")?.Value == "导出选中的 AI 报告");
+        Assert.Contains(
+            reportTab.Descendants(),
+            element => element.Name.LocalName == "Button"
+                && element.Attribute("Command")?.Value == "{Binding ReloadReportsCommand}"
+                && element.Attribute("AutomationProperties.Name")?.Value == "刷新本地 AI 报告库");
+    }
+
+    [Fact]
     public void NewsPageUsesRoutedSectionsAndSharedSmoothScrolling()
     {
         XElement template = LoadNewsCenterTemplate();

@@ -10,7 +10,7 @@ public sealed partial class SqliteDatabase(
     AppPaths paths,
     ILogger<SqliteDatabase> logger) : IDisposable
 {
-    private const int CurrentSchemaVersion = 23;
+    private const int CurrentSchemaVersion = 24;
     private readonly SemaphoreSlim _initializationGate = new(1, 1);
     private bool _initialized;
     private bool _disposed;
@@ -458,6 +458,24 @@ public sealed partial class SqliteDatabase(
                 command.Parameters.AddWithValue(
                     "$checksum",
                     "lenx-schema-v23-local-schedule-runs");
+                await command.ExecuteNonQueryAsync(cancellationToken)
+                    .ConfigureAwait(false);
+                version = 23;
+            }
+
+            if (version < 24)
+            {
+                command.CommandText = MigrationTwentyFourSql;
+                command.Parameters.Clear();
+                await command.ExecuteNonQueryAsync(cancellationToken)
+                    .ConfigureAwait(false);
+                command.CommandText = "INSERT INTO schema_versions(version, applied_at, checksum) VALUES (24, $appliedAt, $checksum);";
+                command.Parameters.AddWithValue(
+                    "$appliedAt",
+                    DateTimeOffset.UtcNow.ToString("O"));
+                command.Parameters.AddWithValue(
+                    "$checksum",
+                    "lenx-schema-v24-feed-digest-execution");
                 await command.ExecuteNonQueryAsync(cancellationToken)
                     .ConfigureAwait(false);
             }
@@ -1450,6 +1468,68 @@ public sealed partial class SqliteDatabase(
 
         CREATE INDEX ix_local_schedule_runs_history
             ON local_schedule_runs(schedule_id, scheduled_for DESC);
+        """;
+
+    private const string MigrationTwentyFourSql = """
+        -- 摘要范围与计划定义保持逻辑分层，但由同一个仓储事务提交，避免多进程
+        -- 交错后出现“时间属于 A、范围属于 B”。通用负载有严格大小上限。
+        CREATE TABLE local_scheduled_task_payloads(
+            schedule_id TEXT PRIMARY KEY
+                REFERENCES local_scheduled_tasks(id) ON DELETE CASCADE,
+            payload TEXT NOT NULL CHECK(length(payload) <= 4096)
+        ) WITHOUT ROWID;
+
+        -- PENDING 的重试可见时间与实际 updated_at 分离；计划代际更新仍使用
+        -- 真实状态变更时间，不会被未来 Retry-After 时间干扰。
+        CREATE TABLE local_schedule_run_retries(
+            schedule_id TEXT NOT NULL,
+            scheduled_for TEXT NOT NULL,
+            retry_not_before TEXT NOT NULL
+                CHECK(length(retry_not_before) = 33
+                    AND substr(retry_not_before, -6) = '+00:00'),
+            PRIMARY KEY(schedule_id, scheduled_for),
+            FOREIGN KEY(schedule_id, scheduled_for)
+                REFERENCES local_schedule_runs(schedule_id, scheduled_for)
+                ON DELETE CASCADE
+        ) WITHOUT ROWID;
+
+        -- DeepSeek 没有本地可依赖的幂等键。调用前先写 STARTED；任何崩溃或
+        -- 网络结果未知都保留耐久证据并阻止自动再次计费。
+        CREATE TABLE feed_digest_requests(
+            schedule_id TEXT NOT NULL
+                CHECK(length(schedule_id) = 36
+                    AND schedule_id = lower(schedule_id)),
+            scheduled_for TEXT NOT NULL
+                CHECK(length(scheduled_for) = 33
+                    AND substr(scheduled_for, -6) = '+00:00'),
+            report_id TEXT NOT NULL
+                CHECK(length(report_id) = 76
+                    AND report_id LIKE 'feed-digest-%'),
+            attempt_count INTEGER NOT NULL
+                CHECK(typeof(attempt_count) = 'integer'
+                    AND attempt_count >= 1),
+            status TEXT NOT NULL
+                CHECK(status IN (
+                    'STARTED', 'COMPLETED', 'AMBIGUOUS', 'DISCARDED')),
+            created_at TEXT NOT NULL
+                CHECK(length(created_at) = 33
+                    AND substr(created_at, -6) = '+00:00'),
+            updated_at TEXT NOT NULL
+                CHECK(length(updated_at) = 33
+                    AND substr(updated_at, -6) = '+00:00'),
+            completed_at TEXT
+                CHECK(completed_at IS NULL OR (
+                    length(completed_at) = 33
+                    AND substr(completed_at, -6) = '+00:00')),
+            PRIMARY KEY(schedule_id, scheduled_for),
+            UNIQUE(report_id),
+            CHECK(created_at <= updated_at),
+            CHECK(
+                (status = 'STARTED' AND completed_at IS NULL)
+                OR
+                (status IN ('COMPLETED', 'AMBIGUOUS', 'DISCARDED')
+                    AND completed_at = updated_at))
+        ) WITHOUT ROWID;
         """;
 
 }

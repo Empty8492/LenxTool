@@ -10,7 +10,8 @@ public interface ILocalScheduledTaskRepository
         LocalScheduleMissedRunPolicy missedRunPolicy,
         bool isEnabled,
         DateTimeOffset changedAtUtc,
-        CancellationToken cancellationToken);
+        CancellationToken cancellationToken,
+        string? payload = null);
 
     Task<LocalScheduledTask?> GetAsync(
         string id,

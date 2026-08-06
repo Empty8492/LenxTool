@@ -10,7 +10,8 @@ namespace LenxTool.Infrastructure.Networking;
 
 public sealed class DeepSeekReportService(
     IHttpClientFactory httpClientFactory,
-    ISecretStore secretStore) : IAiReportService
+    ISecretStore secretStore,
+    TimeProvider timeProvider) : IAiReportService
 {
     // Sources: https://api-docs.deepseek.com/api/create-chat-completion/
     //          https://api-docs.deepseek.com/quick_start/pricing/
@@ -19,6 +20,47 @@ public sealed class DeepSeekReportService(
     private const int MaximumSourceCharacters = 16_000;
     private const int MaximumResponseBytes = 2_000_000;
     private const int MaximumOutputTokens = 1200;
+
+    public Task<AiReport> GenerateFeedDigestAsync(
+        FeedDigestPlan plan,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+        const string reportIdPrefix = "feed-digest-";
+        if (!plan.ReportId.StartsWith(
+                reportIdPrefix,
+                StringComparison.Ordinal)
+            || plan.ReportId.Length != reportIdPrefix.Length + 64
+            || plan.ReportId[reportIdPrefix.Length..]
+                .Any(character => !Uri.IsHexDigit(character))
+            || !string.Equals(
+                plan.ScheduleId,
+                FeedDigestScheduleIds.For(plan.Period),
+                StringComparison.Ordinal)
+            || plan.EntryCount < 1
+            || plan.SourceContent.Length > MaximumSourceCharacters)
+        {
+            throw new ArgumentException(
+                "本地聚合摘要计划无效。",
+                nameof(plan));
+        }
+        string reportType = plan.Period switch
+        {
+            FeedDigestPeriod.Daily => "daily_feed_digest",
+            FeedDigestPeriod.Weekly => "weekly_feed_digest",
+            _ => throw new ArgumentOutOfRangeException(nameof(plan))
+        };
+        return GenerateAsync(
+            "feed_digest",
+            plan.ScheduleId,
+            reportType,
+            plan.Title,
+            // SourceContent 已由规划器按模型总输入预算封口；不要在这里追加元数据后
+            // 再截断，否则未发送的尾部仍会改变缓存键并导致重复计费。
+            plan.SourceContent,
+            cancellationToken,
+            plan.ReportId);
+    }
 
     public Task<AiReport> GenerateArticleInsightAsync(
         NewsArticle article,
@@ -66,7 +108,8 @@ public sealed class DeepSeekReportService(
         string reportType,
         string title,
         string source,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? reportId = null)
     {
         string? apiKey = await secretStore.GetAsync("deepseek_api_key", cancellationToken)
             .ConfigureAwait(false);
@@ -127,7 +170,7 @@ public sealed class DeepSeekReportService(
                     "DeepSeek",
                     requestId,
                     LimitTechnicalDetails(SecretRedactor.Redact(responseText)),
-                    response.Headers.RetryAfter?.Delta));
+                    GetRetryAfter(response)));
             }
 
             if (response.Content.Headers.ContentLength is > MaximumResponseBytes)
@@ -160,7 +203,7 @@ public sealed class DeepSeekReportService(
                 ? modelElement.GetString() ?? Model
                 : Model;
             return new(
-                $"report-{Guid.NewGuid():N}",
+                reportId ?? $"report-{Guid.NewGuid():N}",
                 entityType,
                 entityId,
                 reportType,
@@ -187,6 +230,22 @@ public sealed class DeepSeekReportService(
         {
             throw InvalidResponse(null, exception.Message, exception);
         }
+    }
+
+    private TimeSpan? GetRetryAfter(HttpResponseMessage response)
+    {
+        RetryConditionHeaderValue? retryAfter = response.Headers.RetryAfter;
+        if (retryAfter?.Delta is { } delta)
+        {
+            return delta;
+        }
+        if (retryAfter?.Date is not { } retryAtUtc)
+        {
+            return null;
+        }
+
+        TimeSpan delay = retryAtUtc - timeProvider.GetUtcNow();
+        return delay > TimeSpan.Zero ? delay : TimeSpan.Zero;
     }
 
     private static AppException InvalidResponse(

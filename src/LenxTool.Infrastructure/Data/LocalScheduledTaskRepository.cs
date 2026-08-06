@@ -18,11 +18,13 @@ public sealed class LocalScheduledTaskRepository(SqliteDatabase database)
         LocalScheduleMissedRunPolicy missedRunPolicy,
         bool isEnabled,
         DateTimeOffset changedAtUtc,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? payload = null)
     {
         string validatedId = ValidateId(id);
         ValidateTimestamp(changedAtUtc, nameof(changedAtUtc));
         ValidatePolicy(missedRunPolicy);
+        ValidatePayload(payload);
         DateTimeOffset? candidate = LocalScheduleCalculator
             .GetNextOccurrenceUtc(schedule, changedAtUtc);
         DateTimeOffset? nextRunAtUtc = isEnabled
@@ -36,6 +38,21 @@ public sealed class LocalScheduledTaskRepository(SqliteDatabase database)
                 .ConfigureAwait(false);
         await using SqliteTransaction transaction =
             connection.BeginTransaction(deferred: false);
+        LocalScheduledTask? current = await ReadOneAsync(
+            connection,
+            transaction,
+            validatedId,
+            cancellationToken).ConfigureAwait(false);
+        if (current is not null
+            && changedAtUtc == current.UpdatedAtUtc
+            && !string.Equals(
+                payload,
+                current.Payload,
+                StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                "同一时间戳不能表示不同的本地计划负载。");
+        }
         await using SqliteCommand command = connection.CreateCommand();
         command.Transaction = transaction;
         command.CommandText = """
@@ -86,6 +103,12 @@ public sealed class LocalScheduledTaskRepository(SqliteDatabase database)
             throw new InvalidOperationException(
                 "较旧的本地计划变更不能覆盖新状态。");
         }
+        await SavePayloadAsync(
+            connection,
+            transaction,
+            validatedId,
+            payload,
+            cancellationToken).ConfigureAwait(false);
         await CancelUnownedInvalidatedRunsAsync(
             connection,
             transaction,
@@ -129,7 +152,7 @@ public sealed class LocalScheduledTaskRepository(SqliteDatabase database)
         await using SqliteCommand command = connection.CreateCommand();
         command.CommandText = SelectColumns + """
 
-            ORDER BY created_at, id;
+            ORDER BY task.created_at, task.id;
             """;
         var tasks = new List<LocalScheduledTask>();
         await using SqliteDataReader reader =
@@ -255,6 +278,20 @@ public sealed class LocalScheduledTaskRepository(SqliteDatabase database)
         command.Parameters.AddWithValue("$changedAt", Format(changedAtUtc));
         await command.ExecuteNonQueryAsync(cancellationToken)
             .ConfigureAwait(false);
+        command.Parameters.Clear();
+        command.CommandText = """
+            DELETE FROM local_schedule_run_retries
+            WHERE schedule_id=$scheduleId
+              AND EXISTS(
+                  SELECT 1
+                  FROM local_schedule_runs AS run
+                  WHERE run.schedule_id=local_schedule_run_retries.schedule_id
+                    AND run.scheduled_for=local_schedule_run_retries.scheduled_for
+                    AND run.status<>'PENDING');
+            """;
+        command.Parameters.AddWithValue("$scheduleId", scheduleId);
+        await command.ExecuteNonQueryAsync(cancellationToken)
+            .ConfigureAwait(false);
     }
 
     private static async Task<LocalScheduledTask?> ReadOneAsync(
@@ -267,7 +304,7 @@ public sealed class LocalScheduledTaskRepository(SqliteDatabase database)
         command.Transaction = transaction;
         command.CommandText = SelectColumns + """
 
-            WHERE id=$id;
+            WHERE task.id=$id;
             """;
         command.Parameters.AddWithValue("$id", id);
         await using SqliteDataReader reader =
@@ -310,7 +347,8 @@ public sealed class LocalScheduledTaskRepository(SqliteDatabase database)
             isEnabled,
             nextRunAtUtc,
             ReadRequiredTimestamp(reader, 10),
-            ReadRequiredTimestamp(reader, 11));
+            ReadRequiredTimestamp(reader, 11),
+            reader.IsDBNull(12) ? null : reader.GetString(12));
     }
 
     private static void AddScheduleParameters(
@@ -353,6 +391,37 @@ public sealed class LocalScheduledTaskRepository(SqliteDatabase database)
         command.Parameters.AddWithValue("$changedAt", Format(changedAtUtc));
     }
 
+    private static async Task SavePayloadAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        string scheduleId,
+        string? payload,
+        CancellationToken cancellationToken)
+    {
+        await using SqliteCommand command = connection.CreateCommand();
+        command.Transaction = transaction;
+        if (payload is null)
+        {
+            command.CommandText = """
+                DELETE FROM local_scheduled_task_payloads
+                WHERE schedule_id=$scheduleId;
+                """;
+        }
+        else
+        {
+            command.CommandText = """
+                INSERT INTO local_scheduled_task_payloads(schedule_id, payload)
+                VALUES($scheduleId, $payload)
+                ON CONFLICT(schedule_id) DO UPDATE SET
+                    payload=excluded.payload;
+                """;
+            command.Parameters.AddWithValue("$payload", payload);
+        }
+        command.Parameters.AddWithValue("$scheduleId", scheduleId);
+        await command.ExecuteNonQueryAsync(cancellationToken)
+            .ConfigureAwait(false);
+    }
+
     private static string ValidateId(string id)
     {
         if (!Guid.TryParseExact(id, "D", out Guid parsed)
@@ -373,6 +442,15 @@ public sealed class LocalScheduledTaskRepository(SqliteDatabase database)
         if (!Enum.IsDefined(policy))
         {
             throw new ArgumentOutOfRangeException(nameof(policy));
+        }
+    }
+
+    private static void ValidatePayload(string? payload)
+    {
+        if (payload is not null
+            && (payload.Length > 4_096 || payload.Any(char.IsControl)))
+        {
+            throw new ArgumentOutOfRangeException(nameof(payload));
         }
     }
 
@@ -466,9 +544,12 @@ public sealed class LocalScheduledTaskRepository(SqliteDatabase database)
         value is null ? DBNull.Value : Format(value.Value);
 
     private const string SelectColumns = """
-        SELECT id, frequency, time_zone_id, local_time,
-               once_date, weekly_day, monthly_day, missed_run_policy,
-               is_enabled, next_run_at, created_at, updated_at
-        FROM local_scheduled_tasks
+        SELECT task.id, task.frequency, task.time_zone_id, task.local_time,
+               task.once_date, task.weekly_day, task.monthly_day,
+               task.missed_run_policy, task.is_enabled, task.next_run_at,
+               task.created_at, task.updated_at, payload.payload
+        FROM local_scheduled_tasks AS task
+        LEFT JOIN local_scheduled_task_payloads AS payload
+          ON payload.schedule_id=task.id
         """;
 }

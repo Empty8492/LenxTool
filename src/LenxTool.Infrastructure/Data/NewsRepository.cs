@@ -333,54 +333,42 @@ public sealed class NewsRepository(SqliteDatabase database) : INewsRepository
         await using SqliteTransaction transaction = (SqliteTransaction)await connection
             .BeginTransactionAsync(cancellationToken)
             .ConfigureAwait(false);
-        await using SqliteCommand command = connection.CreateCommand();
-        command.Transaction = transaction;
-        command.CommandText = """
-            INSERT INTO ai_reports(
-                id, entity_type, entity_id, report_type, title, content, model,
-                request_count, token_usage, created_at)
-            VALUES (
-                $id, $entityType, $entityId, $reportType, $title, $content, $model,
-                $requestCount, $tokenUsage, $createdAt)
-            ON CONFLICT(id) DO UPDATE SET
-                entity_type=excluded.entity_type,
-                entity_id=excluded.entity_id,
-                report_type=excluded.report_type,
-                title=excluded.title,
-                content=excluded.content,
-                model=excluded.model,
-                request_count=excluded.request_count,
-                token_usage=excluded.token_usage,
-                created_at=excluded.created_at;
-            """;
-        command.Parameters.AddWithValue("$id", report.Id);
-        command.Parameters.AddWithValue("$entityType", report.EntityType);
-        command.Parameters.AddWithValue("$entityId", (object?)report.EntityId ?? DBNull.Value);
-        command.Parameters.AddWithValue("$reportType", report.ReportType);
-        command.Parameters.AddWithValue("$title", report.Title);
-        command.Parameters.AddWithValue("$content", report.Content);
-        command.Parameters.AddWithValue("$model", report.Model);
-        command.Parameters.AddWithValue("$requestCount", report.RequestCount);
-        command.Parameters.AddWithValue("$tokenUsage", report.TokenUsage);
-        command.Parameters.AddWithValue("$createdAt", report.CreatedAt.ToString("O", CultureInfo.InvariantCulture));
-        await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
-
-        command.Parameters.Clear();
-        command.CommandText = "DELETE FROM content_fts WHERE entity_type='report' AND entity_id=$id;";
-        command.Parameters.AddWithValue("$id", report.Id);
-        await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
-
-        command.Parameters.Clear();
-        command.CommandText = """
-            INSERT INTO content_fts(entity_type, entity_id, title, content)
-            VALUES ('report', $id, $title, $content);
-            """;
-        command.Parameters.AddWithValue("$id", report.Id);
-        command.Parameters.AddWithValue("$title", report.Title);
-        command.Parameters.AddWithValue("$content", report.Content);
-        await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        await AiReportSql.UpsertAsync(
+            connection,
+            transaction,
+            report,
+            cancellationToken).ConfigureAwait(false);
 
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<AiReport?> GetReportByIdAsync(
+        string reportId,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(reportId)
+            || reportId.Length > 128
+            || reportId.Any(char.IsControl))
+        {
+            throw new ArgumentOutOfRangeException(nameof(reportId));
+        }
+        await using SqliteConnection connection =
+            await database.OpenConnectionAsync(cancellationToken)
+                .ConfigureAwait(false);
+        await using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT id, entity_type, entity_id, report_type, title, content, model,
+                   request_count, token_usage, created_at
+            FROM ai_reports
+            WHERE id=$id
+            LIMIT 1;
+            """;
+        command.Parameters.AddWithValue("$id", reportId);
+        await using SqliteDataReader reader = await command.ExecuteReaderAsync(
+            cancellationToken).ConfigureAwait(false);
+        return await reader.ReadAsync(cancellationToken).ConfigureAwait(false)
+            ? ReadReport(reader)
+            : null;
     }
 
     public async Task<IReadOnlyList<AiReport>> GetLatestReportsAsync(
@@ -404,21 +392,26 @@ public sealed class NewsRepository(SqliteDatabase database) : INewsRepository
             .ConfigureAwait(false);
         while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
         {
-            reports.Add(new(
-                reader.GetString(0),
-                reader.GetString(1),
-                reader.IsDBNull(2) ? null : reader.GetString(2),
-                reader.GetString(3),
-                reader.GetString(4),
-                reader.GetString(5),
-                reader.GetString(6),
-                reader.GetInt32(7),
-                reader.GetInt32(8),
-                DateTimeOffset.Parse(reader.GetString(9), CultureInfo.InvariantCulture)));
+            reports.Add(ReadReport(reader));
         }
 
         return reports;
     }
+
+    private static AiReport ReadReport(SqliteDataReader reader) =>
+        new(
+            reader.GetString(0),
+            reader.GetString(1),
+            reader.IsDBNull(2) ? null : reader.GetString(2),
+            reader.GetString(3),
+            reader.GetString(4),
+            reader.GetString(5),
+            reader.GetString(6),
+            reader.GetInt32(7),
+            reader.GetInt32(8),
+            DateTimeOffset.Parse(
+                reader.GetString(9),
+                CultureInfo.InvariantCulture));
 
     public async Task<IReadOnlyList<NewsArticle>> GetLatestAsync(
         int limit,

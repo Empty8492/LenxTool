@@ -499,6 +499,69 @@ public sealed class NewsCenterViewModelTests
     }
 
     [Fact]
+    public async Task ExportSelectedReportUsesFixedSuggestedNameAndSelectedReport()
+    {
+        DateOnly today = DateOnly.FromDateTime(DateTime.Today);
+        NewsArticle article = CreateArticle("today", today);
+        AiReport generated = new(
+            "report-export",
+            "news",
+            article.Id,
+            "article_insight",
+            "../不可信标题",
+            "核心判断：值得持续关注。",
+            "deepseek-v4-flash",
+            1,
+            128,
+            new DateTimeOffset(2026, 8, 6, 0, 0, 0, TimeSpan.Zero));
+        var dialogs = new StubAiReportFileDialogService("C:\\Exports\\report.txt");
+        var exporter = new StubAiReportTextExportService();
+        using NewsCenterViewModel viewModel = CreateViewModel(
+            CreateSnapshot(article),
+            aiReports: new StubAiReportService(generated),
+            reportRepository: new StubNewsRepository(),
+            reportDialogs: dialogs,
+            reportExporter: exporter);
+        await viewModel.InitializeAsync(CancellationToken.None);
+        await viewModel.GenerateArticleReportCommand.ExecuteAsync();
+
+        await viewModel.ExportSelectedReportCommand.ExecuteAsync();
+
+        Assert.Equal("LenxTool-AI-report-20260806-000000.txt", dialogs.SuggestedFileName);
+        Assert.Equal("C:\\Exports\\report.txt", exporter.Path);
+        Assert.Same(generated, exporter.Report);
+        Assert.Contains("已导出", viewModel.ReportStatus, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ReloadReportsShowsDigestCreatedByBackgroundProcessor()
+    {
+        AiReport digest = new(
+            $"feed-digest-{new string('a', 64)}",
+            "feed_digest",
+            FeedDigestScheduleIds.Daily,
+            "daily_feed_digest",
+            "每日订阅摘要 · 2026-08-06",
+            "核心判断：本窗口有新增内容。",
+            "deepseek-v4-flash",
+            1,
+            100,
+            new DateTimeOffset(2026, 8, 6, 0, 0, 0, TimeSpan.Zero));
+        var reports = new StubNewsRepository();
+        using NewsCenterViewModel viewModel = CreateViewModel(
+            CreateSnapshot(),
+            reportRepository: reports);
+        await viewModel.InitializeAsync(CancellationToken.None);
+        reports.LatestReports = [digest];
+
+        await viewModel.ReloadReportsCommand.ExecuteAsync();
+
+        Assert.Same(digest, Assert.Single(viewModel.Reports));
+        Assert.Same(digest, viewModel.SelectedReport);
+        Assert.Contains("1 份", viewModel.ReportStatus, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task InitializeAsyncGroupsLocalRanksByPlatform()
     {
         NewsCenterSnapshot snapshot = new(
@@ -2570,11 +2633,15 @@ public sealed class NewsCenterViewModelTests
         IEagleExportTargetStore? eagleTargets = null,
         IEagleApiClient? eagleApi = null,
         IZoteroExportTargetStore? zoteroTargets = null,
-        IEntryIntegrationCredentialStore? integrationCredentials = null) =>
+        IEntryIntegrationCredentialStore? integrationCredentials = null,
+        StubAiReportService? aiReports = null,
+        StubNewsRepository? reportRepository = null,
+        IAiReportFileDialogService? reportDialogs = null,
+        IAiReportTextExportService? reportExporter = null) =>
         new(
             new StubNewsCenterService(snapshot),
-            new StubAiReportService(null),
-            new StubNewsRepository(),
+            aiReports ?? new StubAiReportService(null),
+            reportRepository ?? new StubNewsRepository(),
             dialogs ?? new StubDesktopFileDialogService(),
             feedEntries ?? new StubFeedEntryRepository([]),
             catalogRepository ?? new StubFeedCatalogRepository(CreateCatalog()),
@@ -2602,7 +2669,10 @@ public sealed class NewsCenterViewModelTests
                 ? null
                 : new StubEagleApiClient()),
             zoteroTargets,
-            integrationCredentials);
+            integrationCredentials,
+            null,
+            reportDialogs,
+            reportExporter);
 
     private static ZoteroExportTarget CreateZoteroTarget(
         bool includeSummaryNote = false,
@@ -2905,6 +2975,11 @@ public sealed class NewsCenterViewModelTests
     {
         public IReadOnlyList<TrendItem>? LastTrendItems { get; private set; }
 
+        public Task<AiReport> GenerateFeedDigestAsync(
+            FeedDigestPlan plan,
+            CancellationToken cancellationToken) => Task.FromResult(
+                report ?? throw new InvalidOperationException("本测试不应生成摘要报告。"));
+
         public Task<AiReport> GenerateArticleInsightAsync(
             NewsArticle article,
             CancellationToken cancellationToken) => Task.FromResult(
@@ -2923,6 +2998,7 @@ public sealed class NewsCenterViewModelTests
     private sealed class StubNewsRepository : INewsRepository
     {
         public AiReport? SavedReport { get; private set; }
+        public IReadOnlyList<AiReport> LatestReports { get; set; } = [];
 
         public Task UpsertReportAsync(AiReport report, CancellationToken cancellationToken)
         {
@@ -2930,9 +3006,14 @@ public sealed class NewsCenterViewModelTests
             return Task.CompletedTask;
         }
 
+        public Task<AiReport?> GetReportByIdAsync(
+            string reportId,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<AiReport?>(null);
+
         public Task<IReadOnlyList<AiReport>> GetLatestReportsAsync(
             int limit,
-            CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<AiReport>>([]);
+            CancellationToken cancellationToken) => Task.FromResult(LatestReports);
 
         public Task UpsertAsync(IReadOnlyCollection<NewsArticle> articles, CancellationToken cancellationToken) =>
             Task.CompletedTask;
@@ -3377,6 +3458,35 @@ public sealed class NewsCenterViewModelTests
         public string? PickFolder() => null;
         public void OpenFolder(string path) { }
         public void OpenUri(string uri) => OpenedUri = uri;
+    }
+
+    private sealed class StubAiReportFileDialogService(string? path)
+        : IAiReportFileDialogService
+    {
+        public string? SuggestedFileName { get; private set; }
+
+        public string? PickAiReportExport(string suggestedFileName)
+        {
+            SuggestedFileName = suggestedFileName;
+            return path;
+        }
+    }
+
+    private sealed class StubAiReportTextExportService
+        : IAiReportTextExportService
+    {
+        public string? Path { get; private set; }
+        public AiReport? Report { get; private set; }
+
+        public Task ExportAsync(
+            string path,
+            AiReport report,
+            CancellationToken cancellationToken)
+        {
+            Path = path;
+            Report = report;
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class StubFeedSmartViewRepository(

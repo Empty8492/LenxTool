@@ -98,7 +98,7 @@ LenxTool/
 
 数据库：`%LocalAppData%\LenxTool\Data\lenx.db`。
 
-主要表：`news_articles`、`trend_items`、`ai_reports`、`media_jobs`、`subtitle_segments`、`favorites`、`tags`、`entity_tags`、`app_settings`、`feed_catalog_state`、`feed_categories`、`feed_catalog`、`feed_fetch_state`、`feed_entries`、`user_entry_states`、`entry_assets`、`feed_full_text_content`、`feed_full_text_jobs`、`feed_ai_automation_jobs`、`feed_automation_runs`、`feed_automation_action_runs`、`feed_automation_rules`、`feed_media_deliveries`、`app_notifications`、`schema_versions`。
+主要表：`news_articles`、`trend_items`、`ai_reports`、`media_jobs`、`subtitle_segments`、`favorites`、`tags`、`entity_tags`、`app_settings`、`feed_catalog_state`、`feed_categories`、`feed_catalog`、`feed_fetch_state`、`feed_entries`、`user_entry_states`、`entry_assets`、`feed_full_text_content`、`feed_full_text_jobs`、`feed_ai_automation_jobs`、`feed_automation_runs`、`feed_automation_action_runs`、`feed_automation_rules`、`feed_media_deliveries`、`app_notifications`、`local_scheduled_tasks`、`local_scheduled_task_payloads`、`local_schedule_runs`、`local_schedule_run_retries`、`feed_digest_requests`、`schema_versions`。
 
 实现原则：
 
@@ -260,11 +260,12 @@ npm.cmd test -- --run
 - P2-14 Readwise 适配器已完成：通用个人集成卡选择 Readwise 后固定 `default` 与只读 `https://readwise.io/`，token 只进入 `Readwise/default` DPAPI CurrentUser 槽位；当前表单必须先保存再测试。无副作用健康探针只调用官方 `GET /api/v2/auth/`，显式阅读器动作在 ACTIVE 策略精确允许 `readwise.io` 后才按固定 `default.v1` 作用域入队，后台再次执行策略、凭据和 API 门控。行内 `R` 仅对当前已选中并展示预览的同一 FeedEntry 可执行，详情按钮使用同一边界，防止预览与发送条目错位。
 - 导出器支持五种视图，只发送规范来源、标题、作者、UTC 日期、最多 32 个 categories 和界面可见的有界 `summary`。摘要优先净化正文、为空才回退 Feed summary，规范空白后同时限制 4,000 个 Unicode 文本元素与 16 KiB UTF-8；不发送 `html`、图片、私人备注、AI 私人状态或本机路径。客户端固定 Reader API 与 `Token` 请求头，禁代理/跳转/Cookie/解压、全部公网 DNS 钉住、单并发、1.2 秒主动节流、响应头与正文共用 8 秒、有界 JSON 和封闭错误；长 `Retry-After` 立即交还耐久队列调度，不占住全局导出 worker。官方同 URL 重放不会创建第二条，但会把文档置顶并显示绿色标记；不同追踪 URL 仍可能重复，因此不宣称无副作用强幂等。没有真实 token/账户写入，本切片不新增依赖、SQLite schema 或 D1 migration。
 - P2-14 当前独立项目门禁为 Core 177/177、Infrastructure 714/714、App 397/397（继续排除上述单个 Calendar AutomationPeer 基线环境用例），共 1288 个未阻断 .NET 用例；Worker 78/78、strict typecheck、NuGet/npm 0 漏洞和 Release build 0 警告/0 错误。Readwise 聚焦结果为 Infrastructure 72/72、App/设置/DI 17/17。Infrastructure 首轮因既有 SQLitePCL 测试宿主释放串扰为 713/714，精确复跑 1/1 后独立全量 714/714；App 首轮暴露只读预览误用默认 TwoWay 绑定为 396/397，改为 OneWay 后精确与独立全量均通过。独立审查发现并修复了长 Retry-After 阻塞全局 worker、行按钮可发送非预览条目两项 P1；修复后复核未发现新的 P0/P1。
-- P2-20 本地定时任务模型已完成：Core 负责 once/daily/weekly/monthly 的本地时区与 DST 换算，schema v22 保存计划定义和下一 UTC 游标，schema v23 以唯一窗口、租约令牌和尝试次数提供重启后的 RunOnce/Skip 恢复。通用后台只领取已注册稳定 ID 的幂等处理器，未知计划不执行也不阻塞；续租心跳、异常释放、宿主停止和陈旧 owner 均有独立收敛路径。领取后的任何计划写入都形成持久取消代际，Complete/Release 在 SQL 中原子要求计划仍存在且代际未变；禁用后快速重启、删除计划和过期孤儿窗口都不能恢复旧执行。生产 DI 已接通但当前没有具体处理器，所以后台安全空转。P2-20 聚焦为计划仓储/窗口 30/30、处理器/DI 6/6；完整门禁为 Core 184/184、Infrastructure 745/745、App 非 WPF-runtime 404/404、Worker 78/78、strict typecheck、NuGet 0 漏洞和 Release build 0 警告/0 错误。独立审查修复缺失计划绕过最终护栏和首次取消探测期间宿主停止不释放两项问题，复核无剩余 P0/P1。P2-21 尚未提供摘要处理器或管理 UI，不能把基础设施完成写成定时摘要可用。
+- P2-20 本地定时任务模型已完成：Core 负责 once/daily/weekly/monthly 的本地时区与 DST 换算，schema v22 保存计划定义和下一 UTC 游标，schema v23 以唯一窗口、租约令牌和尝试次数提供重启后的 RunOnce/Skip 恢复。通用后台只领取已注册稳定 ID 的幂等处理器，未知计划不执行也不阻塞；续租心跳、异常释放、宿主停止和陈旧 owner 均有独立收敛路径。领取后的任何计划写入都形成持久取消代际，Complete/Release 在 SQL 中原子要求计划仍存在且代际未变；禁用后快速重启、删除计划和过期孤儿窗口都不能恢复旧执行。P2-20 聚焦为计划仓储/窗口 30/30、处理器/DI 6/6；独立审查修复缺失计划绕过最终护栏和首次取消探测期间宿主停止不释放两项问题，复核无剩余 P0/P1。
+- P2-21 每日/每周本地摘要已完成：两个稳定计划 ID 按所选 ACTIVE Feed/分类/关键词读取上一个本地日历窗口，限制候选 200、去重后 40 条、单条 1,200 字符和总源 16,000 字符。空窗口和确定性报告缓存在模型调用前返回；报告身份只覆盖真正进入模型的输入，并包含范围、窗口、模型和 prompt 版本。schema v24 以三张伴生表提供计划+范围原子保存、持久 Retry-After/指数退避和模型请求防重账本；报告/FTS、请求与窗口终态在同一事务验证租约和计划代际后提交。明确可重试的 429 按 Delta 或 HTTP-date 退避，永久 4xx 收敛为终态；网络/超时/5xx 或崩溃等结果不明场景不自动重放，以可能跳过一次摘要换取不重复计费。报告可在 AI 报告页刷新、搜索并原子导出 `.txt`；筛选、报告和路径不上传 Worker/D1，生成沿用本机 DPAPI DeepSeek Key。管理卡提供日/周启停、本地时间、星期、ACTIVE 范围、关键词和下一次执行时间。最终新鲜门禁见 [`TEST_REPORT.md`](TEST_REPORT.md)。
 
 ### 10.2 下一里程碑
 
-Gate 0 字幕闭环、P0“管理员策展 RSS”、P1“阅读增强、AI 与自动化”、P2-01～P2-14、P2-20，以及插入计划 DISC-01～DISC-06、UX-03 均已完成。[P2 内容视图与集成计划](plans/RSS_P2_VIEWS_INTEGRATIONS.md) 的 P2-15 Cubox 因与既有导出能力重叠、官方幂等与安全重试契约不足而取消实施；客户端不保存 Cubox API 凭据，也不注册连接探针或导出器。P2-20 已完成本地时区换算、schema v22/v23 持久化、RunOnce/Skip 重启恢复、处理器白名单、租约心跳、计划代际取消和生产后台 DI。下一窄切片为 P2-21 每日/每周本地摘要：它才会提供具体摘要处理器、输入边界和管理 UI；当前后台因没有处理器而安全空转，定时摘要尚不可用。P1/P2 源码进度不等于正式签名发布完成。
+Gate 0 字幕闭环、P0“管理员策展 RSS”、P1“阅读增强、AI 与自动化”、P2-01～P2-14、P2-20、P2-21，以及插入计划 DISC-01～DISC-06、UX-03 均已完成。[P2 内容视图与集成计划](plans/RSS_P2_VIEWS_INTEGRATIONS.md) 的 P2-15 Cubox 因与既有导出能力重叠、官方幂等与安全重试契约不足而取消实施；客户端不保存 Cubox API 凭据，也不注册连接探针或导出器。P2-20/P2-21 已完成本地时区换算、schema v22～v24 持久化、RunOnce/Skip 重启恢复、处理器白名单、租约心跳、计划代际取消、日/周摘要的原子配置/结果提交、耐久防重和管理 UI。下一窄切片为 P2-22 Windows 通知与应用内收件箱；P1/P2 源码进度不等于正式签名发布完成。
 
 字幕闭环完成后的产品主路线已确定为“管理员策展 RSS”：管理员维护共享 RSS/Atom 目录，普通用户只能同步和阅读，不得修改共享订阅、分类、抓取策略或自动化规则。为保持现有“云端不存新闻正文”边界，首版采用 Worker/D1 保存权威目录、各桌面客户端本地抓取和 SQLite 缓存的模式。
 
@@ -274,7 +275,7 @@ Gate 0 字幕闭环、P0“管理员策展 RSS”、P1“阅读增强、AI 与�
 2. P0-01～P0-20、P0-B/P0-C 及最终检查点已完成；P0 关闭记录见 [`plans/RSS_P0_ADMIN_CATALOG.md`](plans/RSS_P0_ADMIN_CATALOG.md)。
 3. P1-01～P1-20、P1-A/P1-B/P1-C/P1-D 及最终检查点已完成；关闭记录见 [`plans/RSS_P1_READING_INTELLIGENCE.md`](plans/RSS_P1_READING_INTELLIGENCE.md)。
 4. P2-01～P2-14 已完成五视图、智能视图、统一导出契约、安全集成策略、持久化队列、本地 Markdown、受控 Obsidian Vault、Eagle 图片、Zotero 个人库与 Readwise Reader 导出；[`plans/RSS_DISCOVERY_AND_CONTROL_UX.md`](plans/RSS_DISCOVERY_AND_CONTROL_UX.md) 的 DISC-01～DISC-06 已交付独立发现索引、安全可替换 provider、管理员统一发现页、确认发布闭环和最终检查点，UX-03 已交付原生 WPF 共享控件模板，不依赖 Folo 私有 API 或复制其源码。
-5. P2-15 Cubox 已取消实施；P2-20 已完成本地时区重复计算、schema v22 计划定义、schema v23 窗口幂等/漏跑恢复、后台处理、在途取消协同和生产 DI。下一片为 P2-21 每日/每周本地摘要及管理 UI；P2-16～P2-19 仍待逐项选择，P2-22 以后继续按检查点推进，具体见 [`plans/RSS_P2_VIEWS_INTEGRATIONS.md`](plans/RSS_P2_VIEWS_INTEGRATIONS.md)。
+5. P2-15 Cubox 已取消实施；P2-20/P2-21 已完成本地时区重复计算、schema v22 计划定义、schema v23 窗口幂等/漏跑恢复、schema v24 计划载荷/持久退避/摘要请求账本、后台处理、在途取消、每日/每周摘要及管理 UI。下一片为 P2-22 Windows 通知与应用内收件箱；P2-16～P2-19 仍待逐项选择，具体见 [`plans/RSS_P2_VIEWS_INTEGRATIONS.md`](plans/RSS_P2_VIEWS_INTEGRATIONS.md)。
 6. “洛克王国世界每日清体力自动化”只登记为独立候选调研项，尚未批准 MaaFramework 依赖或任何实现。它不属于 RSS P2 编号；若后续启动，必须先完成条款核对、前台手动登录边界、识别 PoC、进程隔离、停止/失败保护与许可证审查，具体见 [`plans/GAME_AUTOMATION_BACKLOG.md`](plans/GAME_AUTOMATION_BACKLOG.md)。
 
 总路线、参考项目和许可证边界见 [`plans/RSS_MASTER_ROADMAP.md`](plans/RSS_MASTER_ROADMAP.md)，架构决策见 [`decisions/ADR-001-admin-curated-rss.md`](decisions/ADR-001-admin-curated-rss.md)、[`decisions/ADR-002-article-content-extraction.md`](decisions/ADR-002-article-content-extraction.md) 与 [`decisions/ADR-003-durable-entry-export-queue.md`](decisions/ADR-003-durable-entry-export-queue.md)。P0 与 P1 可作为已验收基础；生产 Worker/D1、正式安装包、签名、升级和跨物理机矩阵仍按 10.5～10.7 节单独验收。
@@ -293,13 +294,13 @@ Gate 0 字幕闭环、P0“管理员策展 RSS”、P1“阅读增强、AI 与�
 - 客户端已接入共享账号登录、退出、过期状态、角色、额度和管理员目录管理；注册尚未实现。
 - Worker 认证、令牌轮换和管理员目录写入已有 workerd/D1 自动化；生产 D1 并发压测、共享额度代理链路和真实部署仍未验收。
 - 管理员分类/Feed 写 API、普通用户只读目录、ETag/304、桌面角色可见性、本地目录自动同步、安全发现/抓取和管理交互已实现。
-- 安全 Feed URL 发现、通用条目解析、抓取调度、OPML 管理、只读时间线、Feed 健康诊断、首页真实数据聚合、全文/图片离线、附件分类与安全外链、自动化规则发布边界、图形管理与只读模拟、本地运行账本、规则同步、受限状态动作、AI 摘要/翻译动作、Feed 媒体投递、本地通知收件箱、七类实体统一搜索以及 180 天保留维护均已实现；P2-01～P2-14 的多内容视图、智能视图与已选外部导出也已完成。P2-16～P2-19 仍待逐项选择，P2-21 摘要与后续通知/指标尚未完成。
+- 安全 Feed URL 发现、通用条目解析、抓取调度、OPML 管理、只读时间线、Feed 健康诊断、首页真实数据聚合、全文/图片离线、附件分类与安全外链、自动化规则发布边界、图形管理与只读模拟、本地运行账本、规则同步、受限状态动作、AI 摘要/翻译动作、Feed 媒体投递、本地通知收件箱、七类实体统一搜索、180 天保留维护以及 P2-21 日/周本地摘要均已实现；P2-01～P2-14 的多内容视图、智能视图与已选外部导出也已完成。P2-16～P2-19 仍待逐项选择，P2-22 后续通知与指标尚未完成。
 
 ### 10.4 普通本地使用需要配置
 
 - 云端转写：在设置页保存有效的 Groq API Key。
 - 离线转写：导入兼容 whisper.cpp、文件大于 1 MiB 的 `ggml-*.bin` 模型。
-- DeepSeek Key：生成单条解读或每日趋势报告时需要；在设置页保存后由 DPAPI CurrentUser 加密，报告正文和 token 用量写入本地 SQLite。
+- DeepSeek Key：生成单条解读、每日趋势报告或 P2-21 日/周订阅摘要时需要；在设置页保存后由 DPAPI CurrentUser 加密，报告正文和 token 用量写入本地 SQLite。计划不绕过凭据检查；未配置/无效 Key 等永久 4xx 会把当前窗口终止，明确的 429 持久退避，结果不明的网络/超时/5xx 失败不自动重放以避免重复计费。
 - Obsidian：管理员先在“外部集成”中启用 Obsidian；本机再从设置页选择一个已存在的本地 Vault 根目录并保存相对子目录、标签、可选内联模板和来源链接开关。只有阅读器中的显式导出按钮会入队，保存设置本身不会写入 Vault。
 - Eagle：管理员先在“外部集成”中启用 Eagle；本机设置页默认使用 `http://127.0.0.1:41595/`，也可保存其他带显式端口的数字 loopback HTTP 根地址。Eagle 4.0 Build 21+ 必须正在 Windows 上运行并打开目标资源库；阅读器只对已验证图片显示显式导出动作。
 - Zotero：管理员先在“外部集成”中启用 Zotero 并只允许 `api.zotero.org`；本机设置页保存个人库 User ID、显式条目类型和可选笔记/附件开关，API key 进入 DPAPI 后不回读。所需权限至少为 library/write；启用笔记或附件时还分别需要 notes/files。当前不支持群组库，且真实个人库写入仍需受控验收。

@@ -433,6 +433,11 @@ public sealed class HistoryViewModelTests
         public Task UpsertReportAsync(AiReport report, CancellationToken cancellationToken) =>
             Task.CompletedTask;
 
+        public Task<AiReport?> GetReportByIdAsync(
+            string reportId,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<AiReport?>(null);
+
         public Task<IReadOnlyList<AiReport>> GetLatestReportsAsync(
             int limit,
             CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<AiReport>>([]);

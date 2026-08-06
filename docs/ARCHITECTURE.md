@@ -28,7 +28,7 @@ LenxTool.Core 不引用 WPF、SQLite、HTTP 或任何基础设施包。
 
 每日早报同时保存用于搜索的纯文本和用于阅读的 RSS 富内容。原生 WPF 阅读控件只解析允许的图片、标题、列表和 HTTP/HTTPS 链接，忽略脚本、样式、iframe、object 与 embed；点击链接时才交给系统浏览器。日期选择只在已缓存文章集合中切换，不执行远端 HTML 或脚本。
 
-AI 报告使用自备 DeepSeek Key 经请求级 Bearer 授权调用 `deepseek-v4-flash`。早报正文和热点标题作为不可信资料放入有长度上限的 DATA 区域；模型无工具权限，输出只按纯文本处理。成功结果与模型、请求数、token 用量一并事务写入 `ai_reports` 和 FTS5。
+AI 报告使用自备 DeepSeek Key 经请求级 Bearer 授权调用 `deepseek-v4-flash`。早报正文、热点标题和 P2-21 有界 Feed 聚合输入都作为不可信资料放入 DATA 区域；模型无工具权限，输出只按纯文本处理。成功结果与模型、请求数、token 用量一并事务写入 `ai_reports` 和 FTS5。
 
 ### 媒体任务
 
@@ -71,7 +71,7 @@ AI 报告使用自备 DeepSeek Key 经请求级 Bearer 授权调用 `deepseek-v4
 - `feed_entries`：通用 RSS/Atom 条目；外部 ID 只在 Feed 内唯一，规范化 URL 与内容哈希不承担全局唯一职责。
 - `favorites`：通用实体收藏和备注。
 - `tags`、`entity_tags`：标签与多态关联。
-- `app_settings`：非秘密设置。
+- `app_settings`：不需与其他业务表共同提交的非秘密设置。
 - `schema_versions`：已应用迁移及校验和。
 - `content_fts`：Feed、早报、热点、AI 报告、字幕、标签和收藏的统一 FTS5 内容索引。
 - `feed_entry_search_documents`：Feed 条目的搜索文档投影；schema v5 触发器负责与 `content_fts` 同事务同步。
@@ -85,8 +85,11 @@ AI 报告使用自备 DeepSeek Key 经请求级 Bearer 授权调用 `deepseek-v4
 - `app_notifications`：内容命中、系统健康和任务完成三类本地通知的稳定关联、标题及创建/已读状态；不保存正文、结果内容、异常详情或任意 URI。
 - `local_scheduled_tasks`：本地计划定义、错过执行策略、启用状态和下一次 UTC 游标；不保存任务输入、输出或执行历史。
 - `local_schedule_runs`：以计划 ID 和计划 UTC 时刻唯一标识实际执行窗口，保存封闭状态、尝试次数、租约和最小时间审计；不保存任务输入、输出、正文、异常详情或凭据。
+- `local_scheduled_task_payloads`：与计划定义在同一事务中写入的版本化任务载荷；P2-21 只保存有界的 Feed/分类/关键词范围。
+- `local_schedule_run_retries`：与窗口状态同事务保存的最早重试时刻，使 Retry-After/指数退避跨进程生效而不篡改真实状态时间。
+- `feed_digest_requests`：模型请求的 STARTED/COMPLETED/AMBIGUOUS/DISCARDED 耐久账本，用于在供应商无幂等键时抑制不确定请求的自动重放。
 
-本地数据库当前版本为 schema v23。v3～v7 依次建立字幕翻译用量、Feed 目录/条目、Feed FTS、私人阅读状态和离线资源；v8～v11 建立全文策略/队列、Feed AI 缓存策略和本地自动处理；v12～v14 建立规则运行账本、隐藏状态与 ACTIVE 规则缓存；v15 建立 Feed 媒体投递台账；v16 建立应用内通知收件箱；v17 回填字幕、标签和收藏搜索文档，并为收藏和标签建立同步触发器；v18 为 Feed 视图分类增加独立显式覆盖状态；v19 为通知增加三类封闭类别；v20 保存最近一次验证通过的 ACTIVE 智能视图筛选定义；v21 增加带幂等键、租约、重试、取消和封闭错误码的持久化条目导出任务；v22 保存本地计划定义、错过执行策略、启用状态与下一次 UTC 游标；v23 增加唯一计划窗口、租约、尝试次数和完成/取消历史。旧 v2 数据会依次应用全部迁移，任何一步失败均在事务中回滚且不提升版本。
+本地数据库当前版本为 schema v24。v3～v7 依次建立字幕翻译用量、Feed 目录/条目、Feed FTS、私人阅读状态和离线资源；v8～v11 建立全文策略/队列、Feed AI 缓存策略和本地自动处理；v12～v14 建立规则运行账本、隐藏状态与 ACTIVE 规则缓存；v15 建立 Feed 媒体投递台账；v16 建立应用内通知收件箱；v17 回填字幕、标签和收藏搜索文档，并为收藏和标签建立同步触发器；v18 为 Feed 视图分类增加独立显式覆盖状态；v19 为通知增加三类封闭类别；v20 保存最近一次验证通过的 ACTIVE 智能视图筛选定义；v21 增加带幂等键、租约、重试、取消和封闭错误码的持久化条目导出任务；v22 保存本地计划定义、错过执行策略、启用状态与下一次 UTC 游标；v23 增加唯一计划窗口、租约、尝试次数和完成/取消历史；v24 增加计划载荷、持久退避和摘要模型请求账本三张伴生表。旧 v2 数据会依次应用全部迁移，任何一步失败均在事务中回滚且不提升版本。
 
 统一搜索仓储只接受参数化查询对象，先约束关键词、日期、筛选组合、偏移和页大小，再通过七类实体 CTE 投影到同一结果模型。排序固定为 FTS 排名、实体时间倒序、实体类型和稳定文档 ID；仓储读取 `limit + 1` 决定下一页，UI 使用原始页数量推进偏移并按稳定结果身份防重。应用内导航服务只传递路由和实体 ID：Feed 结果由资讯 ViewModel 精确读取并打开，字幕结果由历史 ViewModel 精确定位任务，其他外部地址仍经 HTTP/HTTPS 安全命令打开。
 
@@ -104,11 +107,17 @@ P1-20 的保留候选由 `FeedRetentionSql` 统一投影，严格排除 favorite
 
 P2-20 已在 Core 建立本地日历计划换算，并由 schema v22 和 `ILocalScheduledTaskRepository` 保存计划定义、错过执行策略、启用状态与下一次 UTC 游标。计划显式保存时区 ID，once/daily/weekly/monthly 都计算严格晚于给定时刻的下一次 UTC；月末收敛到短月最后一天，春季 DST 缺口移动到第一个有效分钟，秋季重叠固定选择较早的 UTC 时刻。禁用会清空待执行游标，重新启用从变更时刻重算；过期单次计划可以保持禁用但不能重新启用。写入使用单调更新时间守卫：较旧状态拒绝，相同时间戳只接受 payload 完全相同的幂等重放。
 
-schema v23 和 `ILocalScheduleRunRepository` 将实际执行窗口与计划定义分离。`scheduled_for` 严格早于调用方给定的 `missedBeforeUtc` 才属于漏跑：RunOnce 只领取持久游标代表的一个窗口并把下一游标推进到 `nowUtc` 之后，Skip 只推进游标且不写伪执行历史；等于边界的窗口仍正常领取。窗口插入与计划游标推进处于同一 `BEGIN IMMEDIATE` 事务，插入失败会一起回滚；`(schedule_id, scheduled_for)` 主键和活动窗口排除保证重复启动只产生一个逻辑窗口。领取优先恢复 PENDING 或租约到期窗口，每次接管生成新令牌并增加尝试次数；到期即失权，旧令牌的续租、完成、取消和释放都会拒绝。续租时间单调不缩短，相同更新时间只允许相同到期时间幂等重放。单次计划在窗口落盘或按 Skip 推进后自动禁用，但已落盘窗口仍可独立恢复。
+schema v23 和 `ILocalScheduleRunRepository` 将实际执行窗口与计划定义分离。`scheduled_for` 严格早于调用方给定的 `missedBeforeUtc` 才属于漏跑：RunOnce 只领取持久游标代表的一个窗口并把下一游标推进到 `nowUtc` 之后，Skip 只推进游标且不写伪执行历史；等于边界的窗口仍正常领取。窗口插入与计划游标推进处于同一 `BEGIN IMMEDIATE` 事务，插入失败会一起回滚；`(schedule_id, scheduled_for)` 主键和活动窗口排除保证重复启动只产生一个逻辑窗口。领取优先恢复 PENDING 或租约到期窗口，每次接管生成新令牌并增加尝试次数；到期即失权，旧令牌的续租、完成、取消和释放都会拒绝。续租时间单调不缩短，相同更新时间只允许相同到期时间幂等重放。schema v24 的伴生重试行使未到 `retry_not_before` 的 PENDING 窗口不参与领取，重新领取时删除该行；因此一个 429 不会热循环或阻塞其他计划。单次计划在窗口落盘或按 Skip 推进后自动禁用，但已落盘窗口仍可独立恢复。
 
-`LocalScheduleProcessor` 只领取已注册 `ILocalScheduledTaskHandler.ScheduleId` 对应的窗口，并在注册时拒绝非法/重复 ID 和非幂等实现；持久租约只能提供至少一次执行，具体处理器不能取得租约令牌或自行提交窗口状态。处理器按租约三分之一周期续租，业务完成前再次检查计划代际，异常把窗口释放为 PENDING，宿主停止尽力释放，所有权丢失则旧 owner 静默退出。计划领取与游标推进使用同一时间戳，之后任意计划写入都会使 `local_scheduled_tasks.updated_at` 大于窗口 `created_at`，形成无需新字段的持久取消代际；即使先禁用后快速重新启用，旧窗口仍必须取消。Complete/Release 的单条 SQL 还要求计划行存在且代际未变，删除、新代际和迟到 owner 都不能越过最终护栏；未持有或过期的旧代际/孤儿窗口会直接收敛为 Cancelled。
+`LocalScheduleProcessor` 只领取已注册 `ILocalScheduledTaskHandler.ScheduleId` 对应的窗口，并在注册时拒绝非法/重复 ID 和非幂等实现。处理器按租约三分之一周期续租，把租约令牌作为最小执行能力交给业务处理器，并在业务返回后再次检查计划代际。普通任务由调度器收敛 Complete/Release；P2-21 的专用仓储则在同一 SQLite 事务中验证租约和计划代际、写入报告/FTS，并把窗口置为 COMPLETED；调度器之后的终态收敛是幂等的。可重试 `AppException` 按有界 Retry-After 或指数退避释放，宿主停止尽力释放，所有权丢失则旧 owner 静默退出。计划领取与游标推进使用同一时间戳，之后任意计划写入都会使 `local_scheduled_tasks.updated_at` 大于窗口 `created_at`，形成持久取消代际；禁用后快速重新启用，旧窗口仍必须取消。Complete/Release 与专用原子提交都要求计划行存在且代际未变，删除、新代际和迟到 owner 都不能越过最终护栏；未持有或过期的旧代际/孤儿窗口会收敛为 Cancelled。
 
-生产组合根已注册两个计划仓储、通用处理器和 `LocalScheduleBackgroundService`。当前没有注册具体 `ILocalScheduledTaskHandler`，因此后台安全空转，不读取或执行未知计划；P2-21 将提供每日/每周摘要处理器、稳定计划 ID、输入边界和管理 UI。在此之前定时摘要仍不是可用产品功能。
+生产组合根已注册两个计划仓储、通用处理器、`LocalScheduleBackgroundService`，以及 P2-21 每日/每周两个稳定 GUID 对应的 `FeedDigestScheduledTaskHandler`。只有用户保存并启用相应计划后才会产生到期窗口；未创建计划时仍安全空转，未知计划继续不会被领取。
+
+P2-21 的 `FeedDigestPlanner` 从计划时区推导前一个本地日/周历窗口，而不是固定减去 24/168 小时；查询始终带 `ActiveOnly`，并叠加本机所选 Feed、分类和最多 200 字关键词。候选最多 200，按时间排序后以规范 URL、内容哈希或条目 ID 去重，实际最多 40 条；单条正文 1,200 字符、总模型源 16,000 字符。规划器返回的条目数、内容哈希和报告 ID 只覆盖真正进入模型的截断后输入，范围、窗口、模型与 prompt 版本共同隔离缓存。空输入返回成功但不生成占位报告；确定性报告 ID 在模型调用前通过 `INewsRepository.GetReportByIdAsync` 查询，已有结果不再次计费。
+
+摘要范围使用版本化 JSON 载荷，`ILocalScheduledTaskRepository.SaveAsync` 在一个 `BEGIN IMMEDIATE` 事务中同时保存计划与载荷，相同时间戳的幂等身份也包含载荷。`FeedDigestScheduleService` 更新已启用计划时先禁用旧代际，再原子保存新计划与范围；失败最多留下禁用任务，不会形成“计划 A + 范围 B”。启用时范围必须仍属当前 ACTIVE 目录，运行查询再次强制 `ActiveOnly`；未知版本或损坏载荷失败关闭。
+
+在没有供应商幂等键的前提下，客户端无法同时保证“崩溃后一定产生报告”和“绝不重复计费”。P2-21 选择 at-most-once 调用边界：发网前先持久化 STARTED；进程崩溃、网络/超时、5xx、无效成功响应或无法证明结果的取消都标记为 AMBIGUOUS 并取消该窗口，之后不再自动调模型，代价是最多丢失一个摘要。只有明确证明未生成可保存结果的 400/401/403/409/429 才清除 STARTED；其中可重试错误使用有界 Retry-After（Delta 或 HTTP-date）/指数退避，不可重试的永久 4xx 直接取消窗口，不释放回 PENDING。成功时专用仓储将租约、计划代际验证、`ai_reports`/FTS、请求 COMPLETED 和窗口 COMPLETED 放在同一事务；代际已变则只记录 DISCARDED 并取消窗口，不落旧报告。AI 报告页只读取本地报告，可显式刷新，并通过用户确认的绝对 `.txt` 路径导出；写入先落同目录临时文件再替换目标，文件名不使用模型输出。
 
 ## 4. 密钥与认证
 
@@ -156,7 +165,7 @@ UI 错误卡根据能力显示重试、复制脱敏详情、打开设置、切�
 
 后续资讯架构采用“Worker/D1 权威共享目录 + 桌面客户端本地抓取/缓存”：管理员通过服务端授权的写端点维护 Feed、分类和策略，普通用户只读同步目录；文章正文、AI 结果、字幕和本地文件仍不写入 D1。详细理由和备选方案见 [ADR-001](decisions/ADR-001-admin-curated-rss.md)，实施批次见 [RSS 集成总路线图](plans/RSS_MASTER_ROADMAP.md)。
 
-P0/P1 当前已完成 Worker 身份生命周期、D1 共享目录/AI 策略/自动化规则 schema、管理员单项与原子批量写 API、目录和规则 ACTIVE/ALL 快照，以及桌面安全会话、账号/角色/额度、订阅管理和规则管理 UI。本地 schema v23 已覆盖目录/抓取状态、Feed 条目与七类 FTS、私人阅读状态、离线资源/全文、AI 缓存与任务、规则快照/运行/动作租约、媒体投递、三类应用内通知、显式视图覆盖、ACTIVE 智能视图缓存、持久化条目导出任务、本地计划定义及唯一计划窗口。目录、规则和智能视图写入均以服务端 admin 角色为授权真相，使用相互独立的 `If-Match` 单调版本、`Idempotency-Key`、参数化 SQL、不可变历史/最小审计和原子结果；ACTIVE/ALL 由服务端角色隔离，桌面角色只控制入口可见性。OPML 在客户端完成有界 XXE-safe 解析、选择和逐项安全发现后，才由 Worker 原子批量提交；目录导出只使用公开字段。D1 智能视图只保存封闭筛选定义，不保存文章正文、AI 结果、字幕、本地文件或私人状态。
+P0/P1 当前已完成 Worker 身份生命周期、D1 共享目录/AI 策略/自动化规则 schema、管理员单项与原子批量写 API、目录和规则 ACTIVE/ALL 快照，以及桌面安全会话、账号/角色/额度、订阅管理和规则管理 UI。本地 schema v24 已覆盖目录/抓取状态、Feed 条目与七类 FTS、私人阅读状态、离线资源/全文、AI 缓存与任务、规则快照/运行/动作租约、媒体投递、三类应用内通知、显式视图覆盖、ACTIVE 智能视图缓存、持久化条目导出任务、本地计划定义/载荷、唯一计划窗口/持久退避及摘要模型请求账本。目录、规则和智能视图写入均以服务端 admin 角色为授权真相，使用相互独立的 `If-Match` 单调版本、`Idempotency-Key`、参数化 SQL、不可变历史/最小审计和原子结果；ACTIVE/ALL 由服务端角色隔离，桌面角色只控制入口可见性。OPML 在客户端完成有界 XXE-safe 解析、选择和逐项安全发现后，才由 Worker 原子批量提交；目录导出只使用公开字段。D1 智能视图只保存封闭筛选定义，不保存文章正文、AI 结果、字幕、本地文件或私人状态。
 
 P2-05 为共享智能视图建立与目录/规则解耦的第三条权威配置流：Worker D1 0009 使用独立 `view_set_version`，ACTIVE 向所有认证用户返回启用视图，ALL 及 POST/PATCH/DELETE 只允许管理员；每次写入通过条件版本、幂等键、事务守卫、不可变版本和最小审计提交。定义只含名称、排序、启用状态，以及 Feed/分类、内容类别、已读、收藏、关键词和发布时间窗口，不含 SQL、正则、脚本、URL 或内容字段。桌面 schema v20 只保存最近一次完整验证的 ACTIVE 快照；后台同步对旧/同版本、ALL 冒充、停用项、重复 ID、超限或畸形响应失败关闭并保留上次缓存。已读与收藏筛选只在 `FeedSmartViewValidator.Apply` 生成本地查询时读取私人状态，不进入 Worker 请求或缓存定义之外的字段。
 

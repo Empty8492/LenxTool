@@ -22,7 +22,8 @@ public sealed record LocalScheduleRun(
     int AttemptCount,
     DateTimeOffset CreatedAtUtc,
     DateTimeOffset UpdatedAtUtc,
-    DateTimeOffset? CompletedAtUtc);
+    DateTimeOffset? CompletedAtUtc,
+    DateTimeOffset? RetryNotBeforeUtc = null);
 
 /// <summary>
 /// 调度处理器领取一个逻辑窗口后得到的所有权证明。
@@ -35,13 +36,29 @@ public sealed record LocalScheduleRunLease(
     string LeaseToken);
 
 /// <summary>
-/// 交给具体计划处理器的最小执行上下文。租约令牌只属于调度内核，
-/// 不向任务实现暴露，避免业务代码绕过所有权检查提交窗口状态。
+/// 交给具体计划处理器的执行上下文。租约令牌只能作为能力传给专用的
+/// 原子提交仓储；业务处理器不能自行拼 SQL 或绕过所有权检查。
 /// </summary>
 public sealed record LocalScheduleExecution(
     string ScheduleId,
     DateTimeOffset ScheduledForUtc,
-    int AttemptCount);
+    int AttemptCount,
+    string? LeaseToken = null)
+{
+    public LocalScheduleRunLease RequireLease()
+    {
+        if (LeaseToken is null)
+        {
+            throw new InvalidOperationException(
+                "当前本地任务没有耐久租约能力。");
+        }
+        return new(
+            ScheduleId,
+            ScheduledForUtc,
+            AttemptCount,
+            LeaseToken);
+    }
+}
 
 /// <summary>
 /// 本地计划处理器的恢复、租约和轮询边界。错过阈值表示计划时刻

@@ -43,4 +43,5 @@ public sealed record LocalScheduledTask(
     bool IsEnabled,
     DateTimeOffset? NextRunAtUtc,
     DateTimeOffset CreatedAtUtc,
-    DateTimeOffset UpdatedAtUtc);
+    DateTimeOffset UpdatedAtUtc,
+    string? Payload = null);

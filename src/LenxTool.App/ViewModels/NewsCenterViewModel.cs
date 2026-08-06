@@ -1,5 +1,7 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Globalization;
+using System.IO;
 using LenxTool.App.Mvvm;
 using LenxTool.App.Services;
 using LenxTool.Core.Contracts;
@@ -20,6 +22,9 @@ public sealed partial class NewsCenterViewModel
     private readonly IAiReportService _aiReportService;
     private readonly INewsRepository _repository;
     private readonly IDesktopFileDialogService _dialogs;
+    private readonly FeedDigestScheduleViewModel? _feedDigestSchedule;
+    private readonly IAiReportFileDialogService? _aiReportDialogs;
+    private readonly IAiReportTextExportService? _aiReportExporter;
     private NewsArticle? _selectedArticle;
     private AiReport? _selectedReport;
     private DateOnly? _selectedDate;
@@ -74,7 +79,10 @@ public sealed partial class NewsCenterViewModel
         IEagleApiClient? eagleApiClient = null,
         IZoteroExportTargetStore? zoteroExportTargetStore = null,
         IEntryIntegrationCredentialStore?
-            entryIntegrationCredentialStore = null)
+            entryIntegrationCredentialStore = null,
+        FeedDigestScheduleViewModel? feedDigestSchedule = null,
+        IAiReportFileDialogService? aiReportDialogs = null,
+        IAiReportTextExportService? aiReportExporter = null)
         : base("资讯列表", "订阅资讯、每日早报、热点趋势与 AI 报告")
     {
         bool hasSharedMediaDependency =
@@ -96,11 +104,20 @@ public sealed partial class NewsCenterViewModel
                 "媒体视图的共享依赖必须完整提供或全部省略。",
                 nameof(feedMediaDelivery));
         }
+        if ((aiReportDialogs is null) != (aiReportExporter is null))
+        {
+            throw new ArgumentException(
+                "AI 报告导出对话框与写入服务必须同时提供或同时省略。",
+                nameof(aiReportDialogs));
+        }
 
         _newsCenterService = newsCenterService;
         _aiReportService = aiReportService;
         _repository = repository;
         _dialogs = dialogs;
+        _feedDigestSchedule = feedDigestSchedule;
+        _aiReportDialogs = aiReportDialogs;
+        _aiReportExporter = aiReportExporter;
         _feedEntryRepository = feedEntryRepository;
         _feedCatalogRepository = feedCatalogRepository;
         _feedCatalogSync = feedCatalogSync;
@@ -124,12 +141,18 @@ public sealed partial class NewsCenterViewModel
                 ? dispatcherContext
                 : null;
         RefreshCommand = new AsyncRelayCommand(RefreshAsync);
+        ReloadReportsCommand = new AsyncRelayCommand(ReloadReportsAsync);
         GenerateArticleReportCommand = new AsyncRelayCommand(
             GenerateArticleReportAsync,
             () => SelectedArticle is not null);
         GenerateDailyTrendReportCommand = new AsyncRelayCommand(
             GenerateDailyTrendReportAsync,
             () => TrendGroups.Count > 0);
+        ExportSelectedReportCommand = new AsyncRelayCommand(
+            ExportSelectedReportAsync,
+            () => SelectedReport is not null
+                && _aiReportDialogs is not null
+                && _aiReportExporter is not null);
         OpenTrendCommand = new RelayCommand<TrendItem>(OpenTrend, CanOpenTrend);
         SelectAllSourcesCommand = new RelayCommand(
             SelectAllSources,
@@ -152,6 +175,8 @@ public sealed partial class NewsCenterViewModel
     public ObservableCollection<TrendPlatformGroup> TrendGroups { get; } = [];
     public ObservableCollection<TrendSourceFilter> SourceFilters { get; } = [];
     public ObservableCollection<AiReport> Reports { get; } = [];
+    public FeedDigestScheduleViewModel? FeedDigestSchedule =>
+        _feedDigestSchedule;
     public FeedContentCollectionViewModel? PictureFeed { get; private set; }
     public Task PictureFeedInitialization => _pictureFeedInitialization;
     public FeedAudioViewModel? AudioFeed { get; private set; }
@@ -162,8 +187,10 @@ public sealed partial class NewsCenterViewModel
     public Task NotificationFeedInitialization =>
         _notificationFeedInitialization;
     public AsyncRelayCommand RefreshCommand { get; }
+    public AsyncRelayCommand ReloadReportsCommand { get; }
     public AsyncRelayCommand GenerateArticleReportCommand { get; }
     public AsyncRelayCommand GenerateDailyTrendReportCommand { get; }
+    public AsyncRelayCommand ExportSelectedReportCommand { get; }
     public RelayCommand<TrendItem> OpenTrendCommand { get; }
     public RelayCommand SelectAllSourcesCommand { get; }
     public int SelectedSectionIndex
@@ -261,7 +288,13 @@ public sealed partial class NewsCenterViewModel
     public AiReport? SelectedReport
     {
         get => _selectedReport;
-        set => SetProperty(ref _selectedReport, value);
+        set
+        {
+            if (SetProperty(ref _selectedReport, value))
+            {
+                ExportSelectedReportCommand.NotifyCanExecuteChanged();
+            }
+        }
     }
 
     public string Status
@@ -293,6 +326,10 @@ public sealed partial class NewsCenterViewModel
         NewsCenterSnapshot snapshot = await _newsCenterService.LoadCachedAsync(cancellationToken);
         ApplySnapshot(snapshot);
         await LoadReportsAsync(cancellationToken);
+        if (_feedDigestSchedule is not null)
+        {
+            await _feedDigestSchedule.InitializeAsync(cancellationToken);
+        }
         await InitializeTimelineAsync(cancellationToken);
     }
 
@@ -301,12 +338,15 @@ public sealed partial class NewsCenterViewModel
         foreach (TrendSourceFilter filter in SourceFilters)
             filter.PropertyChanged -= OnSourceFilterChanged;
         RefreshCommand.Dispose();
+        ReloadReportsCommand.Dispose();
         GenerateArticleReportCommand.Dispose();
         GenerateDailyTrendReportCommand.Dispose();
+        ExportSelectedReportCommand.Dispose();
         PictureFeed?.Dispose();
         AudioFeed?.Dispose();
         VideoFeed?.Dispose();
         NotificationFeed?.Dispose();
+        _feedDigestSchedule?.Dispose();
         DisposeEntryExports();
         DisposeTimeline();
     }
@@ -514,6 +554,47 @@ public sealed partial class NewsCenterViewModel
             cancellationToken);
     }
 
+    private async Task ExportSelectedReportAsync(
+        CancellationToken cancellationToken)
+    {
+        AiReport? report = SelectedReport;
+        if (report is null
+            || _aiReportDialogs is null
+            || _aiReportExporter is null)
+        {
+            return;
+        }
+        string timestamp = report.CreatedAt.UtcDateTime.ToString(
+            "yyyyMMdd-HHmmss",
+            CultureInfo.InvariantCulture);
+        string? path = _aiReportDialogs.PickAiReportExport(
+            $"LenxTool-AI-report-{timestamp}.txt");
+        if (path is null)
+        {
+            ReportStatus = "已取消报告导出。";
+            return;
+        }
+
+        ReportError = null;
+        ReportStatus = "正在导出本地报告…";
+        try
+        {
+            await _aiReportExporter.ExportAsync(
+                path,
+                report,
+                cancellationToken).ConfigureAwait(true);
+            ReportStatus = $"报告已导出 · {Path.GetFileName(path)}";
+        }
+        catch (Exception exception) when (
+            exception is IOException
+                or UnauthorizedAccessException
+                or ArgumentException
+                or NotSupportedException)
+        {
+            ReportStatus = $"报告导出失败：{exception.Message}";
+        }
+    }
+
     private static bool CanOpenTrend(TrendItem? trend) =>
         trend is not null
         && Uri.TryCreate(trend.Url, UriKind.Absolute, out Uri? uri)
@@ -554,6 +635,21 @@ public sealed partial class NewsCenterViewModel
         Reports.Clear();
         foreach (AiReport report in reports) Reports.Add(report);
         SelectedReport = Reports.FirstOrDefault();
+    }
+
+    private async Task ReloadReportsAsync(CancellationToken cancellationToken)
+    {
+        ReportStatus = "正在读取本地报告库…";
+        try
+        {
+            await LoadReportsAsync(cancellationToken).ConfigureAwait(true);
+            ReportStatus = $"报告库已刷新 · {Reports.Count} 份";
+        }
+        catch (Exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            // UI 边界不回显可能包含本机路径的数据库异常。
+            ReportStatus = "本地报告库刷新失败，请稍后重试。";
+        }
     }
 
     private void ApplySnapshot(NewsCenterSnapshot snapshot)

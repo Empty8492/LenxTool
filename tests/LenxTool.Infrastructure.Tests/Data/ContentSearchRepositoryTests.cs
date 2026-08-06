@@ -241,9 +241,12 @@ public sealed class ContentSearchRepositoryTests : IDisposable
                 DROP TABLE feed_smart_views;
                 DROP TABLE feed_smart_view_state;
                 DROP TABLE entry_export_tasks;
+                DROP TABLE feed_digest_requests;
+                DROP TABLE local_schedule_run_retries;
+                DROP TABLE local_scheduled_task_payloads;
                 DROP TABLE local_schedule_runs;
                 DROP TABLE local_scheduled_tasks;
-                DELETE FROM schema_versions WHERE version IN (17, 18, 19, 20, 21, 22, 23);
+                DELETE FROM schema_versions WHERE version>=17;
 
                 INSERT INTO media_jobs(
                     id, kind, input_path, status, progress, engine,
@@ -286,7 +289,7 @@ public sealed class ContentSearchRepositoryTests : IDisposable
         await using SqliteCommand version = verification.CreateCommand();
         version.CommandText = "SELECT MAX(version) FROM schema_versions;";
         Assert.Equal(
-            23L,
+            24L,
             (long)(await version.ExecuteScalarAsync(CancellationToken.None))!);
     }
 

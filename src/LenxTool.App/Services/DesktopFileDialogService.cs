@@ -22,7 +22,15 @@ public interface IOpmlFileDialogService
     string? PickOpmlExport(string suggestedFileName);
 }
 
-public sealed class DesktopFileDialogService : IDesktopFileDialogService, IOpmlFileDialogService
+public interface IAiReportFileDialogService
+{
+    string? PickAiReportExport(string suggestedFileName);
+}
+
+public sealed class DesktopFileDialogService
+    : IDesktopFileDialogService,
+      IOpmlFileDialogService,
+      IAiReportFileDialogService
 {
     public IReadOnlyList<string> PickMediaFiles()
     {
@@ -111,6 +119,22 @@ public sealed class DesktopFileDialogService : IDesktopFileDialogService, IOpmlF
             FileName = suggestedFileName,
             AddExtension = true,
             DefaultExt = ".opml"
+        };
+        return dialog.ShowDialog() == true ? dialog.FileName : null;
+    }
+
+    public string? PickAiReportExport(string suggestedFileName)
+    {
+        string fileName = Path.GetFileName(suggestedFileName);
+        var dialog = new SaveFileDialog
+        {
+            Title = "导出本地 AI 报告",
+            Filter = "纯文本报告|*.txt",
+            FileName = string.IsNullOrWhiteSpace(fileName)
+                ? "LenxTool-AI-report.txt"
+                : fileName,
+            AddExtension = true,
+            DefaultExt = ".txt"
         };
         return dialog.ShowDialog() == true ? dialog.FileName : null;
     }

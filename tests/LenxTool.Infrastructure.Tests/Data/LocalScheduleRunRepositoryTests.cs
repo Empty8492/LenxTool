@@ -275,6 +275,57 @@ public sealed class LocalScheduleRunRepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task ReleasedWindowHonorsRetryNotBeforeAcrossRestart()
+    {
+        DateTimeOffset dueAt = CreatedAt.AddHours(1);
+        DateTimeOffset retryAt = dueAt.AddMinutes(6);
+        using (SqliteDatabase database = CreateDatabase())
+        {
+            await database.InitializeAsync(CancellationToken.None);
+            await SaveDailyAsync(
+                database,
+                LocalScheduleMissedRunPolicy.RunOnce);
+            var repository = new LocalScheduleRunRepository(database);
+            LocalScheduleRunLease lease =
+                Assert.IsType<LocalScheduleRunLease>(
+                    await repository.ClaimDueAsync(
+                        dueAt,
+                        dueAt.AddMinutes(-1),
+                        LeaseDuration,
+                        CancellationToken.None));
+            await repository.ReleaseAsync(
+                lease,
+                dueAt.AddMinutes(1),
+                CancellationToken.None,
+                retryAt);
+            LocalScheduleRun pending = Assert.Single(
+                await repository.GetRecentAsync(
+                    TaskId,
+                    10,
+                    CancellationToken.None));
+            Assert.Equal(LocalScheduleRunStatus.Pending, pending.Status);
+            Assert.Equal(retryAt, pending.RetryNotBeforeUtc);
+        }
+
+        using SqliteDatabase reopened = CreateDatabase();
+        await reopened.InitializeAsync(CancellationToken.None);
+        var reopenedRepository = new LocalScheduleRunRepository(reopened);
+        Assert.Null(await reopenedRepository.ClaimDueAsync(
+            retryAt.AddTicks(-1),
+            dueAt.AddMinutes(-1),
+            LeaseDuration,
+            CancellationToken.None));
+        LocalScheduleRunLease reclaimed =
+            Assert.IsType<LocalScheduleRunLease>(
+                await reopenedRepository.ClaimDueAsync(
+                    retryAt,
+                    dueAt.AddMinutes(-1),
+                    LeaseDuration,
+                    CancellationToken.None));
+        Assert.Equal(2, reclaimed.AttemptCount);
+    }
+
+    [Fact]
     public async Task RunOnceOnceScheduleDisablesButItsExpiredRunIsRecoverable()
     {
         using SqliteDatabase database = CreateDatabase();

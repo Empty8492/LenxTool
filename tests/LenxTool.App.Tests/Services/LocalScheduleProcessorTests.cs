@@ -1,5 +1,6 @@
 using LenxTool.App.Services;
 using LenxTool.Core.Contracts;
+using LenxTool.Core.Errors;
 using LenxTool.Core.Models;
 using LenxTool.Infrastructure.Data;
 using LenxTool.Infrastructure.SystemServices;
@@ -180,6 +181,128 @@ public sealed class LocalScheduleProcessorTests : IDisposable
     }
 
     [Fact]
+    public async Task RetryAfterDefersFailedWindowAndDoesNotStarveOtherPlan()
+    {
+        const string secondScheduleId =
+            "10000000-0000-4000-8000-000000000021";
+        using SqliteDatabase database = CreateDatabase();
+        await database.InitializeAsync(CancellationToken.None);
+        await SaveDailyAsync(database, ScheduleId);
+        await SaveDailyAsync(database, secondScheduleId);
+        var time = new MutableTimeProvider(DueAt);
+        int firstAttempts = 0;
+        var first = new StubHandler(
+            ScheduleId,
+            (_, _) =>
+            {
+                firstAttempts++;
+                if (firstAttempts == 1)
+                {
+                    throw new AppException(new(
+                        AppErrorCode.ProviderRateLimited,
+                        "限流",
+                        "稍后重试。",
+                        "等待服务商窗口。",
+                        RetryAfter: TimeSpan.FromMinutes(2),
+                        IsRetryable: true));
+                }
+                return Task.CompletedTask;
+            });
+        int secondAttempts = 0;
+        var second = new StubHandler(
+            secondScheduleId,
+            (_, _) =>
+            {
+                secondAttempts++;
+                return Task.CompletedTask;
+            });
+        using var processor = CreateProcessor(
+            database,
+            time,
+            [first, second]);
+
+        await Assert.ThrowsAsync<AppException>(() =>
+            processor.ProcessBackgroundBatchAsync(CancellationToken.None));
+        Assert.Equal(
+            DueAt.AddMinutes(2),
+            Assert.Single(
+                await new LocalScheduleRunRepository(database)
+                    .GetRecentAsync(
+                        ScheduleId,
+                        10,
+                        CancellationToken.None))
+                .RetryNotBeforeUtc);
+        Assert.Equal(
+            1,
+            await processor.ProcessBackgroundBatchAsync(
+                CancellationToken.None));
+        Assert.Equal(1, secondAttempts);
+        Assert.Equal(
+            0,
+            await processor.ProcessBackgroundBatchAsync(
+                CancellationToken.None));
+
+        time.SetUtcNow(DueAt.AddMinutes(2));
+        Assert.Equal(
+            1,
+            await processor.ProcessBackgroundBatchAsync(
+                CancellationToken.None));
+        Assert.Equal(2, firstAttempts);
+    }
+
+    [Fact]
+    public async Task NonRetryableProviderFailureCancelsWindowAndDoesNotStarveOtherPlan()
+    {
+        const string secondScheduleId =
+            "10000000-0000-4000-8000-000000000021";
+        using SqliteDatabase database = CreateDatabase();
+        await database.InitializeAsync(CancellationToken.None);
+        await SaveDailyAsync(database, ScheduleId);
+        await SaveDailyAsync(database, secondScheduleId);
+        int firstAttempts = 0;
+        var first = new StubHandler(
+            ScheduleId,
+            (_, _) =>
+            {
+                firstAttempts++;
+                throw new AppException(new(
+                    AppErrorCode.CredentialsInvalid,
+                    "凭据无效",
+                    "请更新凭据。",
+                    "服务商明确拒绝请求。"));
+            });
+        int secondAttempts = 0;
+        var second = new StubHandler(
+            secondScheduleId,
+            (_, _) =>
+            {
+                secondAttempts++;
+                return Task.CompletedTask;
+            });
+        using var processor = CreateProcessor(
+            database,
+            new FrozenTimeProvider(DueAt),
+            [first, second]);
+
+        await Assert.ThrowsAsync<AppException>(() =>
+            processor.ProcessBackgroundBatchAsync(CancellationToken.None));
+        Assert.Equal(
+            LocalScheduleRunStatus.Cancelled,
+            Assert.Single(
+                await new LocalScheduleRunRepository(database).GetRecentAsync(
+                    ScheduleId,
+                    10,
+                    CancellationToken.None)).Status);
+
+        Assert.Equal(
+            1,
+            await processor.ProcessBackgroundBatchAsync(
+                CancellationToken.None));
+        Assert.Equal(1, firstAttempts);
+        Assert.Equal(1, secondAttempts);
+    }
+
+    [Fact]
     public async Task StopDuringInitialCancellationProbeReleasesClaimedWindow()
     {
         var repository = new BlockingProbeRepository();
@@ -340,7 +463,8 @@ public sealed class LocalScheduleProcessorTests : IDisposable
         public Task ReleaseAsync(
             LocalScheduleRunLease lease,
             DateTimeOffset releasedAtUtc,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            DateTimeOffset? retryNotBeforeUtc = null)
         {
             WasReleased = true;
             return Task.CompletedTask;

@@ -1977,8 +1977,14 @@
                             </Grid>
                         </TabItem>
                         <TabItem Header="AI 报告">
-                            <Grid Margin="0,8,0,0" MinHeight="620">
-                                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="8" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                            <Grid Margin="0,8,0,0" MinHeight="960">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="8" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="12" />
+                                    <RowDefinition Height="*" />
+                                </Grid.RowDefinitions>
                                 <Border Padding="18,12" Style="{StaticResource BentoCardStyle}">
                                     <Grid>
                                         <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
@@ -1988,11 +1994,19 @@
                                         </StackPanel>
                                         <StackPanel Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center">
                                             <TextBlock HorizontalAlignment="Right" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource Brush.Accent}" Text="DEEPSEEK" />
-                                            <TextBlock Margin="0,4,0,0" HorizontalAlignment="Right" Style="{StaticResource MetaTextStyle}" Text="输出按纯文本保存 · 可取消" />
+                                            <TextBlock Margin="0,4,0,0" HorizontalAlignment="Right" Style="{StaticResource MetaTextStyle}" Text="输出按纯文本保存 · 可导出" />
+                                            <Button Margin="0,8,0,0"
+                                                    HorizontalAlignment="Right"
+                                                    Padding="10,4"
+                                                    Command="{Binding ReloadReportsCommand}"
+                                                    AutomationProperties.Name="刷新本地 AI 报告库"
+                                                    Content="刷新报告" />
                                         </StackPanel>
                                     </Grid>
                                 </Border>
-                                <Grid Grid.Row="2">
+                                <views:FeedDigestScheduleView Grid.Row="2"
+                                                              DataContext="{Binding FeedDigestSchedule}" />
+                                <Grid Grid.Row="4">
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="340" /><ColumnDefinition Width="14" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                                     <Border Style="{StaticResource BentoCardStyle}" Padding="0">
                                         <ListBox ItemsSource="{Binding Reports}"
@@ -2020,10 +2034,23 @@
                                     <Border Grid.Column="2" Style="{StaticResource BentoCardStyle}" Padding="0">
                                         <Grid>
                                             <Grid.RowDefinitions><RowDefinition Height="56" /><RowDefinition Height="*" /><RowDefinition Height="40" /></Grid.RowDefinitions>
-                                            <StackPanel Margin="22,0" VerticalAlignment="Center">
-                                                <TextBlock Style="{StaticResource SectionTitleStyle}" Text="{Binding SelectedReport.Title, TargetNullValue=尚未生成报告}" TextWrapping="Wrap" />
-                                                <TextBlock Margin="0,4,0,0" Style="{StaticResource MetaTextStyle}" Text="{Binding SelectedReport.Model, TargetNullValue=请从每日早报或热点趋势页生成第一份报告}" />
-                                            </StackPanel>
+                                            <Grid Margin="22,0">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <StackPanel VerticalAlignment="Center">
+                                                    <TextBlock Style="{StaticResource SectionTitleStyle}" Text="{Binding SelectedReport.Title, TargetNullValue=尚未生成报告}" TextWrapping="Wrap" />
+                                                    <TextBlock Margin="0,4,0,0" Style="{StaticResource MetaTextStyle}" Text="{Binding SelectedReport.Model, TargetNullValue=请从每日早报或热点趋势页生成第一份报告}" />
+                                                </StackPanel>
+                                                <Button Grid.Column="1"
+                                                        MinWidth="88"
+                                                        Margin="16,0,0,0"
+                                                        VerticalAlignment="Center"
+                                                        Command="{Binding ExportSelectedReportCommand}"
+                                                        AutomationProperties.Name="导出选中的 AI 报告"
+                                                        Content="导出文本" />
+                                            </Grid>
                                             <TextBox Grid.Row="1"
                                                      Padding="22,16"
                                                      IsReadOnly="True"

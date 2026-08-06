@@ -26,6 +26,10 @@ public interface INewsRepository
         AiReport report,
         CancellationToken cancellationToken);
 
+    Task<AiReport?> GetReportByIdAsync(
+        string reportId,
+        CancellationToken cancellationToken);
+
     Task<IReadOnlyList<AiReport>> GetLatestReportsAsync(
         int limit,
         CancellationToken cancellationToken);

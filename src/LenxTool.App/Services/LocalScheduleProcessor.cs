@@ -1,11 +1,13 @@
 using LenxTool.Core.Contracts;
+using LenxTool.Core.Errors;
 using LenxTool.Core.Models;
 
 namespace LenxTool.App.Services;
 
 /// <summary>
-/// 单并发驱动已注册的本地计划处理器，并把持久租约、重启恢复和计划代际取消
-/// 隔离在业务处理器之外。具体任务只能看到窗口身份，不能直接提交仓储状态。
+/// 单并发驱动已注册的本地计划处理器，并统一维护持久租约、重启恢复和计划代际取消。
+/// 执行上下文携带当前租约能力；普通任务返回后由本类收敛状态，需要“业务结果 + 窗口终态”
+/// 原子提交的处理器可把该能力交给专用仓储验证，但不能绕过租约与计划代际护栏。
 /// </summary>
 public sealed class LocalScheduleProcessor :
     ILocalScheduleProcessor,
@@ -149,7 +151,8 @@ public sealed class LocalScheduleProcessor :
                     new LocalScheduleExecution(
                         lease.ScheduleId,
                         lease.ScheduledForUtc,
-                        lease.AttemptCount),
+                        lease.AttemptCount,
+                        lease.LeaseToken),
                     linked.Token).ConfigureAwait(false);
                 if (leaseOwnershipLost.IsCancellationRequested)
                 {
@@ -177,6 +180,30 @@ public sealed class LocalScheduleProcessor :
                 when (leaseOwnershipLost.IsCancellationRequested)
             {
                 // 租约已失效时旧处理器只能退出，不能覆盖新 owner 的状态。
+            }
+            catch (AppException exception)
+                when (exception.Error.IsRetryable)
+            {
+                if (!await TryHonorCancellationAsync(lease)
+                        .ConfigureAwait(false))
+                {
+                    DateTimeOffset releasedAtUtc =
+                        _timeProvider.GetUtcNow();
+                    await TryReleaseAsync(
+                        lease,
+                        releasedAtUtc.Add(
+                            GetRetryDelay(lease, exception.Error)))
+                        .ConfigureAwait(false);
+                }
+                throw;
+            }
+            catch (AppException)
+            {
+                // 供应商已明确拒绝且错误不可重试时，窗口必须
+                // 进入终态。若释放回 PENDING，旧窗口会每轮优先被重领，
+                // 既反复调用永久 4xx，也可能饿死其他到期计划。
+                await TryCancelAsync(lease).ConfigureAwait(false);
+                throw;
             }
             catch
             {
@@ -302,19 +329,38 @@ public sealed class LocalScheduleProcessor :
         }
     }
 
-    private async Task TryReleaseAsync(LocalScheduleRunLease lease)
+    private async Task TryReleaseAsync(
+        LocalScheduleRunLease lease,
+        DateTimeOffset? retryNotBeforeUtc = null)
     {
         try
         {
             await _repository.ReleaseAsync(
                 lease,
                 _timeProvider.GetUtcNow(),
-                CancellationToken.None).ConfigureAwait(false);
+                CancellationToken.None,
+                retryNotBeforeUtc).ConfigureAwait(false);
         }
         catch
         {
             // 退出与异常路径尽力释放；失败时租约到期后仍能持久恢复。
         }
+    }
+
+    private TimeSpan GetRetryDelay(
+        LocalScheduleRunLease lease,
+        AppError error)
+    {
+        TimeSpan fallback = TimeSpan.FromMinutes(
+            Math.Min(60, Math.Pow(2, Math.Min(lease.AttemptCount - 1, 6))));
+        TimeSpan requested = error.RetryAfter ?? fallback;
+        if (requested < _options.PollInterval)
+        {
+            return _options.PollInterval;
+        }
+        return requested > TimeSpan.FromDays(1)
+            ? TimeSpan.FromDays(1)
+            : requested;
     }
 
     private static string ValidateScheduleId(string scheduleId)

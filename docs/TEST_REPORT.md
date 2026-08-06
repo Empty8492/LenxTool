@@ -1,6 +1,6 @@
 # 测试报告
 
-测试日期：.NET 2026-08-05 / Worker 2026-08-05（Asia/Shanghai）
+测试日期：.NET 2026-08-06 / Worker 2026-08-06（Asia/Shanghai）
 版本：0.1.0  
 配置：Release / win-x64 / .NET SDK 10.0.302
 
@@ -8,10 +8,10 @@
 
 | 测试组 | 结果 |
 |---|---:|
-| LenxTool.Core.Tests | 184 passed |
-| LenxTool.Infrastructure.Tests | 745 passed |
-| LenxTool.App.Tests（排除 WpfRuntime） | 404 passed |
-| LenxTool.App.Tests（WpfRuntime 独立串行） | 6 passed / 3 baseline environment failures |
+| LenxTool.Core.Tests | 191 passed |
+| LenxTool.Infrastructure.Tests | 755 passed |
+| LenxTool.App.Tests（排除 WpfRuntime） | 427 passed |
+| LenxTool.App.Tests（WpfRuntime 逐项隔离复跑） | 8 passed / 1 baseline environment failure |
 | Cloudflare Worker Vitest | 78 passed |
 | Worker TypeScript strict typecheck | passed |
 | .NET build warnings | 0 |
@@ -26,7 +26,13 @@ P2-20 持久化片新增 schema v22、计划仓储接口与 SQLite 实现，以�
 
 P2-20 窗口与恢复片新增 schema v23、`ILocalScheduleRunRepository`、SQLite 实现、14 项窗口行为测试和 1 项 v22→v23 迁移测试。覆盖正常到期、RunOnce/Skip 漏跑、严格漏跑边界、同一窗口双仓储竞争、计划游标与窗口插入原子回滚、数据库重开、PENDING 释放、过期接管、陈旧令牌、到期即失权、单次计划自动禁用、续租单调/同时间戳幂等、完成和取消。独立审查发现旧 owner 在租约到期但尚未被接管时仍可续租或提交的 P1；修复后领取与提交在到期边界互斥，复核未再发现 P0/P1/P2。窗口聚焦 14/14、Core 184/184、Infrastructure 739/739、App 非 WPF-runtime 399/399、Worker 78/78、strict typecheck 和 Release build 0 警告/0 错误均为本片新鲜结果。App 一次性运行受既有 Calendar AutomationPeer 宿主串扰影响为 401/408；真实 WPF 类逐进程串行后为 8/9，唯一 `SelectionControlsWpfRuntimeTests` 仍在既有第 124 行以同一空元素调用栈失败，记录为基线环境门禁。NuGet 在线审计为 0；同步 lockfile 后的 npm audit 仍为 5 项开发/测试工具链漏洞（1 high / 4 moderate），本片未修改依赖，也未执行破坏性强制回退。在该窗口片结束时尚无后台处理器、禁用与在途窗口的取消协同、生产 DI 或 UI；下一段记录其后续补全结果。
 
-P2-20 后台执行与取消片新增 `ILocalScheduledTaskHandler`、`ILocalScheduleProcessor`、通用单并发处理器、轮询后台服务和生产 DI，并以计划 ID 白名单阻止未知计划被误领或阻塞已注册任务。处理器只接受幂等实现，覆盖成功终态、失败释放后同窗口第二次尝试、跨仓储禁用合作取消和宿主在首次取消探测期间停止；仓储新增计划代际取消、禁用后快速重启仍取消旧窗口、最终 Complete/Release 原子护栏、缺失计划拒绝和过期孤儿直接取消。计划仓储/窗口聚焦 30/30、处理器/DI 6/6；独立审查发现并修复“缺失计划可绕过最终护栏”和“首次探测时停止不主动释放”两项问题，复核未发现剩余 P0/P1。最终完整非 WPF-runtime 门禁为 Core 184/184、Infrastructure 745/745、App 404/404，共 1333 个未阻断 .NET 用例；Worker 78/78、strict typecheck、Release build 0 警告/0 错误和 NuGet 在线审计 0 漏洞均为新鲜结果。9 个真实 WPF 用例逐进程串行后为 6/9：`SelectionControlsWpfRuntimeTests` 仍是既有 Calendar AutomationPeer 空元素基线；另外两个滚动时序用例的 100 ms 帧进度低于 70 下限，并分别在未修改的 `b1f754b` 临时 worktree 以相同断言复现，属于当前宿主/负载基线而非本片调度回归。临时 worktree 均已移除。npm 在线审计仍为未改依赖下的 5 项开发/测试工具链漏洞（1 high / 4 moderate），未执行 `audit fix --force`。当前生产没有具体计划处理器，所以后台安全空转；P2-21 摘要与 UI 尚不可用。
+P2-20 后台执行与取消片新增 `ILocalScheduledTaskHandler`、`ILocalScheduleProcessor`、通用单并发处理器、轮询后台服务和生产 DI，并以计划 ID 白名单阻止未知计划被误领或阻塞已注册任务。处理器只接受幂等实现，覆盖成功终态、失败释放后同窗口第二次尝试、跨仓储禁用合作取消和宿主在首次取消探测期间停止；仓储新增计划代际取消、禁用后快速重启仍取消旧窗口、最终 Complete/Release 原子护栏、缺失计划拒绝和过期孤儿直接取消。计划仓储/窗口聚焦 30/30、处理器/DI 6/6；独立审查发现并修复“缺失计划可绕过最终护栏”和“首次探测时停止不主动释放”两项问题，复核未发现剩余 P0/P1。最终完整非 WPF-runtime 门禁为 Core 184/184、Infrastructure 745/745、App 404/404，共 1333 个未阻断 .NET 用例；Worker 78/78、strict typecheck、Release build 0 警告/0 错误和 NuGet 在线审计 0 漏洞均为新鲜结果。9 个真实 WPF 用例逐进程串行后为 6/9：`SelectionControlsWpfRuntimeTests` 仍是既有 Calendar AutomationPeer 空元素基线；另外两个滚动时序用例的 100 ms 帧进度低于 70 下限，并分别在未修改的 `b1f754b` 临时 worktree 以相同断言复现，属于当前宿主/负载基线而非本片调度回归。临时 worktree 均已移除。npm 在线审计仍为未改依赖下的 5 项开发/测试工具链漏洞（1 high / 4 moderate），未执行 `audit fix --force`。截至该片收口时，生产尚无具体计划处理器，因此后台安全空转；该边界随后由 P2-21 补齐。
+
+P2-21 每日/每周本地摘要新增两个稳定计划 ID、本地日历窗口与有界输入规划器、管理卡、报告刷新/搜索和原子纯文本导出。规划器只读 ACTIVE 范围，按规范 URL、内容哈希或条目 ID 去重，并将候选、实际条目、单条正文和总模型源分别限制为 200、40、1,200 字符和 16,000 字符。内容哈希与确定性报告 ID 只覆盖真正送入模型的截断后输入，并包含范围、窗口、模型和 prompt 版本；空窗口和已落库报告都在 DeepSeek 调用前返回。
+
+独立审查先后发现并修复了 5 项 P1：外部请求在发送/落库间崩溃可重复计费、报告可在最终代际验证前落库、计划与范围可跨进程混配、429 可热循环并饿死其他计划，以及永久 4xx 被误释放回 PENDING。schema v24 以 `local_scheduled_task_payloads`、`local_schedule_run_retries` 和 `feed_digest_requests` 分别提供计划+范围原子保存、持久退避和模型请求防重。发网前先写 STARTED；网络/超时/5xx、崩溃、无效成功响应或不确定取消都收敛为 AMBIGUOUS 并终止自动重放。这是显式 at-most-once 取舍：可能丢失一个摘要，但不会因恢复再发一次模型请求。明确可重试的 429 按 Delta 或 HTTP-date 持久退避，永久 4xx 终止窗口；成功报告/FTS、请求与窗口终态在同一事务内验证租约与计划代际后提交。另一项 P2（HTTP-date `Retry-After`）也已修复；第二轮复核未发现剩余 P0/P1/P2。
+
+P2-21 相对 P2-20 共新增 40 个自动化用例，覆盖空输入、去重/DST/周窗口、输入预算与缓存、ACTIVE 范围、配置原子性、租约/代际提交、崩溃防重、Delta/HTTP-date 429、永久 4xx 终态、持久化/搜索、UI/DI 和原子导出。完整非 WPF-runtime 门禁为 Core 191/191、Infrastructure 755/755、App 427/427，共 1373 个用例；Worker 78/78、strict typecheck、Release build 0 警告/0 错误和 NuGet 在线审计 0 漏洞均通过。9 个 WPF runtime 用例同一批次为 5/9，4 项均落在既有 `CalendarAutomationPeer.GetChildrenCore` 空元素调用栈；FeedDiscovery、FeedTimeline 和 FeedViewSwitching 逐项独立复跑通过，唯一 `SelectionControlsWpfRuntimeTests` 仍在未修改的第 124 行以同一既有调用栈失败，因此有效隔离结果为 8/9，记录为基线环境门禁而非摘要回归。npm 在线审计仍为 5 项未改开发/测试工具链漏洞（1 high / 4 moderate），未执行不兼容的 `audit fix --force`。本轮只以假 HTTP 和真实 SQLite 验证外部请求边界，未使用真实 Key 发起 DeepSeek 调用。
 
 NuGet 在线审计未发现漏洞；npm 在线审计报告 5 项开发/测试工具链问题（`undici` 1 high，`@cloudflare/vitest-pool-workers`、`miniflare`、`postcss`、`wrangler` 4 moderate）。`npm audit fix --dry-run` 对 `postcss` 给出传递更新，同时对其余链只给出回退到不兼容的 Cloudflare 测试池/Wrangler 版本，dry-run 汇总仍为 5 项；本轮未改依赖、未运行 `audit fix --force`，正式安全发布门禁保持开放。
 

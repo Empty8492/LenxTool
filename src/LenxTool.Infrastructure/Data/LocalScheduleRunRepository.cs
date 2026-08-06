@@ -243,6 +243,8 @@ public sealed class LocalScheduleRunRepository(SqliteDatabase database)
             lease,
             "COMPLETED",
             completedAtUtc,
+            completedAtUtc,
+            retryNotBeforeUtc: null,
             isTerminal: true,
             allowScheduleMutation: false,
             cancellationToken);
@@ -255,6 +257,8 @@ public sealed class LocalScheduleRunRepository(SqliteDatabase database)
             lease,
             "CANCELLED",
             cancelledAtUtc,
+            cancelledAtUtc,
+            retryNotBeforeUtc: null,
             isTerminal: true,
             allowScheduleMutation: true,
             cancellationToken);
@@ -262,11 +266,14 @@ public sealed class LocalScheduleRunRepository(SqliteDatabase database)
     public Task ReleaseAsync(
         LocalScheduleRunLease lease,
         DateTimeOffset releasedAtUtc,
-        CancellationToken cancellationToken) =>
+        CancellationToken cancellationToken,
+        DateTimeOffset? retryNotBeforeUtc = null) =>
         FinishLeaseAsync(
             lease,
             "PENDING",
             releasedAtUtc,
+            releasedAtUtc,
+            retryNotBeforeUtc,
             isTerminal: false,
             allowScheduleMutation: false,
             cancellationToken);
@@ -288,8 +295,8 @@ public sealed class LocalScheduleRunRepository(SqliteDatabase database)
         await using SqliteCommand command = connection.CreateCommand();
         command.CommandText = SelectRunColumns + """
 
-            WHERE schedule_id=$scheduleId
-            ORDER BY scheduled_for DESC
+            WHERE run.schedule_id=$scheduleId
+            ORDER BY run.scheduled_for DESC
             LIMIT $limit;
             """;
         command.Parameters.AddWithValue("$scheduleId", validatedId);
@@ -336,6 +343,10 @@ public sealed class LocalScheduleRunRepository(SqliteDatabase database)
         command.Parameters.AddWithValue("$now", Format(nowUtc));
         await command.ExecuteNonQueryAsync(cancellationToken)
             .ConfigureAwait(false);
+        await DeleteRetriesForTerminalRunsAsync(
+            connection,
+            transaction,
+            cancellationToken).ConfigureAwait(false);
     }
 
     private static async Task<ExistingRunCandidate?> ReadClaimableRunAsync(
@@ -348,16 +359,22 @@ public sealed class LocalScheduleRunRepository(SqliteDatabase database)
         await using SqliteCommand command = connection.CreateCommand();
         command.Transaction = transaction;
         command.CommandText = """
-            SELECT schedule_id, scheduled_for, attempt_count
-            FROM local_schedule_runs
-            WHERE ((status='PENDING' AND updated_at<=$now)
-               OR (status='RUNNING' AND lease_expires_at<=$now))
+            SELECT run.schedule_id, run.scheduled_for, run.attempt_count
+            FROM local_schedule_runs AS run
+            LEFT JOIN local_schedule_run_retries AS retry
+              ON retry.schedule_id=run.schedule_id
+             AND retry.scheduled_for=run.scheduled_for
+            WHERE ((run.status='PENDING'
+                    AND COALESCE(
+                        retry.retry_not_before,
+                        run.updated_at)<=$now)
+               OR (run.status='RUNNING' AND run.lease_expires_at<=$now))
             """ + BuildEligiblePredicate(
                 command,
-                "schedule_id",
+                "run.schedule_id",
                 eligibleScheduleIds) + """
 
-            ORDER BY scheduled_for, schedule_id
+            ORDER BY run.scheduled_for, run.schedule_id
             LIMIT 1;
             """;
         command.Parameters.AddWithValue("$now", Format(nowUtc));
@@ -395,7 +412,13 @@ public sealed class LocalScheduleRunRepository(SqliteDatabase database)
                 updated_at=$now
             WHERE schedule_id=$scheduleId
               AND scheduled_for=$scheduledFor
-              AND ((status='PENDING' AND updated_at<=$now)
+              AND ((status='PENDING'
+                    AND COALESCE(
+                        (SELECT retry.retry_not_before
+                         FROM local_schedule_run_retries AS retry
+                         WHERE retry.schedule_id=local_schedule_runs.schedule_id
+                           AND retry.scheduled_for=local_schedule_runs.scheduled_for),
+                        updated_at)<=$now)
                 OR (status='RUNNING' AND lease_expires_at<=$now));
             """;
         command.Parameters.AddWithValue("$leaseToken", leaseToken);
@@ -409,6 +432,15 @@ public sealed class LocalScheduleRunRepository(SqliteDatabase database)
             Format(candidate.ScheduledForUtc));
         int changed = await command.ExecuteNonQueryAsync(cancellationToken)
             .ConfigureAwait(false);
+        if (changed == 1)
+        {
+            await DeleteRetryAsync(
+                connection,
+                transaction,
+                candidate.ScheduleId,
+                candidate.ScheduledForUtc,
+                cancellationToken).ConfigureAwait(false);
+        }
         return changed == 1
             ? new(
                 candidate.ScheduleId,
@@ -566,17 +598,34 @@ public sealed class LocalScheduleRunRepository(SqliteDatabase database)
     private async Task FinishLeaseAsync(
         LocalScheduleRunLease lease,
         string status,
+        DateTimeOffset observedAtUtc,
         DateTimeOffset updatedAtUtc,
+        DateTimeOffset? retryNotBeforeUtc,
         bool isTerminal,
         bool allowScheduleMutation,
         CancellationToken cancellationToken)
     {
         ValidateLease(lease);
+        ValidateTimestamp(observedAtUtc, nameof(observedAtUtc));
         ValidateTimestamp(updatedAtUtc, nameof(updatedAtUtc));
+        if (retryNotBeforeUtc is { } retryAt)
+        {
+            ValidateTimestamp(retryAt, nameof(retryNotBeforeUtc));
+            if (isTerminal
+                || retryAt < observedAtUtc
+                || retryAt - observedAtUtc > TimeSpan.FromDays(1))
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(retryNotBeforeUtc));
+            }
+        }
         await using SqliteConnection connection =
             await database.OpenConnectionAsync(cancellationToken)
                 .ConfigureAwait(false);
+        await using SqliteTransaction transaction =
+            connection.BeginTransaction(deferred: false);
         await using SqliteCommand command = connection.CreateCommand();
+        command.Transaction = transaction;
         command.CommandText = """
             UPDATE local_schedule_runs
             SET status=$status,
@@ -588,8 +637,8 @@ public sealed class LocalScheduleRunRepository(SqliteDatabase database)
               AND scheduled_for=$scheduledFor
               AND status='RUNNING'
               AND lease_token=$leaseToken
-              AND lease_expires_at>$updatedAt
-              AND updated_at<=$updatedAt
+              AND lease_expires_at>$observedAt
+              AND updated_at<=$observedAt
               AND ($allowScheduleMutation=1 OR EXISTS(
                   SELECT 1
                   FROM local_scheduled_tasks AS task
@@ -597,6 +646,9 @@ public sealed class LocalScheduleRunRepository(SqliteDatabase database)
                     AND task.updated_at<=local_schedule_runs.created_at));
             """;
         command.Parameters.AddWithValue("$status", status);
+        command.Parameters.AddWithValue(
+            "$observedAt",
+            Format(observedAtUtc));
         command.Parameters.AddWithValue("$updatedAt", Format(updatedAtUtc));
         command.Parameters.AddWithValue(
             "$completedAt",
@@ -610,6 +662,27 @@ public sealed class LocalScheduleRunRepository(SqliteDatabase database)
         {
             throw StaleLease();
         }
+        if (!isTerminal && retryNotBeforeUtc is { } scheduledRetryAt)
+        {
+            await SaveRetryAsync(
+                connection,
+                transaction,
+                lease.ScheduleId,
+                lease.ScheduledForUtc,
+                scheduledRetryAt,
+                cancellationToken).ConfigureAwait(false);
+        }
+        else
+        {
+            await DeleteRetryAsync(
+                connection,
+                transaction,
+                lease.ScheduleId,
+                lease.ScheduledForUtc,
+                cancellationToken).ConfigureAwait(false);
+        }
+        await transaction.CommitAsync(cancellationToken)
+            .ConfigureAwait(false);
     }
 
     private static LocalScheduleRun ReadRun(SqliteDataReader reader) =>
@@ -622,7 +695,80 @@ public sealed class LocalScheduleRunRepository(SqliteDatabase database)
             ParseTimestamp(reader.GetString(5)),
             reader.IsDBNull(6)
                 ? null
-                : ParseTimestamp(reader.GetString(6)));
+                : ParseTimestamp(reader.GetString(6)),
+            reader.IsDBNull(7)
+                ? null
+                : ParseTimestamp(reader.GetString(7)));
+
+    private static async Task SaveRetryAsync(
+        SqliteConnection connection,
+        SqliteTransaction? transaction,
+        string scheduleId,
+        DateTimeOffset scheduledForUtc,
+        DateTimeOffset retryNotBeforeUtc,
+        CancellationToken cancellationToken)
+    {
+        await using SqliteCommand command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            INSERT INTO local_schedule_run_retries(
+                schedule_id, scheduled_for, retry_not_before)
+            VALUES($scheduleId, $scheduledFor, $retryNotBefore)
+            ON CONFLICT(schedule_id, scheduled_for) DO UPDATE SET
+                retry_not_before=excluded.retry_not_before;
+            """;
+        command.Parameters.AddWithValue("$scheduleId", scheduleId);
+        command.Parameters.AddWithValue(
+            "$scheduledFor",
+            Format(scheduledForUtc));
+        command.Parameters.AddWithValue(
+            "$retryNotBefore",
+            Format(retryNotBeforeUtc));
+        await command.ExecuteNonQueryAsync(cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private static async Task DeleteRetryAsync(
+        SqliteConnection connection,
+        SqliteTransaction? transaction,
+        string scheduleId,
+        DateTimeOffset scheduledForUtc,
+        CancellationToken cancellationToken)
+    {
+        await using SqliteCommand command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            DELETE FROM local_schedule_run_retries
+            WHERE schedule_id=$scheduleId
+              AND scheduled_for=$scheduledFor;
+            """;
+        command.Parameters.AddWithValue("$scheduleId", scheduleId);
+        command.Parameters.AddWithValue(
+            "$scheduledFor",
+            Format(scheduledForUtc));
+        await command.ExecuteNonQueryAsync(cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private static async Task DeleteRetriesForTerminalRunsAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        CancellationToken cancellationToken)
+    {
+        await using SqliteCommand command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            DELETE FROM local_schedule_run_retries
+            WHERE EXISTS(
+                SELECT 1
+                FROM local_schedule_runs AS run
+                WHERE run.schedule_id=local_schedule_run_retries.schedule_id
+                  AND run.scheduled_for=local_schedule_run_retries.scheduled_for
+                  AND run.status<>'PENDING');
+            """;
+        await command.ExecuteNonQueryAsync(cancellationToken)
+            .ConfigureAwait(false);
+    }
 
     private static void AddLeaseParameters(
         SqliteCommand command,
@@ -782,9 +928,13 @@ public sealed class LocalScheduleRunRepository(SqliteDatabase database)
         value.ToString("O", CultureInfo.InvariantCulture);
 
     private const string SelectRunColumns = """
-        SELECT schedule_id, scheduled_for, status, attempt_count,
-               created_at, updated_at, completed_at
-        FROM local_schedule_runs
+        SELECT run.schedule_id, run.scheduled_for, run.status,
+               run.attempt_count, run.created_at, run.updated_at,
+               run.completed_at, retry.retry_not_before
+        FROM local_schedule_runs AS run
+        LEFT JOIN local_schedule_run_retries AS retry
+          ON retry.schedule_id=run.schedule_id
+         AND retry.scheduled_for=run.scheduled_for
         """;
 
     private static InvalidOperationException StaleLease() =>
