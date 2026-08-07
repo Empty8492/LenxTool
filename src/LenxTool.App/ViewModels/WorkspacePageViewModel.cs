@@ -61,7 +61,8 @@ public sealed partial class SettingsViewModel : PageViewModel
         IntegrationSettingsViewModel? integrationSettings = null,
         ObsidianSettingsViewModel? obsidianSettings = null,
         EagleSettingsViewModel? eagleSettings = null,
-        ZoteroSettingsViewModel? zoteroSettings = null)
+        ZoteroSettingsViewModel? zoteroSettings = null,
+        WindowsNotificationSettingsViewModel? windowsNotifications = null)
         : base("设置", "外观、服务凭据、数据与更新")
     {
         _themeService = themeService;
@@ -75,6 +76,7 @@ public sealed partial class SettingsViewModel : PageViewModel
         ObsidianSettings = obsidianSettings;
         EagleSettings = eagleSettings;
         ZoteroSettings = zoteroSettings;
+        WindowsNotifications = windowsNotifications;
         _synchronizationContext = SynchronizationContext.Current;
         CheckForUpdatesCommand = new(CheckForUpdatesAsync);
         DownloadUpdateCommand = new(DownloadUpdateAsync, () => _candidate is not null);
@@ -143,6 +145,7 @@ public sealed partial class SettingsViewModel : PageViewModel
     public ObsidianSettingsViewModel? ObsidianSettings { get; }
     public EagleSettingsViewModel? EagleSettings { get; }
     public ZoteroSettingsViewModel? ZoteroSettings { get; }
+    public WindowsNotificationSettingsViewModel? WindowsNotifications { get; }
     public string AppearanceStatus
     {
         get => _appearanceStatus;
@@ -251,6 +254,10 @@ public sealed partial class SettingsViewModel : PageViewModel
         if (ZoteroSettings is not null)
         {
             await ZoteroSettings.InitializeAsync(cancellationToken);
+        }
+        if (WindowsNotifications is not null)
+        {
+            await WindowsNotifications.InitializeAsync(cancellationToken);
         }
     }
 

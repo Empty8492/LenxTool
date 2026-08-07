@@ -4,7 +4,7 @@
 
 `scripts\Build-Release.ps1` 生成：
 
-- `Release\publish\`：自包含 win-x64 文件。
+- `Release\publish\`：自包含 .NET 的 win-x64 文件；Windows App SDK Runtime 仍为系统依赖。
 - `Release\LenxTool_Setup.exe`：Inno Setup 安装包。
 - `Release\LenxTool_Portable_win-x64.zip`：便携版。
 - `Release\update-payload.json`：待签名清单正文。
@@ -33,7 +33,13 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Build-Release.
   -Repository Empty8492/LenxTools
 ```
 
-脚本会：发布自包含应用、准备 WebView2 引导程序、编译中文安装器、创建 ZIP、签名包和清单、使用公钥反向验证两份签名，最后写出 SHA256SUMS。任何一步失败都会终止发布。
+脚本会：发布自包含 .NET 应用，准备 WebView2 引导程序与 Windows App Runtime 2.3.1 x64，编译中文安装器，创建 ZIP，签名包和清单，使用公钥反向验证两份签名，最后写出 SHA256SUMS。任何一步失败都会终止发布。
+
+两个 Microsoft 安装资产都使用仓库中显式固定的 SHA-256，并要求 Authenticode 状态为 `Valid`、发布者精确为 Microsoft Corporation。校验无条件发生在缓存复用或首次下载之后、Inno Setup 编译之前；哈希不匹配不能通过“重新下载”或删除校验绕过。升级资产时必须从 Microsoft 官方来源取得新文件，人工复核版本、哈希和签名后再更新常量与回归测试。
+
+会改变安装界面文本的 `ChineseSimplified.isl` 虽不是可执行文件，也必须匹配仓库固定 SHA-256；文件缺失时的下载同样在 Inno 编译前验证。更新翻译要显式审阅内容并同步哈希测试。
+
+安装版会静默运行两项依赖安装器。便携 ZIP 不包含 Windows App Runtime 安装器：目标机器缺失 Runtime 时，Lenx Tools 主窗口和应用内通知收件箱仍能工作，但 Windows 系统通知会显示为不可用。该降级不等于安装版依赖验收通过。
 
 ## GitHub Releases
 
@@ -65,5 +71,7 @@ ECDSA 发布签名保护应用自己的更新协议，但不会消除 Windows Sm
 - 安装/启动/卸载与覆盖升级通过。
 - 中文用户名、空格路径、断网、取消、429、数据库损坏/迁移测试通过。
 - 清单与安装包签名反向验证通过。
+- WebView2 与 Windows App Runtime 资产的固定哈希、Authenticode、Microsoft 发布者及打包前顺序检查通过。
+- 安装版/便携版分别验证 Runtime 已安装与缺失路径；系统通知缺失时必须只降级 Toast，不能阻止主程序启动。
 - 仓库和发布目录不含私钥、真实 Key、密码、用户媒体或数据库。
 - GitHub Release URL、发行说明和最低版本已替换为真实值。

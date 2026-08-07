@@ -79,7 +79,10 @@ public sealed class FeedAutomationNotificationActionService
             NormalizeLabel(entry.Title, 1_024, "无标题资讯"),
             NormalizeLabel(feed.DisplayName, 160, "未知订阅"),
             _timeProvider.GetUtcNow(),
-            ReadAt: null);
+            ReadAt: null,
+            AppNotificationKind.ContentMatch,
+            AppNotificationTargetKind.FeedEntry,
+            entry.Id);
         AppNotificationRegistration registration =
             await _notifications.RegisterAsync(
                 notification,

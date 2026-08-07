@@ -21,6 +21,7 @@ public sealed class FeedDigestScheduledTaskHandler : ILocalScheduledTaskHandler
     private readonly IFeedDigestExecutionStore _executionStore;
     private readonly FeedDigestOptions _options;
     private readonly TimeProvider _timeProvider;
+    private readonly IAppNotificationPublisher? _notifications;
 
     public FeedDigestScheduledTaskHandler(
         FeedDigestPeriod period,
@@ -30,7 +31,8 @@ public sealed class FeedDigestScheduledTaskHandler : ILocalScheduledTaskHandler
         IAiReportService aiReports,
         IFeedDigestExecutionStore executionStore,
         FeedDigestOptions options,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        IAppNotificationPublisher? notifications = null)
     {
         if (!Enum.IsDefined(period))
         {
@@ -52,6 +54,7 @@ public sealed class FeedDigestScheduledTaskHandler : ILocalScheduledTaskHandler
         _executionStore = executionStore;
         _options = options;
         _timeProvider = timeProvider;
+        _notifications = notifications;
     }
 
     public string ScheduleId => FeedDigestScheduleIds.For(_period);
@@ -116,6 +119,10 @@ public sealed class FeedDigestScheduledTaskHandler : ILocalScheduledTaskHandler
             cancellationToken).ConfigureAwait(false);
         if (cached is not null)
         {
+            // The report commit may have won immediately before a prior
+            // best-effort notification failed. Publishing is idempotent and
+            // repairs that narrow crash/failure window without model replay.
+            await TryPublishCompletionAsync(cached).ConfigureAwait(false);
             return;
         }
 
@@ -139,14 +146,16 @@ public sealed class FeedDigestScheduledTaskHandler : ILocalScheduledTaskHandler
                 "摘要调用已完成但本地报告缺失。");
         }
 
+        AiReport generated;
+        bool committed;
         try
         {
-            AiReport generated = await _aiReports.GenerateFeedDigestAsync(
+            generated = await _aiReports.GenerateFeedDigestAsync(
                 plan,
                 cancellationToken).ConfigureAwait(false);
             ValidateGeneratedReport(plan, generated);
             cancellationToken.ThrowIfCancellationRequested();
-            _ = await _executionStore.CompleteAsync(
+            committed = await _executionStore.CompleteAsync(
                 lease,
                 generated,
                 _timeProvider.GetUtcNow(),
@@ -172,6 +181,38 @@ public sealed class FeedDigestScheduledTaskHandler : ILocalScheduledTaskHandler
                 _timeProvider.GetUtcNow(),
                 CancellationToken.None).ConfigureAwait(false);
             throw;
+        }
+
+        if (committed)
+        {
+            await TryPublishCompletionAsync(generated).ConfigureAwait(false);
+        }
+    }
+
+    private async Task TryPublishCompletionAsync(AiReport report)
+    {
+        if (_notifications is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _notifications.PublishAsync(
+                new(
+                    AppNotificationKind.TaskCompleted,
+                    $"feed-digest:{report.Id}",
+                    report.Id,
+                    ScheduleId,
+                    report.Title,
+                    "本地定时摘要",
+                    TargetKind: AppNotificationTargetKind.AiReport,
+                    TargetId: report.Id),
+                CancellationToken.None).ConfigureAwait(false);
+        }
+        catch
+        {
+            // 系统或应用内通知失败不能反向破坏已原子提交的摘要结果。
         }
     }
 

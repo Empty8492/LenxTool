@@ -15,6 +15,26 @@ $PortablePath = Join-Path $ReleaseDir "LenxTool_Portable_win-x64.zip"
 $PayloadPath = Join-Path $ReleaseDir "update-payload.json"
 $ManifestPath = Join-Path $ReleaseDir "update-manifest.json"
 $PublicKeyPath = Join-Path $ProjectRoot "installer\update-public-key.pem"
+$MicrosoftPublisher = "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+
+function Assert-MicrosoftInstaller {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$ExpectedSha256,
+        [Parameter(Mandatory = $true)][string]$DisplayName
+    )
+
+    $ActualSha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $Path).Hash.ToLowerInvariant()
+    if ($ActualSha256 -ne $ExpectedSha256) {
+        throw "$DisplayName SHA-256 mismatch"
+    }
+
+    $Signature = Get-AuthenticodeSignature -LiteralPath $Path
+    if ($Signature.Status -ne "Valid" -or
+        $Signature.SignerCertificate.Subject -ne $MicrosoftPublisher) {
+        throw "$DisplayName is not validly signed by Microsoft"
+    }
+}
 
 if (-not (Test-Path -LiteralPath $PrivateKeyPath -PathType Leaf)) {
     throw "Offline update private key not found: $PrivateKeyPath"
@@ -34,17 +54,43 @@ dotnet build $ReleaseTool -c Release
 if ($LASTEXITCODE -ne 0) { throw "Release tool build failed" }
 
 $WebViewBootstrapper = Join-Path $InstallerAssets "MicrosoftEdgeWebview2Setup.exe"
+$WebViewBootstrapperSha256 = "23a55fbff920c0f99887848cfc25125f8f915df35638e01beb8f8fa9b5a0bc51"
 if (-not (Test-Path -LiteralPath $WebViewBootstrapper)) {
     Invoke-WebRequest -UseBasicParsing `
         -Uri "https://go.microsoft.com/fwlink/p/?LinkId=2124703" `
         -OutFile $WebViewBootstrapper
 }
+Assert-MicrosoftInstaller `
+    -Path $WebViewBootstrapper `
+    -ExpectedSha256 $WebViewBootstrapperSha256 `
+    -DisplayName "WebView2 bootstrapper"
+
+# AppNotificationManager needs the WinAppSDK Singleton package even though the
+# application itself is published as a self-contained .NET executable.
+$WindowsAppRuntimeInstaller = Join-Path $InstallerAssets "WindowsAppRuntimeInstall-x64.exe"
+$WindowsAppRuntimeSha256 = "4011748ddf472b7e856d909fdfb4e9b19c3d23fcd8121039ac91f99d5ffa65db"
+if (-not (Test-Path -LiteralPath $WindowsAppRuntimeInstaller)) {
+    Invoke-WebRequest -UseBasicParsing `
+        -Uri "https://aka.ms/windowsappsdk/2.3/2.3.1/windowsappruntimeinstall-x64.exe" `
+        -OutFile $WindowsAppRuntimeInstaller
+}
+Assert-MicrosoftInstaller `
+    -Path $WindowsAppRuntimeInstaller `
+    -ExpectedSha256 $WindowsAppRuntimeSha256 `
+    -DisplayName "Windows App Runtime installer"
 
 $ChineseLanguage = Join-Path $ProjectRoot "installer\ChineseSimplified.isl"
+$ChineseLanguageSha256 = "869e43e7c7b8d20c7e4397c8e98f7d1b7cf0528803acdf019ad350143ec85469"
 if (-not (Test-Path -LiteralPath $ChineseLanguage)) {
     Invoke-WebRequest -UseBasicParsing `
         -Uri "https://raw.githubusercontent.com/kira-96/Inno-Setup-Chinese-Simplified-Translation/main/ChineseSimplified.isl" `
         -OutFile $ChineseLanguage
+}
+$ActualChineseLanguageSha256 = (
+    Get-FileHash -Algorithm SHA256 -LiteralPath $ChineseLanguage
+).Hash.ToLowerInvariant()
+if ($ActualChineseLanguageSha256 -ne $ChineseLanguageSha256) {
+    throw "Inno Setup Chinese language file SHA-256 mismatch"
 }
 
 $Iscc = @(

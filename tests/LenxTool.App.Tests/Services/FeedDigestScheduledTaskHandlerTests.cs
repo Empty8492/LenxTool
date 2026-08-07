@@ -33,7 +33,7 @@ public sealed class FeedDigestScheduledTaskHandlerTests
     }
 
     [Fact]
-    public async Task ExistingDeterministicReportSkipsModelAndSecondWrite()
+    public async Task ExistingDeterministicReportSkipsModelAndRecoversNotification()
     {
         LocalScheduledTask task = DailyTask();
         var entries = new StubEntryRepository([Entry("entry-1", "摘要")]);
@@ -42,7 +42,14 @@ public sealed class FeedDigestScheduledTaskHandlerTests
             ReportFactory = id => Report(id, FeedDigestScheduleIds.Daily)
         };
         var ai = new StubAiReportService();
-        var handler = CreateHandler(task, entries, reports, ai);
+        var notifications = new RecordingNotificationPublisher();
+        var handler = CreateHandler(
+            task,
+            entries,
+            reports,
+            ai,
+            new StubExecutionStore(),
+            notifications);
 
         await handler.ExecuteAsync(
             Execution(2),
@@ -51,6 +58,7 @@ public sealed class FeedDigestScheduledTaskHandlerTests
         Assert.StartsWith("feed-digest-", reports.LastRequestedReportId, StringComparison.Ordinal);
         Assert.Equal(0, ai.DigestCalls);
         Assert.Null(reports.SavedReport);
+        Assert.Single(notifications.Drafts);
     }
 
     [Fact]
@@ -83,6 +91,80 @@ public sealed class FeedDigestScheduledTaskHandlerTests
         Assert.Equal("daily_feed_digest", saved.ReportType);
         Assert.Equal(1, ai.DigestCalls);
         Assert.Null(reports.SavedReport);
+    }
+
+    [Fact]
+    public async Task CommittedDigestPublishesAiReportTargetWithoutBody()
+    {
+        LocalScheduledTask task = DailyTask();
+        var entries = new StubEntryRepository([Entry("entry-1", "摘要")]);
+        var executions = new StubExecutionStore();
+        var notifications = new RecordingNotificationPublisher();
+        var ai = new StubAiReportService
+        {
+            DigestFactory = plan => Report(plan.ReportId, plan.ScheduleId)
+        };
+        var handler = CreateHandler(
+            task,
+            entries,
+            new StubNewsRepository(),
+            ai,
+            executions,
+            notifications);
+
+        await handler.ExecuteAsync(Execution(1), CancellationToken.None);
+
+        AppNotificationDraft draft = Assert.Single(notifications.Drafts);
+        AiReport report = Assert.IsType<AiReport>(executions.CompletedReport);
+        Assert.Equal(AppNotificationKind.TaskCompleted, draft.Kind);
+        Assert.Equal(AppNotificationTargetKind.AiReport, draft.TargetKind);
+        Assert.Equal(report.Id, draft.TargetId);
+        Assert.Equal(report.Title, draft.Title);
+        Assert.DoesNotContain(report.Content, draft.Title, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task StaleGenerationOrNotificationFailureDoesNotCorruptDigestResult()
+    {
+        LocalScheduledTask task = DailyTask();
+        var entries = new StubEntryRepository([Entry("entry-1", "摘要")]);
+        var staleExecutions = new StubExecutionStore
+        {
+            CompleteResult = false
+        };
+        var staleNotifications = new RecordingNotificationPublisher();
+        var ai = new StubAiReportService();
+        var staleHandler = CreateHandler(
+            task,
+            entries,
+            new StubNewsRepository(),
+            ai,
+            staleExecutions,
+            staleNotifications);
+
+        await staleHandler.ExecuteAsync(Execution(1), CancellationToken.None);
+
+        Assert.Empty(staleNotifications.Drafts);
+
+        var committedExecutions = new StubExecutionStore();
+        var failingNotifications = new RecordingNotificationPublisher
+        {
+            Failure = new IOException("notification unavailable")
+        };
+        var committedHandler = CreateHandler(
+            task,
+            entries,
+            new StubNewsRepository(),
+            ai,
+            committedExecutions,
+            failingNotifications);
+
+        await committedHandler.ExecuteAsync(
+            Execution(2),
+            CancellationToken.None);
+
+        Assert.NotNull(committedExecutions.CompletedReport);
+        Assert.Single(failingNotifications.Drafts);
     }
 
     [Fact]
@@ -204,7 +286,8 @@ public sealed class FeedDigestScheduledTaskHandlerTests
         IFeedEntryRepository entries,
         INewsRepository reports,
         IAiReportService ai,
-        IFeedDigestExecutionStore? executionStore = null) =>
+        IFeedDigestExecutionStore? executionStore = null,
+        IAppNotificationPublisher? notifications = null) =>
         new(
             FeedDigestPeriod.Daily,
             new StubScheduledTaskRepository(task),
@@ -213,7 +296,8 @@ public sealed class FeedDigestScheduledTaskHandlerTests
             ai,
             executionStore ?? new StubExecutionStore(),
             FeedDigestOptions.Default,
-            new FrozenTimeProvider(Utc(2026, 8, 6, 8, 1)));
+            new FrozenTimeProvider(Utc(2026, 8, 6, 8, 1)),
+            notifications);
 
     private static LocalScheduledTask DailyTask() =>
         new(
@@ -291,6 +375,7 @@ public sealed class FeedDigestScheduledTaskHandlerTests
         public AiReport? CompletedReport { get; private set; }
         public bool WasClearedForRetry { get; private set; }
         public bool WasAbandoned { get; private set; }
+        public bool CompleteResult { get; init; } = true;
 
         public Task<FeedDigestExecutionBeginResult> BeginAsync(
             LocalScheduleRunLease lease,
@@ -316,7 +401,7 @@ public sealed class FeedDigestScheduledTaskHandlerTests
             CancellationToken cancellationToken)
         {
             CompletedReport = report;
-            return Task.FromResult(true);
+            return Task.FromResult(CompleteResult);
         }
 
         public Task AbandonUncertainAsync(
@@ -474,5 +559,38 @@ public sealed class FeedDigestScheduledTaskHandlerTests
             int limit,
             string? platform,
             CancellationToken cancellationToken) => throw new NotSupportedException();
+    }
+
+    private sealed class RecordingNotificationPublisher
+        : IAppNotificationPublisher
+    {
+        public List<AppNotificationDraft> Drafts { get; } = [];
+        public Exception? Failure { get; init; }
+
+        public Task<AppNotificationRegistration> PublishAsync(
+            AppNotificationDraft draft,
+            CancellationToken cancellationToken)
+        {
+            Drafts.Add(draft);
+            if (Failure is not null)
+            {
+                throw Failure;
+            }
+            return Task.FromResult(new AppNotificationRegistration(
+                new(
+                    new string('d', 64),
+                    draft.EntryId,
+                    draft.FeedId,
+                    Guid.Empty.ToString("D"),
+                    1,
+                    draft.Title,
+                    draft.SourceLabel,
+                    Utc(2026, 8, 6, 8, 1),
+                    ReadAt: null,
+                    draft.Kind,
+                    draft.TargetKind,
+                    draft.TargetId),
+                Created: true));
+        }
     }
 }

@@ -111,7 +111,7 @@ public sealed class SqliteDatabaseTests : IDisposable
 
         await using SqliteCommand versionCommand = connection.CreateCommand();
         versionCommand.CommandText = "SELECT COUNT(*) FROM schema_versions";
-        Assert.Equal(24L, (long)(await versionCommand.ExecuteScalarAsync(
+        Assert.Equal(25L, (long)(await versionCommand.ExecuteScalarAsync(
             CancellationToken.None))!);
     }
 
@@ -137,7 +137,7 @@ public sealed class SqliteDatabaseTests : IDisposable
         await using SqliteConnection connection = await upgraded.OpenConnectionAsync(CancellationToken.None);
         await using SqliteCommand version = connection.CreateCommand();
         version.CommandText = "SELECT MAX(version) FROM schema_versions;";
-        Assert.Equal(24L, (long)(await version.ExecuteScalarAsync(CancellationToken.None))!);
+        Assert.Equal(25L, (long)(await version.ExecuteScalarAsync(CancellationToken.None))!);
         Assert.Single(Directory.GetFiles(CreatePaths().BackupDirectory, "lenx-pre-migration-*.db"));
     }
 
@@ -200,7 +200,7 @@ public sealed class SqliteDatabaseTests : IDisposable
             (long)(await check.ExecuteScalarAsync(CancellationToken.None))!);
         check.CommandText = "SELECT MAX(version) FROM schema_versions;";
         Assert.Equal(
-            24L,
+            25L,
             (long)(await check.ExecuteScalarAsync(CancellationToken.None))!);
     }
 
@@ -246,7 +246,7 @@ public sealed class SqliteDatabaseTests : IDisposable
                 DROP TABLE feed_digest_requests;
                 DROP TABLE local_schedule_run_retries;
                 DROP TABLE local_scheduled_task_payloads;
-                DELETE FROM schema_versions WHERE version=24;
+                DELETE FROM schema_versions WHERE version >= 24;
                 """;
             await command.ExecuteNonQueryAsync(CancellationToken.None);
         }
@@ -280,7 +280,7 @@ public sealed class SqliteDatabaseTests : IDisposable
             (long)(await check.ExecuteScalarAsync(CancellationToken.None))!);
         check.CommandText = "SELECT MAX(version) FROM schema_versions;";
         Assert.Equal(
-            24L,
+            25L,
             (long)(await check.ExecuteScalarAsync(CancellationToken.None))!);
     }
 
@@ -387,7 +387,7 @@ public sealed class SqliteDatabaseTests : IDisposable
             """;
         Assert.Equal(0L, (long)(await check.ExecuteScalarAsync(CancellationToken.None))!);
         check.CommandText = "SELECT MAX(version) FROM schema_versions;";
-        Assert.Equal(24L, (long)(await check.ExecuteScalarAsync(CancellationToken.None))!);
+        Assert.Equal(25L, (long)(await check.ExecuteScalarAsync(CancellationToken.None))!);
     }
 
     [Fact]
@@ -517,7 +517,7 @@ public sealed class SqliteDatabaseTests : IDisposable
         check.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE type='trigger' AND name LIKE 'feed_entries_fts_%';";
         Assert.Equal(3L, (long)(await check.ExecuteScalarAsync(CancellationToken.None))!);
         check.CommandText = "SELECT MAX(version) FROM schema_versions;";
-        Assert.Equal(24L, (long)(await check.ExecuteScalarAsync(CancellationToken.None))!);
+        Assert.Equal(25L, (long)(await check.ExecuteScalarAsync(CancellationToken.None))!);
     }
 
     [Fact]

@@ -2609,6 +2609,39 @@ public sealed class NewsCenterViewModelTests
         Assert.Contains("统一搜索", viewModel.TimelineStatus);
     }
 
+    [Fact]
+    public async Task EntityNavigationOpensPersistedAiReport()
+    {
+        var report = new AiReport(
+            "feed-digest-" + new string('a', 64),
+            "feed_digest",
+            null,
+            "weekly_feed_digest",
+            "每周摘要",
+            "报告正文",
+            "deepseek-chat",
+            1,
+            42,
+            TimelineNow);
+        var repository = new StubNewsRepository
+        {
+            ReportById = report
+        };
+        using NewsCenterViewModel viewModel = CreateViewModel(
+            CreateSnapshot(),
+            reportRepository: repository);
+
+        await viewModel.OpenEntityAsync(
+            "ai_report",
+            report.Id,
+            CancellationToken.None);
+
+        Assert.Equal(3, viewModel.SelectedSectionIndex);
+        Assert.Equal(report, viewModel.SelectedReport);
+        Assert.Equal(report, Assert.Single(viewModel.Reports));
+        Assert.Contains("通知", viewModel.ReportStatus);
+    }
+
     private static NewsCenterViewModel CreateViewModel(
         NewsCenterSnapshot snapshot,
         StubDesktopFileDialogService? dialogs = null,
@@ -2998,6 +3031,7 @@ public sealed class NewsCenterViewModelTests
     private sealed class StubNewsRepository : INewsRepository
     {
         public AiReport? SavedReport { get; private set; }
+        public AiReport? ReportById { get; init; }
         public IReadOnlyList<AiReport> LatestReports { get; set; } = [];
 
         public Task UpsertReportAsync(AiReport report, CancellationToken cancellationToken)
@@ -3009,7 +3043,13 @@ public sealed class NewsCenterViewModelTests
         public Task<AiReport?> GetReportByIdAsync(
             string reportId,
             CancellationToken cancellationToken) =>
-            Task.FromResult<AiReport?>(null);
+            Task.FromResult(
+                string.Equals(
+                    ReportById?.Id,
+                    reportId,
+                    StringComparison.Ordinal)
+                    ? ReportById
+                    : null);
 
         public Task<IReadOnlyList<AiReport>> GetLatestReportsAsync(
             int limit,

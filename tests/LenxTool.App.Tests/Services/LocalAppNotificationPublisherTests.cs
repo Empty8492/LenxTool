@@ -37,6 +37,8 @@ public sealed class LocalAppNotificationPublisherTests
         Assert.False(duplicate.Created);
         Assert.Equal(first.Notification.Id, duplicate.Notification.Id);
         Assert.Equal(AppNotificationKind.SystemHealth, first.Notification.Kind);
+        Assert.Equal(AppNotificationTargetKind.None, first.Notification.TargetKind);
+        Assert.Null(first.Notification.TargetId);
         Assert.Equal("Daily 抓取异常", first.Notification.Title);
         Assert.Equal("Daily", first.Notification.SourceLabel);
         Assert.Equal(Now, first.Notification.CreatedAt);
@@ -61,6 +63,11 @@ public sealed class LocalAppNotificationPublisherTests
 
         public Task<IReadOnlyList<AppNotification>> GetRecentAsync(
             int maximumCount,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<AppNotification?> GetByIdAsync(
+            string id,
             CancellationToken cancellationToken) =>
             throw new NotSupportedException();
 

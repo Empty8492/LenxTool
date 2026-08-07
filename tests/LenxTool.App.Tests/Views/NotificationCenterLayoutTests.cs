@@ -30,6 +30,10 @@ public sealed class NotificationCenterLayoutTests
             "Text=\"{Binding KindLabel}\"",
             text,
             StringComparison.Ordinal);
+        Assert.Contains(
+            "Command=\"{Binding DataContext.OpenCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}\"",
+            text,
+            StringComparison.Ordinal);
         Assert.DoesNotContain(
             "SanitizedContent",
             text,

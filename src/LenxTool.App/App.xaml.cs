@@ -24,6 +24,7 @@ namespace LenxTool.App;
 public partial class App : Application
 {
     private IHost? _host;
+    private WindowsNotificationService? _windowsNotifications;
     private readonly ExceptionDialogGate _exceptionDialogGate = new();
 
     public App()
@@ -42,15 +43,19 @@ public partial class App : Application
             HostApplicationBuilder builder = Host.CreateApplicationBuilder();
             ConfigureServices(builder.Services);
             _host = builder.Build();
+            _windowsNotifications = _host.Services.GetRequiredService<
+                WindowsNotificationService>();
+            _windowsNotifications.Register();
+            SqliteDatabase database = _host.Services.GetRequiredService<SqliteDatabase>();
+            await database.InitializeAsync(CancellationToken.None).ConfigureAwait(true);
+            await _windowsNotifications.InitializeAsync(
+                CancellationToken.None).ConfigureAwait(true);
             await _host.StartAsync().ConfigureAwait(true);
             IArticleImageDownloader imageDownloader =
                 _host.Services.GetRequiredService<IArticleImageDownloader>();
             ArticleImageBlockFactory.Configure(imageDownloader);
             FeedThumbnail.Configure(
                 _host.Services.GetRequiredService<IArticleImageStreamDownloader>());
-
-            SqliteDatabase database = _host.Services.GetRequiredService<SqliteDatabase>();
-            await database.InitializeAsync(CancellationToken.None).ConfigureAwait(true);
             NotificationCenterViewModel notificationCenter =
                 _host.Services.GetRequiredService<NotificationCenterViewModel>();
             await notificationCenter.InitializeAsync(CancellationToken.None)
@@ -83,6 +88,8 @@ public partial class App : Application
             MainWindow window = _host.Services.GetRequiredService<MainWindow>();
             MainWindow = window;
             window.Show();
+            await _windowsNotifications.SetNavigationReadyAsync(
+                CancellationToken.None).ConfigureAwait(true);
             _ = settings.CheckInBackgroundAsync(CancellationToken.None);
             _ = settings.RefreshStorageUsageInBackgroundAsync(
                 CancellationToken.None);
@@ -108,6 +115,7 @@ public partial class App : Application
     {
         if (_host is not null)
         {
+            _windowsNotifications?.Unregister();
             await _host.StopAsync(TimeSpan.FromSeconds(3)).ConfigureAwait(true);
             _host.Dispose();
         }
@@ -335,6 +343,23 @@ public partial class App : Application
         services.AddSingleton<IAppNotificationPublisher,
             LocalAppNotificationPublisher>();
         services.AddSingleton<IAppSettingsRepository, AppSettingsRepository>();
+        services.AddSingleton<
+            IWindowsNotificationSettingsStore,
+            AppSettingsWindowsNotificationSettingsStore>();
+        services.AddSingleton<
+            IAppNotificationNavigationService,
+            AppNotificationNavigationService>();
+        services.AddSingleton<
+            IWindowsNotificationActivationTarget,
+            WpfWindowsNotificationActivationTarget>();
+        services.AddSingleton<
+            IWindowsNotificationAdapter,
+            WindowsAppSdkNotificationAdapter>();
+        services.AddSingleton<WindowsNotificationService>();
+        services.AddSingleton<IWindowsNotificationController>(
+            static services =>
+                services.GetRequiredService<WindowsNotificationService>());
+        services.AddHostedService<WindowsNotificationBackgroundService>();
         services.AddSingleton<IFileHashService, FileHashService>();
         services.AddSingleton<ILocalModelService, LocalWhisperModelService>();
         services.AddSingleton<IDatabaseMaintenanceService, DatabaseMaintenanceService>();
@@ -380,6 +405,7 @@ public partial class App : Application
         services.AddSingleton<ObsidianSettingsViewModel>();
         services.AddSingleton<EagleSettingsViewModel>();
         services.AddSingleton<ZoteroSettingsViewModel>();
+        services.AddSingleton<WindowsNotificationSettingsViewModel>();
         // 发现页发布复用现有目录管理员服务、版本同步和服务端 RBAC。
         services.AddSingleton<FeedDiscoveryViewModel>();
         services.AddSingleton<FeedAdminViewModel>();
@@ -402,7 +428,8 @@ public partial class App : Application
             services.GetRequiredService<IAiReportService>(),
             services.GetRequiredService<IFeedDigestExecutionStore>(),
             services.GetRequiredService<FeedDigestOptions>(),
-            services.GetRequiredService<TimeProvider>());
+            services.GetRequiredService<TimeProvider>(),
+            services.GetRequiredService<IAppNotificationPublisher>());
 
     private static ShellViewModel CreateShellViewModel(IServiceProvider services)
     {

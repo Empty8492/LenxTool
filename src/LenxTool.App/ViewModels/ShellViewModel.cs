@@ -119,12 +119,14 @@ public sealed class ShellViewModel : ObservableObject
         }
     }
 
-    private void Navigate(string? pageId)
+    private void Navigate(string? pageId) => TryNavigate(pageId);
+
+    private bool TryNavigate(string? pageId)
     {
-        if (string.IsNullOrWhiteSpace(pageId)) return;
+        if (string.IsNullOrWhiteSpace(pageId)) return false;
         PageNavigationItem? target = NavigationItems.FirstOrDefault(
             item => string.Equals(item.Id, pageId, StringComparison.Ordinal));
-        if (target is null) return;
+        if (target is null) return false;
 
         CurrentPage = target.ViewModel;
         if (target.ViewModel is INavigationAware navigationAware)
@@ -134,6 +136,7 @@ public sealed class ShellViewModel : ObservableObject
         SetProperty(ref _selectedPageId, target.Id, nameof(SelectedPageId));
         IsCommandPaletteOpen = false;
         CommandQuery = string.Empty;
+        return true;
     }
 
     internal async Task NavigateAsync(
@@ -141,8 +144,34 @@ public sealed class ShellViewModel : ObservableObject
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
-        Navigate(request.RouteId);
-        if (CurrentPage is IEntityNavigationAware target)
+        if (string.Equals(
+                request.RouteId,
+                "notifications",
+                StringComparison.Ordinal))
+        {
+            if (NotificationCenter is not null &&
+                string.Equals(
+                    request.EntityType,
+                    "app_notification",
+                    StringComparison.Ordinal) &&
+                WindowsNotificationActivation.IsValidNotificationId(
+                    request.EntityId))
+            {
+                NotificationCenter.IsOpen = true;
+            }
+            return;
+        }
+
+        PageNavigationItem? targetPage = NavigationItems.FirstOrDefault(
+            item => string.Equals(
+                item.Id,
+                request.RouteId,
+                StringComparison.Ordinal));
+        if (targetPage is null || !TryNavigate(targetPage.Id))
+        {
+            return;
+        }
+        if (targetPage.ViewModel is IEntityNavigationAware target)
         {
             await target.OpenEntityAsync(
                     request.EntityType,

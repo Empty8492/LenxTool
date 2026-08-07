@@ -7,6 +7,36 @@ public enum AppNotificationKind
     TaskCompleted
 }
 
+public enum AppNotificationTargetKind
+{
+    None,
+    FeedEntry,
+    AiReport
+}
+
+public static class AppNotificationTargetPolicy
+{
+    public static bool IsValid(
+        AppNotificationTargetKind kind,
+        string? targetId) =>
+        kind switch
+        {
+            AppNotificationTargetKind.None => targetId is null,
+            AppNotificationTargetKind.FeedEntry or
+                AppNotificationTargetKind.AiReport =>
+                IsSafeEntityId(targetId),
+            _ => false
+        };
+
+    public static bool IsSafeEntityId(string? value) =>
+        value is { Length: >= 1 and <= 512 } &&
+        value.All(character =>
+            character is >= 'a' and <= 'z'
+                or >= 'A' and <= 'Z'
+                or >= '0' and <= '9'
+                or '-' or '_' or '.' or ':');
+}
+
 public sealed record AppNotification(
     string Id,
     string EntryId,
@@ -17,7 +47,9 @@ public sealed record AppNotification(
     string SourceLabel,
     DateTimeOffset CreatedAt,
     DateTimeOffset? ReadAt,
-    AppNotificationKind Kind = AppNotificationKind.ContentMatch)
+    AppNotificationKind Kind = AppNotificationKind.ContentMatch,
+    AppNotificationTargetKind TargetKind = AppNotificationTargetKind.None,
+    string? TargetId = null)
 {
     public bool IsRead => ReadAt is not null;
 
@@ -42,4 +74,6 @@ public sealed record AppNotificationDraft(
     string Title,
     string SourceLabel,
     string? RuleId = null,
-    int? RuleVersion = null);
+    int? RuleVersion = null,
+    AppNotificationTargetKind TargetKind = AppNotificationTargetKind.None,
+    string? TargetId = null);

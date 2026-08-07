@@ -34,10 +34,12 @@ public sealed class AppNotificationRepository(SqliteDatabase database)
         command.CommandText = """
             INSERT INTO app_notifications(
                 id, entry_id, feed_id, rule_id, rule_version,
-                title, source_label, created_at, read_at, kind)
+                title, source_label, created_at, read_at, kind,
+                target_kind, target_id)
             VALUES(
                 $id, $entryId, $feedId, $ruleId, $ruleVersion,
-                $title, $sourceLabel, $createdAt, $readAt, $kind);
+                $title, $sourceLabel, $createdAt, $readAt, $kind,
+                $targetKind, $targetId);
             """;
         AddNotificationParameters(command, notification);
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
@@ -65,6 +67,26 @@ public sealed class AppNotificationRepository(SqliteDatabase database)
             """;
         command.Parameters.AddWithValue("$maximumCount", maximumCount);
         return await ReadAsync(command, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<AppNotification?> GetByIdAsync(
+        string id,
+        CancellationToken cancellationToken)
+    {
+        ValidateId(id);
+        await using SqliteConnection connection =
+            await database.OpenConnectionAsync(cancellationToken)
+                .ConfigureAwait(false);
+        await using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = $"""
+            SELECT {SelectColumns}
+            FROM app_notifications
+            WHERE id=$id;
+            """;
+        command.Parameters.AddWithValue("$id", id);
+        IReadOnlyList<AppNotification> notifications =
+            await ReadAsync(command, cancellationToken).ConfigureAwait(false);
+        return notifications.SingleOrDefault();
     }
 
     public async Task<int> GetUnreadCountAsync(
@@ -168,7 +190,9 @@ public sealed class AppNotificationRepository(SqliteDatabase database)
                     : DateTimeOffset.Parse(
                         reader.GetString(8),
                         CultureInfo.InvariantCulture),
-                ParseKind(reader.GetString(9))));
+                ParseKind(reader.GetString(9)),
+                ParseTargetKind(reader.GetString(10)),
+                reader.IsDBNull(11) ? null : reader.GetString(11)));
         }
         return notifications;
     }
@@ -197,6 +221,14 @@ public sealed class AppNotificationRepository(SqliteDatabase database)
         command.Parameters.AddWithValue(
             "$kind",
             StoreKind(notification.Kind));
+        command.Parameters.AddWithValue(
+            "$targetKind",
+            StoreTargetKind(notification.TargetKind));
+        command.Parameters.AddWithValue(
+            "$targetId",
+            notification.TargetId is null
+                ? DBNull.Value
+                : notification.TargetId);
     }
 
     private static void Validate(AppNotification notification)
@@ -224,6 +256,14 @@ public sealed class AppNotificationRepository(SqliteDatabase database)
         {
             throw new ArgumentOutOfRangeException(nameof(notification));
         }
+        if (!AppNotificationTargetPolicy.IsValid(
+                notification.TargetKind,
+                notification.TargetId))
+        {
+            throw new ArgumentException(
+                "通知目标必须是封闭类型与安全本地实体 ID 的有效组合。",
+                nameof(notification));
+        }
         ValidateTimestamp(notification.CreatedAt, nameof(notification.CreatedAt));
         if (notification.ReadAt is { } readAt)
         {
@@ -238,7 +278,9 @@ public sealed class AppNotificationRepository(SqliteDatabase database)
     private static void ValidateId(string id)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
-        if (id.Length != 64 || id.Any(character => !Uri.IsHexDigit(character)))
+        if (id.Length != 64 || id.Any(character =>
+                character is not (>= '0' and <= '9') and
+                    not (>= 'a' and <= 'f')))
         {
             throw new ArgumentException(
                 "通知 ID 必须是 64 位十六进制幂等键。",
@@ -272,7 +314,8 @@ public sealed class AppNotificationRepository(SqliteDatabase database)
 
     private const string SelectColumns = """
         id, entry_id, feed_id, rule_id, rule_version,
-        title, source_label, created_at, read_at, kind
+        title, source_label, created_at, read_at, kind,
+        target_kind, target_id
         """;
 
     private static string StoreKind(AppNotificationKind kind) =>
@@ -292,5 +335,25 @@ public sealed class AppNotificationRepository(SqliteDatabase database)
             "TASK_COMPLETED" => AppNotificationKind.TaskCompleted,
             _ => throw new InvalidDataException(
                 "通知类别不受支持。")
+        };
+
+    private static string StoreTargetKind(
+        AppNotificationTargetKind kind) =>
+        kind switch
+        {
+            AppNotificationTargetKind.None => "NONE",
+            AppNotificationTargetKind.FeedEntry => "FEED_ENTRY",
+            AppNotificationTargetKind.AiReport => "AI_REPORT",
+            _ => throw new ArgumentOutOfRangeException(nameof(kind))
+        };
+
+    private static AppNotificationTargetKind ParseTargetKind(string value) =>
+        value switch
+        {
+            "NONE" => AppNotificationTargetKind.None,
+            "FEED_ENTRY" => AppNotificationTargetKind.FeedEntry,
+            "AI_REPORT" => AppNotificationTargetKind.AiReport,
+            _ => throw new InvalidDataException(
+                "通知目标类别不受支持。")
         };
 }

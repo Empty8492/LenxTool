@@ -56,7 +56,9 @@ public sealed class LocalAppNotificationPublisher(
             NormalizeLabel(draft.SourceLabel, 160, "Lenx Tools"),
             timeProvider.GetUtcNow(),
             ReadAt: null,
-            draft.Kind);
+            draft.Kind,
+            draft.TargetKind,
+            draft.TargetId);
         AppNotificationRegistration registration =
             await repository.RegisterAsync(
                 notification,

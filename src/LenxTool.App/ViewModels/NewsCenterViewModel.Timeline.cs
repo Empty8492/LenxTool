@@ -273,6 +273,36 @@ public sealed partial class NewsCenterViewModel
         string entityId,
         CancellationToken cancellationToken)
     {
+        if (string.Equals(
+                entityType,
+                "ai_report",
+                StringComparison.Ordinal))
+        {
+            AiReport? report = await _repository.GetReportByIdAsync(
+                entityId,
+                cancellationToken);
+            if (report is null)
+            {
+                ReportStatus = "对应的 AI 报告已被清理。";
+                return;
+            }
+
+            AiReport? existingReport = Reports.FirstOrDefault(item =>
+                string.Equals(
+                    item.Id,
+                    report.Id,
+                    StringComparison.Ordinal));
+            if (existingReport is not null)
+            {
+                Reports.Remove(existingReport);
+            }
+            Reports.Insert(0, report);
+            SelectedSectionIndex = 3;
+            SelectedReport = report;
+            ReportStatus = $"已从通知打开：{report.Title}";
+            return;
+        }
+
         if (!string.Equals(
                 entityType,
                 FeedEntryFavoriteType,

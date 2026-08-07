@@ -355,7 +355,7 @@
                                                     <Button Margin="0,0,0,8"
                                                             Padding="12"
                                                             HorizontalContentAlignment="Stretch"
-                                                            Command="{Binding DataContext.MarkReadCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                            Command="{Binding DataContext.OpenCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                             CommandParameter="{Binding}">
                                                         <Button.Style>
                                                             <Style TargetType="Button"

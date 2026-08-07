@@ -1,4 +1,5 @@
 using LenxTool.App.Mvvm;
+using LenxTool.App.Services;
 using LenxTool.App.ViewModels;
 using LenxTool.Core.Accounts;
 using LenxTool.Core.Contracts;
@@ -90,6 +91,48 @@ public sealed class ShellViewModelTests
         Assert.Equal("owner · 普通用户", shell.CloudAccountStatus);
     }
 
+    [Fact]
+    public async Task EntityNavigationRejectsUnknownRouteBeforeCurrentPageDispatch()
+    {
+        var home = new EntityPageViewModel("首页");
+        var news = new EntityPageViewModel("资讯中心");
+        ShellViewModel shell = new(
+        [
+            new("home", "首页", "今日概览", IconData, home),
+            new("news", "资讯中心", "订阅内容", IconData, news)
+        ], new FakeAccountSessionService());
+
+        await shell.NavigateAsync(
+            new("https://example.com", "feed_entry", "entry-1"),
+            CancellationToken.None);
+
+        Assert.Same(home, shell.CurrentPage);
+        Assert.Empty(home.OpenedEntities);
+        Assert.Empty(news.OpenedEntities);
+    }
+
+    [Fact]
+    public async Task EntityNavigationDispatchesOnlyToTheSelectedTargetPage()
+    {
+        var home = new EntityPageViewModel("首页");
+        var news = new EntityPageViewModel("资讯中心");
+        ShellViewModel shell = new(
+        [
+            new("home", "首页", "今日概览", IconData, home),
+            new("news", "资讯中心", "订阅内容", IconData, news)
+        ], new FakeAccountSessionService());
+
+        await shell.NavigateAsync(
+            new("news", "feed_entry", "entry-1"),
+            CancellationToken.None);
+
+        Assert.Same(news, shell.CurrentPage);
+        Assert.Empty(home.OpenedEntities);
+        Assert.Equal(
+            [("feed_entry", "entry-1")],
+            news.OpenedEntities);
+    }
+
     private const string IconData = "M0,0 L1,0 1,1 0,1 Z";
 
     private static AccountSessionSnapshot SignedIn(AccountRole role) => new(
@@ -127,5 +170,21 @@ public sealed class ShellViewModelTests
         public string? LastRouteId { get; private set; }
 
         public void OnNavigated(string routeId) => LastRouteId = routeId;
+    }
+
+    private sealed class EntityPageViewModel(string title)
+        : PageViewModel(title, string.Empty), IEntityNavigationAware
+    {
+        public List<(string EntityType, string EntityId)> OpenedEntities
+            { get; } = [];
+
+        public Task OpenEntityAsync(
+            string entityType,
+            string entityId,
+            CancellationToken cancellationToken)
+        {
+            OpenedEntities.Add((entityType, entityId));
+            return Task.CompletedTask;
+        }
     }
 }

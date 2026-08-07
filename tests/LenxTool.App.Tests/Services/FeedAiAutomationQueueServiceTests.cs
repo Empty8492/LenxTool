@@ -193,6 +193,10 @@ public sealed class FeedAiAutomationQueueServiceTests
         AppNotificationDraft draft =
             Assert.Single(notifications.Drafts);
         Assert.Equal(AppNotificationKind.TaskCompleted, draft.Kind);
+        Assert.Equal(
+            AppNotificationTargetKind.FeedEntry,
+            draft.TargetKind);
+        Assert.Equal(entry.Id, draft.TargetId);
         Assert.Equal($"摘要已生成：{entry.Title}", draft.Title);
         Assert.DoesNotContain("content", draft.Title, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("Hello world", draft.Title, StringComparison.Ordinal);

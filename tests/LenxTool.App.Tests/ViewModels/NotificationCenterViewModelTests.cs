@@ -85,6 +85,104 @@ public sealed class NotificationCenterViewModelTests
     }
 
     [Fact]
+    public async Task OpenUsesTheSharedSafeRouterAndUpdatesLocalReadState()
+    {
+        AppNotification notification = Notification('3', "打开目标") with
+        {
+            TargetKind = AppNotificationTargetKind.FeedEntry,
+            TargetId = "entry-3"
+        };
+        var repository = new StubRepository(notification);
+        var navigation = new StubNotificationNavigationService(
+            notification with { ReadAt = Now });
+        var viewModel = new NotificationCenterViewModel(
+            repository,
+            new AppNotificationInbox(),
+            new FixedTimeProvider(Now),
+            navigation);
+        await viewModel.InitializeAsync(CancellationToken.None);
+        viewModel.IsOpen = true;
+
+        await viewModel.OpenCommand.ExecuteAsync(notification);
+
+        Assert.Equal(notification.Id, Assert.Single(navigation.OpenedIds));
+        Assert.True(viewModel.Items[0].IsRead);
+        Assert.Equal(0, viewModel.UnreadCount);
+        Assert.False(viewModel.IsOpen);
+    }
+
+    [Fact]
+    public async Task ExternalSharedRouterOpenSynchronizesCurrentUnreadProjection()
+    {
+        AppNotification notification = Notification('4', "系统通知打开") with
+        {
+            TargetKind = AppNotificationTargetKind.FeedEntry,
+            TargetId = "entry-4"
+        };
+        var repository = new StubRepository(notification);
+        var navigation = new AppNotificationNavigationService(
+            repository,
+            new RecordingAppNavigationService(),
+            new FixedTimeProvider(Now));
+        var viewModel = new NotificationCenterViewModel(
+            repository,
+            new AppNotificationInbox(),
+            new FixedTimeProvider(Now),
+            navigation);
+        await viewModel.InitializeAsync(CancellationToken.None);
+
+        await navigation.OpenAsync(
+            notification.Id,
+            CancellationToken.None);
+
+        Assert.True(viewModel.Items[0].IsRead);
+        Assert.Equal(0, viewModel.UnreadCount);
+        Assert.False(viewModel.HasUnread);
+    }
+
+    [Fact]
+    public async Task ExternalOpenDecrementsUnreadWhenTargetIsOutsideRecentWindow()
+    {
+        AppNotification[] notifications = Enumerable.Range(0, 51)
+            .Select(index => Notification('a', $"通知 {index}") with
+            {
+                Id = index.ToString(
+                    "x64",
+                    System.Globalization.CultureInfo.InvariantCulture),
+                EntryId = $"entry-{index}",
+                CreatedAt = Now.AddMinutes(-index),
+                TargetKind = AppNotificationTargetKind.FeedEntry,
+                TargetId = $"entry-{index}"
+            })
+            .ToArray();
+        AppNotification outsideRecent = notifications[^1];
+        var repository = new StubRepository(notifications);
+        var navigation = new AppNotificationNavigationService(
+            repository,
+            new RecordingAppNavigationService(),
+            new FixedTimeProvider(Now));
+        var viewModel = new NotificationCenterViewModel(
+            repository,
+            new AppNotificationInbox(),
+            new FixedTimeProvider(Now),
+            navigation);
+        await viewModel.InitializeAsync(CancellationToken.None);
+        Assert.Equal(51, viewModel.UnreadCount);
+        Assert.DoesNotContain(
+            viewModel.Items,
+            item => item.Id == outsideRecent.Id);
+
+        await navigation.OpenAsync(
+            outsideRecent.Id,
+            CancellationToken.None);
+
+        Assert.Equal(50, viewModel.UnreadCount);
+        Assert.DoesNotContain(
+            viewModel.Items,
+            item => item.Id == outsideRecent.Id);
+    }
+
+    [Fact]
     public async Task ToggleControlsPanelWithoutDatabaseAccess()
     {
         var repository = new StubRepository();
@@ -173,6 +271,11 @@ public sealed class NotificationCenterViewModelTests
                     .ToArray());
         }
 
+        public Task<AppNotification?> GetByIdAsync(
+            string id,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(_items.GetValueOrDefault(id));
+
         public Task<int> GetUnreadCountAsync(
             CancellationToken cancellationToken) =>
             Task.FromResult(_items.Values.Count(item => !item.IsRead));
@@ -215,5 +318,33 @@ public sealed class NotificationCenterViewModelTests
     private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
     {
         public override DateTimeOffset GetUtcNow() => now;
+    }
+
+    private sealed class RecordingAppNavigationService
+        : IAppNavigationService
+    {
+        public Task NavigateAsync(
+            AppNavigationRequest request,
+            CancellationToken cancellationToken) => Task.CompletedTask;
+    }
+
+    private sealed class StubNotificationNavigationService(
+        AppNotification result) : IAppNotificationNavigationService
+    {
+        public List<string> OpenedIds { get; } = [];
+
+        public event EventHandler<AppNotificationOpenedEventArgs>?
+            NotificationOpened;
+
+        public Task<AppNotification?> OpenAsync(
+            string notificationId,
+            CancellationToken cancellationToken)
+        {
+            OpenedIds.Add(notificationId);
+            NotificationOpened?.Invoke(
+                this,
+                new AppNotificationOpenedEventArgs(result));
+            return Task.FromResult<AppNotification?>(result);
+        }
     }
 }

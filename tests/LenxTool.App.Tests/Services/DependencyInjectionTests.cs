@@ -127,6 +127,17 @@ public sealed class DependencyInjectionTests
             provider.GetRequiredService<IAppNotificationInbox>());
         Assert.IsType<LocalAppNotificationPublisher>(
             provider.GetRequiredService<IAppNotificationPublisher>());
+        Assert.IsType<AppNotificationNavigationService>(
+            provider.GetRequiredService<IAppNotificationNavigationService>());
+        Assert.IsType<WindowsAppSdkNotificationAdapter>(
+            provider.GetRequiredService<IWindowsNotificationAdapter>());
+        WindowsNotificationService windowsNotifications =
+            provider.GetRequiredService<WindowsNotificationService>();
+        Assert.Same(
+            windowsNotifications,
+            provider.GetRequiredService<IWindowsNotificationController>());
+        Assert.IsType<AppSettingsWindowsNotificationSettingsStore>(
+            provider.GetRequiredService<IWindowsNotificationSettingsStore>());
         Assert.IsType<FeedAutomationNotificationActionService>(
             provider.GetRequiredService<
                 IFeedAutomationNotificationActionService>());
@@ -168,6 +179,8 @@ public sealed class DependencyInjectionTests
         Assert.IsType<FavoriteRepository>(provider.GetRequiredService<IFavoriteRepository>());
         Assert.NotNull(provider.GetRequiredService<DashboardViewModel>());
         Assert.NotNull(provider.GetRequiredService<NotificationCenterViewModel>());
+        Assert.NotNull(provider.GetRequiredService<
+            WindowsNotificationSettingsViewModel>());
         Assert.IsType<FeedSmartViewRepository>(
             provider.GetRequiredService<IFeedSmartViewRepository>());
         Assert.IsType<FeedSmartViewSyncService>(

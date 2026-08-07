@@ -19,7 +19,9 @@ public sealed class AppNotificationRepositoryTests : IDisposable
         AppNotification expected = CreateNotification(
             'a',
             "订阅抓取异常",
-            AppNotificationKind.SystemHealth);
+            AppNotificationKind.SystemHealth,
+            AppNotificationTargetKind.None,
+            targetId: null);
         using (SqliteDatabase database = CreateDatabase())
         {
             await database.InitializeAsync(CancellationToken.None);
@@ -49,6 +51,14 @@ public sealed class AppNotificationRepositoryTests : IDisposable
         Assert.Equal(
             AppNotificationKind.SystemHealth,
             expected.Kind);
+        Assert.Equal(
+            expected,
+            await restoredRepository.GetByIdAsync(
+                expected.Id,
+                CancellationToken.None));
+        Assert.Null(await restoredRepository.GetByIdAsync(
+            new string('f', 64),
+            CancellationToken.None));
     }
 
     [Fact]
@@ -91,6 +101,44 @@ public sealed class AppNotificationRepositoryTests : IDisposable
 
         Assert.False(duplicate.Created);
         Assert.Equal(original, duplicate.Notification);
+    }
+
+    [Theory]
+    [InlineData(AppNotificationTargetKind.None, "entry-notification")]
+    [InlineData(AppNotificationTargetKind.FeedEntry, null)]
+    [InlineData(AppNotificationTargetKind.AiReport, null)]
+    [InlineData((AppNotificationTargetKind)99, "entry-notification")]
+    [InlineData(AppNotificationTargetKind.FeedEntry, "https://example.com")]
+    public async Task RegisterAsyncRejectsInvalidTargetCombinations(
+        AppNotificationTargetKind targetKind,
+        string? targetId)
+    {
+        using SqliteDatabase database = CreateDatabase();
+        await database.InitializeAsync(CancellationToken.None);
+        var repository = new AppNotificationRepository(database);
+        AppNotification invalid = CreateNotification('f', "非法目标") with
+        {
+            TargetKind = targetKind,
+            TargetId = targetId
+        };
+
+        await Assert.ThrowsAnyAsync<ArgumentException>(() =>
+            repository.RegisterAsync(invalid, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task RegisterAsyncRejectsUppercaseNotificationId()
+    {
+        using SqliteDatabase database = CreateDatabase();
+        await database.InitializeAsync(CancellationToken.None);
+        var repository = new AppNotificationRepository(database);
+        AppNotification invalid = CreateNotification('a', "非法 ID") with
+        {
+            Id = new string('A', 64)
+        };
+
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            repository.RegisterAsync(invalid, CancellationToken.None));
     }
 
     [Fact]
@@ -147,7 +195,10 @@ public sealed class AppNotificationRepositoryTests : IDisposable
     private static AppNotification CreateNotification(
         char key,
         string title,
-        AppNotificationKind kind = AppNotificationKind.ContentMatch) => new(
+        AppNotificationKind kind = AppNotificationKind.ContentMatch,
+        AppNotificationTargetKind targetKind =
+            AppNotificationTargetKind.FeedEntry,
+        string? targetId = "entry-notification") => new(
         new string(key, 64),
         "entry-notification",
         "30000000-0000-4000-8000-000000000701",
@@ -157,7 +208,9 @@ public sealed class AppNotificationRepositoryTests : IDisposable
         "AI 资讯",
         new DateTimeOffset(2026, 7, 26, 20, 0, 0, TimeSpan.Zero),
         null,
-        kind);
+        kind,
+        targetKind,
+        targetId);
 
     public void Dispose()
     {

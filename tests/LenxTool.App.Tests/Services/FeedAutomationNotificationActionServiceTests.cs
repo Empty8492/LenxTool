@@ -35,6 +35,10 @@ public sealed class FeedAutomationNotificationActionServiceTests
         Assert.Equal("AI 资讯", notification.SourceLabel);
         Assert.Equal(Lease().RuleId, notification.RuleId);
         Assert.Equal(Lease().RuleVersion, notification.RuleVersion);
+        Assert.Equal(
+            AppNotificationTargetKind.FeedEntry,
+            notification.TargetKind);
+        Assert.Equal(Entry().Id, notification.TargetId);
         Assert.Equal(Now, notification.CreatedAt);
         Assert.Null(notification.ReadAt);
         Assert.Equal(notification, Assert.Single(published));
@@ -232,6 +236,13 @@ public sealed class FeedAutomationNotificationActionServiceTests
             int maximumCount,
             CancellationToken cancellationToken) =>
             throw new NotSupportedException();
+
+        public Task<AppNotification?> GetByIdAsync(
+            string id,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(
+                Registered.SingleOrDefault(item =>
+                    string.Equals(item.Id, id, StringComparison.Ordinal)));
 
         public Task<int> GetUnreadCountAsync(
             CancellationToken cancellationToken) =>

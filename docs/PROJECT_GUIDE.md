@@ -19,7 +19,7 @@ LenxTool/
 │  ├─ LenxTool.Infrastructure.Tests/
 │  └─ LenxTool.App.Tests/
 ├─ cloud/LenxTool.Worker/       Worker API、D1 migration、安全测试
-├─ installer/                   Inno Setup、WebView2 引导程序、公钥
+├─ installer/                   Inno Setup、WebView2/Windows App Runtime 资产、公钥
 ├─ tools/LenxTool.ReleaseTool/  离线签名与验证工具
 ├─ scripts/Build-Release.ps1    可重复发布脚本
 ├─ Release/                     自包含发布、安装包、便携版、更新清单
@@ -93,6 +93,7 @@ LenxTool/
 - Key 使用 Windows DPAPI CurrentUser 加密，不进入 SQLite。
 - PasswordBox 附加绑定会在空初始值时正确订阅输入事件并保留 TwoWay Binding；空输入时保存按钮禁用，成功或失败均在设置页给出明确状态。
 - 启动后台检查更新，设置页支持手动检查、展示版本/大小/日志、下载进度和安装。
+- Windows 系统通知默认关闭；启用后可选择通用提示或仅标题、配置静默时段与聚合间隔。系统能力不可用时只降级 Toast，应用内通知仍会持久保存。
 
 ## 5. SQLite 数据
 
@@ -134,12 +135,14 @@ Groq 429 读取 `Retry-After`、请求限额和剩余量，并计算已用量。
 - 安装器固定 AppId：`{D13CF52E-A89C-4CC6-A888-3CA9F4CCB2B4}`。
 - Inno Setup 支持覆盖升级、开始菜单、可选桌面快捷方式、静默安装和卸载。
 - WebView2 Evergreen Bootstrapper 随安装器提供并静默检查/安装。
+- Windows App Runtime 2.3.1 x64 随安装器提供并静默检查/安装；便携版缺失 Runtime 时只关闭系统通知能力。
+- 发布脚本在 Inno Setup 打包前，对 WebView2 和 Windows App Runtime 的缓存或下载文件统一执行固定 SHA-256、有效 Authenticode 和 Microsoft 精确发布者校验。
 - 用户数据、模型、设置和密钥位于 LocalAppData，覆盖升级及默认卸载均保留。
 - 正式发布前需要给 EXE/Setup 增加 Authenticode；Inno 脚本已保留 SignTool 接口。
 
 ## 9. 构建与运行
 
-前置：Windows x64、.NET SDK 10.0.302。开发机需安装 WebView2 Runtime；Word 转 PDF 需要 Microsoft Word。
+前置：Windows x64、.NET SDK 10.0.302。开发机需安装 WebView2 Runtime；运行系统通知手测还需 Windows App Runtime 2.3.1+。Word 转 PDF 需要 Microsoft Word。
 
 ```powershell
 dotnet restore LenxTools.slnx
@@ -161,7 +164,7 @@ npm.cmd test -- --run
 
 ## 10. 当前版本边界与交付状态
 
-本节是当前交付状态的唯一准绳，最后核对日期为 **2026-08-05**。`IMPLEMENTATION_PLAN.md` 保留完整任务与验收条件；其中未勾选的任务可能已有部分实现，但表示尚未满足该任务的全部验收条件。
+本节是当前交付状态的唯一准绳，最后核对日期为 **2026-08-08**。`IMPLEMENTATION_PLAN.md` 保留完整任务与验收条件；其中未勾选的任务可能已有部分实现，但表示尚未满足该任务的全部验收条件。
 
 ### 10.1 本轮已完成
 
@@ -221,7 +224,7 @@ npm.cmd test -- --run
 - P1-15 Worker ACTIVE 规则同步已完成：登录后立即请求 `/v1/automation-rules?scope=ACTIVE&afterVersion=本地版本`，之后每 15 分钟增量检查；失败按 1 分钟重试，退出登录后停止请求。200 响应有 4 MiB 上限并逐项显式映射大写字段/操作符/动作契约，随后再次经过 Core 验证、编译和本地原子替换；304 只推进当前版本的同步时间，首次空规则集也会留下已同步标记。401 继续复用账号服务的单次令牌刷新，取消不写缓存，错误 scope、旧版本、超限或畸形快照均保留最后成功规则。
 - P1-15 Feed 刷新规则触发已完成：只有条目事务写入且抓取成功状态提交后，规划服务才读取一次 ACTIVE 快照并编译一次规则集；每个解析条目使用 Feed/分类、标题、作者、正文、发布时间和音视频投影计算计划，再写入既有幂等运行账本。正文优先使用清洗正文、缺失时回退摘要，并在 Unicode 边界内限制为 100,000 字符；音视频由 Feed 视图或 enclosure MIME 判断，当前 Feed 模型尚无可靠语言字段时显式传空。空规则不打开运行事务，304/写入失败不规划，同一条目+规则版本重放由账本保持零新增；规划失败与 AI 策略排队互相隔离，已成功的 Feed 刷新不回滚。
 - P1-15 AI 摘要/翻译规则动作已完成：独立处理器只领取 `GenerateSummary` 与 `Translate`，在读取条目前验证动作载荷，停用 Feed/分类和缺失条目进入明确终态；规则本身授权执行，因此不依赖自动摘要/自动翻译开关，但继续使用解析后的每日条目上限。实际处理复用既有摘要/翻译缓存、共享额度传输和富文本纯文本投影，AI 调用始终位于 SQLite 事务之外；可重试供应商错误遵循受限退避，取消会释放全部已领取租约。处理器保守串行执行，以满足任意 Feed 的最小并发上限。
-- P1-15 Notify 规则动作已完成：独立处理器只领取 `Notify`，在读取后复核 Feed/分类启用状态。schema v16 的 `app_notifications` 用动作幂等键保存本地标题、来源、规则追踪和创建/已读状态，不保存正文或 URI；并发与重启重放不重复。顶部铃铛显示最近通知、未读角标并支持单条/全部已读，后台事件切回 UI 上下文且订阅者异常与持久动作隔离。Windows 系统通知、勿扰与受控深链仍留在 P2-22。
+- P1-15 Notify 规则动作已完成：独立处理器只领取 `Notify`，在读取后复核 Feed/分类启用状态。schema v16 的 `app_notifications` 用动作幂等键保存本地标题、来源、规则追踪和创建/已读状态，不保存正文或 URI；并发与重启重放不重复。顶部铃铛显示最近通知、未读角标并支持单条/全部已读，后台事件切回 UI 上下文且订阅者异常与持久动作隔离。P2-22 已在该耐久收件箱之上补齐系统投递与受控激活。
 - P1-16 规则管理和只读模拟已完成：管理员专属一级页面只用封闭字段、允许操作符和七类动作构建规则，不提供脚本或自定义请求。桌面读取 Worker `ALL` 快照，以独立规则集版本和幂等键发布；版本冲突刷新但不重放，响应继续走 Core 验证。模拟只读取本地最近条目和目录，在内存解释器中展示命中及计划动作，不取得运行账本、AI、媒体或通知服务。普通用户无入口，绕过 UI 的发布仍由 Worker 403 拒绝，管理员发布由既有 D1 不可变版本与审计记录覆盖。
 - P1-17 附件分类与安全打开已完成：RSS/Atom enclosure 与 Media RSS `media:content` 统一解析、稳定去重并限制每条 32 项；Core 以允许清单核对 MIME/扩展名，并阻止危险协议、凭据、自定义端口、保留主机名和非公网字面 IP。阅读器显示附件种类、大小/未知大小、类型状态和来源警告；仅经验证且不超过 12 MiB 的 HTTPS 图片进入既有安全图片下载器，音视频、大图、未知大小和不支持类型回退为受限外链，危险地址不生成链接。
 - P1-18 Feed 媒体投递已完成：`SendToMedia` 规则动作只处理经附件分类器批准的音视频，逐跳复用固定地址/SSRF 策略，并限制类型、容器、大小、重定向、超时、并发和专用临时目录。schema v15 以条目和附件 URL 幂等创建来源台账与既有媒体任务；失败不留文件或孤立任务，重启后由持久队列恢复，成功任务即时进入媒体工作台并继续复用转写、翻译、SRT 导出和历史能力。
@@ -262,10 +265,11 @@ npm.cmd test -- --run
 - P2-14 当前独立项目门禁为 Core 177/177、Infrastructure 714/714、App 397/397（继续排除上述单个 Calendar AutomationPeer 基线环境用例），共 1288 个未阻断 .NET 用例；Worker 78/78、strict typecheck、NuGet/npm 0 漏洞和 Release build 0 警告/0 错误。Readwise 聚焦结果为 Infrastructure 72/72、App/设置/DI 17/17。Infrastructure 首轮因既有 SQLitePCL 测试宿主释放串扰为 713/714，精确复跑 1/1 后独立全量 714/714；App 首轮暴露只读预览误用默认 TwoWay 绑定为 396/397，改为 OneWay 后精确与独立全量均通过。独立审查发现并修复了长 Retry-After 阻塞全局 worker、行按钮可发送非预览条目两项 P1；修复后复核未发现新的 P0/P1。
 - P2-20 本地定时任务模型已完成：Core 负责 once/daily/weekly/monthly 的本地时区与 DST 换算，schema v22 保存计划定义和下一 UTC 游标，schema v23 以唯一窗口、租约令牌和尝试次数提供重启后的 RunOnce/Skip 恢复。通用后台只领取已注册稳定 ID 的幂等处理器，未知计划不执行也不阻塞；续租心跳、异常释放、宿主停止和陈旧 owner 均有独立收敛路径。领取后的任何计划写入都形成持久取消代际，Complete/Release 在 SQL 中原子要求计划仍存在且代际未变；禁用后快速重启、删除计划和过期孤儿窗口都不能恢复旧执行。P2-20 聚焦为计划仓储/窗口 30/30、处理器/DI 6/6；独立审查修复缺失计划绕过最终护栏和首次取消探测期间宿主停止不释放两项问题，复核无剩余 P0/P1。
 - P2-21 每日/每周本地摘要已完成：两个稳定计划 ID 按所选 ACTIVE Feed/分类/关键词读取上一个本地日历窗口，限制候选 200、去重后 40 条、单条 1,200 字符和总源 16,000 字符。空窗口和确定性报告缓存在模型调用前返回；报告身份只覆盖真正进入模型的输入，并包含范围、窗口、模型和 prompt 版本。schema v24 以三张伴生表提供计划+范围原子保存、持久 Retry-After/指数退避和模型请求防重账本；报告/FTS、请求与窗口终态在同一事务验证租约和计划代际后提交。明确可重试的 429 按 Delta 或 HTTP-date 退避，永久 4xx 收敛为终态；网络/超时/5xx 或崩溃等结果不明场景不自动重放，以可能跳过一次摘要换取不重复计费。报告可在 AI 报告页刷新、搜索并原子导出 `.txt`；筛选、报告和路径不上传 Worker/D1，生成沿用本机 DPAPI DeepSeek Key。管理卡提供日/周启停、本地时间、星期、ACTIVE 范围、关键词和下一次执行时间。最终新鲜门禁见 [`TEST_REPORT.md`](TEST_REPORT.md)。
+- P2-22 Windows 通知已完成：系统投递默认关闭并采用通用提示，标题预览也不包含来源或正文；设置页可配置静默时段、0/5/15/30/60 分钟聚合和关闭通知，保存后立即生效。应用内 SQLite 收件箱保持唯一耐久真相，容量 128 的 Windows 通道只做尽力投递；启动早期事件会等持久策略恢复，隐私降级或关闭与最终 `Show` 串行，避免旧标题竞态。schema v25 为通知增加 `NONE`、`FEED_ENTRY`、`AI_REPORT` 封闭目标；系统激活只接受唯一的 64 位小写十六进制通知 ID，重读本地行后才路由，不接受 URI。Toast 点击会同步当前列表和全表角标，包括最近 50 条窗口外目标。Windows App SDK Runtime 缺失或系统禁用时只降级 Toast；安装器的 WebView2/Windows App Runtime 资产在下载和缓存复用时均受固定哈希与 Microsoft 签名验证。真实系统通知、常规/最小窗口设置页以及最终自动化门禁均已验证，独立终审无剩余 P0/P1。
 
 ### 10.2 下一里程碑
 
-Gate 0 字幕闭环、P0“管理员策展 RSS”、P1“阅读增强、AI 与自动化”、P2-01～P2-14、P2-20、P2-21，以及插入计划 DISC-01～DISC-06、UX-03 均已完成。[P2 内容视图与集成计划](plans/RSS_P2_VIEWS_INTEGRATIONS.md) 的 P2-15 Cubox 因与既有导出能力重叠、官方幂等与安全重试契约不足而取消实施；客户端不保存 Cubox API 凭据，也不注册连接探针或导出器。P2-20/P2-21 已完成本地时区换算、schema v22～v24 持久化、RunOnce/Skip 重启恢复、处理器白名单、租约心跳、计划代际取消、日/周摘要的原子配置/结果提交、耐久防重和管理 UI。下一窄切片为 P2-22 Windows 通知与应用内收件箱；P1/P2 源码进度不等于正式签名发布完成。
+Gate 0 字幕闭环、P0“管理员策展 RSS”、P1“阅读增强、AI 与自动化”、P2-01～P2-14、P2-20～P2-22，以及插入计划 DISC-01～DISC-06、UX-03 均已完成。[P2 内容视图与集成计划](plans/RSS_P2_VIEWS_INTEGRATIONS.md) 的 P2-15 Cubox 因与既有导出能力重叠、官方幂等与安全重试契约不足而取消实施；客户端不保存 Cubox API 凭据，也不注册连接探针或导出器。下一项为 P2-23 服务端邮件摘要决策闸门：只做隐私、保留、成本、退订、反滥用和版权 ADR，未获批准前不新增云端文章表或邮件发送代码。P1/P2 源码进度不等于正式签名发布完成。
 
 字幕闭环完成后的产品主路线已确定为“管理员策展 RSS”：管理员维护共享 RSS/Atom 目录，普通用户只能同步和阅读，不得修改共享订阅、分类、抓取策略或自动化规则。为保持现有“云端不存新闻正文”边界，首版采用 Worker/D1 保存权威目录、各桌面客户端本地抓取和 SQLite 缓存的模式。
 
@@ -275,7 +279,7 @@ Gate 0 字幕闭环、P0“管理员策展 RSS”、P1“阅读增强、AI 与�
 2. P0-01～P0-20、P0-B/P0-C 及最终检查点已完成；P0 关闭记录见 [`plans/RSS_P0_ADMIN_CATALOG.md`](plans/RSS_P0_ADMIN_CATALOG.md)。
 3. P1-01～P1-20、P1-A/P1-B/P1-C/P1-D 及最终检查点已完成；关闭记录见 [`plans/RSS_P1_READING_INTELLIGENCE.md`](plans/RSS_P1_READING_INTELLIGENCE.md)。
 4. P2-01～P2-14 已完成五视图、智能视图、统一导出契约、安全集成策略、持久化队列、本地 Markdown、受控 Obsidian Vault、Eagle 图片、Zotero 个人库与 Readwise Reader 导出；[`plans/RSS_DISCOVERY_AND_CONTROL_UX.md`](plans/RSS_DISCOVERY_AND_CONTROL_UX.md) 的 DISC-01～DISC-06 已交付独立发现索引、安全可替换 provider、管理员统一发现页、确认发布闭环和最终检查点，UX-03 已交付原生 WPF 共享控件模板，不依赖 Folo 私有 API 或复制其源码。
-5. P2-15 Cubox 已取消实施；P2-20/P2-21 已完成本地时区重复计算、schema v22 计划定义、schema v23 窗口幂等/漏跑恢复、schema v24 计划载荷/持久退避/摘要请求账本、后台处理、在途取消、每日/每周摘要及管理 UI。下一片为 P2-22 Windows 通知与应用内收件箱；P2-16～P2-19 仍待逐项选择，具体见 [`plans/RSS_P2_VIEWS_INTEGRATIONS.md`](plans/RSS_P2_VIEWS_INTEGRATIONS.md)。
+5. P2-15 Cubox 已取消实施；P2-20～P2-22 已完成本地计划、每日/每周摘要、schema v22～v25、系统通知隐私策略、受控激活和 Runtime 降级。下一项为 P2-23 服务端邮件摘要决策闸门；P2-16～P2-19 仍待逐项选择，具体见 [`plans/RSS_P2_VIEWS_INTEGRATIONS.md`](plans/RSS_P2_VIEWS_INTEGRATIONS.md)。
 6. “洛克王国世界每日清体力自动化”只登记为独立候选调研项，尚未批准 MaaFramework 依赖或任何实现。它不属于 RSS P2 编号；若后续启动，必须先完成条款核对、前台手动登录边界、识别 PoC、进程隔离、停止/失败保护与许可证审查，具体见 [`plans/GAME_AUTOMATION_BACKLOG.md`](plans/GAME_AUTOMATION_BACKLOG.md)。
 
 总路线、参考项目和许可证边界见 [`plans/RSS_MASTER_ROADMAP.md`](plans/RSS_MASTER_ROADMAP.md)，架构决策见 [`decisions/ADR-001-admin-curated-rss.md`](decisions/ADR-001-admin-curated-rss.md)、[`decisions/ADR-002-article-content-extraction.md`](decisions/ADR-002-article-content-extraction.md) 与 [`decisions/ADR-003-durable-entry-export-queue.md`](decisions/ADR-003-durable-entry-export-queue.md)。P0 与 P1 可作为已验收基础；生产 Worker/D1、正式安装包、签名、升级和跨物理机矩阵仍按 10.5～10.7 节单独验收。
@@ -294,7 +298,7 @@ Gate 0 字幕闭环、P0“管理员策展 RSS”、P1“阅读增强、AI 与�
 - 客户端已接入共享账号登录、退出、过期状态、角色、额度和管理员目录管理；注册尚未实现。
 - Worker 认证、令牌轮换和管理员目录写入已有 workerd/D1 自动化；生产 D1 并发压测、共享额度代理链路和真实部署仍未验收。
 - 管理员分类/Feed 写 API、普通用户只读目录、ETag/304、桌面角色可见性、本地目录自动同步、安全发现/抓取和管理交互已实现。
-- 安全 Feed URL 发现、通用条目解析、抓取调度、OPML 管理、只读时间线、Feed 健康诊断、首页真实数据聚合、全文/图片离线、附件分类与安全外链、自动化规则发布边界、图形管理与只读模拟、本地运行账本、规则同步、受限状态动作、AI 摘要/翻译动作、Feed 媒体投递、本地通知收件箱、七类实体统一搜索、180 天保留维护以及 P2-21 日/周本地摘要均已实现；P2-01～P2-14 的多内容视图、智能视图与已选外部导出也已完成。P2-16～P2-19 仍待逐项选择，P2-22 后续通知与指标尚未完成。
+- 安全 Feed URL 发现、通用条目解析、抓取调度、OPML 管理、只读时间线、Feed 健康诊断、首页真实数据聚合、全文/图片离线、附件分类与安全外链、自动化规则发布边界、图形管理与只读模拟、本地运行账本、规则同步、受限状态动作、AI 摘要/翻译动作、Feed 媒体投递、本地/Windows 通知、七类实体统一搜索、180 天保留维护以及 P2-21 日/周本地摘要均已实现；P2-01～P2-14 的多内容视图、智能视图与已选外部导出也已完成。P2-16～P2-19 仍待逐项选择，P2-23 仍处于决策闸门。
 
 ### 10.4 普通本地使用需要配置
 
@@ -306,7 +310,7 @@ Gate 0 字幕闭环、P0“管理员策展 RSS”、P1“阅读增强、AI 与�
 - Zotero：管理员先在“外部集成”中启用 Zotero 并只允许 `api.zotero.org`；本机设置页保存个人库 User ID、显式条目类型和可选笔记/附件开关，API key 进入 DPAPI 后不回读。所需权限至少为 library/write；启用笔记或附件时还分别需要 notes/files。当前不支持群组库，且真实个人库写入仍需受控验收。
 - Readwise：管理员先在“外部集成”中启用 Readwise 并只允许 `readwise.io`；本机“个人外部集成”选择 Readwise 后固定 `default` 与官方端点，保存 access token 后再测试。阅读器仅在显式点击当前已预览条目的 `R` 或详情按钮后入队；当前没有真实 token/账户写入验收。
 - 共享账号：部署 Worker 后，以 `LENXTOOL_WORKER_BASE_URL` 配置其 HTTPS 根地址；登录界面才会启用。该变量不是凭据，账号 refresh token 仍只由 DPAPI CurrentUser 保存。
-- WebView2 Runtime：当前电脑已安装；早报正文已不再依赖它，安装器和未来富文本能力仍保留运行时检查。
+- WebView2 / Windows App Runtime：当前电脑均已安装。安装版会携带并校验两项 Microsoft 安装资产；便携版若缺少 Windows App Runtime，只会禁用系统通知，应用内收件箱仍可用。
 - Microsoft Word：当前电脑已安装，Word 转 PDF 无需额外配置。
 - .NET SDK 与 Node/npm：当前开发机已满足；安装自包含正式包的普通用户不需要 .NET SDK。
 
@@ -324,8 +328,9 @@ Gate 0 字幕闭环、P0“管理员策展 RSS”、P1“阅读增强、AI 与�
 - 提供仓库外的 ECDSA P-256 更新签名私钥路径；私钥不得发到聊天或提交仓库。
 - 购买并配置 Authenticode 证书和可信时间戳服务。
 - 填写真实发布说明、最低支持版本和强制更新标志，并完成覆盖升级验收。
+- 若有意升级 WebView2 或 Windows App Runtime 安装资产，必须从官方来源取得新文件，人工复核版本/签名后显式更新固定 SHA-256；不得为了恢复构建而移除校验。
 - 当前 Git 仓库可正常识别；正式发布前仍需确认发布提交已推送到 `origin/main`，并让版本标签、清单版本和安装包版本保持一致。
 
 ### 10.7 当前制品状态
 
-`Release\LenxTool_Setup.exe` 是 2026-07-20 01:44 生成的旧制品，不含随后完成的媒体、备份、设置和资讯修复。包含本轮源码的开发验收便携包为 `artifacts\LenxTool_Portable_0.1.0-preview-rich-reader.zip`；它未经过正式签名发布流程。现有 Setup 和 `Release` 中的旧便携包仍需重新构建；在上述发布配置完成并重新运行 `scripts/Build-Release.ps1` 前，不应对外宣称已有最新正式安装包。
+`Release\LenxTool_Setup.exe` 是 2026-07-20 01:44 生成的旧制品，不含随后完成的媒体、备份、设置、资讯和 P2-22 通知修复。本轮源码已发布到忽略目录 `artifacts\publish\p2-22-final`（315 个顶层文件、167.0 MiB）并完成主程序/系统通知开发验收，但它没有经过 Inno、离线更新签名或 Authenticode 流程。现有 Setup 和 `Release` 中的旧便携包仍需重新构建；在上述发布配置完成并重新运行 `scripts/Build-Release.ps1` 前，不应对外宣称已有最新正式安装包。

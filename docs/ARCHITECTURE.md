@@ -55,6 +55,20 @@ AI 报告使用自备 DeepSeek Key 经请求级 Bearer 授权调用 `deepseek-v4
 
 更新永不覆盖 `%LocalAppData%\LenxTool`。镜像是清单数据，不写死在更新算法中。
 
+### Windows 通知
+
+```text
+业务完成 -> app_notifications（SQLite 耐久真相）
+  -> WindowsNotificationService（显式启用、静默/聚合、隐私代际重验）
+  -> Windows App SDK AppNotificationManager（有界尽力投递）
+  -> notification_id 激活 -> 重读 SQLite 可信目标
+  -> notifications / feed_entry / ai_report 封闭应用内路由
+```
+
+应用在注册激活处理器后先完成数据库迁移和通知设置恢复，再启动可能产生事件的 Host 后台服务；初始化前事件由容量 128 的有界通道暂存。应用内收件箱始终是耐久真相，系统 Toast 丢失、被系统禁用或 Runtime 缺失都不反向改变业务成功和收件箱状态。设置保存与最终投递共享串行门，`Show` 前重新读取当前启用/预览策略，保证关闭或从标题降级到通用提示返回后不再按旧策略发送。
+
+系统激活载荷只能包含一个 64 位小写十六进制 `notification_id`。导航服务据此读取 `app_notifications`，只接受 `NONE`、`FEED_ENTRY`、`AI_REPORT` 三类本地目标并映射到已知页面；URI、附加参数、未知类型和非法 ID 失败关闭。标记已读的真实 `unread→read` 变化通过进程内事件同步铃铛投影和全表角标，目标不在最近 50 条窗口内时仍按确认 delta 更新。
+
 ## 3. 数据库
 
 数据库路径：`%LocalAppData%\LenxTool\Data\lenx.db`。连接初始化启用外键、WAL、busy timeout 和完整同步策略。迁移在单事务中执行，执行前通过 SQLite 在线备份 API 生成包含已提交 WAL 内容的一致性单文件快照；失败则不提升 `schema_versions`。
@@ -82,14 +96,14 @@ AI 报告使用自备 DeepSeek Key 经请求级 Bearer 授权调用 `deepseek-v4
 - `feed_ai_automation_jobs`、`feed_ai_automation_daily_entries`：本地 AI 自动处理队列和每日不同条目额度。
 - `feed_automation_runs`、`feed_automation_action_runs`、`feed_automation_rule_state`、`feed_automation_rules`：规则快照、确定性运行账本、动作租约和状态。
 - `feed_media_deliveries`：Feed 附件到既有媒体任务的幂等来源台账。
-- `app_notifications`：内容命中、系统健康和任务完成三类本地通知的稳定关联、标题及创建/已读状态；不保存正文、结果内容、异常详情或任意 URI。
+- `app_notifications`：内容命中、系统健康和任务完成三类本地通知的稳定关联、标题、创建/已读状态，以及 `NONE`、`FEED_ENTRY`、`AI_REPORT` 封闭本地目标；不保存正文、结果内容、异常详情或任意 URI。
 - `local_scheduled_tasks`：本地计划定义、错过执行策略、启用状态和下一次 UTC 游标；不保存任务输入、输出或执行历史。
 - `local_schedule_runs`：以计划 ID 和计划 UTC 时刻唯一标识实际执行窗口，保存封闭状态、尝试次数、租约和最小时间审计；不保存任务输入、输出、正文、异常详情或凭据。
 - `local_scheduled_task_payloads`：与计划定义在同一事务中写入的版本化任务载荷；P2-21 只保存有界的 Feed/分类/关键词范围。
 - `local_schedule_run_retries`：与窗口状态同事务保存的最早重试时刻，使 Retry-After/指数退避跨进程生效而不篡改真实状态时间。
 - `feed_digest_requests`：模型请求的 STARTED/COMPLETED/AMBIGUOUS/DISCARDED 耐久账本，用于在供应商无幂等键时抑制不确定请求的自动重放。
 
-本地数据库当前版本为 schema v24。v3～v7 依次建立字幕翻译用量、Feed 目录/条目、Feed FTS、私人阅读状态和离线资源；v8～v11 建立全文策略/队列、Feed AI 缓存策略和本地自动处理；v12～v14 建立规则运行账本、隐藏状态与 ACTIVE 规则缓存；v15 建立 Feed 媒体投递台账；v16 建立应用内通知收件箱；v17 回填字幕、标签和收藏搜索文档，并为收藏和标签建立同步触发器；v18 为 Feed 视图分类增加独立显式覆盖状态；v19 为通知增加三类封闭类别；v20 保存最近一次验证通过的 ACTIVE 智能视图筛选定义；v21 增加带幂等键、租约、重试、取消和封闭错误码的持久化条目导出任务；v22 保存本地计划定义、错过执行策略、启用状态与下一次 UTC 游标；v23 增加唯一计划窗口、租约、尝试次数和完成/取消历史；v24 增加计划载荷、持久退避和摘要模型请求账本三张伴生表。旧 v2 数据会依次应用全部迁移，任何一步失败均在事务中回滚且不提升版本。
+本地数据库当前版本为 schema v25。v3～v7 依次建立字幕翻译用量、Feed 目录/条目、Feed FTS、私人阅读状态和离线资源；v8～v11 建立全文策略/队列、Feed AI 缓存策略和本地自动处理；v12～v14 建立规则运行账本、隐藏状态与 ACTIVE 规则缓存；v15 建立 Feed 媒体投递台账；v16 建立应用内通知收件箱；v17 回填字幕、标签和收藏搜索文档，并为收藏和标签建立同步触发器；v18 为 Feed 视图分类增加独立显式覆盖状态；v19 为通知增加三类封闭类别；v20 保存最近一次验证通过的 ACTIVE 智能视图筛选定义；v21 增加带幂等键、租约、重试、取消和封闭错误码的持久化条目导出任务；v22 保存本地计划定义、错过执行策略、启用状态与下一次 UTC 游标；v23 增加唯一计划窗口、租约、尝试次数和完成/取消历史；v24 增加计划载荷、持久退避和摘要模型请求账本三张伴生表；v25 在事务内重建 `app_notifications`，加入封闭目标类别/标识约束并把旧系统健康通知映射为无目标、其余旧通知映射为 Feed 条目。旧 v2 数据会依次应用全部迁移，任何一步失败均在事务中回滚且不提升版本。
 
 统一搜索仓储只接受参数化查询对象，先约束关键词、日期、筛选组合、偏移和页大小，再通过七类实体 CTE 投影到同一结果模型。排序固定为 FTS 排名、实体时间倒序、实体类型和稳定文档 ID；仓储读取 `limit + 1` 决定下一页，UI 使用原始页数量推进偏移并按稳定结果身份防重。应用内导航服务只传递路由和实体 ID：Feed 结果由资讯 ViewModel 精确读取并打开，字幕结果由历史 ViewModel 精确定位任务，其他外部地址仍经 HTTP/HTTPS 安全命令打开。
 
@@ -159,13 +173,13 @@ UI 错误卡根据能力显示重试、复制脱敏详情、打开设置、切�
 
 ## 8. 发布与回滚
 
-自包含发布不是单文件，以便 WebView2/native 依赖和差分下载可诊断。Inno Setup 使用固定 AppId，安装到 `{localappdata}\Programs\LenxTool`，覆盖升级前关闭应用；卸载器不删除用户数据。回滚采用重新安装上一个已签名版本，数据库只使用向前兼容迁移；破坏性迁移需另行 ADR。
+自包含 .NET 发布不是单文件，以便 WebView2/native 依赖和差分下载可诊断。Windows App SDK 采用框架依赖与手动惰性 bootstrap：缺少 Runtime 时只关闭 App Notifications，主程序仍启动。Inno Setup 使用固定 AppId，安装到 `{localappdata}\Programs\LenxTool`，并携带 WebView2 引导程序与 Windows App Runtime 2.3.1 x64；两项资产在打包前均验证固定 SHA-256、有效 Authenticode 和 Microsoft 精确发布者。覆盖升级前关闭应用，卸载器不删除用户数据。回滚采用重新安装上一个已签名版本，数据库只使用向前兼容迁移；破坏性迁移需另行 ADR。
 
 ## 9. 管理员策展 RSS 的 P0/P1 架构
 
 后续资讯架构采用“Worker/D1 权威共享目录 + 桌面客户端本地抓取/缓存”：管理员通过服务端授权的写端点维护 Feed、分类和策略，普通用户只读同步目录；文章正文、AI 结果、字幕和本地文件仍不写入 D1。详细理由和备选方案见 [ADR-001](decisions/ADR-001-admin-curated-rss.md)，实施批次见 [RSS 集成总路线图](plans/RSS_MASTER_ROADMAP.md)。
 
-P0/P1 当前已完成 Worker 身份生命周期、D1 共享目录/AI 策略/自动化规则 schema、管理员单项与原子批量写 API、目录和规则 ACTIVE/ALL 快照，以及桌面安全会话、账号/角色/额度、订阅管理和规则管理 UI。本地 schema v24 已覆盖目录/抓取状态、Feed 条目与七类 FTS、私人阅读状态、离线资源/全文、AI 缓存与任务、规则快照/运行/动作租约、媒体投递、三类应用内通知、显式视图覆盖、ACTIVE 智能视图缓存、持久化条目导出任务、本地计划定义/载荷、唯一计划窗口/持久退避及摘要模型请求账本。目录、规则和智能视图写入均以服务端 admin 角色为授权真相，使用相互独立的 `If-Match` 单调版本、`Idempotency-Key`、参数化 SQL、不可变历史/最小审计和原子结果；ACTIVE/ALL 由服务端角色隔离，桌面角色只控制入口可见性。OPML 在客户端完成有界 XXE-safe 解析、选择和逐项安全发现后，才由 Worker 原子批量提交；目录导出只使用公开字段。D1 智能视图只保存封闭筛选定义，不保存文章正文、AI 结果、字幕、本地文件或私人状态。
+P0/P1 当前已完成 Worker 身份生命周期、D1 共享目录/AI 策略/自动化规则 schema、管理员单项与原子批量写 API、目录和规则 ACTIVE/ALL 快照，以及桌面安全会话、账号/角色/额度、订阅管理和规则管理 UI。本地 schema v25 已覆盖目录/抓取状态、Feed 条目与七类 FTS、私人阅读状态、离线资源/全文、AI 缓存与任务、规则快照/运行/动作租约、媒体投递、三类应用内通知及其封闭目标、显式视图覆盖、ACTIVE 智能视图缓存、持久化条目导出任务、本地计划定义/载荷、唯一计划窗口/持久退避及摘要模型请求账本。目录、规则和智能视图写入均以服务端 admin 角色为授权真相，使用相互独立的 `If-Match` 单调版本、`Idempotency-Key`、参数化 SQL、不可变历史/最小审计和原子结果；ACTIVE/ALL 由服务端角色隔离，桌面角色只控制入口可见性。OPML 在客户端完成有界 XXE-safe 解析、选择和逐项安全发现后，才由 Worker 原子批量提交；目录导出只使用公开字段。D1 智能视图只保存封闭筛选定义，不保存文章正文、AI 结果、字幕、本地文件或私人状态。
 
 P2-05 为共享智能视图建立与目录/规则解耦的第三条权威配置流：Worker D1 0009 使用独立 `view_set_version`，ACTIVE 向所有认证用户返回启用视图，ALL 及 POST/PATCH/DELETE 只允许管理员；每次写入通过条件版本、幂等键、事务守卫、不可变版本和最小审计提交。定义只含名称、排序、启用状态，以及 Feed/分类、内容类别、已读、收藏、关键词和发布时间窗口，不含 SQL、正则、脚本、URL 或内容字段。桌面 schema v20 只保存最近一次完整验证的 ACTIVE 快照；后台同步对旧/同版本、ALL 冒充、停用项、重复 ID、超限或畸形响应失败关闭并保留上次缓存。已读与收藏筛选只在 `FeedSmartViewValidator.Apply` 生成本地查询时读取私人状态，不进入 Worker 请求或缓存定义之外的字段。
 

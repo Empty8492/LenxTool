@@ -12,6 +12,10 @@ public interface IAppNotificationRepository
         int maximumCount,
         CancellationToken cancellationToken);
 
+    Task<AppNotification?> GetByIdAsync(
+        string id,
+        CancellationToken cancellationToken);
+
     Task<int> GetUnreadCountAsync(
         CancellationToken cancellationToken);
 

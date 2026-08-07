@@ -23,6 +23,7 @@ public sealed class NotificationCenterViewModel : ObservableObject
     private const int RecentLimit = 50;
     private readonly IAppNotificationRepository _repository;
     private readonly TimeProvider _timeProvider;
+    private readonly IAppNotificationNavigationService? _navigation;
     private readonly SynchronizationContext? _synchronizationContext;
     private readonly List<AppNotification> _allItems = [];
     private bool _isOpen;
@@ -32,16 +33,25 @@ public sealed class NotificationCenterViewModel : ObservableObject
     public NotificationCenterViewModel(
         IAppNotificationRepository repository,
         IAppNotificationInbox inbox,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        IAppNotificationNavigationService? navigation = null)
     {
         ArgumentNullException.ThrowIfNull(repository);
         ArgumentNullException.ThrowIfNull(inbox);
         ArgumentNullException.ThrowIfNull(timeProvider);
         _repository = repository;
         _timeProvider = timeProvider;
+        _navigation = navigation;
+        if (_navigation is not null)
+        {
+            _navigation.NotificationOpened += OnNotificationOpened;
+        }
         _synchronizationContext = SynchronizationContext.Current;
         ToggleCommand = new(() => IsOpen = !IsOpen);
         MarkReadCommand = new(MarkReadAsync, item => item is { IsRead: false });
+        OpenCommand = new(
+            OpenAsync,
+            item => item is not null && _navigation is not null);
         MarkAllReadCommand = new(
             MarkAllReadAsync,
             () => UnreadCount > 0);
@@ -58,6 +68,7 @@ public sealed class NotificationCenterViewModel : ObservableObject
     ];
     public RelayCommand ToggleCommand { get; }
     public AsyncRelayCommand<AppNotification> MarkReadCommand { get; }
+    public AsyncRelayCommand<AppNotification> OpenCommand { get; }
     public AsyncRelayCommand MarkAllReadCommand { get; }
 
     public bool IsOpen
@@ -126,22 +137,43 @@ public sealed class NotificationCenterViewModel : ObservableObject
     private void OnNotificationReceived(
         AppNotification notification)
     {
+        AcceptOnCapturedContext(
+            notification,
+            confirmedReadTransition: false);
+    }
+
+    private void OnNotificationOpened(
+        object? sender,
+        AppNotificationOpenedEventArgs eventArgs)
+    {
+        AcceptOnCapturedContext(
+            eventArgs.Notification,
+            eventArgs.BecameRead);
+    }
+
+    private void AcceptOnCapturedContext(
+        AppNotification notification,
+        bool confirmedReadTransition)
+    {
         if (_synchronizationContext is not null &&
             !ReferenceEquals(
                 SynchronizationContext.Current,
                 _synchronizationContext))
         {
             _synchronizationContext.Post(
-                _ => AcceptNotification(notification),
+                _ => AcceptNotification(
+                    notification,
+                    confirmedReadTransition),
                 null);
             return;
         }
 
-        AcceptNotification(notification);
+        AcceptNotification(notification, confirmedReadTransition);
     }
 
     private void AcceptNotification(
-        AppNotification notification)
+        AppNotification notification,
+        bool confirmedReadTransition = false)
     {
         int existingIndex = FindAllIndex(notification.Id);
         bool wasUnread = existingIndex >= 0 &&
@@ -170,6 +202,11 @@ public sealed class NotificationCenterViewModel : ObservableObject
             UnreadCount++;
         }
         else if (wasUnread && !isUnread)
+        {
+            UnreadCount = Math.Max(0, UnreadCount - 1);
+        }
+        else if (existingIndex < 0 && !isUnread &&
+                 confirmedReadTransition)
         {
             UnreadCount = Math.Max(0, UnreadCount - 1);
         }
@@ -204,6 +241,26 @@ public sealed class NotificationCenterViewModel : ObservableObject
             UnreadCount = Math.Max(0, UnreadCount - 1);
         }
         MarkReadCommand.NotifyCanExecuteChanged();
+    }
+
+    private async Task OpenAsync(
+        AppNotification? notification,
+        CancellationToken cancellationToken)
+    {
+        if (notification is null || _navigation is null)
+        {
+            return;
+        }
+
+        AppNotification? opened = await _navigation.OpenAsync(
+            notification.Id,
+            cancellationToken);
+        if (opened is null)
+        {
+            return;
+        }
+        AcceptNotification(opened);
+        IsOpen = false;
     }
 
     private async Task MarkAllReadAsync(

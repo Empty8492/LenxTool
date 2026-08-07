@@ -1,6 +1,6 @@
 # 测试报告
 
-测试日期：.NET 2026-08-06 / Worker 2026-08-06（Asia/Shanghai）
+测试日期：.NET 2026-08-08 / Worker 2026-08-08（Asia/Shanghai）
 版本：0.1.0  
 配置：Release / win-x64 / .NET SDK 10.0.302
 
@@ -9,14 +9,19 @@
 | 测试组 | 结果 |
 |---|---:|
 | LenxTool.Core.Tests | 191 passed |
-| LenxTool.Infrastructure.Tests | 755 passed |
-| LenxTool.App.Tests（排除 WpfRuntime） | 427 passed |
-| LenxTool.App.Tests（WpfRuntime 逐项隔离复跑） | 8 passed / 1 baseline environment failure |
+| LenxTool.Infrastructure.Tests | 763 passed |
+| LenxTool.App.Tests | 500 passed |
 | Cloudflare Worker Vitest | 78 passed |
 | Worker TypeScript strict typecheck | passed |
 | .NET build warnings | 0 |
 | NuGet vulnerable packages | 0 detected |
-| npm audit vulnerabilities | 5 detected（1 high / 4 moderate；均在开发/测试工具链） |
+| npm audit vulnerabilities | 0 detected |
+
+P2-22 最终门禁为 Core 191/191、Infrastructure 763/763、App 500/500，三个项目串行 Release 全绿，共 1454 项且无跳过；完整 App 运行包含既有 WPF runtime 用例，本次未复现历史 `CalendarAutomationPeer` 宿主失败。Worker 78/78、strict typecheck、Release build 0 警告/0 错误、win-x64 自包含 .NET 发布、NuGet 在线漏洞审计 0 和 npm 在线漏洞审计 0 均通过。发布目录 `artifacts\publish\p2-22-final` 为 315 个顶层文件、175,100,510 bytes（167.0 MiB）。
+
+本片新增 schema v25 通知目标迁移/仓储、设置存储/策略/聚合、系统适配器降级、通知服务生命周期/并发、严格激活与受控导航、设置 ViewModel/XAML、生产 DI，以及摘要完成/缓存补发和铃铛投影回归。覆盖默认关闭/损坏回退、跨午夜静默、五档聚合、容量 128 通道、初始化前事件、权限拒绝、Runtime 缺失、禁用/隐私降级赢得并发、唯一 64 位小写 ID、URI/附加参数/未知目标拒绝、三类本地路由、点击已读和最近 50 条窗口外角标 51→50。独立终审发现的 5 项 P1——旧预览竞态、启动丢 Toast、点击后投影/窗口外角标不同步、Windows App Runtime 缓存信任、WebView2 缓存信任——均已修复并有回归，最新树无未解决 P0/P1。
+
+Cloudflare 开发工具链从 `@cloudflare/vitest-pool-workers 0.18.8` / `wrangler 4.114.0` 升至与 Vitest 4.1 兼容的 `0.20.3` / `4.120.0`，并同步 `@cloudflare/workers-types 5.20260807.2`；非强制 `npm audit fix` 只更新可兼容传递依赖。升级后重新执行 typecheck、12 个 Vitest 文件 78/78 与完整 audit，结果为 0 漏洞；没有使用 `--force` 或忽略 peer 约束。
 
 P2-15 Cubox 于 2026-08-05 取消实施，未提交的凭据解析、只读健康探针、设置 UI 与对应测试已撤回；生产代码不保存 Cubox API 凭据，也不注册 Cubox 客户端、探针或导出器。设置选项聚焦测试 10/10、Core 177/177、Infrastructure 714/714、App 非 WPF-runtime 399/399、Worker 78/78、strict typecheck 与 Release build 0 警告/0 错误通过。完整 WPF runtime 为 5/9；4 项失败均位于既有 `CalendarAutomationPeer.GetChildrenCore` 空元素调用栈，其中 3 项在独立宿主精确复跑通过，余下 `SelectionControlsWpfRuntimeTests` 在干净提交 `17c0f2e` 上以同一行和调用栈复现，因此记录为基线环境门禁，不归因于本次设置选项修改。
 
@@ -180,11 +185,15 @@ D1 目录迁移测试明确执行“0001 → 写入旧 schema 哨兵数据 → �
 - `LenxTool_Setup.exe` 静默安装到包含中文与空格的测试目录：ExitCode=0。
 - 启动已安装应用：Responding=True，标题正确。
 - 静默卸载：ExitCode=0，测试安装目录已移除。
-- 安装器包含 WebView2 Evergreen Bootstrapper。
-- 自包含发布无需系统 .NET Runtime。
+- 旧安装器包含 WebView2 Evergreen Bootstrapper；本轮 Inno 脚本另加入 Windows App Runtime 2.3.1 x64。
+- 自包含发布无需系统 .NET Runtime；Windows App Runtime 缺失时只降级系统通知。
 - 更新清单 ECDSA 签名与安装包 hash 签名均由发布脚本使用嵌入公钥反向验证。
 
 以上安装器冒烟记录对应 2026-07-20 01:44 的旧制品。本轮源码已更新，但当前机器缺少 Inno Setup 6，且本轮未提供仓库外离线私钥路径，因此尚未覆盖生成签名安装器；不得将旧 `LenxTool_Setup.exe` 视为包含本轮修复。
+
+P2-22 本机使用手动 Windows App SDK bootstrap 进行真实系统通知冒烟，返回 `availability=Available`、`show=success`，并实际显示 Windows 通知。Release 主窗口随后通过 UI Automation 导航到设置页，常规窗口与应用允许的最小 920×620 窗口均能访问启用、预览、聚合、静默起止和保存控件；截图见忽略的 `artifacts\P2-22-settings-window.png` 与 `artifacts\P2-22-settings-min.png`。该单机结果不替代 Windows 10/11、锁屏、前后台/冷启动 Action Center 和安装版/便携版 Runtime 缺失的正式发布矩阵。
+
+本轮实际缓存的 `MicrosoftEdgeWebview2Setup.exe` 为 1,690,320 bytes、SHA-256 `23A55FBFF920C0F99887848CFC25125F8F915DF35638E01BEB8F8FA9B5A0BC51`；`WindowsAppRuntimeInstall-x64.exe` 为 113,192,760 bytes、SHA-256 `4011748DDF472B7E856D909FDFB4E9B19C3D23FCD8121039AC91F99D5FFA65DB`。两者 Authenticode 均为 `Valid`，发布者精确为 Microsoft Corporation；`ChineseSimplified.isl` 另固定 SHA-256 `869E43E7C7B8D20C7E4397C8E98F7D1B7CF0528803ACDF019AD350143EC85469`。`ReleaseSupplyChainTests` 与 PowerShell AST 解析确认缓存复用/首次下载都在 Inno 编译前执行相应哈希和签名闸门。由于缺少离线私钥与 Inno Setup，本轮只完成 315 文件、167.0 MiB 的未签名开发发布目录，没有伪造正式 Setup/ZIP/清单证据。
 
 本轮已生成未签名的开发验收便携包 `artifacts\LenxTool_Portable_0.1.0-preview-rich-reader.zip`（74,359,890 bytes，SHA-256 `7DB438205065AE3BC58C0FFDEFD3CBF2EF9CA9F97749D1D010F97C3BF1DE2CA6`）。它包含资讯分段页签、RSS 富内容迁移和原生富文本早报阅读器，但不能替代正式签名安装包。
 
@@ -244,4 +253,4 @@ P1 最终检查点新增 `P1FinalAcceptanceTests`：真实 schema v17 SQLite 写
 
 ## 需要外部环境的验收
 
-以下测试需要真实账号、模型或较长运行时间，不在无凭据自动化环境中执行：真实 Groq/DeepSeek 请求、真实 Worker 管理员账号下的目录写入与冲突演练、Cloudflare 生产 D1 并发压测、超长视频全程转写、各代 CPU 的本地大型模型性能、真实 GitHub Release 更新覆盖、已签 Authenticode 的 SmartScreen 声誉、Windows 10/11 多台物理机 100%～200% DPI（含管理页 900×620～4K）矩阵。对应测试步骤已写入规格与发布指南，生产发布前必须执行。
+以下测试需要真实账号、模型或较长运行时间，不在无凭据自动化环境中执行：真实 Groq/DeepSeek 请求、真实 Worker 管理员账号下的目录写入与冲突演练、Cloudflare 生产 D1 并发压测、超长视频全程转写、各代 CPU 的本地大型模型性能、真实 GitHub Release 更新覆盖、已签 Authenticode 的 SmartScreen 声誉、Windows 10/11 多台物理机 100%～200% DPI（含管理页 920×620～4K）矩阵，以及系统通知的权限拒绝、锁屏、前后台/冷启动 Action Center 点击、安装版/便携版 Runtime 缺失。对应测试步骤已写入规格与发布指南，生产发布前必须执行。

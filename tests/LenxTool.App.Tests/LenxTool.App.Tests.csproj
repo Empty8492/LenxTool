@@ -5,6 +5,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
+    <!-- The referenced WPF app keeps the classic WebView2 projection. -->
+    <WebView2EnableCsWinRTProjection>false</WebView2EnableCsWinRTProjection>
   </PropertyGroup>
 
   <ItemGroup>
@@ -77,6 +79,12 @@
           CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\src\LenxTool.App\Views\SettingsStorageCard.xaml"
           Link="Fixtures\SettingsStorageCard.xaml"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\scripts\Build-Release.ps1"
+          Link="Fixtures\Build-Release.ps1"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\installer\LenxTool.iss"
+          Link="Fixtures\LenxTool.iss"
           CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 

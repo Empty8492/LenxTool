@@ -289,7 +289,7 @@ public sealed class ContentSearchRepositoryTests : IDisposable
         await using SqliteCommand version = verification.CreateCommand();
         version.CommandText = "SELECT MAX(version) FROM schema_versions;";
         Assert.Equal(
-            24L,
+            25L,
             (long)(await version.ExecuteScalarAsync(CancellationToken.None))!);
     }
 

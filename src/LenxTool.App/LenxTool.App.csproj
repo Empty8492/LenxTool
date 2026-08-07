@@ -22,6 +22,11 @@
     <PackageReference Include="Markdig" Version="1.3.2" />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.0" />
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4078.44" />
+    <!-- App notifications live in Foundation; Runtime supplies unpackaged
+         bootstrap/version metadata. Avoid the full metapackage's WinUI/AI/ML. -->
+    <PackageReference Include="Microsoft.WindowsAppSDK.Foundation" Version="2.3.5" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.InteractiveExperiences" Version="2.1.3" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.Runtime" Version="2.3.1" />
   </ItemGroup>
 
   <PropertyGroup>
@@ -30,6 +35,14 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
+    <WindowsPackageType>None</WindowsPackageType>
+    <!-- Keep startup independent from Windows App Runtime. The notification
+         adapter bootstraps it lazily and fails closed when it is unavailable. -->
+    <WindowsAppSDKSelfContained>false</WindowsAppSDKSelfContained>
+    <WindowsAppSdkBootstrapInitialize>false</WindowsAppSdkBootstrapInitialize>
+    <WindowsAppSdkIncludeVersionInfo>true</WindowsAppSdkIncludeVersionInfo>
+    <!-- Keep the existing WPF WebView2 projection when WinAppSDK is present. -->
+    <WebView2EnableCsWinRTProjection>false</WebView2EnableCsWinRTProjection>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <SelfContained>true</SelfContained>
     <PublishSingleFile>false</PublishSingleFile>

@@ -419,7 +419,9 @@ public sealed class FeedAiAutomationQueueService :
                     entry.Id,
                     entry.FeedId,
                     $"摘要已生成：{entry.Title}",
-                    "AI 自动摘要"),
+                    "AI 自动摘要",
+                    TargetKind: AppNotificationTargetKind.FeedEntry,
+                    TargetId: entry.Id),
                 CancellationToken.None).ConfigureAwait(false);
         }
         catch

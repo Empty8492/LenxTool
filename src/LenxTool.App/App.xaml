@@ -1332,6 +1332,93 @@
                                 </DockPanel>
                             </StackPanel>
                         </Border>
+                        <Border Margin="0,16,0,0"
+                                DataContext="{Binding WindowsNotifications}"
+                                Style="{StaticResource BentoCardStyle}">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource SectionTitleStyle}"
+                                           Text="Windows 系统通知" />
+                                <TextBlock Margin="0,7,0,0"
+                                           AutomationProperties.Name="Windows 通知隐私说明"
+                                           Style="{StaticResource MetaTextStyle}"
+                                           Text="{Binding PrivacyDescription}"
+                                           TextWrapping="Wrap" />
+                                <TextBlock Margin="0,6,0,0"
+                                           AutomationProperties.Name="Windows 通知可用状态"
+                                           Style="{StaticResource MetaTextStyle}"
+                                           Text="{Binding AvailabilityStatus}"
+                                           TextWrapping="Wrap" />
+                                <CheckBox Margin="0,16,0,0"
+                                          AutomationProperties.Name="启用 Windows 系统通知"
+                                          Content="启用 Windows 系统通知"
+                                          IsChecked="{Binding Enabled}" />
+                                <Grid Margin="0,14,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="16" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel>
+                                        <TextBlock Style="{StaticResource MetaTextStyle}"
+                                                   Text="通知预览" />
+                                        <ComboBox Margin="0,7,0,0"
+                                                  AutomationProperties.Name="Windows 通知预览级别"
+                                                  DisplayMemberPath="Label"
+                                                  ItemsSource="{Binding PreviewModes}"
+                                                  SelectedValue="{Binding PreviewMode}"
+                                                  SelectedValuePath="Value" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="2">
+                                        <TextBlock Style="{StaticResource MetaTextStyle}"
+                                                   Text="聚合间隔（分钟，0 为不聚合）" />
+                                        <ComboBox Margin="0,7,0,0"
+                                                  AutomationProperties.Name="Windows 通知聚合间隔"
+                                                  ItemsSource="{Binding CoalesceOptions}"
+                                                  SelectedItem="{Binding CoalesceMinutes}" />
+                                    </StackPanel>
+                                </Grid>
+                                <CheckBox Margin="0,14,0,0"
+                                          AutomationProperties.Name="启用 Windows 通知静默时段"
+                                          Content="启用静默时段"
+                                          IsChecked="{Binding QuietHoursEnabled}" />
+                                <Grid Margin="0,10,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="16" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel>
+                                        <TextBlock Style="{StaticResource MetaTextStyle}"
+                                                   Text="开始（HH:mm）" />
+                                        <TextBox Margin="0,7,0,0"
+                                                 AutomationProperties.Name="Windows 通知静默开始时间"
+                                                 MaxLength="5"
+                                                 Text="{Binding QuietStartText, UpdateSourceTrigger=PropertyChanged}" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="2">
+                                        <TextBlock Style="{StaticResource MetaTextStyle}"
+                                                   Text="结束（HH:mm）" />
+                                        <TextBox Margin="0,7,0,0"
+                                                 AutomationProperties.Name="Windows 通知静默结束时间"
+                                                 MaxLength="5"
+                                                 Text="{Binding QuietEndText, UpdateSourceTrigger=PropertyChanged}" />
+                                    </StackPanel>
+                                </Grid>
+                                <DockPanel Margin="0,16,0,0"
+                                           LastChildFill="False">
+                                    <TextBlock AutomationProperties.LiveSetting="Polite"
+                                               Style="{StaticResource MetaTextStyle}"
+                                               Text="{Binding Status}"
+                                               TextWrapping="Wrap" />
+                                    <Button DockPanel.Dock="Right"
+                                            Margin="16,0,0,0"
+                                            Style="{StaticResource AccentButtonStyle}"
+                                            AutomationProperties.Name="保存 Windows 通知设置"
+                                            Command="{Binding SaveCommand}"
+                                            Content="保存通知设置" />
+                                </DockPanel>
+                            </StackPanel>
+                        </Border>
                         <Border Margin="0,16,0,0" Style="{StaticResource BentoCardStyle}">
                             <StackPanel>
                                 <TextBlock Style="{StaticResource SectionTitleStyle}" Text="共享账号" />
