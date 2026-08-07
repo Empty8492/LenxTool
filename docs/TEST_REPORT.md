@@ -34,6 +34,8 @@ P2-21 每日/每周本地摘要新增两个稳定计划 ID、本地日历窗口�
 
 P2-21 相对 P2-20 共新增 40 个自动化用例，覆盖空输入、去重/DST/周窗口、输入预算与缓存、ACTIVE 范围、配置原子性、租约/代际提交、崩溃防重、Delta/HTTP-date 429、永久 4xx 终态、持久化/搜索、UI/DI 和原子导出。完整非 WPF-runtime 门禁为 Core 191/191、Infrastructure 755/755、App 427/427，共 1373 个用例；Worker 78/78、strict typecheck、Release build 0 警告/0 错误和 NuGet 在线审计 0 漏洞均通过。9 个 WPF runtime 用例同一批次为 5/9，4 项均落在既有 `CalendarAutomationPeer.GetChildrenCore` 空元素调用栈；FeedDiscovery、FeedTimeline 和 FeedViewSwitching 逐项独立复跑通过，唯一 `SelectionControlsWpfRuntimeTests` 仍在未修改的第 124 行以同一既有调用栈失败，因此有效隔离结果为 8/9，记录为基线环境门禁而非摘要回归。npm 在线审计仍为 5 项未改开发/测试工具链漏洞（1 high / 4 moderate），未执行不兼容的 `audit fix --force`。本轮只以假 HTTP 和真实 SQLite 验证外部请求边界，未使用真实 Key 发起 DeepSeek 调用。
 
+2026-08-07 发布前复核：重新执行 P2-21 聚焦测试，Core 7/7、Infrastructure 57/57、App 119/119；Release 构建 0 警告/0 错误；完整非 WPF-runtime 回归为 App 423/423、Core 191/191、Infrastructure 755/755，无跳过。将所有标记为 WPF runtime 的 9 个测试类串行执行，共 13 个用例，9/13 通过，4 项仍全部落在既有 `CalendarAutomationPeer.GetChildrenCore` 空元素调用栈，未进入摘要执行链路。NuGet 漏洞审计为 0；Worker `npm audit --omit=dev` 为 0 漏洞，完整 npm 审计仍为未改开发/测试依赖的 5 项漏洞（1 high / 4 moderate）。
+
 NuGet 在线审计未发现漏洞；npm 在线审计报告 5 项开发/测试工具链问题（`undici` 1 high，`@cloudflare/vitest-pool-workers`、`miniflare`、`postcss`、`wrangler` 4 moderate）。`npm audit fix --dry-run` 对 `postcss` 给出传递更新，同时对其余链只给出回退到不兼容的 Cloudflare 测试池/Wrangler 版本，dry-run 汇总仍为 5 项；本轮未改依赖、未运行 `audit fix --force`，正式安全发布门禁保持开放。
 
 ## 历史结果
