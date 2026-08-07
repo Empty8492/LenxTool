@@ -1,6 +1,6 @@
 # P2 详细计划：内容视图、导出与定时摘要
 
-状态：P2-01～P2-14、P2-20～P2-22 与 [统一发现及原生控件视觉插入计划](RSS_DISCOVERY_AND_CONTROL_UX.md)已完成；P2-15 已取消实施；下一项为 P2-23 服务端邮件摘要决策闸门
+状态：P2-01～P2-14、P2-20～P2-22 与 [统一发现及原生控件视觉插入计划](RSS_DISCOVERY_AND_CONTROL_UX.md)已完成；P2-15 已取消实施；P2-23 已形成 [Proposed ADR-004](../decisions/ADR-004-server-email-digest-gate.md)但未验收，等待产品负责人选择 A/B/C
 最后核对：2026-08-08
 开始条件：P1 最终检查点通过，统一 `FeedEntry`、私人状态、规则和搜索契约稳定。
 参考项目：RSSNext/Folo（内容视图、条目动作、AI 定时任务的行为参考），LenxTool 当前 WPF/DPAPI/媒体/更新与审计基础
@@ -609,6 +609,8 @@ WPF 应用使用 Windows App SDK 2.3 的手动惰性 bootstrap：Runtime 缺失�
 **验证：** ADR 审阅通过才创建后续实现计划。
 
 **参考：** Folo AI task 的邮件通知能力；当前 LenxTool 规格默认拒绝云端内容保存。
+
+**决策草案（2026-08-08）：** [`ADR-004`](../decisions/ADR-004-server-email-digest-gate.md) 建议当前不实施邮件摘要、不收集邮箱，标题、摘要、正文和 AI 结果的云端保留期均为 0 天。草案同时记录了仅元数据提醒与包含内容邮件两条备选路径、Cloudflare/Resend/SES 的官方成本和保留差异，以及退订、反滥用、删除与版权最低门槛。当前账号表没有邮箱字段，且仅元数据提醒仍依赖桌面端先运行，不能替代服务端聚合；因此在产品负责人明确选择 A/B/C 前保持 Proposed，不新增 migration、API、发信代码或供应商凭据。
 
 ## P2 最终检查点
 

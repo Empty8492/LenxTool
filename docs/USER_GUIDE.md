@@ -275,4 +275,4 @@ Eagle 未启动、端口错误、版本不兼容、没有打开资源库或响�
 
 ## 当前验收状态（2026-08-08）
 
-Gate 0、P0、P1、P2-01～P2-14、P2-20～P2-22 与统一发现 DISC-01～DISC-06、UX-03 已通过本地自动化验收。P2-22 新增默认关闭、可降级的 Windows 系统通知、静默/聚合设置、schema v25 受控目标与安全激活；真实 Windows 通知显示和设置页最小窗口也已手测。生产 Worker/D1、受控真实 Eagle/Zotero/Readwise 连通和正式签名安装包仍需单独发布验收；P2-15 Cubox 已取消，P2-16～P2-19 待逐项选择，下一项为 P2-23 服务端邮件摘要决策闸门。未获隐私、保留、成本、退订、反滥用与版权批准前，不会增加云端文章表或邮件发送代码。最新自动化门禁数字以 [`TEST_REPORT.md`](TEST_REPORT.md) 为准。
+Gate 0、P0、P1、P2-01～P2-14、P2-20～P2-22 与统一发现 DISC-01～DISC-06、UX-03 已通过本地自动化验收。P2-22 新增默认关闭、可降级的 Windows 系统通知、静默/聚合设置、schema v25 受控目标与安全激活；真实 Windows 通知显示和设置页最小窗口也已手测。生产 Worker/D1、受控真实 Eagle/Zotero/Readwise 连通和正式签名安装包仍需单独发布验收；P2-15 Cubox 已取消，P2-16～P2-19 待逐项选择。P2-23 已形成 [`Proposed ADR-004`](decisions/ADR-004-server-email-digest-gate.md) 但未验收，等待产品负责人选择 A/B/C；获批前不会增加云端文章表、邮箱字段或邮件发送代码。最新自动化门禁数字以 [`TEST_REPORT.md`](TEST_REPORT.md) 为准。
