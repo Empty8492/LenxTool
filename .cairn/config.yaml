@@ -1,0 +1,17 @@
+version: 3
+project:
+  name: "Lenx Tools"
+  summary: "面向 Windows 10/11 x64 的本地优先桌面效率应用，整合资讯阅读、AI 与媒体处理、文档及数据工具。"
+knowledge:
+  directory: "cairn"
+  language: "zh"
+  maintenance: "agents_opt_in"
+capture:
+  # 这里只控制项目 cairn 当前真相的自动维护；Obsidian 是否自动写入由机器 profile 的 writeMode 决定。
+  mode: "automatic_after_substantive_work"
+  preflight_retrieval: true
+  include_agent_findings: true
+  writer: "root_agent"
+graduation:
+  provider: "obsidian"
+  profile: "default"
