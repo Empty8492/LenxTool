@@ -157,8 +157,8 @@ Folo 只作为产品行为和数据流参考；Lenx Tools 使用 C#/.NET/WPF 独
 
 每个阶段结束时必须满足：
 
-- `dotnet build LenxTools.slnx -c Release` 零新增警告。
-- `dotnet test LenxTools.slnx -c Release` 全部通过，无跳过。
+- `dotnet build LenxTool.slnx -c Release` 零新增警告。
+- `dotnet test LenxTool.slnx -c Release` 全部通过，无跳过。
 - Worker `npm run typecheck` 和 `npm test` 通过；P0 持续保留真实 workerd/D1 的 RBAC、令牌、版本并发和目录快照测试，不以辅助函数单测代替端到端证据。
 - 数据库迁移覆盖新建、从 schema v2 升级、失败回滚、WAL 一致性备份和旧早报可读。
 - 普通用户对所有管理员写端点得到 403，且失败写入不产生目录变更。

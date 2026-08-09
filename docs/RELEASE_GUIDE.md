@@ -30,7 +30,7 @@ dotnet run --project tools\LenxTool.ReleaseTool -- keygen D:\Offline\lenxtool-pr
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Build-Release.ps1 `
   -Version 0.1.0 `
   -PrivateKeyPath D:\Offline\lenxtool-private.pem `
-  -Repository Empty8492/LenxTools
+  -Repository Empty8492/LenxTool
 ```
 
 脚本会：发布自包含 .NET 应用，准备 WebView2 引导程序与 Windows App Runtime 2.3.1 x64，编译中文安装器，创建 ZIP，签名包和清单，使用公钥反向验证两份签名，最后写出 SHA256SUMS。任何一步失败都会终止发布。

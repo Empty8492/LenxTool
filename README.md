@@ -25,9 +25,9 @@ Lenx Tools 是面向 Windows 10/11 x64 的本地优先桌面效率应用，统�
 ## 常用命令
 
 ```powershell
-dotnet restore LenxTools.slnx
-dotnet build LenxTools.slnx -c Release --no-restore
-dotnet test LenxTools.slnx -c Release --no-build
+dotnet restore LenxTool.slnx
+dotnet build LenxTool.slnx -c Release --no-restore
+dotnet test LenxTool.slnx -c Release --no-build
 dotnet run --project src/LenxTool.App/LenxTool.App.csproj
 ```
 
@@ -57,8 +57,8 @@ Lenx Tools 是 .NET 10 + WPF 的 Windows 10/11 x64 本地优先桌面应用。�
 ## 快速验证
 
 ```powershell
-dotnet build LenxTools.slnx -c Release
-dotnet test LenxTools.slnx -c Release
+dotnet build LenxTool.slnx -c Release
+dotnet test LenxTool.slnx -c Release
 ```
 
 正式发布脚本完成后，最终制品位于 `Release`。安装包为 `LenxTool_Setup.exe`，便携版为 `LenxTool_Portable_win-x64.zip`；生成时间必须晚于对应源码修改时间。

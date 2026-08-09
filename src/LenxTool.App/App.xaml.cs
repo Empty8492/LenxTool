@@ -513,7 +513,7 @@ public partial class App : Application
         using var reader = new StreamReader(stream);
         string publicKey = reader.ReadToEnd();
         return new(
-            [new Uri("https://github.com/Empty8492/LenxTools/releases/latest/download/update-manifest.json")],
+            [new Uri("https://github.com/Empty8492/LenxTool/releases/latest/download/update-manifest.json")],
             publicKey);
     }
 

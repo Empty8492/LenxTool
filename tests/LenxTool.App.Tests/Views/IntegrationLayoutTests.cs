@@ -100,7 +100,7 @@ public sealed class IntegrationLayoutTests
     {
         string directory = AppContext.BaseDirectory;
         while (!File.Exists(
-                   Path.Combine(directory, "LenxTools.slnx")))
+                   Path.Combine(directory, "LenxTool.slnx")))
         {
             directory = Directory.GetParent(directory)?.FullName
                 ?? throw new DirectoryNotFoundException(

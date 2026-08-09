@@ -145,9 +145,9 @@ Groq 429 读取 `Retry-After`、请求限额和剩余量，并计算已用量。
 前置：Windows x64、.NET SDK 10.0.302。开发机需安装 WebView2 Runtime；运行系统通知手测还需 Windows App Runtime 2.3.1+。Word 转 PDF 需要 Microsoft Word。
 
 ```powershell
-dotnet restore LenxTools.slnx
-dotnet build LenxTools.slnx -c Release
-dotnet test LenxTools.slnx -c Release
+dotnet restore LenxTool.slnx
+dotnet build LenxTool.slnx -c Release
+dotnet test LenxTool.slnx -c Release
 dotnet run --project src\LenxTool.App\LenxTool.App.csproj -c Release
 ```
 
@@ -324,7 +324,7 @@ Gate 0 字幕闭环、P0“管理员策展 RSS”、P1“阅读增强、AI 与�
 ### 10.6 正式发布前需要配置或完成
 
 - 安装 Inno Setup 6；当前机器未安装，因此不能重新生成 Setup。
-- GitHub 更新仓库已配置为 `Empty8492/LenxTools`；正式发布时需在该仓库创建带签名清单与安装包的 Release。
+- GitHub 更新仓库已配置为 `Empty8492/LenxTool`；正式发布时需在该仓库创建带签名清单与安装包的 Release。
 - 提供仓库外的 ECDSA P-256 更新签名私钥路径；私钥不得发到聊天或提交仓库。
 - 购买并配置 Authenticode 证书和可信时间戳服务。
 - 填写真实发布说明、最低支持版本和强制更新标志，并完成覆盖升级验收。

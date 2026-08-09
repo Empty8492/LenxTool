@@ -31,14 +31,14 @@
 ## 4. 工程命令
 
 ```powershell
-dotnet restore LenxTools.slnx
-dotnet build LenxTools.slnx -c Release --no-restore
-dotnet test LenxTools.slnx -c Release --no-build --logger "console;verbosity=normal"
+dotnet restore LenxTool.slnx
+dotnet build LenxTool.slnx -c Release --no-restore
+dotnet test LenxTool.slnx -c Release --no-build --logger "console;verbosity=normal"
 dotnet publish src/LenxTool.App/LenxTool.App.csproj -c Release -r win-x64 --self-contained true -o artifacts/publish/win-x64
 powershell -ExecutionPolicy Bypass -File scripts/Build-Release.ps1 `
   -Version 0.1.0 `
   -PrivateKeyPath D:\Offline\lenxtool-private.pem `
-  -Repository Empty8492/LenxTools
+  -Repository Empty8492/LenxTool
 ```
 
 Worker：

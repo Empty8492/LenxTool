@@ -6,7 +6,7 @@
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         mc:Ignorable="d"
         Title="Lenx Tools"
-        Icon="Assets/LenxTools.ico"
+        Icon="Assets/LenxTool.ico"
         Width="1380"
         Height="860"
         MinWidth="920"
@@ -83,7 +83,7 @@
                             Orientation="Horizontal">
                     <Image Width="14"
                            Height="14"
-                           Source="Assets/LenxTools.ico"
+                           Source="Assets/LenxTool.ico"
                            Stretch="Uniform" />
                     <TextBlock Margin="8,0,0,0"
                                VerticalAlignment="Center"

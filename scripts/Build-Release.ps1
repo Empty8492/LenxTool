@@ -1,7 +1,7 @@
 param(
     [string]$Version = "0.1.0",
     [Parameter(Mandatory = $true)][string]$PrivateKeyPath,
-    [string]$Repository = "Empty8492/LenxTools"
+    [string]$Repository = "Empty8492/LenxTool"
 )
 
 $ErrorActionPreference = "Stop"

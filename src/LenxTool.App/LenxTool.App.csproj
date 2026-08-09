@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
     <ProjectReference Include="..\LenxTool.Core\LenxTool.Core.csproj" />
@@ -13,7 +13,7 @@
     <EmbeddedResource Include="..\..\installer\update-public-key.pem"
                       Link="Resources\update-public-key.pem"
                       LogicalName="LenxTool.UpdatePublicKey" />
-    <Resource Include="Assets\LenxTools.ico" />
+    <Resource Include="Assets\LenxTool.ico" />
     <None Update="Controls\FluentScrollViewer.LICENSE.txt"
           CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
@@ -47,7 +47,7 @@
     <SelfContained>true</SelfContained>
     <PublishSingleFile>false</PublishSingleFile>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <ApplicationIcon>Assets\LenxTools.ico</ApplicationIcon>
+    <ApplicationIcon>Assets\LenxTool.ico</ApplicationIcon>
     <AssemblyName>LenxTool</AssemblyName>
     <RootNamespace>LenxTool.App</RootNamespace>
     <AssemblyTitle>Lenx Tools</AssemblyTitle>

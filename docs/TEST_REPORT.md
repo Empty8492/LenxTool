@@ -153,7 +153,7 @@ P1-A 新增 1 个隔离的真实 WPF 运行场景与 1 个 Infrastructure 隔离
 
 P1-06 新增 11 个 Infrastructure 场景并扩展真实 WPF 运行场景：缓存命中不解析 DNS/请求网络，下载使用已验证固定地址并写入内容寻址缓存；私网重定向在第二次请求前阻断；错误 MIME、SVG 及伪装 PNG 不落盘；每篇资源/网络字节预算、全局并发和调用方取消生效，取消不进入失败缓存；离线失败后的重复读取不再次请求。WPF 使用真实 `EntryAssetStore` 解码显示离线 PNG，未命中显示稳定占位，重复创建同一条目仍只发生一次 DNS 尝试。Feed 发现与图片传输共用固定-IP handler 工厂，受影响网络测试同步通过。
 
-P1-07 新增 25 个 Infrastructure 场景：12 组独立文章 fixture 覆盖 `article`/`main`/内容容器、中文、列表、引用、相对链接、延迟图片、噪声布局、畸形 HTML、元数据和提示注入文本；其余场景覆盖 GB18030、脚本/样式/表单/iframe/危险协议净化、空正文警告、DOM 深度、正文/块上限、最终 URL、固定 DNS 地址、私网 DNS/重定向阻断、响应大小、调用方取消、总超时和同主机并发 1。Core 契约不暴露解析器类型，组合根测试确认 `IArticleContentExtractor` 可解析。`dotnet list LenxTools.slnx package --vulnerable --include-transitive` 对包括 `HtmlAgilityPack 1.12.4` 在内的全部项目报告 0 个已知易受攻击包。
+P1-07 新增 25 个 Infrastructure 场景：12 组独立文章 fixture 覆盖 `article`/`main`/内容容器、中文、列表、引用、相对链接、延迟图片、噪声布局、畸形 HTML、元数据和提示注入文本；其余场景覆盖 GB18030、脚本/样式/表单/iframe/危险协议净化、空正文警告、DOM 深度、正文/块上限、最终 URL、固定 DNS 地址、私网 DNS/重定向阻断、响应大小、调用方取消、总超时和同主机并发 1。Core 契约不暴露解析器类型，组合根测试确认 `IArticleContentExtractor` 可解析。`dotnet list LenxTool.slnx package --vulnerable --include-transitive` 对包括 `HtmlAgilityPack 1.12.4` 在内的全部项目报告 0 个已知易受攻击包。
 
 P1-12 新增 7 个 Infrastructure 翻译服务场景及 6 个 App 行为/布局场景：完整缓存跳过凭据与模型调用；每个批次保存恢复点并按原序归一乱序结果；供应商失败和调用方取消保留已完成块并在下次从精确位置继续；目标语言、模型、内容哈希改变时缓存正确失效；同键并发只执行一次。App 覆盖标题/正文翻译输入、原文/译文/双语切换、失败保留原文、切换条目取消、超长段落 Unicode 安全拆分、图片顺序及原文链接目标保留；模型 HTML/Markdown 仅进入纯文本 `Run`。真实 WPF STA 场景确认阅读模式、目标语言和翻译按钮可访问且默认原文/简体中文。
 
