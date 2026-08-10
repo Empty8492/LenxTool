@@ -101,7 +101,7 @@ public sealed partial class ToolsViewModel
         {
             // 比较只使用本次快照；编辑输入会取消旧任务，避免旧结果覆盖新内容。
             JsonDiffWorkResult result = await Task.Run(
-                () => CompareJsonSnapshots(
+                () => CompareJsonSnapshotsAsync(
                     leftSnapshot,
                     rightSnapshot,
                     cancellationToken),
@@ -140,7 +140,7 @@ public sealed partial class ToolsViewModel
             }
 
             JsonDiffStatus = result.Diff.IsTruncated
-                ? $"发现至少 {Differences.Count} 处差异；为保持界面流畅，仅显示前 {MaximumDisplayedDifferences} 处。"
+                ? $"发现至少 {Differences.Count} 处差异；已按结果预算截断，显示前 {Differences.Count} 处（数量上限 {MaximumDisplayedDifferences}）。"
                 : $"发现 {Differences.Count} 处差异。";
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -161,47 +161,21 @@ public sealed partial class ToolsViewModel
         }
     }
 
-    private static JsonDiffWorkResult CompareJsonSnapshots(
+    private static async Task<JsonDiffWorkResult> CompareJsonSnapshotsAsync(
         string left,
         string right,
         CancellationToken cancellationToken)
     {
-        JsonValidationResult leftValidation = ValidateDiffInput(
-            left,
-            cancellationToken);
-        JsonValidationResult rightValidation = ValidateDiffInput(
-            right,
-            cancellationToken);
-        string leftStatus = DescribeValidation("左侧", leftValidation);
-        string rightStatus = DescribeValidation("右侧", rightValidation);
-        if (!leftValidation.IsValid || !rightValidation.IsValid)
-        {
-            return new(leftStatus, rightStatus, null);
-        }
-
-        JsonDiffResult diff = JsonToolkit.Diff(
+        JsonDiffAnalysisResult analysis = await JsonToolkit.AnalyzeDiffAsync(
             left,
             right,
             MaximumDisplayedDifferences,
-            cancellationToken);
-        return new(leftStatus, rightStatus, diff);
-    }
-
-    private static JsonValidationResult ValidateDiffInput(
-        string input,
-        CancellationToken cancellationToken)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        if (input.Length > MaximumDiffInputCharacters)
-        {
-            return new(
-                false,
-                $"超过 {MaximumDiffInputCharacters:N0} 字符上限");
-        }
-
-        JsonValidationResult result = JsonToolkit.Validate(input);
-        cancellationToken.ThrowIfCancellationRequested();
-        return result;
+            MaximumDiffInputCharacters,
+            cancellationToken).ConfigureAwait(false);
+        return new(
+            DescribeValidation("左侧", analysis.LeftValidation),
+            DescribeValidation("右侧", analysis.RightValidation),
+            analysis.Diff);
     }
 
     private static string DescribeValidation(

@@ -9,6 +9,7 @@ using System.Windows.Threading;
 using LenxTool.App.Services;
 using LenxTool.App.ViewModels;
 using LenxTool.App.Views;
+using LenxTool.Core.Accounts;
 using LenxTool.Core.Contracts;
 
 namespace LenxTool.App.Tests.Views;
@@ -17,7 +18,7 @@ namespace LenxTool.App.Tests.Views;
 public sealed class ToolsWpfRuntimeTests
 {
     [Fact]
-    public void JsonDiffRunsWithNativeKeyboardControlsAtNarrowLayout()
+    public void JsonDiffRunsWithNativeKeyboardControlsInRealMinimumShell()
     {
         Exception? failure = null;
         string stage = "starting";
@@ -33,24 +34,29 @@ public sealed class ToolsWpfRuntimeTests
                         new StubFileHashService(),
                         new StubDocumentConverter(),
                         new StubDialogs());
-                    var view = new ToolsView { DataContext = viewModel };
-                    var scrollViewer = new ScrollViewer
+                    var shell = new ShellViewModel(
+                        [
+                            new(
+                                "tools",
+                                "文档与数据",
+                                "文档转换与 JSON 工具",
+                                "M0,0 L1,0 1,1 0,1 Z",
+                                viewModel)
+                        ],
+                        new StubAccountSession());
+                    window = new MainWindow(shell)
                     {
-                        HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
-                        VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-                        Content = view
-                    };
-                    window = new Window
-                    {
-                        Width = 760,
+                        Width = 920,
                         Height = 620,
                         Left = -10000,
                         Top = -10000,
-                        ShowInTaskbar = false,
-                        Content = scrollViewer
+                        ShowInTaskbar = false
                     };
                     window.Show();
                     window.UpdateLayout();
+                    ToolsView view = FindDescendant<ToolsView>(
+                        window,
+                        _ => true);
 
                     stage = "opening JSON diff tab";
                     TabControl tabs = FindDescendant<TabControl>(
@@ -59,6 +65,13 @@ public sealed class ToolsWpfRuntimeTests
                             == "文档与数据工具模式");
                     tabs.SelectedIndex = 1;
                     PumpDispatcher();
+                    window.UpdateLayout();
+
+                    ScrollViewer diffScrollViewer =
+                        FindDescendant<ScrollViewer>(
+                            view,
+                            element => AutomationProperties.GetName(element)
+                                == "JSON Diff 内容滚动区");
 
                     TextBox left = FindDescendant<TextBox>(
                         view,
@@ -107,6 +120,8 @@ public sealed class ToolsWpfRuntimeTests
                     Assert.True(right.Focus());
                     Assert.True(compare.Focus());
                     Assert.True(swap.Focus());
+                    Assert.True(diffScrollViewer.ScrollableHeight > 0);
+                    Assert.Equal(0, diffScrollViewer.ScrollableWidth);
 
                     stage = "running bound comparison";
                     viewModel.LeftJson = "{\"changed\":1,\"removed\":2}";
@@ -120,7 +135,35 @@ public sealed class ToolsWpfRuntimeTests
 
                     Assert.Equal(3, viewModel.Differences.Count);
                     Assert.Equal(3, differences.Items.Count);
-                    Assert.Equal(0, scrollViewer.ScrollableWidth);
+                    differences.BringIntoView();
+                    PumpDispatcher();
+                    Assert.True(IsWithinViewport(
+                        differences,
+                        diffScrollViewer));
+
+                    stage = "checking production list virtualization";
+                    viewModel.LeftJson = "{" + string.Join(
+                        ',',
+                        Enumerable.Range(0, 500)
+                            .Select(index => $"\"p{index:D3}\":0")) + "}";
+                    viewModel.RightJson = "{" + string.Join(
+                        ',',
+                        Enumerable.Range(0, 500)
+                            .Select(index => $"\"p{index:D3}\":1")) + "}";
+                    compare.Command.Execute(compare.CommandParameter);
+                    PumpUntil(
+                        () => !viewModel.CompareJsonCommand.IsRunning,
+                        TimeSpan.FromSeconds(5));
+                    window.UpdateLayout();
+                    differences.ScrollIntoView(differences.Items[0]);
+                    PumpDispatcher();
+                    Assert.Equal(500, differences.Items.Count);
+                    Assert.NotNull(
+                        differences.ItemContainerGenerator
+                            .ContainerFromIndex(0));
+                    Assert.Null(
+                        differences.ItemContainerGenerator
+                            .ContainerFromIndex(499));
 
                     stage = "checking 200 percent layout";
                     window.Width = 1520;
@@ -128,7 +171,15 @@ public sealed class ToolsWpfRuntimeTests
                     view.LayoutTransform = new ScaleTransform(2d, 2d);
                     window.UpdateLayout();
                     PumpDispatcher();
-                    Assert.Equal(0, scrollViewer.ScrollableWidth);
+                    Assert.True(diffScrollViewer.ScrollableWidth > 0);
+                    right.BringIntoView();
+                    PumpDispatcher();
+                    Assert.True(IsWithinViewport(right, diffScrollViewer));
+                    differences.BringIntoView();
+                    PumpDispatcher();
+                    Assert.True(IsWithinViewport(
+                        differences,
+                        diffScrollViewer));
 
                     stage = "switching semantic theme";
                     string lightBackground = left.Background.ToString(
@@ -163,6 +214,18 @@ public sealed class ToolsWpfRuntimeTests
         UIElementAutomationPeer.CreatePeerForElement(element)
         ?? throw new InvalidOperationException(
             $"{element.GetType().Name} 没有创建自动化 Peer。");
+
+    private static bool IsWithinViewport(
+        FrameworkElement element,
+        ScrollViewer scrollViewer)
+    {
+        Rect bounds = element.TransformToAncestor(scrollViewer)
+            .TransformBounds(new(new Point(), element.RenderSize));
+        return bounds.Bottom > 0
+            && bounds.Top < scrollViewer.ViewportHeight
+            && bounds.Right > 0
+            && bounds.Left < scrollViewer.ViewportWidth;
+    }
 
     private static T FindDescendant<T>(
         DependencyObject root,
@@ -243,5 +306,33 @@ public sealed class ToolsWpfRuntimeTests
         public string? PickFolder() => null;
         public void OpenFolder(string path) { }
         public void OpenUri(string uri) { }
+    }
+
+    private sealed class StubAccountSession : IAccountSessionService
+    {
+        public bool IsConfigured => false;
+        public AccountSessionSnapshot Current =>
+            AccountSessionSnapshot.SignedOut;
+        public event EventHandler<AccountSessionChangedEventArgs>?
+            SessionChanged
+        {
+            add { }
+            remove { }
+        }
+
+        public Task InitializeAsync(CancellationToken cancellationToken) =>
+            Task.CompletedTask;
+
+        public Task LoginAsync(
+            string username,
+            string password,
+            CancellationToken cancellationToken) =>
+            Task.CompletedTask;
+
+        public Task RefreshAsync(CancellationToken cancellationToken) =>
+            Task.CompletedTask;
+
+        public Task LogoutAsync(CancellationToken cancellationToken) =>
+            Task.CompletedTask;
     }
 }

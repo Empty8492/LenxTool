@@ -30,6 +30,22 @@ public sealed class ToolsLayoutTests
         Assert.Contains("比较 JSON 结构", automationNames);
         Assert.Contains("取消 JSON 比较", automationNames);
         Assert.Contains("交换左右 JSON", automationNames);
+        Assert.Contains("JSON Diff 内容滚动区", automationNames);
+        XElement diffScrollViewer = view.Descendants()
+            .Single(element =>
+                element.Name.LocalName == "ScrollViewer"
+                && element.Attributes().Any(attribute =>
+                    attribute.Name.LocalName
+                        == "AutomationProperties.Name"
+                    && attribute.Value == "JSON Diff 内容滚动区"));
+        Assert.Equal(
+            "Auto",
+            diffScrollViewer.Attribute(
+                "VerticalScrollBarVisibility")?.Value);
+        Assert.Equal(
+            "Auto",
+            diffScrollViewer.Attribute(
+                "HorizontalScrollBarVisibility")?.Value);
         Assert.Contains(
             "Text=\"{Binding LeftJson, UpdateSourceTrigger=PropertyChanged}\"",
             viewText,
@@ -52,6 +68,14 @@ public sealed class ToolsLayoutTests
             StringComparison.Ordinal);
         Assert.Contains(
             "AutomationProperties.LiveSetting=\"Polite\"",
+            viewText,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "数量上限 500",
+            viewText,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "路径 1,024/256 KiB",
             viewText,
             StringComparison.Ordinal);
     }

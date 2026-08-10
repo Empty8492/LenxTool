@@ -1514,7 +1514,7 @@
                                            Text="个人外部集成" />
                                 <TextBlock Margin="0,7,0,0"
                                            Style="{StaticResource MetaTextStyle}"
-                                           Text="目标名称和 HTTPS 地址保存在本地数据库；凭据只进入 Windows DPAPI。Readwise Reader 已接通并固定官方端点，其他尚未实现的通用类型不会静默外联。"
+                                           Text="目标名称和 HTTPS 地址保存在本地数据库；凭据只进入 Windows DPAPI。当前通用卡仅开放已接通且固定官方端点的 Readwise；未接通类型不会显示、保存凭据或发起外部请求。"
                                            TextWrapping="Wrap" />
                                 <Grid Margin="0,16,0,0">
                                     <Grid.ColumnDefinitions>
@@ -1559,6 +1559,70 @@
                                 <PasswordBox Margin="0,7,0,0"
                                              AutomationProperties.Name="个人外部集成凭据"
                                              controls:PasswordBoxAssistant.BoundPassword="{Binding CredentialInput, Mode=TwoWay}" />
+                                <Border Margin="0,14,0,0"
+                                        Padding="12"
+                                        Background="{DynamicResource Brush.SurfaceMuted}"
+                                        BorderBrush="{DynamicResource Brush.Warning}"
+                                        BorderThickness="1"
+                                        CornerRadius="8"
+                                        Visibility="{Binding HasLegacyCredential, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="12" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel>
+                                            <TextBlock FontWeight="SemiBold"
+                                                       Text="检测到旧版占位凭据配置" />
+                                            <TextBlock Margin="0,4,0,0"
+                                                       Style="{StaticResource MetaTextStyle}"
+                                                       Text="{Binding LegacyCredentialStatus}"
+                                                       TextWrapping="Wrap" />
+                                        </StackPanel>
+                                        <Button Grid.Column="2"
+                                                VerticalAlignment="Center"
+                                                AutomationProperties.Name="删除旧版占位凭据"
+                                                Command="{Binding DeleteLegacyCredentialCommand}"
+                                                Content="删除旧版占位凭据" />
+                                    </Grid>
+                                </Border>
+                                <Border Margin="0,14,0,0"
+                                        Padding="12"
+                                        Background="{DynamicResource Brush.SurfaceMuted}"
+                                        BorderBrush="{DynamicResource Brush.Border}"
+                                        BorderThickness="1"
+                                        CornerRadius="8">
+                                    <StackPanel>
+                                        <TextBlock FontWeight="SemiBold"
+                                                   Text="清理其他旧版占位槽位" />
+                                        <TextBlock Margin="0,4,0,0"
+                                                   Style="{StaticResource MetaTextStyle}"
+                                                   Text="历史版本可能保存过多组槽位。这里按你提供的类型和 TargetId 幂等删除；只删除，不保存或测试连接，旧值不会返回界面或交给适配器。"
+                                                   TextWrapping="Wrap" />
+                                        <Grid Margin="0,10,0,0">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="180" />
+                                                <ColumnDefinition Width="12" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="12" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <ComboBox AutomationProperties.Name="待清理旧版集成类型"
+                                                      ItemsSource="{Binding LegacyCleanupKinds}"
+                                                      DisplayMemberPath="Label"
+                                                      SelectedItem="{Binding SelectedLegacyCleanupKind}" />
+                                            <TextBox Grid.Column="2"
+                                                     MaxLength="128"
+                                                     AutomationProperties.Name="待清理旧版集成目标标识"
+                                                     Text="{Binding LegacyCleanupTargetId, UpdateSourceTrigger=PropertyChanged}" />
+                                            <Button Grid.Column="4"
+                                                    AutomationProperties.Name="删除指定旧版占位槽位"
+                                                    Command="{Binding DeleteSpecifiedLegacyCredentialCommand}"
+                                                    Content="删除指定旧槽位" />
+                                        </Grid>
+                                    </StackPanel>
+                                </Border>
                                 <DockPanel Margin="0,16,0,0"
                                            LastChildFill="False">
                                     <StackPanel>

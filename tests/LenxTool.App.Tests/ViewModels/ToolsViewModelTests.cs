@@ -33,19 +33,19 @@ public sealed class ToolsViewModelTests
 
         Assert.Contains(
             viewModel.Differences,
-            item => item.Path == "$.added"
+            item => item.Path == "$[\"added\"]"
                 && item.KindText == "新增"
                 && item.LeftValue == "—"
                 && item.RightValue == "3");
         Assert.Contains(
             viewModel.Differences,
-            item => item.Path == "$.removed"
+            item => item.Path == "$[\"removed\"]"
                 && item.KindText == "删除"
                 && item.LeftValue == "2"
                 && item.RightValue == "—");
         Assert.Contains(
             viewModel.Differences,
-            item => item.Path == "$.changed"
+            item => item.Path == "$[\"changed\"]"
                 && item.KindText == "修改"
                 && item.LeftValue == "1"
                 && item.RightValue == "4");
@@ -57,6 +57,36 @@ public sealed class ToolsViewModelTests
         Assert.Equal("{\"changed\":1,\"removed\":2}", viewModel.RightJson);
         Assert.Empty(viewModel.Differences);
         Assert.Contains("已交换", viewModel.JsonDiffStatus, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task CompareJsonReportsTheActualCountWhenPathBudgetTruncatesEarly()
+    {
+        ToolsViewModel viewModel = CreateViewModel();
+        string prefix = new('p', 700);
+        viewModel.LeftJson = "{" + string.Join(
+            ',',
+            Enumerable.Range(0, ToolsViewModel.MaximumDisplayedDifferences)
+                .Select(index => $"\"{prefix}{index:D3}\":0")) + "}";
+        viewModel.RightJson = "{" + string.Join(
+            ',',
+            Enumerable.Range(0, ToolsViewModel.MaximumDisplayedDifferences)
+                .Select(index => $"\"{prefix}{index:D3}\":1")) + "}";
+
+        await viewModel.CompareJsonCommand.ExecuteAsync();
+
+        Assert.InRange(
+            viewModel.Differences.Count,
+            1,
+            ToolsViewModel.MaximumDisplayedDifferences - 1);
+        Assert.Contains(
+            $"显示前 {viewModel.Differences.Count} 处",
+            viewModel.JsonDiffStatus,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            $"数量上限 {ToolsViewModel.MaximumDisplayedDifferences}",
+            viewModel.JsonDiffStatus,
+            StringComparison.Ordinal);
     }
 
     [Fact]

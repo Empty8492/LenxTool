@@ -163,8 +163,8 @@ Feed 的“视图类型”默认选择“自动识别”，客户端会根据经
 ## 文档与数据
 
 - 将文本粘贴到左侧，选择 JSON、Base64、URL 或文本清理操作。
-- “JSON 结构 Diff”页签可分别粘贴左右 JSON；两侧会独立显示语法状态，点击“比较结构”后按路径列出新增、删除和修改值，“交换左右”会清空旧结果后对调输入。
-- 每侧输入最多 2,097,152 个字符，界面最多显示前 500 处差异。比较在后台执行，可点击“取消”；编辑任一侧或交换输入会使旧任务失效，迟到结果不会覆盖当前内容。
+- “JSON 结构 Diff”页签可分别粘贴左右 JSON；两侧会独立显示语法状态，点击“比较结构”后按无歧义的方括号路径列出新增、删除和修改值，例如属性名 `a.b` 显示为 `$["a.b"]`，嵌套属性则显示为 `$["a"]["b"]`。“交换左右”会清空旧结果后对调输入。
+- 每侧输入最多 2,097,152 个字符，合法根值 `null` 也可比较。界面最多显示 500 处差异；单条路径最多 1,024 个字符，全部已显示路径合计最多 256 KiB，任一预算先达到都会提示实际显示条数。比较在后台执行，可点击“取消”；编辑任一侧或交换输入会使旧任务失效，迟到结果不会覆盖当前内容。
 - “SHA-256 文件校验”会弹出文件选择器，结果显示在右侧。
 - “Word 转 PDF”需要本机安装 Microsoft Word；选择源文档和输出 PDF 后自动转换并打开目录。
 
@@ -218,9 +218,9 @@ Feed 的“视图类型”默认选择“自动识别”，客户端会根据经
 
 - 管理员登录后可从侧栏进入“外部集成”，逐类启用或停用集成。Obsidian 和 Eagle 都不填写主机：前者只写本地 Vault，后者只允许客户端另行保存数字 loopback HTTP 端点。Zotero 必须填写精确主机 `api.zotero.org`，Readwise 必须填写精确主机 `readwise.io`；其他网络集成也必须填写各自精确目标主机。主机不能包含协议、端口、路径、通配符、IP、localhost 或 `.local`。
 - 普通用户不能进入或调用共享策略写入。Worker 只向普通用户提供 ACTIVE 策略，ALL 与发布操作仍由服务端管理员角色校验，客户端隐藏入口不是授权边界。
-- “设置 → 个人外部集成”只在本机保存尚未提供专用设置卡的通用网络类型 TargetId 与 HTTPS 地址。凭据保存后立即清空输入框，不支持明文回读，并由 Windows DPAPI CurrentUser 加密；删除凭据不会改变共享策略。选择 Readwise 后该卡会把 TargetId 固定为 `default`、端点固定为只读 `https://readwise.io/`，token 使用 `Readwise/default` DPAPI 槽位。Obsidian、Eagle 和 Zotero 使用各自的本机设置卡；Eagle 不需要凭据，Zotero API key 只使用固定 `Zotero/default` DPAPI 槽位。
-- 通用网络类型的“测试连接”会先校验管理员策略、精确主机、HTTPS/443、凭据和 DNS 公网地址，再应用 8 秒超时与 30 秒冷却。Readwise 只调用无写入副作用的官方 auth 端点；Zotero 继续经过该共享边界，并额外核对个人库 User ID 与 write/按需 notes/files 权限。当前表单必须先保存，避免测试另一代目标。Eagle 使用独立的 loopback 探测，不走公网 DNS 白名单。界面只显示固定状态，不显示第三方响应、异常、请求头、token、API key 或资源库路径。
-- 当前生产已注册的适配器为 Obsidian 本地文件导出、Eagle 本机 Web API 图片导出、Zotero Web API v3 个人库导出和 Readwise Reader 导出；Cubox 已取消实施，Readeck 等其余外部服务适配器仍未安装，不会静默发出第三方请求。
+- “设置 → 个人外部集成”当前只显示已经接通生产 exporter 与健康探针的 Readwise。该卡把 TargetId 固定为 `default`、端点固定为只读 `https://readwise.io/`；token 保存后立即清空输入框、不支持明文回读，并由 Windows DPAPI CurrentUser 存入 `Readwise/default` 槽位。Obsidian、Eagle 和 Zotero 使用各自的本机设置卡；Eagle 不需要凭据，Zotero API key 只使用固定 `Zotero/default` DPAPI 槽位。
+- Readwise 的“测试连接”会先校验管理员策略、精确主机、HTTPS/443、凭据和 DNS 公网地址，再应用 8 秒超时与 30 秒冷却，并只调用无写入副作用的官方 auth 端点；当前表单必须先保存。Zotero 继续经过该共享边界，并额外核对个人库 User ID 与 write/按需 notes/files 权限；Eagle 使用独立的 loopback 探测。界面只显示固定状态，不显示第三方响应、异常、请求头、token、API key 或资源库路径。
+- 当前生产已注册的适配器为 Obsidian 本地文件导出、Eagle 本机 Web API 图片导出、Zotero Web API v3 个人库导出和 Readwise Reader 导出；Cubox 已取消实施，Readeck、Outline、qBittorrent 与 Webhook 只保留兼容枚举/策略契约，不会出现在个人凭据表单、保存占位凭据或发起第三方请求。若升级前曾保存这些占位类型的配置，设置页会显示“旧版占位凭据配置”警告；旧值不会返回界面，也不会交给探针、exporter 或网络，应用不会自动删除它。只有用户点击“删除旧版占位凭据”才会幂等删除当前记录对应的旧槽位，当前 Readwise token 不受影响。若历史上先后保存过多组旧目标，可在“清理其他旧版占位槽位”中按原类型和 TargetId 定向删除；必须仍知道这两个标识，遗忘的 TargetId 不能从哈希槽名反推出。该入口只删除，不保存目标或测试连接。
 
 ### 导出到 Obsidian
 
