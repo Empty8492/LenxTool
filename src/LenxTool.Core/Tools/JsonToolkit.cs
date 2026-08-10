@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using System.Text.Json.Nodes;
 
 namespace LenxTool.Core.Tools;
@@ -21,6 +21,10 @@ public sealed record JsonDifference(
     JsonDifferenceKind Kind,
     string? LeftValue,
     string? RightValue);
+
+public sealed record JsonDiffResult(
+    IReadOnlyList<JsonDifference> Differences,
+    bool IsTruncated);
 
 public static class JsonToolkit
 {
@@ -52,11 +56,36 @@ public static class JsonToolkit
 
     public static IReadOnlyList<JsonDifference> Diff(string left, string right)
     {
+        return Diff(
+            left,
+            right,
+            int.MaxValue,
+            CancellationToken.None).Differences;
+    }
+
+    public static JsonDiffResult Diff(
+        string left,
+        string right,
+        int maximumDifferences,
+        CancellationToken cancellationToken = default)
+    {
+        if (maximumDifferences <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(maximumDifferences),
+                "差异数量上限必须大于 0。");
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
         JsonNode leftNode = Parse(left);
+        cancellationToken.ThrowIfCancellationRequested();
         JsonNode rightNode = Parse(right);
-        var differences = new List<JsonDifference>();
+        cancellationToken.ThrowIfCancellationRequested();
+        var differences = new JsonDifferenceCollector(
+            maximumDifferences,
+            cancellationToken);
         Compare(leftNode, rightNode, "$", differences);
-        return differences;
+        return new(differences.Items, differences.IsTruncated);
     }
 
     private static JsonNode Parse(string input)
@@ -103,9 +132,10 @@ public static class JsonToolkit
         JsonNode? left,
         JsonNode? right,
         string path,
-        ICollection<JsonDifference> differences)
+        JsonDifferenceCollector differences)
     {
-        if (JsonNode.DeepEquals(left, right)) return;
+        differences.ThrowIfCancellationRequested();
+        if (differences.IsTruncated) return;
 
         if (left is JsonObject leftObject && right is JsonObject rightObject)
         {
@@ -113,16 +143,27 @@ public static class JsonToolkit
                          .Union(rightObject.Select(item => item.Key), StringComparer.Ordinal)
                          .OrderBy(key => key, StringComparer.Ordinal))
             {
+                differences.ThrowIfCancellationRequested();
+                if (differences.IsTruncated) return;
+
                 bool hasLeft = leftObject.TryGetPropertyValue(key, out JsonNode? leftValue);
                 bool hasRight = rightObject.TryGetPropertyValue(key, out JsonNode? rightValue);
                 string childPath = $"{path}.{key}";
                 if (!hasLeft)
                 {
-                    differences.Add(new(childPath, JsonDifferenceKind.Added, null, Render(rightValue)));
+                    differences.TryAdd(new(
+                        childPath,
+                        JsonDifferenceKind.Added,
+                        null,
+                        Render(rightValue)));
                 }
                 else if (!hasRight)
                 {
-                    differences.Add(new(childPath, JsonDifferenceKind.Removed, Render(leftValue), null));
+                    differences.TryAdd(new(
+                        childPath,
+                        JsonDifferenceKind.Removed,
+                        Render(leftValue),
+                        null));
                 }
                 else
                 {
@@ -137,14 +178,25 @@ public static class JsonToolkit
         {
             for (int index = 0; index < Math.Max(leftArray.Count, rightArray.Count); index++)
             {
+                differences.ThrowIfCancellationRequested();
+                if (differences.IsTruncated) return;
+
                 string childPath = $"{path}[{index}]";
                 if (index >= leftArray.Count)
                 {
-                    differences.Add(new(childPath, JsonDifferenceKind.Added, null, Render(rightArray[index])));
+                    differences.TryAdd(new(
+                        childPath,
+                        JsonDifferenceKind.Added,
+                        null,
+                        Render(rightArray[index])));
                 }
                 else if (index >= rightArray.Count)
                 {
-                    differences.Add(new(childPath, JsonDifferenceKind.Removed, Render(leftArray[index]), null));
+                    differences.TryAdd(new(
+                        childPath,
+                        JsonDifferenceKind.Removed,
+                        Render(leftArray[index]),
+                        null));
                 }
                 else
                 {
@@ -155,8 +207,41 @@ public static class JsonToolkit
             return;
         }
 
-        differences.Add(new(path, JsonDifferenceKind.Changed, Render(left), Render(right)));
+        if (!JsonNode.DeepEquals(left, right))
+        {
+            differences.TryAdd(new(
+                path,
+                JsonDifferenceKind.Changed,
+                Render(left),
+                Render(right)));
+        }
     }
 
     private static string Render(JsonNode? node) => node?.ToJsonString() ?? "null";
+
+    private sealed class JsonDifferenceCollector(
+        int maximumDifferences,
+        CancellationToken cancellationToken)
+    {
+        private readonly List<JsonDifference> _items = [];
+
+        public IReadOnlyList<JsonDifference> Items => _items;
+
+        public bool IsTruncated { get; private set; }
+
+        public void ThrowIfCancellationRequested() =>
+            cancellationToken.ThrowIfCancellationRequested();
+
+        public void TryAdd(JsonDifference difference)
+        {
+            ThrowIfCancellationRequested();
+            if (_items.Count >= maximumDifferences)
+            {
+                IsTruncated = true;
+                return;
+            }
+
+            _items.Add(difference);
+        }
+    }
 }

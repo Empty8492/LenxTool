@@ -1,6 +1,6 @@
 # 测试报告
 
-测试日期：.NET 2026-08-08 / Worker 2026-08-08（Asia/Shanghai）
+测试日期：.NET 2026-08-10 / Worker 2026-08-08（Asia/Shanghai）
 版本：0.1.0  
 配置：Release / win-x64 / .NET SDK 10.0.302
 
@@ -8,14 +8,19 @@
 
 | 测试组 | 结果 |
 |---|---:|
-| LenxTool.Core.Tests | 191 passed |
-| LenxTool.Infrastructure.Tests | 763 passed |
-| LenxTool.App.Tests | 500 passed |
-| Cloudflare Worker Vitest | 78 passed |
-| Worker TypeScript strict typecheck | passed |
-| .NET build warnings | 0 |
-| NuGet vulnerable packages | 0 detected |
-| npm audit vulnerabilities | 0 detected |
+| LenxTool.Core.Tests（2026-08-10） | 194 passed |
+| LenxTool.Infrastructure.Tests（未重跑，2026-08-08） | 763 passed |
+| LenxTool.App.Tests 非 WPF（2026-08-10） | 494 passed |
+| App WPF runtime 逐类隔离（2026-08-10） | 13/14；1 项既有基线失败 |
+| Cloudflare Worker Vitest（未重跑，2026-08-08） | 78 passed |
+| Worker TypeScript strict typecheck（未重跑，2026-08-08） | passed |
+| .NET Release build warnings（2026-08-10） | 0 |
+| NuGet vulnerable packages（2026-08-10） | 0 detected |
+| npm audit vulnerabilities（未重跑，2026-08-08） | 0 detected |
+
+Independent-01 JSON 双栏结构 Diff 新增 3 项 Core 与 8 项 App 自动化实例。Core 聚焦 8/8、Core 全量 194/194、ViewModel/布局聚焦 7/7、Diff 真实 WPF 1/1、App 非 WPF 全量 494/494 通过；解决方案 Release build 为 0 警告/0 错误，NuGet 在线漏洞审计为 0。覆盖左右独立校验、UTF-8 字节位置、新增/删除/修改路径和值、交换、2 MiB 单侧上限、500/501 截断边界、取消后的迟到完成、A→B→A 输入回绕、760px 窄窗、等效 200% 布局、键盘焦点、原生 Automation Peer、虚拟化列表和深浅主题。独立复核首轮发现的 3 项 P2——取消后迟到结果、A→B→A 快照回绕和字节位置误标字符列——均已修复并有回归；第二轮未发现剩余 P0/P1/P2，取消/回绕用例额外连续 10 轮通过。
+
+App 全量同进程运行结果为 502/508；6 项失败均落在既有 `CalendarAutomationPeer.GetChildrenCore` 空元素调用栈，未经过 JSON Diff。10 个 WPF 类逐进程串行后为 13/14，Feed Audio、Discovery、Thumbnail、Picture、Timeline、Video、ViewSwitching、Tools 和 SmoothWheel 类均通过；唯一失败仍是未改动的 `SelectionControlsWpfRuntimeTests` 第 124 行同一 Calendar AutomationPeer 基线。等效 200% `LayoutTransform` 是组件级回归证据，不替代发布前在真实 Windows 200% DPI/文本缩放环境中的人工观察。本片未修改 Infrastructure、Worker、数据库 schema 或依赖，因此没有把 2026-08-08 的对应结果描述成本轮重跑。
 
 P2-22 最终门禁为 Core 191/191、Infrastructure 763/763、App 500/500，三个项目串行 Release 全绿，共 1454 项且无跳过；完整 App 运行包含既有 WPF runtime 用例，本次未复现历史 `CalendarAutomationPeer` 宿主失败。Worker 78/78、strict typecheck、Release build 0 警告/0 错误、win-x64 自包含 .NET 发布、NuGet 在线漏洞审计 0 和 npm 在线漏洞审计 0 均通过。发布目录 `artifacts\publish\p2-22-final` 为 315 个顶层文件、175,100,510 bytes（167.0 MiB）。
 

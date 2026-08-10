@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using LenxTool.App.Mvvm;
 using LenxTool.App.Services;
 using LenxTool.Core.Contracts;
@@ -6,7 +6,7 @@ using LenxTool.Core.Tools;
 
 namespace LenxTool.App.ViewModels;
 
-public sealed class ToolsViewModel : PageViewModel
+public sealed partial class ToolsViewModel : PageViewModel
 {
     private readonly IFileHashService _hashService;
     private readonly IDocumentConverter _documentConverter;
@@ -35,6 +35,17 @@ public sealed class ToolsViewModel : PageViewModel
             value => TextToolkit.Clean(value, removeDuplicateLines: true, collapseBlankLines: true),
             "重复行与多余空行已清理"));
         SwapCommand = new(Swap);
+        CompareJsonCommand = new(CompareJsonAsync);
+        CancelJsonDiffCommand = new(
+            CancelJsonDiff,
+            () => CompareJsonCommand.IsRunning);
+        SwapJsonSidesCommand = new(SwapJsonSides);
+        CompareJsonCommand.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName != nameof(AsyncRelayCommand.IsRunning)) return;
+            CancelJsonDiffCommand.NotifyCanExecuteChanged();
+            OnPropertyChanged(nameof(IsJsonDiffRunning));
+        };
         HashFileCommand = new(HashFileAsync);
         WordToPdfCommand = new(WordToPdfAsync);
     }

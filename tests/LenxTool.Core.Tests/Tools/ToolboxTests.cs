@@ -1,4 +1,4 @@
-using LenxTool.Core.Tools;
+﻿using LenxTool.Core.Tools;
 
 namespace LenxTool.Core.Tests.Tools;
 
@@ -17,6 +17,49 @@ public sealed class ToolboxTests
         Assert.Equal("{\"a\":{\"b\":1,\"d\":4},\"z\":2}", sorted);
         Assert.Contains(differences, item => item.Path == "$.a.b" && item.Kind == JsonDifferenceKind.Changed);
         Assert.Contains(differences, item => item.Path == "$.new" && item.Kind == JsonDifferenceKind.Added);
+    }
+
+    [Fact]
+    public void JsonToolkitDiffSupportsCancellationAndBoundedResults()
+    {
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        Assert.Throws<OperationCanceledException>(() =>
+            JsonToolkit.Diff("{}", "{}", 10, cancellation.Token));
+
+        JsonDiffResult result = JsonToolkit.Diff(
+            "{\"a\":1,\"b\":2,\"c\":3}",
+            "{\"a\":4,\"b\":5,\"c\":6}",
+            maximumDifferences: 2);
+
+        Assert.Equal(2, result.Differences.Count);
+        Assert.True(result.IsTruncated);
+    }
+
+    [Theory]
+    [InlineData(500, false)]
+    [InlineData(501, true)]
+    public void JsonToolkitDiffMarksOnlyResultsBeyondTheLimitAsTruncated(
+        int propertyCount,
+        bool expectedTruncated)
+    {
+        string left = "{" + string.Join(
+            ',',
+            Enumerable.Range(0, propertyCount)
+                .Select(index => $"\"p{index:D3}\":0")) + "}";
+        string right = "{" + string.Join(
+            ',',
+            Enumerable.Range(0, propertyCount)
+                .Select(index => $"\"p{index:D3}\":1")) + "}";
+
+        JsonDiffResult result = JsonToolkit.Diff(
+            left,
+            right,
+            maximumDifferences: 500);
+
+        Assert.Equal(500, result.Differences.Count);
+        Assert.Equal(expectedTruncated, result.IsTruncated);
     }
 
     [Fact]

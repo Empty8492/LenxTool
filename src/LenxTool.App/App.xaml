@@ -1827,53 +1827,7 @@
             </DataTemplate>
 
             <DataTemplate DataType="{x:Type vm:ToolsViewModel}">
-                <Grid Margin="32,28,32,32">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="18" />
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="12" />
-                        <RowDefinition Height="*" />
-                    </Grid.RowDefinitions>
-                    <StackPanel>
-                        <TextBlock Style="{StaticResource PageTitleStyle}" Text="{Binding Title}" />
-                        <TextBlock Margin="0,7,0,0" Style="{StaticResource MetaTextStyle}" Text="{Binding Subtitle}" />
-                    </StackPanel>
-                    <WrapPanel Grid.Row="2">
-                        <Button Margin="0,0,8,8" Command="{Binding FormatJsonCommand}" Content="格式化 JSON" />
-                        <Button Margin="0,0,8,8" Command="{Binding MinifyJsonCommand}" Content="压缩" />
-                        <Button Margin="0,0,8,8" Command="{Binding SortJsonCommand}" Content="键排序" />
-                        <Button Margin="0,0,8,8" Command="{Binding ValidateJsonCommand}" Content="校验" />
-                        <Button Margin="0,0,8,8" Command="{Binding EncodeBase64Command}" Content="Base64 编码" />
-                        <Button Margin="0,0,8,8" Command="{Binding DecodeBase64Command}" Content="Base64 解码" />
-                        <Button Margin="0,0,8,8" Command="{Binding EncodeUrlCommand}" Content="URL 编码" />
-                        <Button Margin="0,0,8,8" Command="{Binding DecodeUrlCommand}" Content="URL 解码" />
-                        <Button Margin="0,0,8,8" Command="{Binding CleanTextCommand}" Content="清理文本" />
-                        <Button Margin="0,0,8,8" Command="{Binding HashFileCommand}" Content="SHA-256 文件校验" />
-                        <Button Margin="0,0,8,8" Command="{Binding WordToPdfCommand}" Content="Word 转 PDF" />
-                    </WrapPanel>
-                    <Grid Grid.Row="4">
-                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="52" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
-                        <Border Style="{StaticResource BentoCardStyle}" Padding="0">
-                            <Grid><Grid.RowDefinitions><RowDefinition Height="42" /><RowDefinition Height="*" /></Grid.RowDefinitions>
-                                <TextBlock Margin="16,0" VerticalAlignment="Center" FontWeight="SemiBold" Text="输入" />
-                                <TextBox Grid.Row="1" Padding="16" AcceptsReturn="True" AcceptsTab="True" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" FontFamily="Cascadia Mono, Consolas" Text="{Binding Input, UpdateSourceTrigger=PropertyChanged}" />
-                            </Grid>
-                        </Border>
-                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                            <Button Width="38" Height="38" Padding="8" Command="{Binding SwapCommand}" ToolTip="交换输入与输出">
-                                <Path Stretch="Uniform" Stroke="{DynamicResource Brush.Accent}" StrokeThickness="1.6" Data="M4,8 L18,8 15,5 M18,8 15,11 M20,16 L6,16 9,13 M6,16 9,19" />
-                            </Button>
-                        </StackPanel>
-                        <Border Grid.Column="2" Style="{StaticResource BentoCardStyle}" Padding="0">
-                            <Grid><Grid.RowDefinitions><RowDefinition Height="42" /><RowDefinition Height="*" /><RowDefinition Height="34" /></Grid.RowDefinitions>
-                                <TextBlock Margin="16,0" VerticalAlignment="Center" FontWeight="SemiBold" Text="结果" />
-                                <TextBox Grid.Row="1" Padding="16" AcceptsReturn="True" IsReadOnly="True" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" FontFamily="Cascadia Mono, Consolas" Text="{Binding Output}" />
-                                <TextBlock Grid.Row="2" Margin="16,0" VerticalAlignment="Center" Style="{StaticResource MetaTextStyle}" Text="{Binding Status}" />
-                            </Grid>
-                        </Border>
-                    </Grid>
-                </Grid>
+                <views:ToolsView />
             </DataTemplate>
 
             <DataTemplate DataType="{x:Type vm:NewsCenterViewModel}">

@@ -78,7 +78,7 @@ LenxTool/
 
 ### 4.4 文档与数据工具
 
-- JSON：格式化、压缩、语法校验、属性排序和结构 Diff 核心算法。
+- JSON：格式化、压缩、语法校验、属性排序，以及双栏结构 Diff；Diff 支持独立错误定位、交换、取消、2 MiB 单侧上限和 500 项显示上限。
 - Base64 和 URL 编解码。
 - 文本重复行删除、空白归一和空行折叠。
 - SHA-256 文件校验，支持取消。
@@ -280,7 +280,8 @@ Gate 0 字幕闭环、P0“管理员策展 RSS”、P1“阅读增强、AI 与�
 3. P1-01～P1-20、P1-A/P1-B/P1-C/P1-D 及最终检查点已完成；关闭记录见 [`plans/RSS_P1_READING_INTELLIGENCE.md`](plans/RSS_P1_READING_INTELLIGENCE.md)。
 4. P2-01～P2-14 已完成五视图、智能视图、统一导出契约、安全集成策略、持久化队列、本地 Markdown、受控 Obsidian Vault、Eagle 图片、Zotero 个人库与 Readwise Reader 导出；[`plans/RSS_DISCOVERY_AND_CONTROL_UX.md`](plans/RSS_DISCOVERY_AND_CONTROL_UX.md) 的 DISC-01～DISC-06 已交付独立发现索引、安全可替换 provider、管理员统一发现页、确认发布闭环和最终检查点，UX-03 已交付原生 WPF 共享控件模板，不依赖 Folo 私有 API 或复制其源码。
 5. P2-15 Cubox 已取消实施；P2-20～P2-22 已完成本地计划、每日/每周摘要、schema v22～v25、系统通知隐私策略、受控激活和 Runtime 降级。P2-23 已形成 Proposed 草案但未验收，等待 A/B/C 批准；P2-16～P2-19 仍待逐项选择，具体见 [`plans/RSS_P2_VIEWS_INTEGRATIONS.md`](plans/RSS_P2_VIEWS_INTEGRATIONS.md)。
-6. “洛克王国世界每日清体力自动化”只登记为独立候选调研项，尚未批准 MaaFramework 依赖或任何实现。它不属于 RSS P2 编号；若后续启动，必须先完成条款核对、前台手动登录边界、识别 PoC、进程隔离、停止/失败保护与许可证审查，具体见 [`plans/GAME_AUTOMATION_BACKLOG.md`](plans/GAME_AUTOMATION_BACKLOG.md)。
+6. Independent-01 JSON 双栏结构 Diff 已完成；有界/可取消 Core 算法、双栏 UI、交换、虚拟化差异列表和真实 WPF 运行时回归均已接线，未修改 RSS 模型、SQLite 或 Worker。
+7. “洛克王国世界每日清体力自动化”只登记为独立候选调研项，尚未批准 MaaFramework 依赖或任何实现。它不属于 RSS P2 编号；若后续启动，必须先完成条款核对、前台手动登录边界、识别 PoC、进程隔离、停止/失败保护与许可证审查，具体见 [`plans/GAME_AUTOMATION_BACKLOG.md`](plans/GAME_AUTOMATION_BACKLOG.md)。
 
 总路线、参考项目和许可证边界见 [`plans/RSS_MASTER_ROADMAP.md`](plans/RSS_MASTER_ROADMAP.md)，架构决策见 [`decisions/ADR-001-admin-curated-rss.md`](decisions/ADR-001-admin-curated-rss.md)、[`decisions/ADR-002-article-content-extraction.md`](decisions/ADR-002-article-content-extraction.md)、[`decisions/ADR-003-durable-entry-export-queue.md`](decisions/ADR-003-durable-entry-export-queue.md) 与待批准的 [`decisions/ADR-004-server-email-digest-gate.md`](decisions/ADR-004-server-email-digest-gate.md)。P0 与 P1 可作为已验收基础；生产 Worker/D1、正式安装包、签名、升级和跨物理机矩阵仍按 10.5～10.7 节单独验收。
 
@@ -290,7 +291,6 @@ Gate 0 字幕闭环、P0“管理员策展 RSS”、P1“阅读增强、AI 与�
 
 - 首页已接入本地 Feed、旧早报、热点、媒体任务和收藏计数；Feed 的收藏、标签、备注和阅读进度编辑已完成，旧早报/热点的完整同等编辑体验仍可在后续统一。
 - Feed AI 本地缓存、单条/批量摘要、可恢复条目翻译、管理员策略、共享额度门控和本地自动处理已建立；通用管理员规则的安全契约、权威版本、图形管理/发布 UI、只读模拟、本地解释器、运行账本、ACTIVE 快照缓存、Worker 同步，以及本地状态、AI、媒体和通知动作适配均已建立。
-- JSON 双栏结构 Diff 界面；目前只有 Core 层 Diff 算法。
 - 洛克王国世界每日清体力自动化：当前只有候选计划，没有依赖、资源、代码、UI、调度器或发布制品；不得把公开项目的使用人数推断为账号安全证据，也不得宣称可规避游戏检测。
 
 云端与管理缺口：
