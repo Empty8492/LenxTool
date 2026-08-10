@@ -1,4 +1,4 @@
-using LenxTool.App.Mvvm;
+﻿using LenxTool.App.Mvvm;
 using LenxTool.Core.Contracts;
 using LenxTool.Core.Models;
 using LenxTool.Infrastructure.Exports;
@@ -13,18 +13,26 @@ public sealed record IntegrationKindChoice(
     string Label)
 {
     public static IReadOnlyList<IntegrationKindChoice> All { get; } =
-        Enum.GetValues<EntryIntegrationKind>()
-            // Obsidian、Eagle 与 Zotero 都有提供商专用设置卡；Cubox 已
-            // 取消实施。继续显示这些类型只会形成无法工作的凭据入口。
-            .Where(kind => kind is not (
-                EntryIntegrationKind.Obsidian
-                or EntryIntegrationKind.Eagle
-                or EntryIntegrationKind.Zotero
-                or EntryIntegrationKind.Cubox))
-            .Select(kind => new IntegrationKindChoice(
-                kind,
-                LabelFor(kind)))
-            .ToArray();
+        // 这里只列出已经注册生产 exporter 与连接探针的通用设置类型。
+        // 其余枚举仍是共享策略/线协议的一部分，不能因为尚未接通就删除。
+        [new(EntryIntegrationKind.Readwise, LabelFor(
+            EntryIntegrationKind.Readwise))];
+
+    public static IReadOnlyList<IntegrationKindChoice>
+        LegacyCleanupKinds
+    { get; } =
+        [
+            new(EntryIntegrationKind.Cubox, LabelFor(
+                EntryIntegrationKind.Cubox)),
+            new(EntryIntegrationKind.Readeck, LabelFor(
+                EntryIntegrationKind.Readeck)),
+            new(EntryIntegrationKind.Outline, LabelFor(
+                EntryIntegrationKind.Outline)),
+            new(EntryIntegrationKind.QBittorrent, LabelFor(
+                EntryIntegrationKind.QBittorrent)),
+            new(EntryIntegrationKind.Webhook, LabelFor(
+                EntryIntegrationKind.Webhook))
+        ];
 
     public static string LabelFor(EntryIntegrationKind kind) =>
         kind switch
@@ -43,7 +51,7 @@ public sealed record IntegrationKindChoice(
 }
 
 /// <summary>
-/// 管理本机非敏感目标与 DPAPI 凭据；界面从不回读凭据明文。
+/// 管理本机非敏感目标与 DPAPI 凭据；界面不显示或持有凭据明文。
 /// </summary>
 public sealed class IntegrationSettingsViewModel
     : ObservableObject
@@ -52,18 +60,34 @@ public sealed class IntegrationSettingsViewModel
     private const string TargetIdKey = "integration.target.id";
     private const string EndpointKey =
         "integration.target.endpoint";
+    private const string LegacyKindKey =
+        "integration.legacy.kind";
+    private const string LegacyTargetIdKey =
+        "integration.legacy.target.id";
     private readonly IEntryIntegrationCredentialStore _credentials;
     private readonly IEntryIntegrationHealthService _health;
     private readonly IAppSettingsRepository _settings;
     private readonly IReadOnlyList<IntegrationKindChoice> _kinds =
         IntegrationKindChoice.All;
+    private readonly IReadOnlyList<IntegrationKindChoice>
+        _legacyCleanupKinds = IntegrationKindChoice.LegacyCleanupKinds;
     private IntegrationKindChoice _selectedKind =
-        IntegrationKindChoice.All.Single(
-            item => item.Kind == EntryIntegrationKind.Webhook);
-    private string _targetId = "default";
-    private string _endpointText = string.Empty;
+        IntegrationKindChoice.All.Single();
+    private string _targetId =
+        ReadwiseEntryExporter.CredentialTargetId;
+    private string _endpointText =
+        ReadwiseEntryExporter.ApiRoot.AbsoluteUri;
     private string _credentialInput = string.Empty;
     private bool _hasCredential;
+    private bool _isSelectedKindSupported = true;
+    private EntryIntegrationKind? _legacyCredentialKind;
+    private string? _legacyCredentialTargetId;
+    private bool _hasLegacyCredential;
+    private string _legacyCredentialStatus =
+        "未检测到旧版占位集成凭据。";
+    private IntegrationKindChoice _selectedLegacyCleanupKind =
+        IntegrationKindChoice.LegacyCleanupKinds[0];
+    private string _legacyCleanupTargetId = string.Empty;
     private string _status =
         "凭据仅以 Windows DPAPI 加密保存在当前用户目录。";
 
@@ -78,32 +102,96 @@ public sealed class IntegrationSettingsViewModel
         SaveCommand = new(SaveAsync, CanUseTarget);
         DeleteCredentialCommand =
             new(DeleteCredentialAsync, CanUseCredentialSlot);
+        DeleteLegacyCredentialCommand =
+            new(DeleteLegacyCredentialAsync, () => HasLegacyCredential);
+        DeleteSpecifiedLegacyCredentialCommand = new(
+            DeleteSpecifiedLegacyCredentialAsync,
+            CanDeleteSpecifiedLegacyCredential);
         TestCommand = new(TestAsync, CanUseTarget);
     }
 
     public IReadOnlyList<IntegrationKindChoice> Kinds => _kinds;
     public AsyncRelayCommand SaveCommand { get; }
     public AsyncRelayCommand DeleteCredentialCommand { get; }
+    public AsyncRelayCommand DeleteLegacyCredentialCommand { get; }
+    public AsyncRelayCommand DeleteSpecifiedLegacyCredentialCommand { get; }
     public AsyncRelayCommand TestCommand { get; }
+
+    public IReadOnlyList<IntegrationKindChoice> LegacyCleanupKinds =>
+        _legacyCleanupKinds;
+
+    public IntegrationKindChoice SelectedLegacyCleanupKind
+    {
+        get => _selectedLegacyCleanupKind;
+        set
+        {
+            IntegrationKindChoice choice =
+                IntegrationKindChoice.LegacyCleanupKinds
+                    .SingleOrDefault(item => item.Kind == value?.Kind)
+                ?? IntegrationKindChoice.LegacyCleanupKinds[0];
+            if (!SetProperty(
+                    ref _selectedLegacyCleanupKind,
+                    choice))
+            {
+                return;
+            }
+            DeleteSpecifiedLegacyCredentialCommand
+                .NotifyCanExecuteChanged();
+        }
+    }
+
+    public string LegacyCleanupTargetId
+    {
+        get => _legacyCleanupTargetId;
+        set
+        {
+            if (!SetProperty(
+                    ref _legacyCleanupTargetId,
+                    value ?? string.Empty))
+            {
+                return;
+            }
+            DeleteSpecifiedLegacyCredentialCommand
+                .NotifyCanExecuteChanged();
+        }
+    }
 
     public IntegrationKindChoice SelectedKind
     {
         get => _selectedKind;
         set
         {
+            bool isSupported = value is null
+                || IntegrationKindChoice.All.Any(
+                    item => item.Kind == value.Kind);
+            IntegrationKindChoice supportedChoice =
+                IntegrationKindChoice.All.SingleOrDefault(
+                    item => item.Kind == value?.Kind)
+                ?? IntegrationKindChoice.All[0];
+            bool supportChanged =
+                _isSelectedKindSupported != isSupported;
+            _isSelectedKindSupported = isSupported;
             if (SetProperty(
                     ref _selectedKind,
-                    value ?? IntegrationKindChoice.All[0]))
+                    supportedChoice))
             {
                 OnPropertyChanged(nameof(IsFixedReadwiseTarget));
-                if (IsFixedReadwiseTarget)
-                {
-                    // Reader token 权限较高，生产适配器固定官方端点与默认槽位，
-                    // 不能沿用通用表单中的任意目标地址。
-                    TargetId = ReadwiseEntryExporter.CredentialTargetId;
-                    EndpointText = ReadwiseEntryExporter.ApiRoot.AbsoluteUri;
-                }
                 TargetChanged();
+            }
+            if (IsFixedReadwiseTarget)
+            {
+                // Reader token 权限较高，生产适配器固定官方端点与默认槽位，
+                // 不能沿用通用表单中的任意目标地址。
+                TargetId = ReadwiseEntryExporter.CredentialTargetId;
+                EndpointText = ReadwiseEntryExporter.ApiRoot.AbsoluteUri;
+            }
+            if (!isSupported)
+            {
+                Status = "该集成尚未接通，不能保存凭据或测试连接。";
+            }
+            if (supportChanged)
+            {
+                NotifyCommands();
             }
         }
     }
@@ -151,6 +239,22 @@ public sealed class IntegrationSettingsViewModel
         private set => SetProperty(ref _hasCredential, value);
     }
 
+    public bool HasLegacyCredential
+    {
+        get => _hasLegacyCredential;
+        private set
+        {
+            if (!SetProperty(ref _hasLegacyCredential, value)) return;
+            DeleteLegacyCredentialCommand.NotifyCanExecuteChanged();
+        }
+    }
+
+    public string LegacyCredentialStatus
+    {
+        get => _legacyCredentialStatus;
+        private set => SetProperty(ref _legacyCredentialStatus, value);
+    }
+
     public string Status
     {
         get => _status;
@@ -162,6 +266,14 @@ public sealed class IntegrationSettingsViewModel
     {
         string? kindText =
             await _settings.GetAsync(KindKey, cancellationToken);
+        string? savedTargetId =
+            await _settings.GetAsync(TargetIdKey, cancellationToken);
+        string? savedEndpoint =
+            await _settings.GetAsync(EndpointKey, cancellationToken);
+        await RestoreLegacyCredentialAsync(
+            kindText,
+            savedTargetId,
+            cancellationToken);
         if (Enum.TryParse(
                 kindText,
                 ignoreCase: false,
@@ -170,14 +282,10 @@ public sealed class IntegrationSettingsViewModel
             && Kinds.SingleOrDefault(item => item.Kind == kind)
                 is { } selectedKind)
         {
-            // 旧版本若误存了本机导出器类型，保持默认 Webhook，不再把它
-            // 带入只接受 HTTPS 与 DPAPI 凭据的通用表单。
+            // 只有当前已接通的类型才能恢复；旧版本若保存过占位类型，
+            // 保持安全默认值，不再把它带入凭据与连接测试流程。
             SelectedKind = selectedKind;
         }
-        string? savedTargetId =
-            await _settings.GetAsync(TargetIdKey, cancellationToken);
-        string? savedEndpoint =
-            await _settings.GetAsync(EndpointKey, cancellationToken);
         if (IsFixedReadwiseTarget)
         {
             TargetId = ReadwiseEntryExporter.CredentialTargetId;
@@ -249,6 +357,72 @@ public sealed class IntegrationSettingsViewModel
         CredentialInput = string.Empty;
         HasCredential = false;
         Status = "当前本机目标的加密凭据已删除。";
+    }
+
+    private async Task DeleteLegacyCredentialAsync(
+        CancellationToken cancellationToken)
+    {
+        if (_legacyCredentialKind is not { } kind
+            || string.IsNullOrEmpty(_legacyCredentialTargetId))
+        {
+            return;
+        }
+
+        string targetId = _legacyCredentialTargetId;
+        await _credentials.DeleteAsync(
+            kind,
+            targetId,
+            cancellationToken);
+        await NormalizeMatchingLegacyTargetAsync(
+            kind,
+            targetId,
+            cancellationToken);
+        await ClearLegacyCredentialReferenceAsync(cancellationToken);
+        _legacyCredentialKind = null;
+        _legacyCredentialTargetId = null;
+        HasLegacyCredential = false;
+        LegacyCredentialStatus = "旧版占位集成凭据已从本机安全存储删除。";
+        Status = LegacyCredentialStatus;
+    }
+
+    private async Task DeleteSpecifiedLegacyCredentialAsync(
+        CancellationToken cancellationToken)
+    {
+        string targetId;
+        try
+        {
+            targetId = ValidateCredentialTargetId(
+                LegacyCleanupTargetId);
+        }
+        catch (ArgumentException exception)
+        {
+            Status = exception.Message;
+            return;
+        }
+
+        EntryIntegrationKind kind = SelectedLegacyCleanupKind.Kind;
+        await _credentials.DeleteAsync(
+            kind,
+            targetId,
+            cancellationToken);
+        await NormalizeMatchingLegacyTargetAsync(
+            kind,
+            targetId,
+            cancellationToken);
+        if (_legacyCredentialKind == kind
+            && string.Equals(
+                _legacyCredentialTargetId,
+                targetId,
+                StringComparison.Ordinal))
+        {
+            await ClearLegacyCredentialReferenceAsync(
+                cancellationToken);
+            ResetLegacyCredentialState();
+        }
+
+        LegacyCleanupTargetId = string.Empty;
+        Status =
+            $"旧版 {IntegrationKindChoice.LabelFor(kind)} / {targetId} 槽位已幂等删除；未保存目标或发起连接测试。";
     }
 
     private async Task TestAsync(
@@ -358,9 +532,165 @@ public sealed class IntegrationSettingsViewModel
                 StringComparison.OrdinalIgnoreCase);
     }
 
+    private async Task RestoreLegacyCredentialAsync(
+        string? currentKindText,
+        string? currentTargetId,
+        CancellationToken cancellationToken)
+    {
+        string? storedKindText = await _settings.GetAsync(
+            LegacyKindKey,
+            cancellationToken);
+        string? storedTargetId = await _settings.GetAsync(
+            LegacyTargetIdKey,
+            cancellationToken);
+        bool hasStoredReference = TryCreateLegacyCredentialReference(
+            storedKindText,
+            storedTargetId,
+            out EntryIntegrationKind kind,
+            out string targetId);
+        if (!hasStoredReference
+            && !TryCreateLegacyCredentialReference(
+                currentKindText,
+                currentTargetId,
+                out kind,
+                out targetId))
+        {
+            ResetLegacyCredentialState();
+            return;
+        }
+
+        if (!hasStoredReference)
+        {
+            // 遗留入口只保留非秘密槽位指针，不按旧槽位查询或返回凭据。
+            // 当前 Readwise presence 刷新仍可能让底层共享 DPAPI blob 整体解密，
+            // 这里的边界是不把旧值交给 ViewModel、探针或 exporter。
+            await _settings.SetAsync(
+                LegacyKindKey,
+                kind.ToString(),
+                cancellationToken);
+            await _settings.SetAsync(
+                LegacyTargetIdKey,
+                targetId,
+                cancellationToken);
+        }
+        _legacyCredentialKind = kind;
+        _legacyCredentialTargetId = targetId;
+        LegacyCredentialStatus =
+            $"检测到旧版 {IntegrationKindChoice.LabelFor(kind)} / {targetId} 的凭据清理记录；旧值不会返回界面或交给探针/exporter，可在此显式删除。";
+        HasLegacyCredential = true;
+    }
+
+    private async Task NormalizeMatchingLegacyTargetAsync(
+        EntryIntegrationKind legacyKind,
+        string legacyTargetId,
+        CancellationToken cancellationToken)
+    {
+        string? currentKind = await _settings.GetAsync(
+            KindKey,
+            cancellationToken);
+        string? currentTargetId = await _settings.GetAsync(
+            TargetIdKey,
+            cancellationToken);
+        bool stillMatchesLegacy = string.Equals(
+                currentKind,
+                legacyKind.ToString(),
+                StringComparison.Ordinal)
+            && string.Equals(
+                currentTargetId,
+                legacyTargetId,
+                StringComparison.Ordinal);
+        bool isRetryingSafeKind = string.Equals(
+            currentKind,
+            EntryIntegrationKind.Readwise.ToString(),
+            StringComparison.Ordinal);
+        if (!stillMatchesLegacy && !isRetryingSafeKind)
+        {
+            return;
+        }
+
+        // 只迁移仍精确指向已删除旧槽位的配置，避免覆盖用户随后保存的新目标。
+        // Kind 先写入，立即让旧适配器失效；后续设置中途失败时，保留的清理指针
+        // 会让重试继续补齐 Readwise 固定目标，而不会从漂移后的旧 TargetId 重建提示。
+        await _settings.SetAsync(
+            KindKey,
+            EntryIntegrationKind.Readwise.ToString(),
+            cancellationToken);
+        await _settings.SetAsync(
+            TargetIdKey,
+            ReadwiseEntryExporter.CredentialTargetId,
+            cancellationToken);
+        await _settings.SetAsync(
+            EndpointKey,
+            ReadwiseEntryExporter.ApiRoot.AbsoluteUri,
+            cancellationToken);
+    }
+
+    private async Task ClearLegacyCredentialReferenceAsync(
+        CancellationToken cancellationToken)
+    {
+        await _settings.SetAsync(
+            LegacyKindKey,
+            string.Empty,
+            cancellationToken);
+        await _settings.SetAsync(
+            LegacyTargetIdKey,
+            string.Empty,
+            cancellationToken);
+    }
+
+    private void ResetLegacyCredentialState()
+    {
+        _legacyCredentialKind = null;
+        _legacyCredentialTargetId = null;
+        HasLegacyCredential = false;
+        LegacyCredentialStatus = "未检测到旧版占位集成凭据。";
+    }
+
+    private static bool TryCreateLegacyCredentialReference(
+        string? kindText,
+        string? targetId,
+        out EntryIntegrationKind kind,
+        out string normalizedTargetId)
+    {
+        normalizedTargetId = targetId ?? string.Empty;
+        if (!Enum.TryParse(
+                kindText,
+                ignoreCase: false,
+                out kind)
+            || !Enum.IsDefined(kind)
+            || !IsLegacyUnwiredKind(kind)
+            || normalizedTargetId.Length == 0
+            || normalizedTargetId.Length > 128
+            || normalizedTargetId.Any(char.IsControl)
+            || !string.Equals(
+                normalizedTargetId,
+                normalizedTargetId.Trim(),
+                StringComparison.Ordinal))
+        {
+            kind = default;
+            normalizedTargetId = string.Empty;
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool IsLegacyUnwiredKind(
+        EntryIntegrationKind kind) =>
+        kind is EntryIntegrationKind.Cubox
+            or EntryIntegrationKind.Readeck
+            or EntryIntegrationKind.Outline
+            or EntryIntegrationKind.QBittorrent
+            or EntryIntegrationKind.Webhook;
+
     private string ValidateTargetId()
     {
-        string targetId = TargetId.Trim();
+        return ValidateCredentialTargetId(TargetId);
+    }
+
+    private static string ValidateCredentialTargetId(string? value)
+    {
+        string targetId = value?.Trim() ?? string.Empty;
         if (targetId.Length == 0
             || targetId.Length > 128
             || targetId.Any(char.IsControl))
@@ -397,9 +727,31 @@ public sealed class IntegrationSettingsViewModel
 
     private bool CanUseCredentialSlot()
     {
+        if (!_isSelectedKindSupported)
+        {
+            return false;
+        }
         try
         {
             _ = ValidateTargetId();
+            return true;
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
+    }
+
+    private bool CanDeleteSpecifiedLegacyCredential()
+    {
+        if (!IntegrationKindChoice.LegacyCleanupKinds.Any(
+                item => item.Kind == SelectedLegacyCleanupKind.Kind))
+        {
+            return false;
+        }
+        try
+        {
+            _ = ValidateCredentialTargetId(LegacyCleanupTargetId);
             return true;
         }
         catch (ArgumentException)

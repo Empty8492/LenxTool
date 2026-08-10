@@ -1,4 +1,4 @@
-using System.Xml.Linq;
+﻿using System.Xml.Linq;
 
 namespace LenxTool.App.Tests.Views;
 
@@ -73,6 +73,26 @@ public sealed class IntegrationLayoutTests
             StringComparison.Ordinal);
         Assert.Contains(
             "PasswordBoxAssistant.BoundPassword",
+            settings,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "未接通类型不会显示",
+            settings,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "DeleteLegacyCredentialCommand",
+            settings,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "删除旧版占位凭据",
+            settings,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "DeleteSpecifiedLegacyCredentialCommand",
+            settings,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "只删除，不保存或测试连接",
             settings,
             StringComparison.Ordinal);
         Assert.DoesNotContain(

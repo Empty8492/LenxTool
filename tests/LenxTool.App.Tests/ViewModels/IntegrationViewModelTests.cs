@@ -1,4 +1,4 @@
-using LenxTool.App.ViewModels;
+﻿using LenxTool.App.ViewModels;
 using LenxTool.Core.Accounts;
 using LenxTool.Core.Contracts;
 using LenxTool.Core.Models;
@@ -12,23 +12,377 @@ namespace LenxTool.App.Tests.ViewModels;
 public sealed class IntegrationViewModelTests
 {
     [Fact]
-    public void PersonalSettingsOmitsKindsWithDedicatedProviderCards()
+    public void PersonalSettingsExposesOnlyWiredGenericAdapters()
     {
-        Assert.DoesNotContain(
-            IntegrationKindChoice.All,
-            item => item.Kind == EntryIntegrationKind.Obsidian);
-        Assert.DoesNotContain(
-            IntegrationKindChoice.All,
-            item => item.Kind == EntryIntegrationKind.Eagle);
-        Assert.DoesNotContain(
-            IntegrationKindChoice.All,
-            item => item.Kind == EntryIntegrationKind.Zotero);
-        Assert.DoesNotContain(
-            IntegrationKindChoice.All,
-            item => item.Kind == EntryIntegrationKind.Cubox);
+        IntegrationKindChoice choice = Assert.Single(
+            IntegrationKindChoice.All);
+
+        Assert.Equal(EntryIntegrationKind.Readwise, choice.Kind);
+    }
+
+    [Theory]
+    [InlineData(EntryIntegrationKind.Readeck)]
+    [InlineData(EntryIntegrationKind.Outline)]
+    [InlineData(EntryIntegrationKind.QBittorrent)]
+    [InlineData(EntryIntegrationKind.Webhook)]
+    public void PersonalSettingsRejectsUnwiredKindAssignment(
+        EntryIntegrationKind kind)
+    {
+        var viewModel = new IntegrationSettingsViewModel(
+            new FakeCredentialStore(),
+            new FakeHealthService(),
+            new FakeSettingsRepository())
+        {
+            TargetId = "untrusted-target",
+            EndpointText = "https://unwired.example.com/"
+        };
+
+        viewModel.SelectedKind = new(
+            kind,
+            IntegrationKindChoice.LabelFor(kind));
+
+        Assert.Equal(
+            EntryIntegrationKind.Readwise,
+            viewModel.SelectedKind.Kind);
+        Assert.Equal(
+            ReadwiseEntryExporter.CredentialTargetId,
+            viewModel.TargetId);
+        Assert.Equal(
+            ReadwiseEntryExporter.ApiRoot.AbsoluteUri,
+            viewModel.EndpointText);
+        Assert.False(viewModel.SaveCommand.CanExecute(null));
+        Assert.False(viewModel.DeleteCredentialCommand.CanExecute(null));
+        Assert.False(viewModel.TestCommand.CanExecute(null));
+    }
+
+    [Theory]
+    [InlineData(EntryIntegrationKind.Readeck)]
+    [InlineData(EntryIntegrationKind.Outline)]
+    [InlineData(EntryIntegrationKind.QBittorrent)]
+    [InlineData(EntryIntegrationKind.Webhook)]
+    public async Task PersonalSettingsIgnoresPersistedUnwiredKind(
+        EntryIntegrationKind kind)
+    {
+        var localSettings = new FakeSettingsRepository();
+        localSettings.Values["integration.target.kind"] = kind.ToString();
+        localSettings.Values["integration.target.id"] = "legacy-target";
+        localSettings.Values["integration.target.endpoint"] =
+            "https://legacy.example.com/";
+        var viewModel = new IntegrationSettingsViewModel(
+            new FakeCredentialStore(),
+            new FakeHealthService(),
+            localSettings);
+
+        await viewModel.InitializeAsync(CancellationToken.None);
+
+        Assert.Equal(
+            EntryIntegrationKind.Readwise,
+            viewModel.SelectedKind.Kind);
+        Assert.Equal(
+            ReadwiseEntryExporter.CredentialTargetId,
+            viewModel.TargetId);
+        Assert.Equal(
+            ReadwiseEntryExporter.ApiRoot.AbsoluteUri,
+            viewModel.EndpointText);
+    }
+
+    [Fact]
+    public async Task LegacyUnwiredCredentialRemainsExplicitlyDeletableAfterReadwiseSave()
+    {
+        var credentials = new FakeCredentialStore();
+        credentials.Seed(
+            EntryIntegrationKind.Readeck,
+            "legacy-target",
+            "legacy-token");
+        var localSettings = new FakeSettingsRepository();
+        localSettings.Values["integration.target.kind"] = "Readeck";
+        localSettings.Values["integration.target.id"] = "legacy-target";
+        localSettings.Values["integration.target.endpoint"] =
+            "https://legacy.example.com/";
+        var health = new FakeHealthService();
+        var viewModel = new IntegrationSettingsViewModel(
+            credentials,
+            health,
+            localSettings);
+
+        await viewModel.InitializeAsync(CancellationToken.None);
+
+        Assert.True(viewModel.HasLegacyCredential);
         Assert.Contains(
-            IntegrationKindChoice.All,
-            item => item.Kind == EntryIntegrationKind.Webhook);
+            "Readeck",
+            viewModel.LegacyCredentialStatus,
+            StringComparison.Ordinal);
+        Assert.True(viewModel.DeleteLegacyCredentialCommand.CanExecute(null));
+        Assert.Equal(0, health.Count);
+        Assert.DoesNotContain(
+            (EntryIntegrationKind.Readeck, "legacy-target"),
+            credentials.ExistsSlots);
+        Assert.DoesNotContain(
+            (EntryIntegrationKind.Readeck, "legacy-target"),
+            credentials.GetSlots);
+        Assert.Contains(
+            (
+                EntryIntegrationKind.Readwise,
+                ReadwiseEntryExporter.CredentialTargetId),
+            credentials.ExistsSlots);
+        Assert.Equal(
+            "Readeck",
+            localSettings.Values["integration.legacy.kind"]);
+        Assert.Equal(
+            "legacy-target",
+            localSettings.Values["integration.legacy.target.id"]);
+
+        viewModel.CredentialInput = "reader-token";
+        await viewModel.SaveCommand.ExecuteAsync();
+        var reloaded = new IntegrationSettingsViewModel(
+            credentials,
+            health,
+            localSettings);
+        await reloaded.InitializeAsync(CancellationToken.None);
+
+        Assert.True(reloaded.HasLegacyCredential);
+        int getCountBeforeDelete = credentials.GetSlots.Count;
+        int existsCountBeforeDelete = credentials.ExistsSlots.Count;
+        int setCountBeforeDelete = credentials.SetSlots.Count;
+        int deleteCountBeforeDelete = credentials.DeleteSlots.Count;
+        await reloaded.DeleteLegacyCredentialCommand.ExecuteAsync();
+
+        Assert.Equal(getCountBeforeDelete, credentials.GetSlots.Count);
+        Assert.Equal(existsCountBeforeDelete, credentials.ExistsSlots.Count);
+        Assert.Equal(setCountBeforeDelete, credentials.SetSlots.Count);
+        Assert.Equal(
+            deleteCountBeforeDelete + 1,
+            credentials.DeleteSlots.Count);
+        Assert.Equal(
+            (EntryIntegrationKind.Readeck, "legacy-target"),
+            credentials.DeleteSlots[^1]);
+
+        Assert.False(await credentials.ExistsAsync(
+            EntryIntegrationKind.Readeck,
+            "legacy-target",
+            CancellationToken.None));
+        Assert.True(await credentials.ExistsAsync(
+            EntryIntegrationKind.Readwise,
+            ReadwiseEntryExporter.CredentialTargetId,
+            CancellationToken.None));
+        Assert.False(reloaded.HasLegacyCredential);
+        Assert.Empty(localSettings.Values["integration.legacy.kind"]);
+        Assert.Empty(localSettings.Values["integration.legacy.target.id"]);
+    }
+
+    [Fact]
+    public async Task DirectLegacyCredentialDeletionDoesNotRecreateCleanupMarker()
+    {
+        var credentials = new FakeCredentialStore();
+        credentials.Seed(
+            EntryIntegrationKind.Readeck,
+            "legacy-target",
+            "legacy-token");
+        var localSettings = new FakeSettingsRepository();
+        localSettings.Values["integration.target.kind"] = "Readeck";
+        localSettings.Values["integration.target.id"] = "legacy-target";
+        localSettings.Values["integration.target.endpoint"] =
+            "https://legacy.example.com/";
+        var viewModel = new IntegrationSettingsViewModel(
+            credentials,
+            new FakeHealthService(),
+            localSettings);
+        await viewModel.InitializeAsync(CancellationToken.None);
+
+        await viewModel.DeleteLegacyCredentialCommand.ExecuteAsync();
+        var reloaded = new IntegrationSettingsViewModel(
+            credentials,
+            new FakeHealthService(),
+            localSettings);
+        await reloaded.InitializeAsync(CancellationToken.None);
+
+        Assert.False(reloaded.HasLegacyCredential);
+        Assert.Equal(
+            EntryIntegrationKind.Readwise.ToString(),
+            localSettings.Values["integration.target.kind"]);
+        Assert.Equal(
+            ReadwiseEntryExporter.CredentialTargetId,
+            localSettings.Values["integration.target.id"]);
+        Assert.Equal(
+            ReadwiseEntryExporter.ApiRoot.AbsoluteUri,
+            localSettings.Values["integration.target.endpoint"]);
+        Assert.Empty(localSettings.Values["integration.legacy.kind"]);
+        Assert.Empty(localSettings.Values["integration.legacy.target.id"]);
+    }
+
+    [Fact]
+    public async Task LegacyDeletionDoesNotOverwriteNewerUnwiredTargetSettings()
+    {
+        var credentials = new FakeCredentialStore();
+        credentials.Seed(
+            EntryIntegrationKind.Readeck,
+            "legacy-target",
+            "legacy-token");
+        var localSettings = new FakeSettingsRepository();
+        localSettings.Values["integration.target.kind"] = "Readeck";
+        localSettings.Values["integration.target.id"] = "legacy-target";
+        localSettings.Values["integration.target.endpoint"] =
+            "https://legacy.example.com/";
+        var viewModel = new IntegrationSettingsViewModel(
+            credentials,
+            new FakeHealthService(),
+            localSettings);
+        await viewModel.InitializeAsync(CancellationToken.None);
+
+        localSettings.Values["integration.target.kind"] = "Webhook";
+        localSettings.Values["integration.target.id"] = "newer-target";
+        localSettings.Values["integration.target.endpoint"] =
+            "https://newer.example.com/";
+        await viewModel.DeleteLegacyCredentialCommand.ExecuteAsync();
+        var reloaded = new IntegrationSettingsViewModel(
+            credentials,
+            new FakeHealthService(),
+            localSettings);
+        await reloaded.InitializeAsync(CancellationToken.None);
+
+        Assert.Equal(
+            EntryIntegrationKind.Webhook.ToString(),
+            localSettings.Values["integration.target.kind"]);
+        Assert.Equal(
+            "newer-target",
+            localSettings.Values["integration.target.id"]);
+        Assert.Equal(
+            "https://newer.example.com/",
+            localSettings.Values["integration.target.endpoint"]);
+        Assert.True(reloaded.HasLegacyCredential);
+        Assert.Contains(
+            "Webhook",
+            reloaded.LegacyCredentialStatus,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task PartialLegacyNormalizationRemainsSafelyRetryable()
+    {
+        var credentials = new FakeCredentialStore();
+        credentials.Seed(
+            EntryIntegrationKind.Readeck,
+            "legacy-target",
+            "legacy-token");
+        var localSettings = new FakeSettingsRepository();
+        localSettings.Values["integration.target.kind"] = "Readeck";
+        localSettings.Values["integration.target.id"] = "legacy-target";
+        localSettings.Values["integration.target.endpoint"] =
+            "https://legacy.example.com/";
+        var viewModel = new IntegrationSettingsViewModel(
+            credentials,
+            new FakeHealthService(),
+            localSettings);
+        await viewModel.InitializeAsync(CancellationToken.None);
+        localSettings.FailOnSetCall = localSettings.SetCount + 2;
+
+        await Assert.ThrowsAsync<IOException>(() =>
+            viewModel.DeleteLegacyCredentialCommand.ExecuteAsync());
+
+        Assert.Equal(
+            EntryIntegrationKind.Readwise.ToString(),
+            localSettings.Values["integration.target.kind"]);
+        Assert.Equal(
+            "Readeck",
+            localSettings.Values["integration.legacy.kind"]);
+        localSettings.FailOnSetCall = null;
+        var retry = new IntegrationSettingsViewModel(
+            credentials,
+            new FakeHealthService(),
+            localSettings);
+        await retry.InitializeAsync(CancellationToken.None);
+        Assert.True(retry.HasLegacyCredential);
+
+        await retry.DeleteLegacyCredentialCommand.ExecuteAsync();
+        var reloaded = new IntegrationSettingsViewModel(
+            credentials,
+            new FakeHealthService(),
+            localSettings);
+        await reloaded.InitializeAsync(CancellationToken.None);
+
+        Assert.False(reloaded.HasLegacyCredential);
+        Assert.Equal(
+            EntryIntegrationKind.Readwise.ToString(),
+            localSettings.Values["integration.target.kind"]);
+    }
+
+    [Fact]
+    public async Task ManualLegacyCleanupDeletesAnOlderUnreferencedSlotOnly()
+    {
+        var credentials = new FakeCredentialStore();
+        credentials.Seed(
+            EntryIntegrationKind.Readeck,
+            "older-target",
+            "older-token");
+        credentials.Seed(
+            EntryIntegrationKind.Webhook,
+            "current-target",
+            "current-token");
+        var localSettings = new FakeSettingsRepository();
+        localSettings.Values["integration.target.kind"] = "Webhook";
+        localSettings.Values["integration.target.id"] = "current-target";
+        localSettings.Values["integration.target.endpoint"] =
+            "https://current.example.com/";
+        var health = new FakeHealthService();
+        var viewModel = new IntegrationSettingsViewModel(
+            credentials,
+            health,
+            localSettings);
+        await viewModel.InitializeAsync(CancellationToken.None);
+
+        viewModel.SelectedLegacyCleanupKind =
+            IntegrationKindChoice.LegacyCleanupKinds.Single(
+                item => item.Kind == EntryIntegrationKind.Readeck);
+        viewModel.LegacyCleanupTargetId = "older-target";
+        Assert.True(
+            viewModel.DeleteSpecifiedLegacyCredentialCommand
+                .CanExecute(null));
+        int settingsSetCountBeforeDelete = localSettings.SetCount;
+        int credentialGetCountBeforeDelete = credentials.GetSlots.Count;
+        int credentialExistsCountBeforeDelete =
+            credentials.ExistsSlots.Count;
+        int credentialSetCountBeforeDelete = credentials.SetSlots.Count;
+        int credentialDeleteCountBeforeDelete =
+            credentials.DeleteSlots.Count;
+        await viewModel.DeleteSpecifiedLegacyCredentialCommand
+            .ExecuteAsync();
+
+        Assert.Equal(
+            settingsSetCountBeforeDelete,
+            localSettings.SetCount);
+        Assert.Equal(
+            credentialGetCountBeforeDelete,
+            credentials.GetSlots.Count);
+        Assert.Equal(
+            credentialExistsCountBeforeDelete,
+            credentials.ExistsSlots.Count);
+        Assert.Equal(
+            credentialSetCountBeforeDelete,
+            credentials.SetSlots.Count);
+        Assert.Equal(
+            credentialDeleteCountBeforeDelete + 1,
+            credentials.DeleteSlots.Count);
+        Assert.Equal(
+            (EntryIntegrationKind.Readeck, "older-target"),
+            credentials.DeleteSlots[^1]);
+
+        Assert.False(await credentials.ExistsAsync(
+            EntryIntegrationKind.Readeck,
+            "older-target",
+            CancellationToken.None));
+        Assert.True(await credentials.ExistsAsync(
+            EntryIntegrationKind.Webhook,
+            "current-target",
+            CancellationToken.None));
+        Assert.Equal(
+            EntryIntegrationKind.Webhook.ToString(),
+            localSettings.Values["integration.target.kind"]);
+        Assert.Equal(
+            "current-target",
+            localSettings.Values["integration.target.id"]);
+        Assert.True(viewModel.HasLegacyCredential);
+        Assert.Equal(0, health.Count);
+        Assert.Empty(viewModel.LegacyCleanupTargetId);
     }
 
     [Theory]
@@ -118,10 +472,6 @@ public sealed class IntegrationViewModelTests
             health,
             localSettings)
         {
-            SelectedKind = IntegrationKindChoice.All.Single(
-                item => item.Kind == EntryIntegrationKind.Webhook),
-            TargetId = "personal",
-            EndpointText = "https://hooks.example.com/health",
             CredentialInput = "private-token"
         };
 
@@ -130,10 +480,10 @@ public sealed class IntegrationViewModelTests
         Assert.Equal("private-token", credentials.Value);
         Assert.Empty(viewModel.CredentialInput);
         Assert.Equal(
-            "personal",
+            ReadwiseEntryExporter.CredentialTargetId,
             localSettings.Values["integration.target.id"]);
         Assert.Equal(
-            "https://hooks.example.com/health",
+            ReadwiseEntryExporter.ApiRoot.AbsoluteUri,
             localSettings.Values["integration.target.endpoint"]);
         Assert.DoesNotContain(
             localSettings.Values.Values,
@@ -193,8 +543,6 @@ public sealed class IntegrationViewModelTests
             new FakeHealthService(),
             new FakeSettingsRepository())
         {
-            TargetId = "personal",
-            EndpointText = "https://hooks.example.com/health",
             CredentialInput = "private-token"
         };
         await viewModel.SaveCommand.ExecuteAsync();
@@ -219,11 +567,7 @@ public sealed class IntegrationViewModelTests
         var viewModel = new IntegrationSettingsViewModel(
             new FakeCredentialStore(),
             health,
-            new FakeSettingsRepository())
-        {
-            TargetId = "personal",
-            EndpointText = "https://hooks.example.com/health"
-        };
+            new FakeSettingsRepository());
 
         await viewModel.SaveCommand.ExecuteAsync();
 
@@ -234,20 +578,13 @@ public sealed class IntegrationViewModelTests
     }
 
     [Fact]
-    public async Task PersonalConnectionTestRejectsUnsavedTargetGeneration()
+    public async Task PersonalConnectionTestRejectsUnsavedTarget()
     {
         var health = new FakeHealthService();
-        var localSettings = new FakeSettingsRepository();
         var viewModel = new IntegrationSettingsViewModel(
             new FakeCredentialStore(),
             health,
-            localSettings)
-        {
-            TargetId = "saved-target",
-            EndpointText = "https://hooks.example.com/health"
-        };
-        await viewModel.SaveCommand.ExecuteAsync();
-        viewModel.EndpointText = "https://other.example.com/health";
+            new FakeSettingsRepository());
 
         await viewModel.TestCommand.ExecuteAsync();
 
@@ -339,20 +676,52 @@ public sealed class IntegrationViewModelTests
     private sealed class FakeCredentialStore
         : IEntryIntegrationCredentialStore
     {
-        public string? Value { get; private set; }
+        private readonly Dictionary<
+            (EntryIntegrationKind Kind, string TargetId),
+            string> _values = [];
+
+        public string? Value =>
+            LastKind is { } kind && LastTargetId is { } targetId
+                ? _values.GetValueOrDefault((kind, targetId))
+                : null;
         public EntryIntegrationKind? LastKind { get; private set; }
         public string? LastTargetId { get; private set; }
+        public List<(EntryIntegrationKind Kind, string TargetId)>
+            ExistsSlots
+        { get; } = [];
+        public List<(EntryIntegrationKind Kind, string TargetId)>
+            GetSlots
+        { get; } = [];
+        public List<(EntryIntegrationKind Kind, string TargetId)>
+            SetSlots
+        { get; } = [];
+        public List<(EntryIntegrationKind Kind, string TargetId)>
+            DeleteSlots
+        { get; } = [];
+
+        public void Seed(
+            EntryIntegrationKind kind,
+            string targetId,
+            string value) =>
+            _values[(kind, targetId)] = value;
 
         public Task<string?> GetAsync(
             EntryIntegrationKind kind,
             string targetId,
-            CancellationToken cancellationToken) =>
-            Task.FromResult(Value);
+            CancellationToken cancellationToken)
+        {
+            GetSlots.Add((kind, targetId));
+            return Task.FromResult(
+                _values.GetValueOrDefault((kind, targetId)));
+        }
         public Task<bool> ExistsAsync(
             EntryIntegrationKind kind,
             string targetId,
-            CancellationToken cancellationToken) =>
-            Task.FromResult(Value is not null);
+            CancellationToken cancellationToken)
+        {
+            ExistsSlots.Add((kind, targetId));
+            return Task.FromResult(_values.ContainsKey((kind, targetId)));
+        }
         public Task SetAsync(
             EntryIntegrationKind kind,
             string targetId,
@@ -361,7 +730,8 @@ public sealed class IntegrationViewModelTests
         {
             LastKind = kind;
             LastTargetId = targetId;
-            Value = value;
+            SetSlots.Add((kind, targetId));
+            _values[(kind, targetId)] = value;
             return Task.CompletedTask;
         }
         public Task DeleteAsync(
@@ -369,7 +739,10 @@ public sealed class IntegrationViewModelTests
             string targetId,
             CancellationToken cancellationToken)
         {
-            Value = null;
+            LastKind = kind;
+            LastTargetId = targetId;
+            DeleteSlots.Add((kind, targetId));
+            _values.Remove((kind, targetId));
             return Task.CompletedTask;
         }
     }
@@ -398,6 +771,8 @@ public sealed class IntegrationViewModelTests
         : IAppSettingsRepository
     {
         public Dictionary<string, string> Values { get; } = [];
+        public int SetCount { get; private set; }
+        public int? FailOnSetCall { get; set; }
 
         public Task<string?> GetAsync(
             string key,
@@ -409,6 +784,11 @@ public sealed class IntegrationViewModelTests
             string value,
             CancellationToken cancellationToken)
         {
+            SetCount++;
+            if (SetCount == FailOnSetCall)
+            {
+                throw new IOException("Injected settings write failure.");
+            }
             Values[key] = value;
             return Task.CompletedTask;
         }

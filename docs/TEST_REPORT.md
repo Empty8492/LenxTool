@@ -1,6 +1,6 @@
 # 测试报告
 
-测试日期：.NET 2026-08-08 / Worker 2026-08-08（Asia/Shanghai）
+测试日期：.NET 2026-08-10 / Worker 2026-08-08（Asia/Shanghai）
 版本：0.1.0  
 配置：Release / win-x64 / .NET SDK 10.0.302
 
@@ -8,14 +8,23 @@
 
 | 测试组 | 结果 |
 |---|---:|
-| LenxTool.Core.Tests | 191 passed |
-| LenxTool.Infrastructure.Tests | 763 passed |
-| LenxTool.App.Tests | 500 passed |
-| Cloudflare Worker Vitest | 78 passed |
-| Worker TypeScript strict typecheck | passed |
-| .NET build warnings | 0 |
-| NuGet vulnerable packages | 0 detected |
-| npm audit vulnerabilities | 0 detected |
+| LenxTool.Core.Tests（2026-08-10） | 202 passed |
+| LenxTool.Infrastructure.Tests（未重跑，2026-08-08） | 763 passed |
+| LenxTool.App.Tests 非 WPF（2026-08-10） | 508 passed |
+| App WPF runtime 逐类隔离（2026-08-10） | 13/14；1 项既有基线失败 |
+| Cloudflare Worker Vitest（未重跑，2026-08-08） | 78 passed |
+| Worker TypeScript strict typecheck（未重跑，2026-08-08） | passed |
+| .NET Release build warnings（2026-08-10） | 0 |
+| NuGet vulnerable packages（2026-08-10） | 0 detected |
+| npm audit vulnerabilities（未重跑，2026-08-08） | 0 detected |
+
+P2-16～P2-19 未接通入口门禁先以失败测试证明个人通用设置曾同时暴露 Readwise、Readeck、Outline、qBittorrent 与 Webhook 5 项，随后改为显式生产 allowlist：当前只显示已注册 exporter/健康探针且固定官方目标的 Readwise；四种占位类型的程序化赋值与旧持久化配置均回到安全默认值，不能进入 TargetId、DPAPI 凭据或连接测试流程。升级前配置只留下非秘密清理指针；ViewModel 不按旧槽位取值，旧值不会返回界面或交给探针/exporter。直接删除当前记录会以“先写安全 kind、再写目标”的可重放顺序规范化仍匹配的旧设置，逐键写入失败后仍可重试，不会让清理提示复生。历史未引用槽位可由用户按原类型和 TargetId 通过 delete-only 入口定向删除；哈希槽名不能反推出遗忘的标识。生产存储使用共享 DPAPI blob，刷新当前 Readwise presence 或删除槽位时可能在存储层解密整个 blob，因此本门禁不宣称进程从不解密旧值，只保证旧值不离开存储层、不进入 UI、探针、exporter 或网络。ViewModel/布局聚焦 25/25、App 非 WPF 全量 508/508、Core 全量 202/202 通过；10 个 WPF 类逐进程串行仍为 13/14，唯一失败是未修改的 `SelectionControlsWpfRuntimeTests` 第 124 行 `CalendarAutomationPeer.GetChildrenCore` 基线，`ToolsWpfRuntimeTests` 等其余类通过。解决方案 Release build 为 0 警告/0 错误，NuGet 在线漏洞审计为 0。本任务改动的 C# 文件 whitespace verify 通过；全仓 `dotnet format --verify-no-changes` 仍被大量未修改文件的既有 CRLF/空白基线阻断，因此不记录为全仓格式通过。该门禁保留公共枚举和管理员策略兼容值，不代表 P2-16～P2-19 已启动或完成。
+
+Independent-01 JSON 双栏结构 Diff 的当前门禁为 JsonToolkit 聚焦 12/12、Core 全量 202/202、ViewModel 7/7、布局 1/1、Diff 真实 WPF 1/1、App 非 WPF 全量 508/508；解决方案 Release build 为 0 警告/0 错误，NuGet 在线漏洞审计为 0。覆盖合法根值 `null`、左右独立校验、UTF-8 字节位置、无歧义的 `$["a.b"]`/`$["a"]["b"]` 属性路径、新增/删除/修改和值、交换、2 MiB 单侧上限、500/501 数量边界、单路径 1,024 字符/总路径 256 KiB 预算、路径预算提前截断的实际条数、主动取消、取消后的迟到完成和 A→B→A 输入回绕。正常短路径不计算摘要；只有首次溢出后才按完整父路径或缓存摘要延迟生成确定性的 `path-sha256` 标识。256 KiB 长祖先 × 500 个差异的预热后线程分配回归限制为 64 MiB 以内，防止恢复逐结果复制完整祖先路径。每侧只构造一次解析树；严格 UTF-8 编码前后检查取消，异步解析流每次最多读取 64 KiB 并再次检查取消，比较遍历继续传播同一令牌。主动大输入取消用例独立连续 10/10 轮通过。
+
+发布前审查先后发现并修复了路径碰撞、重复解析/解析取消缺口、测试专用滚动宿主、合法根 `null` 被误判、超长祖先路径可放大至 OOM、正常短路径每段无条件计算 SHA、路径预算截断文案虚报 500 条，以及外层滚动区让 ListBox 失去有限视口等问题。当前 WPF 回归直接创建最小 920×620 的 `MainWindow`，使用生产 `ToolsView` 内滚动区验证原生 Automation Peer、键盘焦点、绑定命令、500 行结果的最后容器未被实现、差异列表和纵向可达；在真实窗口中施加等效 200% `LayoutTransform` 后验证横向滚动及右栏/列表可达，并覆盖深浅主题。等效布局缩放仍不替代发布前在真实 Windows 200% DPI/文本缩放环境中的人工观察。
+
+Independent-01 首轮 App 全量同进程运行结果为 502/508；6 项失败均落在既有 `CalendarAutomationPeer.GetChildrenCore` 空元素调用栈，未经过 JSON Diff。当前 10 个 WPF 类逐进程串行后为 13/14，Feed Audio、Discovery、Thumbnail、Picture、Timeline、Video、ViewSwitching、Tools 和 SmoothWheel 类均通过；唯一失败仍是未改动的 `SelectionControlsWpfRuntimeTests` 第 124 行同一 Calendar AutomationPeer 基线。本任务未修改 Infrastructure、Worker、数据库 schema 或依赖，因此没有把 2026-08-08 的对应结果描述成本轮重跑。
 
 P2-22 最终门禁为 Core 191/191、Infrastructure 763/763、App 500/500，三个项目串行 Release 全绿，共 1454 项且无跳过；完整 App 运行包含既有 WPF runtime 用例，本次未复现历史 `CalendarAutomationPeer` 宿主失败。Worker 78/78、strict typecheck、Release build 0 警告/0 错误、win-x64 自包含 .NET 发布、NuGet 在线漏洞审计 0 和 npm 在线漏洞审计 0 均通过。发布目录 `artifacts\publish\p2-22-final` 为 315 个顶层文件、175,100,510 bytes（167.0 MiB）。
 
