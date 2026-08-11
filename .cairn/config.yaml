@@ -1,7 +1,7 @@
 version: 3
 project:
-  name: "Lenx Tools"
-  summary: "面向 Windows 10/11 x64 的本地优先桌面效率应用，整合资讯阅读、AI 与媒体处理、文档及数据工具。"
+  name: "LenxTool"
+  summary: "面向 Windows 10/11 x64 的 .NET 10 + WPF 本地优先桌面效率应用，覆盖资讯阅读、热点研判、媒体字幕处理及文档与数据轻工具。"
 knowledge:
   directory: "cairn"
   language: "zh"

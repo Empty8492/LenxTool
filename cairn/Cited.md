@@ -1,4 +1,13 @@
-# 实际采用的外部知识指针
+# 已采用的外部知识
+
+本文件只记录真正影响过当前项目产出的知识指针，不复制来源正文。
+
+| 日期 | 知识 | 来源 | 采用原因 | 应用位置 |
+|---|---|---|---|---|
+| 2026-08-05 | LenxTool 本地计划窗口幂等与崩溃恢复 | `vault:default/07_Decisions_决策方案/LenxTool 本地计划窗口幂等与崩溃恢复.md` | 采用计划定义与运行窗口分离、明确禁用/在途取消语义的历史约束；以当前代码与失败先行回归重新验证，并把代际取消和最终 SQL 防竞态作为本轮根因级补全 | `LocalScheduledTaskRepository`、`LocalScheduleRunRepository`、`LocalScheduleProcessor` 及回归测试 |
+| 2026-08-05 | LenxTool 交付验证与 GitHub 发布闭环 | `vault:default/08_AI_Workflows_AI与工作流/LenxTool 交付验证与 GitHub 发布闭环.md` | 采用“先核对 worktree 与当前路线图、保护相邻改动、历史验证不冒充本轮结果”的流程约束；其中旧提交号和旧状态未作为当前事实 | `AGENTS.md` 的“LenxTool 工作边界” |
+| 2026-08-05 | Obsidian 证据分级知识库工作流 | `vault:default/08_AI_Workflows_AI与工作流/Obsidian 证据分级知识库工作流.md` | 作为自动毕业改造的既有流程基线；保留证据分级、分类和不覆盖规则，并明确修订逐次授权边界 | `cairn/knowledge-capture.md`、全局与项目 `AGENTS.md` |
+| 2026-08-05 | LenxTool 持久导出队列与安全 Markdown 导出 | `vault:default/07_Decisions_决策方案/LenxTool 持久导出队列与安全 Markdown 导出.md` | 采用真实 SQLite 双仓储、唯一窗口、租约 token、过期接管和陈旧提交拒绝的可恢复状态机约束；仅作为历史设计参考，均由当前代码和测试重新验证 | schema v23、`LocalScheduleRunRepository`、窗口恢复测试 |
 
 ## P2-22 Windows 通知
 
@@ -7,8 +16,8 @@
 - [Microsoft：Deploy self-contained apps](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/self-contained-deploy/deploy-self-contained-apps) 与 [Deploy unpackaged apps](https://learn.microsoft.com/en-us/windows/apps/windows-app-sdk/deploy-unpackaged-apps)：用于选择框架依赖 Windows App SDK、手动 bootstrap 和缺失 Runtime 降级。
 - [Microsoft：Windows App SDK downloads](https://learn.microsoft.com/en-us/windows/apps/windows-app-sdk/downloads)：采用 2.3.1 x64 官方 Runtime 安装资产。
 - [Microsoft：Distribute your app and the WebView2 Runtime](https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/distribution)：保留 Evergreen 引导程序并将其作为需固定哈希/签名验证的安装资产。
-- `G:\Obsidian\Lenx\07_Decisions_决策方案\LenxTool WPF Shell 与原生控件验收规则.md`：用于最小窗口、真实 WPF 与可访问性验收方式；结论已由当前 XAML、UI Automation 和截图复核。
-- `G:\Obsidian\Lenx\07_Decisions_决策方案\LenxTool 本地优先 RSS 架构与安全边界.md`：用于保持本地收件箱为耐久真相、云端不新增内容字段；结论已由当前代码、SQLite 与 Worker schema 复核。
+- `vault:default/07_Decisions_决策方案/LenxTool WPF Shell 与原生控件验收规则.md`：用于最小窗口、真实 WPF 与可访问性验收方式；结论已由当前 XAML、UI Automation 和截图复核。
+- `vault:default/07_Decisions_决策方案/LenxTool 本地优先 RSS 架构与安全边界.md`：用于保持本地收件箱为耐久真相、云端不新增内容字段；结论已由当前代码、SQLite 与 Worker schema 复核。
 
 ## P2-23 服务端邮件摘要决策闸门
 
