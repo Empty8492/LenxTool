@@ -1,4 +1,4 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using LenxTool.App.Mvvm;
 using LenxTool.Core.Contracts;
 using LenxTool.Core.Feeds;
@@ -109,6 +109,11 @@ public sealed partial class NewsCenterViewModel
         {
             if (SetProperty(ref _selectedTimelineEntry, value))
             {
+                if (_pendingQBittorrentExport is not null
+                    && !ReferenceEquals(_pendingQBittorrentExport, value))
+                {
+                    ClearQBittorrentConfirmation();
+                }
                 SelectFeedReaderEntry(value);
                 UpdateTimelineSavedNote(value?.Note ?? string.Empty, replaceEditorText: true);
                 TimelineTagInput = string.Empty;

@@ -25,6 +25,14 @@ interface IntegrationPolicy {
   kind: IntegrationKind;
   isEnabled: boolean;
   allowedHosts: string[];
+  trustedPrivateEndpoints: PrivateEndpoint[];
+  allowedResources: string[];
+  allowedLoopbackHttpPorts: number[];
+}
+
+interface PrivateEndpoint {
+  host: string;
+  port: number;
 }
 
 interface PolicyStateRow {
@@ -36,6 +44,9 @@ interface PolicyRow {
   kind: string;
   is_enabled: number;
   allowed_hosts_json: string;
+  trusted_private_endpoints_json: string;
+  allowed_resources_json: string;
+  allowed_loopback_http_ports_json: string;
 }
 
 interface StoredPolicyMapping {
@@ -64,12 +75,17 @@ const kindOrder = new Map(
   [...allowedKinds].map((kind, index) => [kind, index])
 );
 const keyPattern = /^[A-Za-z0-9._:-]{16,128}$/u;
+const policySchemaVersion = 2;
+const policySchemaHeader = "x-lenxtool-integration-policy-schema";
+const maximumJsonColumnLength = 8 * 1024;
+const maximumPolicySetJsonBytes = 40 * 1024;
 const reservedSuffixes = [
   ".internal",
   ".invalid",
   ".lan",
   ".local",
-  ".localhost"
+  ".localhost",
+  ".home.arpa"
 ];
 
 export async function handleIntegrationPolicyRequest(
@@ -113,6 +129,7 @@ async function readPolicies(
   auth: CatalogAuthContext,
   url: URL
 ): Promise<Response> {
+  const requestedSchema = parseRequestedSchema(request);
   if (new TextEncoder().encode(request.url).byteLength > 2048) {
     throw validationError("集成策略查询地址过长");
   }
@@ -144,7 +161,9 @@ async function readPolicies(
         "FROM integration_policy_state WHERE singleton_id=1"
       ),
       db.prepare(
-        "SELECT kind,is_enabled,allowed_hosts_json " +
+        "SELECT kind,is_enabled,allowed_hosts_json," +
+        "trusted_private_endpoints_json,allowed_resources_json," +
+        "allowed_loopback_http_ports_json " +
         "FROM integration_policies" +
         (scope === "ACTIVE" ? " WHERE is_enabled=1" : "") +
         " ORDER BY kind"
@@ -152,10 +171,15 @@ async function readPolicies(
     ]);
   const state = stateResult?.results[0] as PolicyStateRow | undefined;
   assertState(state);
-  const etag =
-    `"integration-policies-${scope.toLowerCase()}-${state.policy_set_version}"`;
+  const etag = requestedSchema === 2
+    ? `"integration-policies-v2-${scope.toLowerCase()}-${state.policy_set_version}"`
+    : `"integration-policies-${scope.toLowerCase()}-${state.policy_set_version}"`;
   const conditional = afterVersion ??
-    parseEtagVersion(request.headers.get("if-none-match"), scope);
+    parseEtagVersion(
+      request.headers.get("if-none-match"),
+      scope,
+      requestedSchema
+    );
   if (conditional !== undefined
       && conditional > state.policy_set_version) {
     throw new CatalogApiError(
@@ -171,6 +195,12 @@ async function readPolicies(
   const requiresCompatibilityProjection = storedPolicies.some(
     value => value.requiresCompatibilityProjection
   );
+  const advancedOnly = storedPolicies.some(value =>
+    isAdvancedOnly(value.policy)
+  );
+  if (requestedSchema === 1 && scope === "ALL" && advancedOnly) {
+    throw schemaUpgradeRequired();
+  }
   if (conditional === state.policy_set_version
       && !requiresCompatibilityProjection) {
     return new Response(null, {
@@ -178,23 +208,32 @@ async function readPolicies(
       headers: {
         "cache-control": "no-store",
         etag,
+        vary: policySchemaHeader,
         "x-request-id": auth.requestId
       }
     });
   }
 
-  const policies = storedPolicies
+  const normalizedPolicies = storedPolicies
     .map(value => value.policy)
+    .filter(policy => requestedSchema === 2 || !isAdvancedOnly(policy))
     .sort(comparePolicies);
+  const policies = requestedSchema === 2
+    ? normalizedPolicies
+    : normalizedPolicies.map(projectLegacyPolicy);
   return policyJson(
     JSON.stringify({
+      ...(requestedSchema === 2
+        ? { policySchemaVersion }
+        : {}),
       policySetVersion: state.policy_set_version,
       scope,
       generatedAt: state.updated_at,
       policies
     }),
     etag,
-    auth.requestId
+    auth.requestId,
+    requestedSchema
   );
 }
 
@@ -204,7 +243,10 @@ async function replacePolicies(
   auth: CatalogAuthContext
 ): Promise<Response> {
   const body = await readJson(request, 65_536);
-  assertOnlyFields(body, ["policies"]);
+  assertOnlyFields(body, ["policySchemaVersion", "policies"]);
+  if (body.policySchemaVersion !== policySchemaVersion) {
+    throw schemaUpgradeRequired();
+  }
   if (!Array.isArray(body.policies)) {
     throw validationError("集成策略集合无效");
   }
@@ -215,7 +257,7 @@ async function replacePolicies(
   }
   const ifMatch = request.headers.get("if-match") ?? "";
   const match =
-    /^"integration-policies-all-(0|[1-9][0-9]*)"$/u.exec(ifMatch);
+    /^"integration-policies-v2-all-(0|[1-9][0-9]*)"$/u.exec(ifMatch);
   if (!match) throw validationError("If-Match 格式无效");
   const expectedVersion = Number(match[1]);
   if (!Number.isSafeInteger(expectedVersion)) {
@@ -224,7 +266,7 @@ async function replacePolicies(
 
   const requestHash = await sha256(
     `PUT\n/v1/admin/integration-policies\n${ifMatch}\n` +
-    canonicalJson({ policies })
+    canonicalJson({ policySchemaVersion, policies })
   );
   const currentTime = nowIso();
   await db.prepare(
@@ -257,6 +299,7 @@ async function replacePolicies(
   const mutationId = crypto.randomUUID();
   const committedAt = nowIso();
   const responseBody = JSON.stringify({
+    policySchemaVersion,
     policySetVersion: newVersion,
     policies
   });
@@ -268,14 +311,20 @@ async function replacePolicies(
   const policyWrites = policies.map(policy =>
     db.prepare(
       "INSERT INTO integration_policies(" +
-      "kind,is_enabled,allowed_hosts_json,updated_by,updated_at,last_mutation_id) " +
-      "SELECT ?,?,?,?,?,? WHERE EXISTS (" +
+      "kind,is_enabled,allowed_hosts_json," +
+      "trusted_private_endpoints_json,allowed_resources_json," +
+      "allowed_loopback_http_ports_json," +
+      "updated_by,updated_at,last_mutation_id) " +
+      "SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS (" +
       "SELECT 1 FROM integration_policy_state " +
       "WHERE singleton_id=1 AND last_mutation_id=?)"
     ).bind(
       policy.kind,
       policy.isEnabled ? 1 : 0,
       JSON.stringify(policy.allowedHosts),
+      JSON.stringify(policy.trustedPrivateEndpoints),
+      JSON.stringify(policy.allowedResources),
+      JSON.stringify(policy.allowedLoopbackHttpPorts),
       auth.userId,
       committedAt,
       mutationId,
@@ -384,7 +433,14 @@ function normalizePolicySet(values: unknown[]): IntegrationPolicy[] {
       throw validationError("集成策略项无效");
     }
     const input = value as Record<string, unknown>;
-    assertOnlyFields(input, ["kind", "isEnabled", "allowedHosts"]);
+    assertOnlyFields(input, [
+      "kind",
+      "isEnabled",
+      "allowedHosts",
+      "trustedPrivateEndpoints",
+      "allowedResources",
+      "allowedLoopbackHttpPorts"
+    ]);
     if (typeof input.kind !== "string"
         || !allowedKinds.has(input.kind as IntegrationKind)) {
       throw validationError("集成类型无效");
@@ -392,30 +448,166 @@ function normalizePolicySet(values: unknown[]): IntegrationPolicy[] {
     const kind = input.kind as IntegrationKind;
     if (!seen.add(kind)) throw validationError("集成类型不能重复");
     const allowedHosts = normalizeAllowedHosts(input.allowedHosts);
+    const trustedPrivateEndpoints = normalizePrivateEndpoints(
+      input.trustedPrivateEndpoints
+    );
+    const allowedResources = normalizeResources(
+      kind,
+      input.allowedResources
+    );
+    const allowedLoopbackHttpPorts = normalizeLoopbackPorts(
+      input.allowedLoopbackHttpPorts
+    );
     const isEnabled = requireBoolean(input.isEnabled, "启用状态");
-    if (!requiresAllowedHosts(kind) && allowedHosts.length !== 0) {
-      throw validationError("本机集成目标不能写入共享目标主机");
+    if (isLocalOnly(kind)
+        && (allowedHosts.length !== 0
+          || trustedPrivateEndpoints.length !== 0
+          || allowedResources.length !== 0
+          || allowedLoopbackHttpPorts.length !== 0)) {
+      throw validationError("本机集成目标不能写入共享策略元数据");
+    }
+    if (!supportsPrivateEndpoints(kind)
+        && trustedPrivateEndpoints.length !== 0) {
+      throw validationError("该集成类型不能配置受信私网目标");
+    }
+    if (!supportsResources(kind) && allowedResources.length !== 0) {
+      throw validationError("该集成类型不能配置资源白名单");
+    }
+    if (kind !== "QBITTORRENT"
+        && allowedLoopbackHttpPorts.length !== 0) {
+      throw validationError("只有 qBittorrent 可以配置本机 HTTP 端口");
     }
     if (isEnabled
-        && requiresAllowedHosts(kind)
-        && allowedHosts.length === 0) {
-      throw validationError("启用集成前必须配置精确目标主机");
+        && !isLocalOnly(kind)
+        && allowedHosts.length === 0
+        && trustedPrivateEndpoints.length === 0
+        && allowedLoopbackHttpPorts.length === 0) {
+      throw validationError("启用集成前必须配置受控网络目标");
     }
-    return { kind, isEnabled, allowedHosts };
+    if (isEnabled
+        && supportsResources(kind)
+        && allowedResources.length === 0) {
+      throw validationError("启用该集成前必须配置至少一个允许资源");
+    }
+    return {
+      kind,
+      isEnabled,
+      allowedHosts,
+      trustedPrivateEndpoints,
+      allowedResources,
+      allowedLoopbackHttpPorts
+    };
   });
-  return policies.sort(comparePolicies);
+  const normalized = policies.sort(comparePolicies);
+  if (new TextEncoder().encode(JSON.stringify(normalized)).byteLength
+      > maximumPolicySetJsonBytes) {
+    throw validationError("集成策略集合超过安全传输预算");
+  }
+  return normalized;
 }
 
-// Obsidian 与 Eagle 只访问用户本机目标；其余集成仍受精确 DNS 白名单约束。
-function requiresAllowedHosts(kind: IntegrationKind): boolean {
-  return kind !== "OBSIDIAN" && kind !== "EAGLE";
+function isLocalOnly(kind: IntegrationKind): boolean {
+  return kind === "OBSIDIAN" || kind === "EAGLE";
+}
+
+function supportsPrivateEndpoints(kind: IntegrationKind): boolean {
+  return kind === "READECK"
+    || kind === "OUTLINE"
+    || kind === "QBITTORRENT"
+    || kind === "WEBHOOK";
+}
+
+function supportsResources(kind: IntegrationKind): boolean {
+  return kind === "OUTLINE" || kind === "QBITTORRENT";
 }
 
 function normalizeAllowedHosts(value: unknown): string[] {
   if (!Array.isArray(value) || value.length > 32) {
     throw validationError("目标主机列表无效");
   }
-  return [...new Set(value.map(normalizeExactHost))].sort();
+  const normalized = [...new Set(value.map(normalizeExactHost))].sort();
+  ensureColumnBudget(normalized, "目标主机");
+  return normalized;
+}
+
+function normalizePrivateEndpoints(value: unknown): PrivateEndpoint[] {
+  if (!Array.isArray(value) || value.length > 32) {
+    throw validationError("受信私网目标列表无效");
+  }
+  const values = value.map(item => {
+    if (item === null || Array.isArray(item) || typeof item !== "object") {
+      throw validationError("受信私网目标无效");
+    }
+    const endpoint = item as Record<string, unknown>;
+    assertOnlyFields(endpoint, ["host", "port"]);
+    return {
+      host: normalizePrivateHost(endpoint.host),
+      port: normalizePort(endpoint.port)
+    };
+  });
+  const normalized = [...new Map(values.map(item => [
+    `${item.host}:${item.port}`,
+    item
+  ])).values()].sort((left, right) =>
+    (left.host < right.host ? -1 : left.host > right.host ? 1 : 0)
+      || left.port - right.port
+  );
+  ensureColumnBudget(normalized, "受信私网目标");
+  return normalized;
+}
+
+function normalizeResources(
+  kind: IntegrationKind,
+  value: unknown
+): string[] {
+  if (!Array.isArray(value) || value.length > 32) {
+    throw validationError("资源白名单无效");
+  }
+  const values = value.map(item => {
+    if (typeof item !== "string") {
+      throw validationError("资源白名单项必须是字符串");
+    }
+    if (kind === "OUTLINE") {
+      const normalized = item.trim().toLowerCase();
+      if (normalized === "00000000-0000-0000-0000-000000000000"
+          || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u
+            .test(normalized)) {
+        throw validationError("Outline collection ID 必须是非空 UUID");
+      }
+      return normalized;
+    }
+    if (kind === "QBITTORRENT") {
+      const normalized = item.trim();
+      if (normalized.length === 0
+          || normalized.length > 128
+          || /[\u0000-\u001f\u007f-\u009f]/u.test(normalized)) {
+        throw validationError("qBittorrent 分类格式无效");
+      }
+      return normalized;
+    }
+    return item.trim();
+  });
+  const normalized = [...new Set(values)].sort();
+  ensureColumnBudget(normalized, "资源白名单");
+  return normalized;
+}
+
+function normalizeLoopbackPorts(value: unknown): number[] {
+  if (!Array.isArray(value) || value.length > 16) {
+    throw validationError("本机 HTTP 端口列表无效");
+  }
+  const normalized = [...new Set(value.map(normalizePort))]
+    .sort((a, b) => a - b);
+  ensureColumnBudget(normalized, "本机 HTTP 端口");
+  return normalized;
+}
+
+function normalizePort(value: unknown): number {
+  if (!Number.isInteger(value) || (value as number) < 1
+      || (value as number) > 65_535) {
+    throw validationError("目标端口必须位于 1 到 65535 之间");
+  }
+  return value as number;
 }
 
 function normalizeExactHost(value: unknown): string {
@@ -443,10 +635,64 @@ function normalizeExactHost(value: unknown): string {
   }
   if (!host.includes(".")
       || host === "localhost"
+      || host === "home.arpa"
+      || isIpv4Literal(host)
       || reservedSuffixes.some(suffix => host.endsWith(suffix))
       || !/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/u
         .test(host)) {
     throw validationError("目标必须是可公开解析的精确 DNS 主机名");
+  }
+  return host;
+}
+
+function ensureColumnBudget(value: unknown, label: string): void {
+  if (new TextEncoder().encode(JSON.stringify(value)).byteLength
+      > maximumJsonColumnLength) {
+    throw validationError(`${label}超过共享策略列预算`);
+  }
+}
+
+function normalizePrivateHost(value: unknown): string {
+  const host = normalizeDnsSyntax(value);
+  if (host === "localhost"
+      || host.endsWith(".localhost")
+      || host.endsWith(".local")
+      || host.endsWith(".invalid")) {
+    throw validationError(
+      "受信私网目标不能使用 localhost、.local 或无效保留域"
+    );
+  }
+  return host;
+}
+
+function normalizeDnsSyntax(value: unknown): string {
+  if (typeof value !== "string") {
+    throw validationError("目标主机必须是字符串");
+  }
+  const candidate = value.trim().replace(/\.$/u, "");
+  if (candidate.length === 0
+      || candidate.length > 253
+      || candidate.includes("*")
+      || candidate.includes("://")
+      || /[/\\@:?#[\]]/u.test(candidate)
+      || isIpv4Literal(candidate)) {
+    throw validationError(
+      "目标必须是精确 DNS 主机名，不能包含协议、端口、路径、通配符或 IP"
+    );
+  }
+  let host: string;
+  try {
+    host = new URL(`https://${candidate}`).hostname
+      .toLowerCase()
+      .replace(/\.$/u, "");
+  } catch {
+    throw validationError("目标主机格式无效");
+  }
+  if (!host.includes(".")
+      || isIpv4Literal(host)
+      || !/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/u
+        .test(host)) {
+    throw validationError("目标必须是完整的精确 DNS 主机名");
   }
   return host;
 }
@@ -462,8 +708,14 @@ function isIpv4Literal(value: string): boolean {
 
 function mapStoredPolicy(row: PolicyRow): StoredPolicyMapping {
   let hosts: unknown;
+  let privateEndpoints: unknown;
+  let resources: unknown;
+  let loopbackPorts: unknown;
   try {
     hosts = JSON.parse(row.allowed_hosts_json);
+    privateEndpoints = JSON.parse(row.trusted_private_endpoints_json);
+    resources = JSON.parse(row.allowed_resources_json);
+    loopbackPorts = JSON.parse(row.allowed_loopback_http_ports_json);
   } catch {
     throw serviceUnavailable();
   }
@@ -472,14 +724,30 @@ function mapStoredPolicy(row: PolicyRow): StoredPolicyMapping {
       // 严格本机契约前，旧入口允许 Obsidian 主机且启用的 Eagle 还要求主机；
       // 读取时验证旧值后只发布空主机，让管理员可直接 PUT 完成一次性自愈。
       const allowedHosts = normalizeAllowedHosts(hosts);
+      const normalizedPrivateEndpoints =
+        normalizePrivateEndpoints(privateEndpoints);
+      const normalizedResources = normalizeResources(
+        row.kind,
+        resources
+      );
+      const normalizedLoopbackPorts =
+        normalizeLoopbackPorts(loopbackPorts);
       if (row.is_enabled !== 0 && row.is_enabled !== 1) {
         throw validationError("启用状态无效");
+      }
+      if (normalizedPrivateEndpoints.length !== 0
+          || normalizedResources.length !== 0
+          || normalizedLoopbackPorts.length !== 0) {
+        throw validationError("本机集成包含不允许的扩展策略元数据");
       }
       return {
         policy: {
           kind: row.kind,
           isEnabled: row.is_enabled === 1,
-          allowedHosts: []
+          allowedHosts: [],
+          trustedPrivateEndpoints: [],
+          allowedResources: [],
+          allowedLoopbackHttpPorts: []
         },
         requiresCompatibilityProjection: allowedHosts.length !== 0
       };
@@ -488,7 +756,10 @@ function mapStoredPolicy(row: PolicyRow): StoredPolicyMapping {
       policy: normalizePolicySet([{
         kind: row.kind,
         isEnabled: row.is_enabled === 1,
-        allowedHosts: hosts
+        allowedHosts: hosts,
+        trustedPrivateEndpoints: privateEndpoints,
+        allowedResources: resources,
+        allowedLoopbackHttpPorts: loopbackPorts
       }])[0]!,
       requiresCompatibilityProjection: false
     };
@@ -503,6 +774,32 @@ function comparePolicies(
 ): number {
   return (kindOrder.get(left.kind) ?? Number.MAX_SAFE_INTEGER)
     - (kindOrder.get(right.kind) ?? Number.MAX_SAFE_INTEGER);
+}
+
+function isAdvancedOnly(policy: IntegrationPolicy): boolean {
+  return policy.isEnabled
+    && policy.allowedHosts.length === 0
+    && (policy.trustedPrivateEndpoints.length !== 0
+      || policy.allowedLoopbackHttpPorts.length !== 0);
+}
+
+function projectLegacyPolicy(policy: IntegrationPolicy): {
+  kind: IntegrationKind;
+  isEnabled: boolean;
+  allowedHosts: string[];
+} {
+  return {
+    kind: policy.kind,
+    isEnabled: policy.isEnabled,
+    allowedHosts: policy.allowedHosts
+  };
+}
+
+function parseRequestedSchema(request: Request): 1 | 2 {
+  const values = request.headers.get(policySchemaHeader);
+  if (values === null) return 1;
+  if (values === String(policySchemaVersion)) return 2;
+  throw schemaUpgradeRequired();
 }
 
 async function getPolicySetVersion(db: D1Database): Promise<number> {
@@ -569,11 +866,15 @@ function parseVersion(
 
 function parseEtagVersion(
   value: string | null,
-  scope: "ACTIVE" | "ALL"
+  scope: "ACTIVE" | "ALL",
+  schemaVersion: 1 | 2
 ): number | undefined {
   if (value === null) return undefined;
+  const prefix = schemaVersion === 2
+    ? "integration-policies-v2"
+    : "integration-policies";
   const match = new RegExp(
-    `^"integration-policies-${scope.toLowerCase()}-(0|[1-9][0-9]*)"$`,
+    `^"${prefix}-${scope.toLowerCase()}-(0|[1-9][0-9]*)"$`,
     "u"
   ).exec(value);
   if (!match) return undefined;
@@ -595,6 +896,14 @@ function validationError(message: string): CatalogApiError {
   return new CatalogApiError(400, "VALIDATION_ERROR", message);
 }
 
+function schemaUpgradeRequired(): CatalogApiError {
+  return new CatalogApiError(
+    400,
+    "INTEGRATION_POLICY_SCHEMA_UPGRADE_REQUIRED",
+    "集成策略管理端需要升级到 schema v2"
+  );
+}
+
 function serviceUnavailable(): CatalogApiError {
   return new CatalogApiError(
     503,
@@ -606,7 +915,8 @@ function serviceUnavailable(): CatalogApiError {
 function policyJson(
   body: string,
   etag: string,
-  requestId: string
+  requestId: string,
+  schemaVersion: 1 | 2
 ): Response {
   return new Response(body, {
     status: 200,
@@ -614,6 +924,10 @@ function policyJson(
       "content-type": "application/json; charset=utf-8",
       "cache-control": "no-store",
       etag,
+      vary: policySchemaHeader,
+      ...(schemaVersion === 2
+        ? { [policySchemaHeader]: String(policySchemaVersion) }
+        : {}),
       "x-request-id": requestId
     }
   });

@@ -1,4 +1,4 @@
-using LenxTool.Core.Contracts;
+﻿using LenxTool.Core.Contracts;
 using LenxTool.Core.Models;
 using LenxTool.Infrastructure.Security;
 using Microsoft.Extensions.DependencyInjection;
@@ -24,6 +24,9 @@ public static class EntryIntegrationServiceCollectionExtensions
             EntryIntegrationCredentialStore>();
         services.TryAddSingleton(EntryIntegrationHealthOptions.Default);
         services.TryAddSingleton(TimeProvider.System);
+        services.AddSingleton<
+            IEntryIntegrationEndpointAuthorizer,
+            EntryIntegrationEndpointAuthorizer>();
         services.AddSingleton<IEntryIntegrationHealthService>(
             static provider =>
                 new EntryIntegrationHealthService(

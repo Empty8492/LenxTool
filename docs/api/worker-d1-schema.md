@@ -1,10 +1,10 @@
 # Worker D1 Schema
 
-最新权威迁移：[0009_smart_views.sql](../../cloud/LenxTool.Worker/migrations/0009_smart_views.sql)、[0010_integration_policies.sql](../../cloud/LenxTool.Worker/migrations/0010_integration_policies.sql)。生产发布必须按序先应用迁移，再部署读取新表的 Worker；顺序颠倒会使智能视图或集成策略查询因 schema 尚不存在而失败。
+最新权威迁移：[0009_smart_views.sql](../../cloud/LenxTool.Worker/migrations/0009_smart_views.sql)、[0010_integration_policies.sql](../../cloud/LenxTool.Worker/migrations/0010_integration_policies.sql)、[0011_integration_policy_metadata.sql](../../cloud/LenxTool.Worker/migrations/0011_integration_policy_metadata.sql)。生产发布必须按序先应用迁移，再部署读取新列的 Worker；0011 之前部署策略 schema v2 Worker 会使集成策略查询因列尚不存在而失败。
 
 状态：P0 目录、P1 AI 策略和受限自动化规则、DISC-02 已知目录发现、P2 智能视图与外部集成策略 schema/读写均已实现
-最后核对：2026-08-03
-权威迁移：[0001_initial.sql](../../cloud/LenxTool.Worker/migrations/0001_initial.sql)、[0002_feed_catalog.sql](../../cloud/LenxTool.Worker/migrations/0002_feed_catalog.sql)、[0003_catalog_mutations.sql](../../cloud/LenxTool.Worker/migrations/0003_catalog_mutations.sql)、[0004_feed_full_text_policy.sql](../../cloud/LenxTool.Worker/migrations/0004_feed_full_text_policy.sql)、[0005_feed_ai_policy.sql](../../cloud/LenxTool.Worker/migrations/0005_feed_ai_policy.sql)、[0006_automation_rules.sql](../../cloud/LenxTool.Worker/migrations/0006_automation_rules.sql)、[0007_explicit_feed_view_kind.sql](../../cloud/LenxTool.Worker/migrations/0007_explicit_feed_view_kind.sql)、[0008_feed_discovery_index.sql](../../cloud/LenxTool.Worker/migrations/0008_feed_discovery_index.sql)、[0009_smart_views.sql](../../cloud/LenxTool.Worker/migrations/0009_smart_views.sql)、[0010_integration_policies.sql](../../cloud/LenxTool.Worker/migrations/0010_integration_policies.sql)
+最后核对：2026-08-13
+权威迁移：[0001_initial.sql](../../cloud/LenxTool.Worker/migrations/0001_initial.sql)、[0002_feed_catalog.sql](../../cloud/LenxTool.Worker/migrations/0002_feed_catalog.sql)、[0003_catalog_mutations.sql](../../cloud/LenxTool.Worker/migrations/0003_catalog_mutations.sql)、[0004_feed_full_text_policy.sql](../../cloud/LenxTool.Worker/migrations/0004_feed_full_text_policy.sql)、[0005_feed_ai_policy.sql](../../cloud/LenxTool.Worker/migrations/0005_feed_ai_policy.sql)、[0006_automation_rules.sql](../../cloud/LenxTool.Worker/migrations/0006_automation_rules.sql)、[0007_explicit_feed_view_kind.sql](../../cloud/LenxTool.Worker/migrations/0007_explicit_feed_view_kind.sql)、[0008_feed_discovery_index.sql](../../cloud/LenxTool.Worker/migrations/0008_feed_discovery_index.sql)、[0009_smart_views.sql](../../cloud/LenxTool.Worker/migrations/0009_smart_views.sql)、[0010_integration_policies.sql](../../cloud/LenxTool.Worker/migrations/0010_integration_policies.sql)、[0011_integration_policy_metadata.sql](../../cloud/LenxTool.Worker/migrations/0011_integration_policy_metadata.sql)
 接口语义：[Worker v1 API 契约](worker-v1.md)
 
 ## 1. 数据边界
@@ -29,6 +29,7 @@ D1 是账号和管理员发布的共享订阅配置/受限规则的权威来源�
 - `0008_feed_discovery_index.sql` 从所有未删除 `managed_feeds` 原位回填发现字段白名单，并用 Feed/分类触发器持续同步；同时增加按用户、UTC 分钟分桶的发现限流状态。它不复制 `original_url`、AI 策略、删除时间、正文或私人状态。
 - `0009_smart_views.sql` 增加独立智能视图集状态、当前定义、不可变版本、幂等和事务 guard；只保存管理员发布的有界筛选定义，不保存筛选结果、文章或用户阅读状态。
 - `0010_integration_policies.sql` 增加独立集成策略集状态、当前类型开关/精确 DNS 主机白名单、不可变版本、幂等和事务 guard；个人目标、凭据、探测结果与外部响应禁止进入 D1。
+- `0011_integration_policy_metadata.sql` 为当前策略增加受信私网 `{host,port}`、provider 资源和 qBittorrent localhost HTTP 端口三个 JSON 列；旧行回填为空数组，不增加个人凭据、完整 URL、条目或第三方响应。
 - 测试启动器先应用 0001、写入旧 schema 哨兵行，再应用全部迁移，从而验证带数据升级；再次调用迁移流程不会重复执行已记录文件。
 - Wrangler 应用某个迁移失败时会回滚该迁移，并保留之前成功的迁移。生产恢复遵循第 7 节，不提交手写“向下迁移”去伪造 `d1_migrations` 历史。
 
@@ -127,12 +128,12 @@ D1 默认在查询和迁移中强制外键。分类关系使用 `RESTRICT`，因
 ## 5. 外部集成策略表
 
 - `integration_policy_state` 只有 `singleton_id=1` 一行，保存独立的非负 `policy_set_version`、更新时间和事务内 `last_mutation_id`。
-- `integration_policies` 以九种受支持类型为主键，只保存启用开关和主机 JSON，以及发布管理员、时间和事务标记。Obsidian/Eagle 的主机数组必须为空；两种本机集成的任意非空主机都会由 Worker 拒绝。其余七种启用类型必须保存 1～32 个精确 DNS 主机，协议、端口、路径、通配符、IP、localhost 和保留后缀由 Worker 在写入前拒绝。
+- `integration_policies` 以九种受支持类型为主键，只保存启用开关、公开主机 JSON、精确私网端点 JSON、provider 资源 JSON、qBittorrent localhost HTTP 端口 JSON，以及发布管理员、时间和事务标记。四个 JSON 列各有 8,192 字符数据库上限，Worker/Core 再按规范 JSON UTF-8 字节统一校验 8 KiB，并限制完整策略集 40 KiB。Obsidian/Eagle 的四个数组必须为空；公开主机拒绝协议、端口、路径、通配符、所有 IP 表示、localhost、`.local` 和 `home.arpa`，显式私网端点可用精确 `home.arpa` 但仍拒绝 IP/localhost/`.local`。
 - `integration_policy_versions` 保存每次完整替换后的有界不可变快照；`integration_policy_idempotency` 仅保存 24 小时有效的请求摘要和成功响应；`integration_policy_mutation_guards` 保证版本、当前策略、历史、审计和幂等结果属于同一原子 batch。
 
-成功 PUT 比较并只递增一次策略集版本，整组替换当前策略并记录 `integration_policy.replaced`。普通用户只能读取 ACTIVE，管理员可读取 ALL 并发布。D1 不保存个人 TargetId、完整端点、Eagle loopback 地址或资源库修订、Zotero User ID 或目标修订、Readwise 固定队列目标、API key/access token、Cookie、DPAPI 密文、DNS 结果、健康检查状态、Reader 返回 ID/URL 或外部响应。P2-12～P2-14 没有新增表或列，最新迁移仍为 `0010_integration_policies.sql`。
+成功 schema v2 PUT 比较并只递增一次策略集版本，整组替换当前策略并记录 `integration_policy.replaced`。普通用户只能读取 ACTIVE，管理员可读取 ALL 并发布。ACTIVE endpoint/resource 元数据会下发同一 Worker 的登录账号，因此部署方必须把账号视为同一信任域，且首版每种 provider 只允许一个本机目标；D1 仍不保存个人 TargetId、完整 URL/路径、Eagle loopback 地址或资源库修订、Zotero User ID 或目标修订、Readwise 固定队列目标、API key/access token、Cookie、DPAPI 密文、DNS 结果、健康检查状态、第三方返回 ID/URL、条目或外部响应。最新迁移为 `0011_integration_policy_metadata.sql`。
 
-严格本机校验部署前由旧入口写入的 Obsidian/Eagle 精确 DNS 行不需要追加破坏性迁移：Worker 读取时验证旧数组并仅投影空主机；查询范围内仍有非空旧行时会忽略相等的缓存条件并返回 200，损坏数组则在 304 判断前失败关闭为 503。管理员下一次以 ALL 快照执行完整 PUT 时会把当前两行自愈为 `[]`，之后相等条件恢复 304。历史版本快照保持不可变；新写入从入口继续拒绝两种本机策略的非空主机。
+严格本机校验部署前由旧入口写入的 Obsidian/Eagle 精确 DNS 行不需要追加破坏性迁移：Worker 读取时验证旧数组并仅投影空主机；查询范围内仍有非空旧行时会忽略相等的缓存条件并返回 200，任一损坏数组则在 304 判断前失败关闭为 503。管理员下一次以 schema v2 ALL 快照执行完整 PUT 时会把当前两行自愈为 `[]`，之后相等条件恢复 304。未发送 schema 头的旧 ACTIVE 只得到兼容投影且隐藏仅依赖私网/loopback 的启用项；旧 ALL/PUT 在存在高级约束时要求升级，避免旧管理端回写清空扩展列。历史版本快照保持不可变。
 
 ## 6. 数据库约束与应用约束
 

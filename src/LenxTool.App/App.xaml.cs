@@ -278,6 +278,10 @@ public partial class App : Application
         services.AddEntryIntegrationInfrastructure();
         services.AddZoteroExportInfrastructure();
         services.AddReadwiseExportInfrastructure();
+        services.AddReadeckExportInfrastructure();
+        services.AddOutlineExportInfrastructure();
+        services.AddQBittorrentExportInfrastructure();
+        services.AddWebhookExportInfrastructure();
         // Obsidian 适配器始终可解析，但只有用户显式入队、目标已配置且
         // ACTIVE 管理策略允许时才会写入本地 Vault。
         services.AddSingleton<
@@ -297,6 +301,10 @@ public partial class App : Application
         // Readwise 固定官方 Reader API；token 只从 DPAPI 默认槽位读取，
         // RSS 摘录按界面可见预算裁剪后进入 summary，不冒充完整 HTML 正文。
         services.AddSingleton<IEntryExporter, ReadwiseEntryExporter>();
+        services.AddSingleton<IEntryExporter, ReadeckEntryExporter>();
+        services.AddSingleton<IEntryExporter, OutlineEntryExporter>();
+        services.AddSingleton<IEntryExporter, QBittorrentEntryExporter>();
+        services.AddSingleton<IEntryExporter, WebhookEntryExporter>();
         services.AddSingleton<IEntryExportCoordinator>(static provider =>
             new EntryExportCoordinator(
                 provider.GetServices<IEntryExporter>()));
@@ -405,6 +413,7 @@ public partial class App : Application
         services.AddSingleton<ObsidianSettingsViewModel>();
         services.AddSingleton<EagleSettingsViewModel>();
         services.AddSingleton<ZoteroSettingsViewModel>();
+        services.AddSingleton<ManagedIntegrationSettingsViewModel>();
         services.AddSingleton<WindowsNotificationSettingsViewModel>();
         // 发现页发布复用现有目录管理员服务、版本同步和服务端 RBAC。
         services.AddSingleton<FeedDiscoveryViewModel>();

@@ -247,7 +247,57 @@
                                         CommandParameter="{Binding SelectedTimelineEntry}"
                                         Content="导出到 Readwise"
                                         AutomationProperties.Name="导出当前 Feed 到 Readwise" />
+                                <Button MinWidth="112"
+                                        Margin="8,0,0,0"
+                                        Padding="10,5"
+                                        Command="{Binding ExportTimelineEntryToReadeckCommand}"
+                                        CommandParameter="{Binding SelectedTimelineEntry}"
+                                        Content="导出到 Readeck"
+                                        AutomationProperties.Name="导出当前 Feed 到 Readeck" />
+                                <Button MinWidth="108"
+                                        Margin="8,0,0,0"
+                                        Padding="10,5"
+                                        Command="{Binding ExportTimelineEntryToOutlineCommand}"
+                                        CommandParameter="{Binding SelectedTimelineEntry}"
+                                        Content="导出到 Outline"
+                                        AutomationProperties.Name="导出当前 Feed 到 Outline" />
+                                <Button MinWidth="126"
+                                        Margin="8,0,0,0"
+                                        Padding="10,5"
+                                        Command="{Binding PrepareTimelineEntryForQBittorrentCommand}"
+                                        CommandParameter="{Binding SelectedTimelineEntry}"
+                                        Content="投递到 qBittorrent"
+                                        AutomationProperties.Name="准备投递当前 Feed 到 qBittorrent" />
+                                <Button MinWidth="112"
+                                        Margin="8,0,0,0"
+                                        Padding="10,5"
+                                        Command="{Binding ExportTimelineEntryToWebhookCommand}"
+                                        CommandParameter="{Binding SelectedTimelineEntry}"
+                                        Content="发送 Webhook"
+                                        AutomationProperties.Name="发送当前 Feed 到受控 Webhook" />
                             </WrapPanel>
+                            <Border Margin="0,10,0,0"
+                                    Padding="10"
+                                    Background="{DynamicResource Brush.SurfaceMuted}"
+                                    BorderBrush="{DynamicResource Brush.Warning}"
+                                    BorderThickness="1"
+                                    CornerRadius="8"
+                                    Visibility="{Binding HasPendingQBittorrentExport, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                <DockPanel LastChildFill="True">
+                                    <StackPanel DockPanel.Dock="Right" Margin="12,0,0,0" Orientation="Horizontal">
+                                        <Button Margin="0,0,8,0"
+                                                Command="{Binding CancelTimelineEntryToQBittorrentCommand}"
+                                                Content="取消" />
+                                        <Button Style="{StaticResource AccentButtonStyle}"
+                                                Command="{Binding ConfirmTimelineEntryToQBittorrentCommand}"
+                                                Content="确认启动下载"
+                                                AutomationProperties.Name="确认投递到 qBittorrent" />
+                                    </StackPanel>
+                                    <TextBlock VerticalAlignment="Center"
+                                               Text="qBittorrent 会开始下载；目标实例与分类由当前本机设置和管理员策略共同约束。"
+                                               TextWrapping="Wrap" />
+                                </DockPanel>
+                            </Border>
                             <StackPanel Margin="0,8,0,0">
                                 <TextBlock Style="{StaticResource SectionTitleStyle}"
                                            Text="私人阅读状态" />
@@ -276,6 +326,26 @@
                                 <TextBlock Margin="0,3,12,0"
                                            Style="{StaticResource MetaTextStyle}"
                                            Text="{Binding ReadwiseExportStatus}"
+                                           AutomationProperties.LiveSetting="Polite"
+                                           TextWrapping="Wrap" />
+                                <TextBlock Margin="0,3,12,0"
+                                           Style="{StaticResource MetaTextStyle}"
+                                           Text="{Binding ReadeckExportStatus}"
+                                           AutomationProperties.LiveSetting="Polite"
+                                           TextWrapping="Wrap" />
+                                <TextBlock Margin="0,3,12,0"
+                                           Style="{StaticResource MetaTextStyle}"
+                                           Text="{Binding OutlineExportStatus}"
+                                           AutomationProperties.LiveSetting="Polite"
+                                           TextWrapping="Wrap" />
+                                <TextBlock Margin="0,3,12,0"
+                                           Style="{StaticResource MetaTextStyle}"
+                                           Text="{Binding QBittorrentExportStatus}"
+                                           AutomationProperties.LiveSetting="Polite"
+                                           TextWrapping="Wrap" />
+                                <TextBlock Margin="0,3,12,0"
+                                           Style="{StaticResource MetaTextStyle}"
+                                           Text="{Binding WebhookExportStatus}"
                                            AutomationProperties.LiveSetting="Polite"
                                            TextWrapping="Wrap" />
                                 <TextBlock Margin="0,10,0,5"

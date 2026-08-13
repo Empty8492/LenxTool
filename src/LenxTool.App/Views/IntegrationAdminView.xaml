@@ -60,7 +60,7 @@
                                Text="类型与精确目标主机" />
                     <TextBlock Margin="0,6,0,14"
                                Style="{StaticResource MetaTextStyle}"
-                               Text="网络类型启用时必须填写精确 DNS 主机；不接受协议、端口、路径、通配符、IP、localhost 或 .local。Obsidian 与 Eagle 是本机集成，主机栏必须留空。"
+                               Text="默认只允许公网 HTTPS 精确 DNS 主机。Readeck、Outline、qBittorrent、Webhook 可额外批准精确私网 DNS:端口，但仍强制 HTTPS；qBittorrent 可单独批准 localhost HTTP 端口。禁止通配符、IP 与 .local。"
                                TextWrapping="Wrap" />
                     <ItemsControl ItemsSource="{Binding Policies}">
                         <ItemsControl.ItemTemplate>
@@ -87,13 +87,53 @@
                                                    Style="{StaticResource MetaTextStyle}"
                                                    Text="{Binding HostGuidance}"
                                                    TextWrapping="Wrap" />
+                                        <StackPanel Margin="0,9,0,0"
+                                                    Visibility="{Binding SupportsTrustedPrivateEndpoints, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                            <TextBlock FontWeight="SemiBold"
+                                                       Text="受信私网 HTTPS 目标（每行 host:port）" />
+                                            <TextBox MinHeight="52"
+                                                     Margin="0,5,0,0"
+                                                     Padding="10,7"
+                                                     AcceptsReturn="True"
+                                                     VerticalScrollBarVisibility="Auto"
+                                                     AutomationProperties.Name="{Binding Label, StringFormat={}{0} 受信私网 HTTPS 目标}"
+                                                     Text="{Binding TrustedPrivateEndpointsText, UpdateSourceTrigger=PropertyChanged}" />
+                                        </StackPanel>
+                                        <StackPanel Margin="0,9,0,0"
+                                                    Visibility="{Binding SupportsResources, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                            <TextBlock FontWeight="SemiBold"
+                                                       Text="允许资源" />
+                                            <TextBox MinHeight="52"
+                                                     Margin="0,5,0,0"
+                                                     Padding="10,7"
+                                                     AcceptsReturn="True"
+                                                     VerticalScrollBarVisibility="Auto"
+                                                     AutomationProperties.Name="{Binding Label, StringFormat={}{0} 允许资源}"
+                                                     Text="{Binding AllowedResourcesText, UpdateSourceTrigger=PropertyChanged}" />
+                                            <TextBlock Margin="0,4,0,0"
+                                                       Style="{StaticResource MetaTextStyle}"
+                                                       Text="{Binding ResourceGuidance}"
+                                                       TextWrapping="Wrap" />
+                                        </StackPanel>
+                                        <StackPanel Margin="0,9,0,0"
+                                                    Visibility="{Binding SupportsLoopbackHttpPorts, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                            <TextBlock FontWeight="SemiBold"
+                                                       Text="localhost HTTP 端口" />
+                                            <TextBox MinHeight="42"
+                                                     Margin="0,5,0,0"
+                                                     Padding="10,7"
+                                                     AcceptsReturn="True"
+                                                     VerticalScrollBarVisibility="Auto"
+                                                     AutomationProperties.Name="qBittorrent localhost HTTP 端口"
+                                                     Text="{Binding AllowedLoopbackHttpPortsText, UpdateSourceTrigger=PropertyChanged}" />
+                                        </StackPanel>
                                     </StackPanel>
                                 </Grid>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
                     <TextBlock Style="{StaticResource MetaTextStyle}"
-                               Text="共享策略只包含类型、开关和主机名；个人目标、凭据、连接结果与文章数据不会上传。"
+                               Text="共享策略只包含类型、开关、精确主机/端口与批准资源；个人 URL、路径、凭据、连接结果与文章数据不会上传。扩展字段需要 Worker 策略 schema v2。"
                                TextWrapping="Wrap" />
                 </StackPanel>
             </Border>

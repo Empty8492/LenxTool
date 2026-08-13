@@ -1,6 +1,6 @@
-using System.Reflection;
-using LenxTool.App.ViewModels;
+﻿using System.Reflection;
 using LenxTool.App.Services;
+using LenxTool.App.ViewModels;
 using LenxTool.Core.Contracts;
 using LenxTool.Core.Exports;
 using LenxTool.Core.Models;
@@ -201,7 +201,14 @@ public sealed class DependencyInjectionTests
             .OrderBy(probe => probe.Kind)
             .ToArray();
         Assert.Equal(
-            [EntryIntegrationKind.Zotero, EntryIntegrationKind.Readwise],
+            [
+                EntryIntegrationKind.Zotero,
+                EntryIntegrationKind.Readwise,
+                EntryIntegrationKind.Readeck,
+                EntryIntegrationKind.Outline,
+                EntryIntegrationKind.QBittorrent,
+                EntryIntegrationKind.Webhook
+            ],
             integrationProbes.Select(probe => probe.Kind));
         Assert.IsType<EntryExportTaskRepository>(
             provider.GetRequiredService<IEntryExportTaskRepository>());
@@ -222,11 +229,15 @@ public sealed class DependencyInjectionTests
         IEntryExporter[] exporters = provider
             .GetServices<IEntryExporter>()
             .ToArray();
-        Assert.Equal(4, exporters.Length);
+        Assert.Equal(8, exporters.Length);
         Assert.Contains(exporters, item => item is ObsidianEntryExporter);
         Assert.Contains(exporters, item => item is EagleEntryExporter);
         Assert.Contains(exporters, item => item is ZoteroEntryExporter);
         Assert.Contains(exporters, item => item is ReadwiseEntryExporter);
+        Assert.Contains(exporters, item => item is ReadeckEntryExporter);
+        Assert.Contains(exporters, item => item is OutlineEntryExporter);
+        Assert.Contains(exporters, item => item is QBittorrentEntryExporter);
+        Assert.Contains(exporters, item => item is WebhookEntryExporter);
         EntryExportCapability[] capabilities = provider
             .GetRequiredService<IEntryExportCoordinator>()
             .Capabilities
@@ -236,7 +247,11 @@ public sealed class DependencyInjectionTests
             [
                 EagleEntryExporter.ExporterId,
                 ObsidianEntryExporter.ExporterId,
+                OutlineEntryExporter.ExporterId,
+                QBittorrentEntryExporter.ExporterId,
+                ReadeckEntryExporter.ExporterId,
                 ReadwiseEntryExporter.ExporterId,
+                WebhookEntryExporter.ExporterId,
                 ZoteroEntryExporter.ExporterId
             ],
             capabilities.Select(item => item.ExporterId));
@@ -252,6 +267,8 @@ public sealed class DependencyInjectionTests
             ZoteroSettingsViewModel>());
         Assert.NotNull(provider.GetRequiredService<
             IntegrationAdminViewModel>());
+        Assert.NotNull(provider.GetRequiredService<
+            ManagedIntegrationSettingsViewModel>());
 
         ShellViewModel shell = provider.GetRequiredService<ShellViewModel>();
         Assert.Equal(

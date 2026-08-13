@@ -120,32 +120,62 @@ public sealed class SelectionControlsWpfRuntimeTests
                         dateTextBox.Template.FindName("PART_Watermark", dateTextBox));
                     Assert.Equal(Visibility.Visible, watermark.Visibility);
                     Assert.NotNull(watermark.Content);
-                    calendar.ApplyTemplate();
-                    calendar.UpdateLayout();
-                    PumpDispatcher();
-                    var calendarItem =
-                        Assert.IsType<System.Windows.Controls.Primitives.CalendarItem>(
-                            calendar.Template.FindName(
+                    System.Windows.Controls.Primitives.CalendarItem? calendarItem = null;
+                    Button? previousButton = null;
+                    Button? headerButton = null;
+                    Button? nextButton = null;
+                    // 让 Popup 内的嵌套模板沿真实 Loaded/布局流程自然完成，再查询
+                    // Automation 树；测试不主动把 Calendar 推进到半初始化的中间态。
+                    PumpUntil(
+                        () =>
+                        {
+                            calendarItem = calendar.Template.FindName(
                                 "PART_CalendarItem",
-                                calendar));
-                    var headerButton = Assert.IsType<Button>(
-                        calendarItem.Template.FindName(
-                            "PART_HeaderButton",
-                            calendarItem));
-                    headerButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                                calendar) as System.Windows.Controls.Primitives.CalendarItem;
+                            if (calendarItem is not { IsLoaded: true })
+                            {
+                                return false;
+                            }
+                            previousButton = calendarItem.Template.FindName(
+                                "PART_PreviousButton",
+                                calendarItem) as Button;
+                            headerButton = calendarItem.Template.FindName(
+                                "PART_HeaderButton",
+                                calendarItem) as Button;
+                            nextButton = calendarItem.Template.FindName(
+                                "PART_NextButton",
+                                calendarItem) as Button;
+                            return previousButton is { IsLoaded: true }
+                                   && headerButton is { IsLoaded: true }
+                                   && nextButton is { IsLoaded: true };
+                        },
+                        TimeSpan.FromSeconds(5));
+                    var readyHeaderButton = Assert.IsType<Button>(headerButton);
+                    var readyNextButton = Assert.IsType<Button>(nextButton);
+                    List<AutomationPeer>? calendarChildren = CreatePeer(calendar).GetChildren();
+                    Assert.NotNull(calendarChildren);
+                    Assert.Contains(
+                        calendarChildren,
+                        peer => peer.GetName() == "上一个月");
+                    Assert.Contains(
+                        calendarChildren,
+                        peer => peer.GetName() == "切换月份和年份");
+                    Assert.Contains(
+                        calendarChildren,
+                        peer => peer.GetName() == "下一个月");
+                    Assert.Contains(
+                        calendarChildren,
+                        peer => peer is DateTimeAutomationPeer);
+                    readyHeaderButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                     PumpDispatcher();
                     Assert.Equal(CalendarMode.Year, calendar.DisplayMode);
-                    headerButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                    readyHeaderButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                     PumpDispatcher();
                     Assert.Equal(CalendarMode.Decade, calendar.DisplayMode);
                     calendar.DisplayMode = CalendarMode.Month;
                     PumpDispatcher();
                     DateTime displayedMonth = calendar.DisplayDate;
-                    var nextButton = Assert.IsType<Button>(
-                        calendarItem.Template.FindName(
-                            "PART_NextButton",
-                            calendarItem));
-                    nextButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                    readyNextButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                     PumpDispatcher();
                     Assert.Equal(
                         displayedMonth.AddMonths(1).Month,

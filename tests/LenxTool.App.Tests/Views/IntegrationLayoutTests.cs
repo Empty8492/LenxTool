@@ -44,6 +44,20 @@ public sealed class IntegrationLayoutTests
             element => element.Name.LocalName == "TextBlock"
                 && element.Attribute("Text")?.Value
                     == "{Binding HostGuidance}");
+        string[] textBindings = root.Descendants()
+            .Where(element => element.Name.LocalName == "TextBox")
+            .Select(element => element.Attribute("Text")?.Value)
+            .OfType<string>()
+            .ToArray();
+        Assert.Contains(
+            "{Binding TrustedPrivateEndpointsText, UpdateSourceTrigger=PropertyChanged}",
+            textBindings);
+        Assert.Contains(
+            "{Binding AllowedResourcesText, UpdateSourceTrigger=PropertyChanged}",
+            textBindings);
+        Assert.Contains(
+            "{Binding AllowedLoopbackHttpPortsText, UpdateSourceTrigger=PropertyChanged}",
+            textBindings);
     }
 
     [Fact]
@@ -76,9 +90,15 @@ public sealed class IntegrationLayoutTests
             settings,
             StringComparison.Ordinal);
         Assert.Contains(
-            "未接通类型不会显示",
+            "Readeck、Outline、qBittorrent 与 Webhook 使用下方专用卡",
             settings,
             StringComparison.Ordinal);
+        Assert.Contains(
+            settingsTemplate.Descendants(),
+            element => element.Name.LocalName
+                == "ManagedIntegrationSettingsView"
+                && element.Attribute("DataContext")?.Value
+                    == "{Binding ManagedIntegrations}");
         Assert.Contains(
             "DeleteLegacyCredentialCommand",
             settings,
@@ -99,6 +119,45 @@ public sealed class IntegrationLayoutTests
             "CredentialOutput",
             settings,
             StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ManagedIntegrationCardsExposeClosedProviderSpecificControls()
+    {
+        XElement root = Load("ManagedIntegrationSettingsView.xaml");
+        string xaml = root.ToString(SaveOptions.DisableFormatting);
+        string[] automationNames = root.Descendants()
+            .Select(element => element.Attributes()
+                .FirstOrDefault(attribute =>
+                    attribute.Name.LocalName
+                        == "AutomationProperties.Name")
+                ?.Value)
+            .OfType<string>()
+            .ToArray();
+
+        Assert.Contains("Readeck 实例 HTTPS 根地址", automationNames);
+        Assert.Contains("Outline Collection ID", automationNames);
+        Assert.Contains("qBittorrent 保存分类", automationNames);
+        Assert.Contains("受控 Webhook HTTPS 地址", automationNames);
+        Assert.Contains("qBittorrent 5.2+ / WebAPI 2.14.1+", xaml);
+        Assert.Contains("首版始终创建个人草稿", xaml);
+        Assert.Contains("API key 会通过本机 TCP 明文传输", xaml);
+        Assert.Contains("Idempotency-Key", xaml);
+        Assert.Contains("PasswordBoxAssistant.BoundPassword", xaml);
+        Assert.DoesNotContain("CredentialOutput", xaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TimelineRequiresExplicitQBittorrentConfirmation()
+    {
+        XElement root = Load("FeedTimelineBrowserView.xaml");
+        string xaml = root.ToString(SaveOptions.DisableFormatting);
+
+        Assert.Contains("PrepareTimelineEntryForQBittorrentCommand", xaml);
+        Assert.Contains("HasPendingQBittorrentExport", xaml);
+        Assert.Contains("ConfirmTimelineEntryToQBittorrentCommand", xaml);
+        Assert.Contains("CancelTimelineEntryToQBittorrentCommand", xaml);
+        Assert.Contains("确认启动下载", xaml);
     }
 
     private static XElement Load(string name) =>

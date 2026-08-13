@@ -164,7 +164,7 @@ npm.cmd test -- --run
 
 ## 10. 当前版本边界与交付状态
 
-本节是当前交付状态的唯一准绳，最后核对日期为 **2026-08-08**。`IMPLEMENTATION_PLAN.md` 保留完整任务与验收条件；其中未勾选的任务可能已有部分实现，但表示尚未满足该任务的全部验收条件。
+本节是当前交付状态的唯一准绳，最后核对日期为 **2026-08-13**。`IMPLEMENTATION_PLAN.md` 保留完整任务与验收条件；其中未勾选的任务可能已有部分实现，但表示尚未满足该任务的全部验收条件。
 
 ### 10.1 本轮已完成
 
@@ -269,7 +269,18 @@ npm.cmd test -- --run
 
 ### 10.2 下一里程碑
 
-Gate 0 字幕闭环、P0“管理员策展 RSS”、P1“阅读增强、AI 与自动化”、P2-01～P2-14、P2-20～P2-22，以及插入计划 DISC-01～DISC-06、UX-03 均已完成。[P2 内容视图与集成计划](plans/RSS_P2_VIEWS_INTEGRATIONS.md) 的 P2-15 Cubox 因与既有导出能力重叠、官方幂等与安全重试契约不足而取消实施；客户端不保存 Cubox API 凭据，也不注册连接探针或导出器。P2-23 已形成 [Proposed ADR-004](decisions/ADR-004-server-email-digest-gate.md) 但未验收：建议当前不实施邮件摘要、不收集邮箱、所有 Feed/AI 内容云端保留 0 天，等待产品负责人明确选择 A/B/C；获批前不新增云端文章表、邮箱字段或邮件发送代码。P1/P2 源码进度不等于正式签名发布完成。
+Gate 0 字幕闭环、P0“管理员策展 RSS”、P1“阅读增强、AI 与自动化”、P2-01～P2-14、P2-16～P2-23，以及插入计划 DISC-01～DISC-06、UX-03 均已完成。[P2 内容视图与集成计划](plans/RSS_P2_VIEWS_INTEGRATIONS.md) 的 P2-15 Cubox 因与既有导出能力重叠、官方幂等与安全重试契约不足而取消实施；客户端不保存 Cubox API 凭据，也不注册连接探针或导出器。P2-23 已按 [Accepted ADR-004](decisions/ADR-004-server-email-digest-gate.md) 选择 A：不实施邮件摘要、不收集邮箱、所有 Feed/AI 内容云端保留 0 天，不新增云端文章表、邮箱字段或邮件发送代码。P2-D 的受控真实外部服务连通仍未完成，P1/P2 源码进度不等于正式签名发布完成。
+
+#### 10.2.1 可执行下一步：P2-D → 正式发布
+
+按以下顺序推进，任何一步失败都停止后续写入或发布，不用“重试”代替人工确认：
+
+1. **锁定受控环境。** 指定 Readeck、Outline、qBittorrent 和 Webhook 的测试实例、版本、操作者、测试时间窗与回滚负责人；准备 Outline collection UUID、qBittorrent category 和 Webhook 接收端。API key、token、密码和签名私钥只通过密码管理器或运行时安全输入提供，不写入仓库、Issue、日志、截图或聊天。
+2. **部署服务端。** 先为生产 D1 做 Time Travel/备份记录并确认 `0011_integration_policy_metadata.sql` 尚未应用；按 `D1 migration 0011 → Worker v2 → Desktop v2` 顺序部署。部署后验证 `/health`、登录、管理员策略 v2、v2 ETag/If-Match、旧客户端兼容投影，以及高级约束下旧管理端的升级拒绝。
+3. **执行真实 provider 矩阵。** Readeck 验证标签查找、首次创建、重复重放和归档；Outline 验证 collection 身份、个人草稿、重复更新和目标切换；qBittorrent 验证 API key、category、magnet、`.torrent`、200/202/失败回执与写后 info-hash/category；Webhook 验证 OPTIONS 能力、固定 JSON、幂等键、HMAC 和精确 ack。每一步记录脱敏 HTTP 状态、队列终态和第三方对象标识，不记录秘密、正文、完整 magnet 或响应正文。
+4. **关闭或回滚。** 只有四个 provider 的真实矩阵、凭据生命周期、策略撤销、断网/超时/重复执行和 D1/Worker 观测均通过，才关闭 P2-D；迁移或策略语义异常时停止写入，保留 Time Travel 书签并由发布负责人决定恢复，不在生产直接反复应用迁移。
+5. **生成正式制品。** 安装 Inno Setup、准备仓库外 ECDSA 更新私钥和 Authenticode 证书后，运行 [`RELEASE_GUIDE.md`](RELEASE_GUIDE.md) 的构建脚本；核对安装包/便携包/清单的版本、哈希、签名和 Microsoft 依赖资产，完成 Windows 10/11 x64 全新安装、覆盖升级、卸载保留数据、Runtime 缺失降级和更新回滚测试。
+6. **发布与留证。** 先推送源码提交，再创建带版本标签的 GitHub Release；归档测试报告、脱敏日志、迁移版本、制品 SHA256 和升级结果。未完成以上步骤前，仓库只能标记为“代码与假 HTTP 契约完成”，不能标记为“端到端生产验收完成”。
 
 字幕闭环完成后的产品主路线已确定为“管理员策展 RSS”：管理员维护共享 RSS/Atom 目录，普通用户只能同步和阅读，不得修改共享订阅、分类、抓取策略或自动化规则。为保持现有“云端不存新闻正文”边界，首版采用 Worker/D1 保存权威目录、各桌面客户端本地抓取和 SQLite 缓存的模式。
 
@@ -279,11 +290,11 @@ Gate 0 字幕闭环、P0“管理员策展 RSS”、P1“阅读增强、AI 与�
 2. P0-01～P0-20、P0-B/P0-C 及最终检查点已完成；P0 关闭记录见 [`plans/RSS_P0_ADMIN_CATALOG.md`](plans/RSS_P0_ADMIN_CATALOG.md)。
 3. P1-01～P1-20、P1-A/P1-B/P1-C/P1-D 及最终检查点已完成；关闭记录见 [`plans/RSS_P1_READING_INTELLIGENCE.md`](plans/RSS_P1_READING_INTELLIGENCE.md)。
 4. P2-01～P2-14 已完成五视图、智能视图、统一导出契约、安全集成策略、持久化队列、本地 Markdown、受控 Obsidian Vault、Eagle 图片、Zotero 个人库与 Readwise Reader 导出；[`plans/RSS_DISCOVERY_AND_CONTROL_UX.md`](plans/RSS_DISCOVERY_AND_CONTROL_UX.md) 的 DISC-01～DISC-06 已交付独立发现索引、安全可替换 provider、管理员统一发现页、确认发布闭环和最终检查点，UX-03 已交付原生 WPF 共享控件模板，不依赖 Folo 私有 API 或复制其源码。
-5. P2-15 Cubox 已取消实施；P2-20～P2-22 已完成本地计划、每日/每周摘要、schema v22～v25、系统通知隐私策略、受控激活和 Runtime 降级。P2-23 已形成 Proposed 草案但未验收，等待 A/B/C 批准；P2-16～P2-19 仍待逐项选择。公共枚举与管理员共享策略保留这四类稳定协议值，但个人通用设置只显示已接通的 Readwise，不能再为未注册适配器保存占位凭据或发起探测；升级前遗留值不会返回界面或交给探针/exporter，只能由用户显式清理。共享 DPAPI blob 的存储边界与历史多槽位手工清理限制见 [`plans/RSS_P2_VIEWS_INTEGRATIONS.md`](plans/RSS_P2_VIEWS_INTEGRATIONS.md)。
+5. P2-15 Cubox 已取消实施；P2-16～P2-19 已完成 Readeck、Outline、qBittorrent 与受控 Webhook 的共享 schema v2 策略、独立本机设置、健康探针、导出器和显式动作；每种 provider 首版只允许一个本机目标，endpoint/resource 策略元数据只适用于同一 Worker 信任域。旧占位凭据没有新目标文档的 `CredentialVersion=1` 不会启用，必须显式重填或清理。P2-20～P2-22 已完成本地计划、每日/每周摘要、schema v22～v25、系统通知隐私策略、受控激活和 Runtime 降级；P2-23 选择“不扩权”关闭。P2-D 的受控真实外部连通仍开放，详细边界见 [`plans/RSS_P2_VIEWS_INTEGRATIONS.md`](plans/RSS_P2_VIEWS_INTEGRATIONS.md)。
 6. Independent-01 JSON 双栏结构 Diff 已完成；Core 对每侧只解析一次，接受合法根值 `null`，使用分块协作取消、无歧义方括号路径和有界路径输出，双栏 UI 支持交换与回收虚拟化差异列表，并在最小 920×620 的真实 `MainWindow`、500 行结果及等效 200% 布局中验证生产滚动区可达；未修改 RSS 模型、SQLite 或 Worker。
 7. “洛克王国世界每日清体力自动化”只登记为独立候选调研项，尚未批准 MaaFramework 依赖或任何实现。它不属于 RSS P2 编号；若后续启动，必须先完成条款核对、前台手动登录边界、识别 PoC、进程隔离、停止/失败保护与许可证审查，具体见 [`plans/GAME_AUTOMATION_BACKLOG.md`](plans/GAME_AUTOMATION_BACKLOG.md)。
 
-总路线、参考项目和许可证边界见 [`plans/RSS_MASTER_ROADMAP.md`](plans/RSS_MASTER_ROADMAP.md)，架构决策见 [`decisions/ADR-001-admin-curated-rss.md`](decisions/ADR-001-admin-curated-rss.md)、[`decisions/ADR-002-article-content-extraction.md`](decisions/ADR-002-article-content-extraction.md)、[`decisions/ADR-003-durable-entry-export-queue.md`](decisions/ADR-003-durable-entry-export-queue.md) 与待批准的 [`decisions/ADR-004-server-email-digest-gate.md`](decisions/ADR-004-server-email-digest-gate.md)。P0 与 P1 可作为已验收基础；生产 Worker/D1、正式安装包、签名、升级和跨物理机矩阵仍按 10.5～10.7 节单独验收。
+总路线、参考项目和许可证边界见 [`plans/RSS_MASTER_ROADMAP.md`](plans/RSS_MASTER_ROADMAP.md)，架构决策见 [`decisions/ADR-001-admin-curated-rss.md`](decisions/ADR-001-admin-curated-rss.md)、[`decisions/ADR-002-article-content-extraction.md`](decisions/ADR-002-article-content-extraction.md)、[`decisions/ADR-003-durable-entry-export-queue.md`](decisions/ADR-003-durable-entry-export-queue.md) 与已接受的 [`decisions/ADR-004-server-email-digest-gate.md`](decisions/ADR-004-server-email-digest-gate.md)。P0 与 P1 可作为已验收基础；生产 Worker/D1、正式安装包、签名、升级和跨物理机矩阵仍按 10.5～10.7 节单独验收。
 
 ### 10.3 其他尚未完成的产品功能
 
@@ -298,7 +309,7 @@ Gate 0 字幕闭环、P0“管理员策展 RSS”、P1“阅读增强、AI 与�
 - 客户端已接入共享账号登录、退出、过期状态、角色、额度和管理员目录管理；注册尚未实现。
 - Worker 认证、令牌轮换和管理员目录写入已有 workerd/D1 自动化；生产 D1 并发压测、共享额度代理链路和真实部署仍未验收。
 - 管理员分类/Feed 写 API、普通用户只读目录、ETag/304、桌面角色可见性、本地目录自动同步、安全发现/抓取和管理交互已实现。
-- 安全 Feed URL 发现、通用条目解析、抓取调度、OPML 管理、只读时间线、Feed 健康诊断、首页真实数据聚合、全文/图片离线、附件分类与安全外链、自动化规则发布边界、图形管理与只读模拟、本地运行账本、规则同步、受限状态动作、AI 摘要/翻译动作、Feed 媒体投递、本地/Windows 通知、七类实体统一搜索、180 天保留维护以及 P2-21 日/周本地摘要均已实现；P2-01～P2-14 的多内容视图、智能视图与已选外部导出也已完成。P2-16～P2-19 仍待逐项选择；P2-23 已有 Proposed ADR，等待 A/B/C 决策，不存在邮件实现。
+- 安全 Feed URL 发现、通用条目解析、抓取调度、OPML 管理、只读时间线、Feed 健康诊断、首页真实数据聚合、全文/图片离线、附件分类与安全外链、自动化规则发布边界、图形管理与只读模拟、本地运行账本、规则同步、受限状态动作、AI 摘要/翻译动作、Feed 媒体投递、本地/Windows 通知、七类实体统一搜索、180 天保留维护以及 P2-21 日/周本地摘要均已实现；P2-01～P2-14 与 P2-16～P2-19 的多内容视图、智能视图和已选外部导出也已完成。P2-23 已选择 A，以“不扩权”关闭，不存在邮件实现；P2-D 仍等待受控真实服务验收。
 
 ### 10.4 普通本地使用需要配置
 
@@ -309,6 +320,10 @@ Gate 0 字幕闭环、P0“管理员策展 RSS”、P1“阅读增强、AI 与�
 - Eagle：管理员先在“外部集成”中启用 Eagle；本机设置页默认使用 `http://127.0.0.1:41595/`，也可保存其他带显式端口的数字 loopback HTTP 根地址。Eagle 4.0 Build 21+ 必须正在 Windows 上运行并打开目标资源库；阅读器只对已验证图片显示显式导出动作。
 - Zotero：管理员先在“外部集成”中启用 Zotero 并只允许 `api.zotero.org`；本机设置页保存个人库 User ID、显式条目类型和可选笔记/附件开关，API key 进入 DPAPI 后不回读。所需权限至少为 library/write；启用笔记或附件时还分别需要 notes/files。当前不支持群组库，且真实个人库写入仍需受控验收。
 - Readwise：管理员先在“外部集成”中启用 Readwise 并只允许 `readwise.io`；本机“个人外部集成”选择 Readwise 后固定 `default` 与官方端点，保存 access token 后再测试。阅读器仅在显式点击当前已预览条目的 `R` 或详情按钮后入队；当前没有真实 token/账户写入验收。
+- Readeck：管理员先启用 Readeck，并将实例精确配置为公网 HTTPS 主机或受信私网 HTTPS `{host,port}`；本机专用卡保存一个实例根地址、归档选项和 token。导出会写入可见的 `lenxtool:<stable-id>` 技术标签并据此收敛重放；当前没有真实实例写入验收。
+- Outline：管理员先启用 Outline，并同时允许实例 endpoint 与 collection UUID；本机专用卡保存一个 HTTPS 根地址、collection ID 和 API key。同一 Feed 条目使用确定性 UUID 更新同一文档；首版固定创建和更新个人草稿，不会自动向工作区发布，当前没有真实实例写入验收。
+- qBittorrent：只支持 5.2+ / WebAPI 2.14.1+ API key。管理员必须允许实例、非空 category，以及使用同机 HTTP 时的精确 localhost 端口；本机专用卡只保存一个目标。资讯页每次投递 magnet/torrent 都要再次确认；当前没有真实实例投递验收。
+- Webhook：管理员先启用 Webhook 并允许精确 HTTPS endpoint；本机专用卡可选择 HMAC-SHA256。接收方必须用 OPTIONS 声明 LenxTool v1 与幂等能力，并在 POST 后精确回显 `LenxTool-Ack`；不支持自定义方法、请求头、Authorization 或正文模板，当前没有真实接收端验收。
 - 共享账号：部署 Worker 后，以 `LENXTOOL_WORKER_BASE_URL` 配置其 HTTPS 根地址；登录界面才会启用。该变量不是凭据，账号 refresh token 仍只由 DPAPI CurrentUser 保存。
 - WebView2 / Windows App Runtime：当前电脑均已安装。安装版会携带并校验两项 Microsoft 安装资产；便携版若缺少 Windows App Runtime，只会禁用系统通知，应用内收件箱仍可用。
 - Microsoft Word：当前电脑已安装，Word 转 PDF 无需额外配置。

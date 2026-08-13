@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using System.Net.Http;
 using System.Threading;
 using LenxTool.App.Mvvm;
@@ -62,7 +62,8 @@ public sealed partial class SettingsViewModel : PageViewModel
         ObsidianSettingsViewModel? obsidianSettings = null,
         EagleSettingsViewModel? eagleSettings = null,
         ZoteroSettingsViewModel? zoteroSettings = null,
-        WindowsNotificationSettingsViewModel? windowsNotifications = null)
+        WindowsNotificationSettingsViewModel? windowsNotifications = null,
+        ManagedIntegrationSettingsViewModel? managedIntegrations = null)
         : base("设置", "外观、服务凭据、数据与更新")
     {
         _themeService = themeService;
@@ -77,6 +78,7 @@ public sealed partial class SettingsViewModel : PageViewModel
         EagleSettings = eagleSettings;
         ZoteroSettings = zoteroSettings;
         WindowsNotifications = windowsNotifications;
+        ManagedIntegrations = managedIntegrations;
         _synchronizationContext = SynchronizationContext.Current;
         CheckForUpdatesCommand = new(CheckForUpdatesAsync);
         DownloadUpdateCommand = new(DownloadUpdateAsync, () => _candidate is not null);
@@ -146,6 +148,7 @@ public sealed partial class SettingsViewModel : PageViewModel
     public EagleSettingsViewModel? EagleSettings { get; }
     public ZoteroSettingsViewModel? ZoteroSettings { get; }
     public WindowsNotificationSettingsViewModel? WindowsNotifications { get; }
+    public ManagedIntegrationSettingsViewModel? ManagedIntegrations { get; }
     public string AppearanceStatus
     {
         get => _appearanceStatus;
@@ -258,6 +261,10 @@ public sealed partial class SettingsViewModel : PageViewModel
         if (WindowsNotifications is not null)
         {
             await WindowsNotifications.InitializeAsync(cancellationToken);
+        }
+        if (ManagedIntegrations is not null)
+        {
+            await ManagedIntegrations.InitializeAsync(cancellationToken);
         }
     }
 

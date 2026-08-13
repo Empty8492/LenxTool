@@ -91,11 +91,11 @@ public sealed class IntegrationViewModelTests
     {
         var credentials = new FakeCredentialStore();
         credentials.Seed(
-            EntryIntegrationKind.Readeck,
+            EntryIntegrationKind.Cubox,
             "legacy-target",
             "legacy-token");
         var localSettings = new FakeSettingsRepository();
-        localSettings.Values["integration.target.kind"] = "Readeck";
+        localSettings.Values["integration.target.kind"] = "Cubox";
         localSettings.Values["integration.target.id"] = "legacy-target";
         localSettings.Values["integration.target.endpoint"] =
             "https://legacy.example.com/";
@@ -109,16 +109,16 @@ public sealed class IntegrationViewModelTests
 
         Assert.True(viewModel.HasLegacyCredential);
         Assert.Contains(
-            "Readeck",
+            "Cubox",
             viewModel.LegacyCredentialStatus,
             StringComparison.Ordinal);
         Assert.True(viewModel.DeleteLegacyCredentialCommand.CanExecute(null));
         Assert.Equal(0, health.Count);
         Assert.DoesNotContain(
-            (EntryIntegrationKind.Readeck, "legacy-target"),
+            (EntryIntegrationKind.Cubox, "legacy-target"),
             credentials.ExistsSlots);
         Assert.DoesNotContain(
-            (EntryIntegrationKind.Readeck, "legacy-target"),
+            (EntryIntegrationKind.Cubox, "legacy-target"),
             credentials.GetSlots);
         Assert.Contains(
             (
@@ -126,7 +126,7 @@ public sealed class IntegrationViewModelTests
                 ReadwiseEntryExporter.CredentialTargetId),
             credentials.ExistsSlots);
         Assert.Equal(
-            "Readeck",
+            "Cubox",
             localSettings.Values["integration.legacy.kind"]);
         Assert.Equal(
             "legacy-target",
@@ -154,11 +154,11 @@ public sealed class IntegrationViewModelTests
             deleteCountBeforeDelete + 1,
             credentials.DeleteSlots.Count);
         Assert.Equal(
-            (EntryIntegrationKind.Readeck, "legacy-target"),
+            (EntryIntegrationKind.Cubox, "legacy-target"),
             credentials.DeleteSlots[^1]);
 
         Assert.False(await credentials.ExistsAsync(
-            EntryIntegrationKind.Readeck,
+            EntryIntegrationKind.Cubox,
             "legacy-target",
             CancellationToken.None));
         Assert.True(await credentials.ExistsAsync(
@@ -175,11 +175,11 @@ public sealed class IntegrationViewModelTests
     {
         var credentials = new FakeCredentialStore();
         credentials.Seed(
-            EntryIntegrationKind.Readeck,
+            EntryIntegrationKind.Cubox,
             "legacy-target",
             "legacy-token");
         var localSettings = new FakeSettingsRepository();
-        localSettings.Values["integration.target.kind"] = "Readeck";
+        localSettings.Values["integration.target.kind"] = "Cubox";
         localSettings.Values["integration.target.id"] = "legacy-target";
         localSettings.Values["integration.target.endpoint"] =
             "https://legacy.example.com/";
@@ -211,15 +211,15 @@ public sealed class IntegrationViewModelTests
     }
 
     [Fact]
-    public async Task LegacyDeletionDoesNotOverwriteNewerUnwiredTargetSettings()
+    public async Task LegacyDeletionDoesNotOverwriteNewerDedicatedTargetSettings()
     {
         var credentials = new FakeCredentialStore();
         credentials.Seed(
-            EntryIntegrationKind.Readeck,
+            EntryIntegrationKind.Cubox,
             "legacy-target",
             "legacy-token");
         var localSettings = new FakeSettingsRepository();
-        localSettings.Values["integration.target.kind"] = "Readeck";
+        localSettings.Values["integration.target.kind"] = "Cubox";
         localSettings.Values["integration.target.id"] = "legacy-target";
         localSettings.Values["integration.target.endpoint"] =
             "https://legacy.example.com/";
@@ -249,11 +249,7 @@ public sealed class IntegrationViewModelTests
         Assert.Equal(
             "https://newer.example.com/",
             localSettings.Values["integration.target.endpoint"]);
-        Assert.True(reloaded.HasLegacyCredential);
-        Assert.Contains(
-            "Webhook",
-            reloaded.LegacyCredentialStatus,
-            StringComparison.Ordinal);
+        Assert.False(reloaded.HasLegacyCredential);
     }
 
     [Fact]
@@ -261,11 +257,11 @@ public sealed class IntegrationViewModelTests
     {
         var credentials = new FakeCredentialStore();
         credentials.Seed(
-            EntryIntegrationKind.Readeck,
+            EntryIntegrationKind.Cubox,
             "legacy-target",
             "legacy-token");
         var localSettings = new FakeSettingsRepository();
-        localSettings.Values["integration.target.kind"] = "Readeck";
+        localSettings.Values["integration.target.kind"] = "Cubox";
         localSettings.Values["integration.target.id"] = "legacy-target";
         localSettings.Values["integration.target.endpoint"] =
             "https://legacy.example.com/";
@@ -283,7 +279,7 @@ public sealed class IntegrationViewModelTests
             EntryIntegrationKind.Readwise.ToString(),
             localSettings.Values["integration.target.kind"]);
         Assert.Equal(
-            "Readeck",
+            "Cubox",
             localSettings.Values["integration.legacy.kind"]);
         localSettings.FailOnSetCall = null;
         var retry = new IntegrationSettingsViewModel(
@@ -311,7 +307,7 @@ public sealed class IntegrationViewModelTests
     {
         var credentials = new FakeCredentialStore();
         credentials.Seed(
-            EntryIntegrationKind.Readeck,
+            EntryIntegrationKind.Cubox,
             "older-target",
             "older-token");
         credentials.Seed(
@@ -332,7 +328,7 @@ public sealed class IntegrationViewModelTests
 
         viewModel.SelectedLegacyCleanupKind =
             IntegrationKindChoice.LegacyCleanupKinds.Single(
-                item => item.Kind == EntryIntegrationKind.Readeck);
+                item => item.Kind == EntryIntegrationKind.Cubox);
         viewModel.LegacyCleanupTargetId = "older-target";
         Assert.True(
             viewModel.DeleteSpecifiedLegacyCredentialCommand
@@ -363,11 +359,11 @@ public sealed class IntegrationViewModelTests
             credentialDeleteCountBeforeDelete + 1,
             credentials.DeleteSlots.Count);
         Assert.Equal(
-            (EntryIntegrationKind.Readeck, "older-target"),
+            (EntryIntegrationKind.Cubox, "older-target"),
             credentials.DeleteSlots[^1]);
 
         Assert.False(await credentials.ExistsAsync(
-            EntryIntegrationKind.Readeck,
+            EntryIntegrationKind.Cubox,
             "older-target",
             CancellationToken.None));
         Assert.True(await credentials.ExistsAsync(
@@ -380,9 +376,31 @@ public sealed class IntegrationViewModelTests
         Assert.Equal(
             "current-target",
             localSettings.Values["integration.target.id"]);
-        Assert.True(viewModel.HasLegacyCredential);
+        Assert.False(viewModel.HasLegacyCredential);
         Assert.Equal(0, health.Count);
         Assert.Empty(viewModel.LegacyCleanupTargetId);
+    }
+
+    [Fact]
+    public void ManualCleanupAllowsOldNonDefaultProductionSlotsButProtectsDefault()
+    {
+        var viewModel = new IntegrationSettingsViewModel(
+            new FakeCredentialStore(),
+            new FakeHealthService(),
+            new FakeSettingsRepository());
+        viewModel.SelectedLegacyCleanupKind =
+            IntegrationKindChoice.LegacyCleanupKinds.Single(
+                item => item.Kind == EntryIntegrationKind.Readeck);
+
+        viewModel.LegacyCleanupTargetId = "old-custom-target";
+        Assert.True(
+            viewModel.DeleteSpecifiedLegacyCredentialCommand
+                .CanExecute(null));
+
+        viewModel.LegacyCleanupTargetId = "default";
+        Assert.False(
+            viewModel.DeleteSpecifiedLegacyCredentialCommand
+                .CanExecute(null));
     }
 
     [Theory]
@@ -459,6 +477,81 @@ public sealed class IntegrationViewModelTests
         Assert.Equal(
             ["backup.example.com", "hooks.example.com"],
             published.AllowedHosts);
+    }
+
+    [Fact]
+    public async Task AdminPageRoundTripsExtendedPolicyWithoutLoss()
+    {
+        var policies = new FakePolicyService
+        {
+            Snapshot = new(
+                9,
+                [
+                    new(
+                        EntryIntegrationKind.QBittorrent,
+                        true,
+                        [])
+                    {
+                        TrustedPrivateEndpoints =
+                        [
+                            new EntryIntegrationPrivateEndpoint(
+                                "qbit.home.arpa",
+                                8443)
+                        ],
+                        AllowedResources = ["downloads"],
+                        AllowedLoopbackHttpPorts = [8080]
+                    }
+                ],
+                EntryIntegrationPolicyScope.All)
+            {
+                PolicySchemaVersion = 2
+            }
+        };
+        var viewModel = new IntegrationAdminViewModel(
+            policies,
+            new FakeAccountSession(AccountRole.Admin));
+        await viewModel.InitializeAsync(CancellationToken.None);
+        IntegrationPolicyEditorItem qbit = viewModel.Policies.Single(
+            item => item.Kind == EntryIntegrationKind.QBittorrent);
+
+        Assert.Equal("qbit.home.arpa:8443", qbit.TrustedPrivateEndpointsText);
+        Assert.Equal("downloads", qbit.AllowedResourcesText);
+        Assert.Equal("8080", qbit.AllowedLoopbackHttpPortsText);
+        await viewModel.PublishCommand.ExecuteAsync();
+
+        EntryIntegrationPolicyInput published = policies.Inputs.Single(
+            input => input.Kind == EntryIntegrationKind.QBittorrent);
+        Assert.Equal(
+            [new EntryIntegrationPrivateEndpoint("qbit.home.arpa", 8443)],
+            published.TrustedPrivateEndpoints);
+        Assert.Equal(["downloads"], published.AllowedResources);
+        Assert.Equal([8080], published.AllowedLoopbackHttpPorts);
+    }
+
+    [Fact]
+    public async Task AdminPageKeepsLegacySchemaReadOnly()
+    {
+        var policies = new FakePolicyService
+        {
+            Snapshot = new(
+                3,
+                [],
+                EntryIntegrationPolicyScope.All)
+            {
+                PolicySchemaVersion = 1
+            }
+        };
+        var viewModel = new IntegrationAdminViewModel(
+            policies,
+            new FakeAccountSession(AccountRole.Admin));
+
+        await viewModel.InitializeAsync(CancellationToken.None);
+
+        Assert.True(viewModel.RefreshCommand.CanExecute(null));
+        Assert.False(viewModel.PublishCommand.CanExecute(null));
+        Assert.Contains("升级", viewModel.Status, StringComparison.Ordinal);
+        await viewModel.PublishCommand.ExecuteAsync();
+        Assert.Equal(0, policies.ReplaceCount);
     }
 
     [Fact]

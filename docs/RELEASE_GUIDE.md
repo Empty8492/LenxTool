@@ -41,6 +41,16 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Build-Release.
 
 安装版会静默运行两项依赖安装器。便携 ZIP 不包含 Windows App Runtime 安装器：目标机器缺失 Runtime 时，Lenx Tools 主窗口和应用内通知收件箱仍能工作，但 Windows 系统通知会显示为不可用。该降级不等于安装版依赖验收通过。
 
+## P2-D 之后的正式发布顺序
+
+只有 P2-D 四个 provider 的真实矩阵全部通过，才进入本节。发布负责人应使用已推送的候选 commit，不在构建过程中修改策略、迁移或 provider 代码。
+
+1. **预检：** 确认 `dotnet build LenxTool.slnx -c Release --no-restore`、完整 .NET/Worker 测试、strict typecheck、NuGet/npm 审计、`dotnet format --verify-no-changes` 与 `git diff --check` 通过；确认工作树没有真实凭据、数据库、私钥或旧制品。
+2. **生成：** 在仓库外准备 ECDSA 更新私钥和 Authenticode 证书，安装 Inno Setup 6，按本指南的 `Build-Release.ps1` 命令生成自包含目录、安装包、便携 ZIP、更新清单和 SHA256 文件。所有 Microsoft 资产必须在打包前通过固定哈希、Authenticode 和发布者检查。
+3. **安装验收：** 在 Windows 10/11 x64 受控虚拟机或实体机分别验证全新安装、启动登录、P2-D 设置、覆盖升级、卸载后保留用户数据、缺少 Windows App Runtime 时只禁用系统 Toast，以及更新清单签名/哈希反向验证。
+4. **发布留证：** 保存源码 commit、版本标签、制品 SHA256、签名验证结果、安装/升级结果和脱敏测试报告；GitHub Release 至少上传 Setup、Portable ZIP、`update-manifest.json` 与 `SHA256SUMS.txt`。旧 `Release\LenxTool_Setup.exe` 不得复用为新版本。
+5. **回滚：** 安装/更新签名或升级验证任一失败时，不发布标签或 Release；保留上一版制品和用户数据，修复后重新生成全套产物，不覆盖已发布文件。
+
 ## GitHub Releases
 
 创建 `v{version}` Release，至少上传：

@@ -36,6 +36,18 @@ npx wrangler secret put DEEPSEEK_API_KEY
 
 `TOKEN_SECRET` 应使用密码管理器生成至少 32 字节随机值。生产环境不要复用开发 Secret。
 
+## P2-D 生产部署顺序
+
+P2-16～P2-19 的生产窗口必须固定为 `D1 migration 0011 → Worker v2 → Desktop v2`，不能先让新桌面写入高级策略，也不能让旧 Worker 接收 schema v2 写入。
+
+1. **冻结与备份：** 记录当前源码/Worker commit、远端迁移列表、ACTIVE/ALL 版本和 v1 ETag；保存 D1 Time Travel/备份书签，并确认 0011 尚未应用。
+2. **迁移：** 只执行 `cloud/LenxTool.Worker/migrations/0011_integration_policy_metadata.sql`，随后重新列出远端迁移并检查三组扩展列的默认值、长度预算和旧 `allowed_hosts` 数据投影。迁移失败或列数据异常时停止，不重复应用。
+3. **Worker v2：** 部署 Worker 后先验证 `/health`、登录、管理员 v2 GET/PUT、v2 `ETag`/`If-Match`、`policySchemaVersion=2`，再验证旧客户端的兼容投影；存在私网 endpoint、resource 或 loopback 端口时，旧管理端必须收到升级要求且不能清空高级字段。
+4. **Desktop v2：** 只在 Worker v2 验证通过后发布桌面候选；管理员先保存 schema v2 策略，随后按 [P2-D 执行手册](plans/RSS_P2_VIEWS_INTEGRATIONS.md#p2-d-执行手册) 执行四个 provider 的真实矩阵。
+5. **回滚：** 任何迁移语义、ETag、兼容投影或权限异常都先停止写入并保留证据，由发布负责人根据备份/Time Travel 决定恢复。不要通过删除迁移记录、强制覆盖 ETag 或反复重放来“修复”。
+
+部署完成的证据至少包括：迁移列表前后、Worker 部署版本、脱敏的 v1/v2 响应头、策略版本、旧客户端升级提示和 P2-D provider 矩阵结果；凭据、完整响应正文、请求正文和 D1 数据库副本不得进入仓库或普通日志。
+
 ## 首个管理员
 
 项目没有固定管理员密码，也不提交初始化凭据。首次部署按以下顺序执行：

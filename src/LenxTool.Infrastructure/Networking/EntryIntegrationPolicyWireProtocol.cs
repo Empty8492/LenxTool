@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using LenxTool.Core.Errors;
 using LenxTool.Core.Exports;
 using LenxTool.Core.Models;
@@ -10,6 +10,7 @@ namespace LenxTool.Infrastructure.Networking;
 /// </summary>
 internal static class EntryIntegrationPolicyWireProtocol
 {
+    internal const int PolicySchemaVersion = 2;
     internal const long MaximumSafeInteger =
         9_007_199_254_740_991;
     private const int MaximumResponseBytes = 128 * 1024;
@@ -24,11 +25,20 @@ internal static class EntryIntegrationPolicyWireProtocol
                 .ValidateAndNormalizeSet(inputs);
         return new
         {
+            PolicySchemaVersion,
             Policies = policies.Select(policy => new
             {
                 Kind = ToWireValue(policy.Kind),
                 policy.IsEnabled,
-                policy.AllowedHosts
+                policy.AllowedHosts,
+                TrustedPrivateEndpoints =
+                    policy.TrustedPrivateEndpoints.Select(endpoint => new
+                    {
+                        endpoint.Host,
+                        endpoint.Port
+                    }).ToArray(),
+                policy.AllowedResources,
+                policy.AllowedLoopbackHttpPorts
             }).ToArray()
         };
     }
@@ -38,6 +48,8 @@ internal static class EntryIntegrationPolicyWireProtocol
         EntryIntegrationPolicyScope expectedScope)
     {
         if (dto.PolicySetVersion is < 0 or > MaximumSafeInteger
+            || dto.PolicySchemaVersion is not (
+                null or PolicySchemaVersion)
             || dto.GeneratedAt is null
             || dto.GeneratedAt.Value.Offset != TimeSpan.Zero
             || !string.Equals(
@@ -47,8 +59,17 @@ internal static class EntryIntegrationPolicyWireProtocol
         {
             throw InvalidResponse();
         }
+        int schemaVersion = dto.PolicySchemaVersion ?? 1;
         IReadOnlyList<EntryIntegrationPolicy> policies =
-            MapPolicies(dto.Policies);
+            MapPolicies(
+                dto.Policies,
+                requireExtendedFields:
+                    schemaVersion == PolicySchemaVersion);
+        if (dto.PolicySchemaVersion is null
+            && HasExtendedMetadata(dto.Policies))
+        {
+            throw InvalidResponse();
+        }
         if (expectedScope == EntryIntegrationPolicyScope.Active
             && policies.Any(policy => !policy.IsEnabled))
         {
@@ -58,7 +79,10 @@ internal static class EntryIntegrationPolicyWireProtocol
             dto.PolicySetVersion,
             policies,
             expectedScope,
-            dto.GeneratedAt);
+            dto.GeneratedAt)
+        {
+            PolicySchemaVersion = schemaVersion
+        };
     }
 
     internal static EntryIntegrationPolicyMutationResult MapMutation(
@@ -66,15 +90,21 @@ internal static class EntryIntegrationPolicyWireProtocol
         long expectedVersion)
     {
         ValidateVersion(expectedVersion);
-        if (dto.PolicySetVersion != expectedVersion + 1
+        if (dto.PolicySchemaVersion != PolicySchemaVersion
+            || dto.PolicySetVersion != expectedVersion + 1
             || dto.PolicySetVersion > MaximumSafeInteger)
         {
             throw InvalidResponse();
         }
         return new(
             dto.PolicySetVersion,
-            MapPolicies(dto.Policies),
-            IsReplay: false);
+            MapPolicies(
+                dto.Policies,
+                requireExtendedFields: true),
+            IsReplay: false)
+        {
+            PolicySchemaVersion = PolicySchemaVersion
+        };
     }
 
     internal static async Task<T> ReadAsync<T>(
@@ -141,7 +171,8 @@ internal static class EntryIntegrationPolicyWireProtocol
         IsRetryable: true));
 
     private static IReadOnlyList<EntryIntegrationPolicy> MapPolicies(
-        List<PolicyDto?>? values)
+        List<PolicyDto?>? values,
+        bool requireExtendedFields)
     {
         if (values is null
             || values.Count
@@ -155,14 +186,40 @@ internal static class EntryIntegrationPolicyWireProtocol
                 .ValidateAndNormalizeSet(
                     values.Select(value =>
                     {
-                        if (value?.AllowedHosts is null)
+                        if (value?.AllowedHosts is null
+                            || (requireExtendedFields
+                                && (value.TrustedPrivateEndpoints is null
+                                    || value.AllowedResources is null
+                                    || value.AllowedLoopbackHttpPorts
+                                        is null)))
                         {
                             throw InvalidResponse();
                         }
                         return new EntryIntegrationPolicyInput(
                             FromWireValue(value.Kind),
                             value.IsEnabled,
-                            value.AllowedHosts);
+                            value.AllowedHosts)
+                        {
+                            TrustedPrivateEndpoints =
+                                (value.TrustedPrivateEndpoints
+                                    ?? [])
+                                .Select(endpoint =>
+                                {
+                                    if (endpoint?.Host is null)
+                                    {
+                                        throw InvalidResponse();
+                                    }
+                                    return new
+                                        EntryIntegrationPrivateEndpoint(
+                                            endpoint.Host,
+                                            endpoint.Port);
+                                })
+                                .ToArray(),
+                            AllowedResources =
+                                value.AllowedResources ?? [],
+                            AllowedLoopbackHttpPorts =
+                                value.AllowedLoopbackHttpPorts ?? []
+                        };
                     }));
         }
         catch (AppException)
@@ -187,6 +244,15 @@ internal static class EntryIntegrationPolicyWireProtocol
             EntryIntegrationPolicyScope.All => "ALL",
             _ => throw new ArgumentOutOfRangeException(nameof(scope))
         };
+
+    private static bool HasExtendedMetadata(
+        List<PolicyDto?>? policies) =>
+        policies?.Any(policy =>
+            policy is not null
+            && ((policy.TrustedPrivateEndpoints?.Count ?? 0) != 0
+                || (policy.AllowedResources?.Count ?? 0) != 0
+                || (policy.AllowedLoopbackHttpPorts?.Count ?? 0) != 0))
+        == true;
 
     private static string ToWireValue(EntryIntegrationKind kind) =>
         kind switch
@@ -220,6 +286,7 @@ internal static class EntryIntegrationPolicyWireProtocol
 
     internal sealed class SnapshotDto
     {
+        public int? PolicySchemaVersion { get; init; }
         public long PolicySetVersion { get; init; }
         public string? Scope { get; init; }
         public DateTimeOffset? GeneratedAt { get; init; }
@@ -228,6 +295,7 @@ internal static class EntryIntegrationPolicyWireProtocol
 
     internal sealed class MutationDto
     {
+        public int? PolicySchemaVersion { get; init; }
         public long PolicySetVersion { get; init; }
         public List<PolicyDto?>? Policies { get; init; }
     }
@@ -237,5 +305,18 @@ internal static class EntryIntegrationPolicyWireProtocol
         public string? Kind { get; init; }
         public bool IsEnabled { get; init; }
         public List<string>? AllowedHosts { get; init; }
+        public List<PrivateEndpointDto?>? TrustedPrivateEndpoints
+        {
+            get;
+            init;
+        }
+        public List<string>? AllowedResources { get; init; }
+        public List<int>? AllowedLoopbackHttpPorts { get; init; }
+    }
+
+    internal sealed class PrivateEndpointDto
+    {
+        public string? Host { get; init; }
+        public int Port { get; init; }
     }
 }

@@ -2,6 +2,33 @@
 
 <!-- 最新记录放在此行下方；每条只写摘要、证据和详情指针，控制在约 20 行内。 -->
 
+## 2026-08-13 · P2-D 执行手册与仓库目标校正
+
+- 文档：补齐 README、PROJECT_GUIDE、P2 专项计划、TEST_REPORT、WORKER_DEPLOYMENT 和 RELEASE_GUIDE 的可执行下一步、真实 provider 矩阵、部署顺序、证据字段、停止/回滚条件和正式制品闸门。
+- 仓库：核验 GitHub canonical repository 为 `Empty8492/LenxTool`，本地 `origin` 已从复数旧地址校正为单数地址；当前工作在短期分支 `agent/p2-integrations-docs-release`。
+- 边界：本轮只把“代码与假 HTTP 契约完成”推进到可执行发布手册，不伪造真实 token、实例、D1 生产数据或签名制品证据；P2-D 仍开放。
+- 证据：文档内部链接、schema v2→0011→Worker→Desktop 顺序和 P2-D 关闭条件已交叉核对；最终测试与发布结果仍以 `docs/TEST_REPORT.md`、`docs/PROJECT_GUIDE.md` 为准。
+
+## 2026-08-13 · P2-16～P2-19 完成，P2-23 选择 A 关闭
+
+- 决策：采用 N2/R1/G1/W1/A；Readeck、Outline、qBittorrent 与受控 Webhook 进入生产 DI，P2-23 不实施邮件、不收邮箱、不扩云端内容权限。
+- 协议：D1 migration 0011 与 Worker/Desktop schema v2 分列保存公网、精确私网 endpoint、resource 和 qBit loopback 端口；旧客户端只获兼容投影，advanced 管理写要求升级。
+- 本机边界：四个 provider 使用独立目标、DPAPI marker 0→秘密→marker 1、删除反向停用、已保存目标测试、策略/DNS 先于秘密和覆盖正文的 deadline；旧 `default` 槽仍可显式删除但不会自动激活。
+- 幂等与副作用：Readeck 以稳定标签且仅明确 count 0 时创建；Outline UUID 绑定目标修订并固定个人草稿；qBit 确认绑定目标修订并写后核对 hash/category；Webhook 固定能力声明、幂等键、ack 与可选正文 HMAC。
+- 终审修复：关闭旧客户端投影、笛卡尔授权假设、正文滴流、重复响应头、写后畸形回执、Outline 跨 collection、qBit 202/`.torrent` 暂时故障、设置测试跨 endpoint、凭据 marker 和确认竞态等高风险路径；最终只读审计无剩余 P0/P1。
+- 门禁：Core 222/222、Infrastructure 811/811、App 非 WPF 523/523、WPF 14/14、Worker 81/81、typecheck、Release build 0/0、NuGet/npm 漏洞 0、改动 C# 格式和 diff check 通过。
+- 边界：未使用真实第三方凭据或实例；P2-D、生产 Worker/D1 部署、签名包与跨机升级矩阵继续开放。
+- 详情：`cairn/integration-adapter-boundaries.md`、`docs/TEST_REPORT.md`、`docs/plans/RSS_P2_VIEWS_INTEGRATIONS.md`、`docs/decisions/ADR-004-server-email-digest-gate.md`。
+
+## 2026-08-13 · WPF CalendarAutomationPeer 误报门禁关闭
+
+- 结果：`SelectionControlsWpfRuntimeTests` 不再在原生日历 Automation 树更新时空引用；10 个 WPF runtime 类逐进程共 14/14，完整 App 522/522。
+- 根因：测试只应用外层 `Calendar` 模板就强制布局，内层 `CalendarItem` 仍未解析 Previous/Header/Next；WPF peer 在 `MonthControl` 存在后会直接读取这三个部件。
+- 修复：不手动应用模板；等待生产 DatePicker 的嵌套控件自然加载后显式查询完整 Calendar Automation 子树，并继续执行键盘、日期、缩放和主题验收；精确独立进程连续 10/10，生产 XAML 与行为未改。
+- 门禁：首轮仅有未改性能用例 2.092 秒越过 2 秒预算，精确为 636 ms、Infrastructure 独立全量 763/763；最终全解决方案 App 522、Core 202、Infrastructure 763，共 1487/1487；Release build 0 警告/0 错误。Worker 与依赖审计未重跑。
+- 路线边界：P2-23 仍等待 A/B/C；P2-16～P2-19 仍需逐项选择，本轮未替产品负责人放行功能。
+- 详情：`cairn/wpf-runtime-test-host.md`、`docs/TEST_REPORT.md`。
+
 ## 2026-08-11 · Git 分支清理知识审计
 
 - 结果：形成通用的已合并分支清理证明链，覆盖远端刷新、独有提交、祖先关系、stash、未跟踪文件、worktree 占用、逐目标授权和删除后读回。

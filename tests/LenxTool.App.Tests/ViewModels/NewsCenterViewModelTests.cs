@@ -1,9 +1,9 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 using LenxTool.App.Controls;
-using LenxTool.App.ViewModels;
 using LenxTool.App.Services;
+using LenxTool.App.ViewModels;
 using LenxTool.Core.Contracts;
 using LenxTool.Core.Errors;
 using LenxTool.Core.Feeds;
@@ -2591,6 +2591,110 @@ public sealed class NewsCenterViewModelTests
     }
 
     [Fact]
+    public async Task QBittorrentRequiresFreshConfirmationBeforeEachEnqueue()
+    {
+        FeedEntry entry = CreateFeedEntry(24) with
+        {
+            Enclosures =
+            [
+                new(
+                    "https://downloads.example/file?id=24",
+                    "application/x-bittorrent",
+                    123,
+                    "download")
+            ]
+        };
+        var queue = new StubEntryExportQueueService();
+        var target = new QBittorrentExportTarget(
+            "default",
+            new Uri("https://qb.example/"),
+            "downloads",
+            CredentialVersion: 1);
+        using NewsCenterViewModel viewModel = CreateViewModel(
+            CreateSnapshot(),
+            feedEntries: new([entry]),
+            exportQueue: queue,
+            integrationPolicies: new StubEntryIntegrationPolicyService(
+                isEnabled: true,
+                EntryIntegrationKind.QBittorrent,
+                allowedHosts: ["qb.example"],
+                allowedResources: ["downloads"]),
+            integrationCredentials:
+                new StubEntryIntegrationCredentialStore(
+                    exists: true,
+                    EntryIntegrationKind.QBittorrent,
+                    "default"),
+            qbittorrentTargets:
+                new StubIntegrationTargetStore<QBittorrentExportTarget>(
+                    target));
+        await viewModel.InitializeAsync(CancellationToken.None);
+        FeedTimelineItem item = Assert.Single(viewModel.TimelineEntries);
+
+        await viewModel.PrepareTimelineEntryForQBittorrentCommand.ExecuteAsync(item);
+        Assert.True(viewModel.HasPendingQBittorrentExport);
+        Assert.Empty(queue.Requests);
+
+        viewModel.CancelTimelineEntryToQBittorrentCommand.Execute(null);
+        Assert.False(viewModel.HasPendingQBittorrentExport);
+        Assert.Empty(queue.Requests);
+
+        await viewModel.PrepareTimelineEntryForQBittorrentCommand.ExecuteAsync(item);
+        await viewModel.ConfirmTimelineEntryToQBittorrentCommand.ExecuteAsync();
+
+        EntryExportRequest request = Assert.Single(queue.Requests);
+        Assert.False(viewModel.HasPendingQBittorrentExport);
+        Assert.Equal(QBittorrentEntryExporter.ExporterId, request.ExporterId);
+        Assert.Equal(target.CreateQueueTargetId(), request.TargetId);
+        Assert.Equal(123, request.ContentBytes);
+    }
+
+    [Fact]
+    public async Task QBittorrentConfirmationIsBoundToPreparedTargetRevision()
+    {
+        FeedEntry entry = CreateFeedEntry(25) with
+        {
+            NormalizedUrl =
+                "magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567"
+        };
+        var queue = new StubEntryExportQueueService();
+        var targets = new StubIntegrationTargetStore<QBittorrentExportTarget>(
+            new(
+                "default",
+                new Uri("https://qb.example/"),
+                "downloads",
+                CredentialVersion: 1));
+        using NewsCenterViewModel viewModel = CreateViewModel(
+            CreateSnapshot(),
+            feedEntries: new([entry]),
+            exportQueue: queue,
+            integrationPolicies: new StubEntryIntegrationPolicyService(
+                isEnabled: true,
+                EntryIntegrationKind.QBittorrent,
+                allowedHosts: ["qb.example", "other.example"],
+                allowedResources: ["downloads", "other"]),
+            integrationCredentials:
+                new StubEntryIntegrationCredentialStore(
+                    exists: true,
+                    EntryIntegrationKind.QBittorrent,
+                    "default"),
+            qbittorrentTargets: targets);
+        await viewModel.InitializeAsync(CancellationToken.None);
+        FeedTimelineItem item = Assert.Single(viewModel.TimelineEntries);
+
+        await viewModel.PrepareTimelineEntryForQBittorrentCommand.ExecuteAsync(item);
+        targets.Target = new(
+            "default",
+            new Uri("https://other.example/"),
+            "other",
+            CredentialVersion: 1);
+        await viewModel.ConfirmTimelineEntryToQBittorrentCommand.ExecuteAsync();
+
+        Assert.Empty(queue.Requests);
+        Assert.Contains("目标已变化", viewModel.QBittorrentExportStatus, StringComparison.Ordinal);
+        Assert.False(viewModel.HasPendingQBittorrentExport);
+    }
+
+    [Fact]
     public async Task EntityNavigationOpensFeedEntryInTheReader()
     {
         FeedEntry entry = CreateFeedEntry(42);
@@ -2670,7 +2774,15 @@ public sealed class NewsCenterViewModelTests
         StubAiReportService? aiReports = null,
         StubNewsRepository? reportRepository = null,
         IAiReportFileDialogService? reportDialogs = null,
-        IAiReportTextExportService? reportExporter = null) =>
+        IAiReportTextExportService? reportExporter = null,
+        IIntegrationExportTargetStore<ReadeckExportTarget>?
+            readeckTargets = null,
+        IIntegrationExportTargetStore<OutlineExportTarget>?
+            outlineTargets = null,
+        IIntegrationExportTargetStore<QBittorrentExportTarget>?
+            qbittorrentTargets = null,
+        IIntegrationExportTargetStore<WebhookExportTarget>?
+            webhookTargets = null) =>
         new(
             new StubNewsCenterService(snapshot),
             aiReports ?? new StubAiReportService(null),
@@ -2705,7 +2817,11 @@ public sealed class NewsCenterViewModelTests
             integrationCredentials,
             null,
             reportDialogs,
-            reportExporter);
+            reportExporter,
+            readeckTargets,
+            outlineTargets,
+            qbittorrentTargets,
+            webhookTargets);
 
     private static ZoteroExportTarget CreateZoteroTarget(
         bool includeSummaryNote = false,
@@ -3658,7 +3774,8 @@ public sealed class NewsCenterViewModelTests
     private sealed class StubEntryIntegrationPolicyService(
         bool isEnabled,
         EntryIntegrationKind kind = EntryIntegrationKind.Obsidian,
-        IReadOnlyList<string>? allowedHosts = null)
+        IReadOnlyList<string>? allowedHosts = null,
+        IReadOnlyList<string>? allowedResources = null)
         : IEntryIntegrationPolicyService
     {
         public int GetCount { get; private set; }
@@ -3674,7 +3791,7 @@ public sealed class NewsCenterViewModelTests
             IReadOnlyList<EntryIntegrationPolicy> policies = isEnabled
                 ?
                 [
-                    new(
+                    new EntryIntegrationPolicy(
                         kind,
                         true,
                         allowedHosts
@@ -3686,6 +3803,10 @@ public sealed class NewsCenterViewModelTests
                                 ["readwise.io"],
                             _ => []
                         })
+                    {
+                        AllowedResources =
+                            allowedResources ?? []
+                    }
                 ]
                 : [];
             return Task.FromResult(new EntryIntegrationPolicySnapshot(
@@ -3860,6 +3981,35 @@ public sealed class NewsCenterViewModelTests
             string targetId,
             CancellationToken cancellationToken) =>
             throw new NotSupportedException();
+    }
+
+    private sealed class StubIntegrationTargetStore<T>(T? target)
+        : IIntegrationExportTargetStore<T>
+        where T : class
+    {
+        public T? Target { get; set; } = target;
+
+        public Task<T?> GetAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(Target);
+
+        public Task<IIntegrationExportTargetLease<T>> AcquireExportLeaseAsync(
+            CancellationToken cancellationToken) =>
+            Task.FromResult<IIntegrationExportTargetLease<T>>(
+                new StubIntegrationTargetLease<T>(Target));
+
+        public Task SaveAsync(T value, CancellationToken cancellationToken)
+        {
+            Target = value;
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class StubIntegrationTargetLease<T>(T? target)
+        : IIntegrationExportTargetLease<T>
+        where T : class
+    {
+        public T? Target { get; } = target;
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 
     private sealed class FixedTimeProvider(DateTimeOffset now)

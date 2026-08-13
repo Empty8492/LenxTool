@@ -1,7 +1,7 @@
 # P2 详细计划：内容视图、导出与定时摘要
 
-状态：P2-01～P2-14、P2-20～P2-22 与 [统一发现及原生控件视觉插入计划](RSS_DISCOVERY_AND_CONTROL_UX.md)已完成；P2-15 已取消实施；P2-23 已形成 [Proposed ADR-004](../decisions/ADR-004-server-email-digest-gate.md)但未验收，等待产品负责人选择 A/B/C
-最后核对：2026-08-08
+状态：P2-01～P2-14、P2-16～P2-23 与 [统一发现及原生控件视觉插入计划](RSS_DISCOVERY_AND_CONTROL_UX.md)已完成；P2-15 已取消实施；P2-D 仍等待各外部服务的受控真实连通验收
+最后核对：2026-08-13
 开始条件：P1 最终检查点通过，统一 `FeedEntry`、私人状态、规则和搜索契约稳定。
 参考项目：RSSNext/Folo（内容视图、条目动作、AI 定时任务的行为参考），LenxTool 当前 WPF/DPAPI/媒体/更新与审计基础
 
@@ -432,6 +432,8 @@ P2 不引入 Folo 社区、关注关系、钱包、支付、移动端或完整 A
 
 ### P2-16：Readeck 适配器
 
+**状态：** 已完成自动化实现（2026-08-13）；受控真实实例连通仍属于 P2-D。
+
 **目标：** 支持用户自托管 Readeck，保存链接、标签和归档选项。
 
 **依赖：** P2-08、P2-09。
@@ -440,9 +442,9 @@ P2 不引入 Folo 社区、关注关系、钱包、支付、移动端或完整 A
 
 **验收：**
 
-- [ ] 实例 URL 必须 HTTPS 且命中管理员允许主机。
-- [ ] 默认禁止私网目标；仅管理员显式可信配置后放行，并阻止重定向逃逸。
-- [ ] 保存成功返回的远端 ID 可追踪，重复投递不生成多份记录。
+- [x] 实例 URL 必须 HTTPS 且命中管理员允许主机。
+- [x] 默认禁止私网目标；仅管理员显式可信配置后放行，并阻止重定向逃逸。
+- [x] 保存成功返回的远端 ID 可追踪，重复投递通过稳定可见技术标签收敛；歧义匹配失败关闭。
 
 **验证：** 私网/重定向、证书错误、重复、401/429 和取消测试。
 
@@ -450,13 +452,17 @@ P2 不引入 Folo 社区、关注关系、钱包、支付、移动端或完整 A
 
 **实施前契约核对（2026-08-05）：** Readeck 官方 API 在提交
 [`145a52fc`](https://codeberg.org/readeck/readeck/commit/145a52fcf0db57082c2705f38388471cf303cdf0)
-中仍由 `POST /api/bookmarks` 每次创建服务器生成的书签 ID；创建契约没有客户端幂等键或外部 ID，书签列表也没有精确 URL 过滤，数据库仅索引而不唯一约束 `initial_url`。因此直接接入至少一次耐久队列无法证明“响应丢失后重放不生成多份记录”，本项在以下任一前提成立前保持未启动：上游提供幂等/外部 ID 契约；产品明确接受用户可见的稳定技术标签；或另行批准本地远端 ID 映射及其隐私、迁移和清理策略。当前不得注册 Readeck 凭据入口、健康探针或导出器。核对依据见官方
+中仍由 `POST /api/bookmarks` 每次创建服务器生成的书签 ID；创建契约没有客户端幂等键或外部 ID，书签列表也没有精确 URL 过滤，数据库仅索引而不唯一约束 `initial_url`。因此直接接入至少一次耐久队列无法证明“响应丢失后重放不生成多份记录”，当时形成三选一闸门：上游提供幂等/外部 ID 契约；产品明确接受用户可见的稳定技术标签；或另行批准本地远端 ID 映射及其隐私、迁移和清理策略。2026-08-13 已选择稳定技术标签路径，具体收敛边界见下方完成记录。核对依据见官方
 [`routes-bookmarks.yaml`](https://codeberg.org/readeck/readeck/src/commit/145a52fcf0db57082c2705f38388471cf303cdf0/docs/api/bookmarks/routes-bookmarks.yaml)、
 [`types.yaml`](https://codeberg.org/readeck/readeck/src/commit/145a52fcf0db57082c2705f38388471cf303cdf0/docs/api/bookmarks/types.yaml)
 与
 [`schema.sql`](https://codeberg.org/readeck/readeck/src/commit/145a52fcf0db57082c2705f38388471cf303cdf0/internal/db/migrations/sqlite3/schema.sql)。
 
+**完成记录（2026-08-13）：** 产品负责人接受 `lenxtool:<stable-id>` 可见技术标签。导出器先按稳定标签精确查询：零匹配才创建，单匹配更新标题、标签与归档状态，多匹配以冲突失败关闭；响应丢失后的队列重放可重新发现已创建书签。专用设置卡只保存一个本机目标，token 使用显式 `CredentialVersion=1` 后才会启用，旧占位槽不会自动激活。执行前重新读取 ACTIVE v2 策略、解析全部 DNS 并钉住批准地址；客户端禁代理、跳转、Cookie 和解压，响应流有硬上限。未使用真实 Readeck 实例或 token。
+
 ### P2-17：Outline 适配器
+
+**状态：** 已完成自动化实现（2026-08-13）；受控真实实例连通仍属于 P2-D。
 
 **目标：** 在指定集合中创建带来源和标签的知识库文档。
 
@@ -466,15 +472,19 @@ P2 不引入 Folo 社区、关注关系、钱包、支付、移动端或完整 A
 
 **验收：**
 
-- [ ] 集合 ID 必须在管理员 allowlist 内，权限错误不自动换集合。
-- [ ] Markdown 在发送前净化并受长度限制，不携带未授权本地资源。
-- [ ] 重复/更新策略和远端文档 ID 持久化明确。
+- [x] 集合 ID 必须在管理员 allowlist 内，权限错误不自动换集合。
+- [x] Markdown 在发送前净化并受长度限制，不携带未授权本地资源。
+- [x] 同一条目使用确定性 UUID 更新同一远端文档，目标切换形成新的队列作用域。
 
 **验证：** 错误集合、长正文、401/403/429、重复和取消测试。
 
 **参考：** Folo Outline 动作；实现时核对 Outline 官方 API。
 
+**完成记录（2026-08-13）：** 单一专用目标保存精确 HTTPS 根地址和 collection UUID；collection 必须命中管理员 `AllowedResources`。文档 ID 由不透明 endpoint/collection 目标修订与稳定条目标识共同确定性生成，先 `documents.info`，并确认既有文档仍属于获准 collection，随后只在同一 ID 上 create/update；切换 collection 形成新作用域并创建另一份草稿，不移动旧文档。首版固定 `publish=false` 创建和更新个人草稿，避免未经复核自动向工作区发布。Markdown 只由已净化、限长的可见条目字段构造。Bearer 凭据只发往经策略授权和 DNS 钉住的同一 authority；结果 URL 或返回 collection 若越权即拒绝。未使用真实 Outline 实例或 API key。
+
 ### P2-18：qBittorrent 适配器
+
+**状态：** 已完成自动化实现（2026-08-13）；受控真实实例连通仍属于 P2-D。
 
 **目标：** 仅对验证后的 magnet/torrent 条目提供显式投递，默认关闭。
 
@@ -484,15 +494,19 @@ P2 不引入 Folo 社区、关注关系、钱包、支付、移动端或完整 A
 
 **验收：**
 
-- [ ] 只接受 `magnet:` 或已验证 torrent，不把任意 URL 交给下载器。
-- [ ] 目标实例和保存分类由管理员 allowlist；每次投递需用户确认。
-- [ ] 不在日志记录可能含敏感 tracker/passkey 的完整 magnet。
+- [x] 只接受 `magnet:` 或已验证 torrent，不把任意 URL 交给下载器。
+- [x] 目标实例和保存分类由管理员 allowlist；每次投递需用户确认。
+- [x] 不在日志记录可能含敏感 tracker/passkey 的完整 magnet。
 
 **验证：** 协议混淆、私网实例策略、重复 hash、认证和脱敏测试。
 
 **参考：** Folo qBittorrent 动作；实现时核对 qBittorrent Web API。
 
+**完成记录（2026-08-13）：** 首版固定 qBittorrent 5.2+ / WebAPI 2.14.1+ 与 32 字符 API key，只允许管理员批准的 HTTPS 目标或 `http://localhost:<精确端口>`。category 必须非空、存在且命中共享白名单，不支持未分类或自动创建。magnet 只接受唯一 BTIH；`.torrent` 只从公网 HTTPS、无跳转的已验证 enclosure 有界下载，并经过规范 bencode 与 info-hash 校验。资讯页采用“准备→再次确认→入队”，完整 magnet、tracker 与 passkey 不进入状态或日志。localhost HTTP 会在本机 TCP 明文传输 API key，界面明确限定为同机例外；未使用真实 qBittorrent 实例。
+
 ### P2-19：受控自定义 Webhook
+
+**状态：** 已完成自动化实现（2026-08-13）；受控真实接收端连通仍属于 P2-D。
 
 **目标：** 为未内置系统提供最小、可审计的 JSON Webhook，而非任意 HTTP 客户端。
 
@@ -502,21 +516,58 @@ P2 不引入 Folo 社区、关注关系、钱包、支付、移动端或完整 A
 
 **验收：**
 
-- [ ] 仅 HTTPS + 管理员主机 allowlist；DNS/重定向复用 SSRF 防护。
-- [ ] 固定字段模板、请求体上限、HMAC 可选；禁止自定义 Authorization 日志。
-- [ ] 响应体不渲染为 HTML，最大长度受限；失败进入队列重试。
+- [x] 仅 HTTPS + 管理员主机 allowlist；DNS/重定向复用 SSRF 防护。
+- [x] 固定字段模板、请求体上限、HMAC 可选；禁止自定义 Authorization 日志。
+- [x] 响应体不渲染为 HTML，最大长度受限；失败进入队列重试。
 
 **验证：** 私网/重定向、模板注入、超大响应、签名、429 和脱敏测试。
 
 **参考：** Folo custom integration 动作；LenxTool SSRF/日志/DPAPI 边界。
 
-**未接通入口门禁（2026-08-10）：** `EntryIntegrationKind` 与管理员共享策略继续保留 Readeck、Outline、qBittorrent 和 Webhook 的稳定线协议值，避免破坏已发布契约；但“设置 → 个人外部集成”只列出已经注册生产 exporter 与健康探针的 Readwise。旧版本若保存过上述占位类型，初始化会忽略其 TargetId/Endpoint 并回到 Readwise 官方固定目标；程序化传入占位类型也不能进入保存、凭据或连接测试流程。遗留凭据不自动删除；ViewModel 不按旧槽位取值，旧值不会返回界面或交给探针/exporter。应用只保存非秘密清理指针并提供“删除旧版占位凭据”动作；删除当前记录后会以可重放顺序规范化仍匹配的旧目标，避免提示复生。历史多槽位只能在用户仍知道原类型和 TargetId 时通过只删除入口定向清理，哈希槽名不能反推遗忘标识。底层凭据存储使用共享 DPAPI blob，因此刷新当前 Readwise presence 或删除槽位时可能在存储层解密整个 blob；这里不承诺进程从不解密旧值，只承诺旧值不离开存储层、不进入 UI、探针、exporter 或网络。该门禁只修复“契约枚举被误当成可用适配器”的偏差，不代表 P2-16～P2-19 已启动或完成，以上验收项继续保持未勾选。
+**完成记录（2026-08-13）：** Webhook 是固定 v1 JSON 协议，不提供自定义方法、请求头、Authorization 或正文模板。每次发送前以 OPTIONS 要求远端声明协议版本与幂等能力，POST 携带稳定 `Idempotency-Key`，成功必须用 `LenxTool-Ack` 精确回显事件 ID；可选 HMAC-SHA256 对实际 UTF-8 请求体签名。响应只做 4 KiB 有界丢弃，不渲染或写日志；能力缺失时不发送。未使用真实 Webhook 接收端。
+
+**共享策略与升级边界（2026-08-13）：** schema v2 将公网 HTTPS 主机、精确私网 HTTPS `{host,port}`、Outline collection/qBittorrent category 和 qBittorrent localhost HTTP 端口分列保存；资源按 kind 全局授权，因此首版每种 provider 只允许一个本机目标。ACTIVE 元数据会进入 D1 并下发同一 Worker 的登录账号，只适用于同一信任域，且这些 endpoint/resource 值被视为非秘密；凭据、完整 URL 路径和条目内容仍不进入 Worker。旧客户端只取得兼容投影，advanced-only ACTIVE 项被隐藏；旧管理读写在存在高级约束时要求升级。部署顺序固定为 `0011 migration → Worker v2 → Desktop v2`。
+
+四个 provider 使用独立版本化设置卡和 target store，不重新开放旧通用占位表单。升级前遗留占位凭据仍保留在原 DPAPI 槽中，但没有 `CredentialVersion=1` 的新目标文档不会读取或启用；用户必须显式重新填写新凭据，或通过旧凭据清理入口删除。健康检查与真实导出共用执行期授权器，先校验 ACTIVE 策略、host/port 与全部 DNS 地址，再读取凭据并创建禁代理、禁跳转、禁 Cookie、禁自动解压的 pinned 客户端。
 
 ### 检查点 P2-D
 
 - [ ] 每个已启用适配器都有官方 API 依据、假 HTTP 契约测试和至少一次受控真实连通验收。
 - [ ] 未配置/服务故障不影响阅读、抓取或其他适配器。
 - [ ] 凭据扫描和日志检查无 token、密码、passkey 或正文泄露。
+
+#### P2-D 执行手册
+
+P2-D 是受控真实环境的发布闸门，不是开发机上“能访问一次”就算完成。必须使用固定的发布候选提交、独立测试账号和可回滚的时间窗；任何失败、目标漂移或无法证明写入结果的用例都保持未通过。
+
+**开始前必须准备：**
+
+| 项目 | 最低要求 | 证据与保护边界 |
+|---|---|---|
+| Readeck | 可写测试实例、Bearer token、可清理的测试书签 | 只记录实例版本、脱敏状态、稳定标签和最终对象 ID；token 不入仓库/日志 |
+| Outline | 可写测试实例、个人 API key、目标 collection UUID | collection 必须专门用于测试；首版只验收 `publish=false` 草稿 |
+| qBittorrent | 5.2+、WebAPI 2.14.1+、32 字符 API key、已存在 category | 优先使用 loopback HTTP 精确端口；API key 只在同机 TCP 传输，禁止截图和日志留存 |
+| Webhook | 可查看接收记录的 HTTPS 端点、OPTIONS 能力声明、可选 HMAC secret | 接收端需支持稳定幂等键和精确 `LenxTool-Ack`，正文与 secret 不进入报告 |
+| 发布负责人 | D1/Worker 操作权限、Time Travel/备份权限、回滚授权 | 预先写明操作者、时间窗、停止条件和回滚负责人 |
+
+**固定执行顺序：**
+
+1. **冻结候选并做基线。** 记录源码 commit、Worker 当前版本、D1 迁移列表、当前 v1/v2 ETag 和已启用策略；运行 Core/Infrastructure/App/Worker 的发布门禁。禁止在真实验收中同时修改策略、迁移和客户端代码。
+2. **部署 D1 与 Worker。** 在生产 D1 记录 Time Travel/备份书签，确认 0011 尚未应用，然后按 `0011 migration → Worker v2 → Desktop v2` 执行。迁移后重新列出迁移状态；Worker 部署后验证 `/health`、登录、管理员 v2 读写、v2 `ETag`/`If-Match`、旧客户端兼容投影和高级约束下的升级拒绝。迁移语义异常时停止写入，不重复应用迁移。
+3. **配置 Desktop v2。** 仅在管理员 ACTIVE 策略已发布后保存每个 provider 的单一 `default` 目标；先保存非秘密目标，再保存秘密并确认 marker 1。设置页连接测试只允许已保存且规范化一致的端点，测试结束后清理测试凭据或降为 marker 0。
+4. **执行最小真实矩阵。** 每个 provider 至少执行“健康/首写/重复或重放/取消或暂时故障/策略撤销”路径：
+
+   | provider | 必测真实路径 | 通过证据 |
+   |---|---|---|
+   | Readeck | 标签查找→首次创建→同条目重放→归档；模拟响应丢失后复查 | 只产生一个带 `lenxtool:<stable-id>` 的书签，重复重放不新增 |
+   | Outline | 指定 collection 创建草稿→重复更新→目标/collection 切换 | 文档 `collectionId` 始终匹配；草稿保持 `publish=false`；切换后产生新确定性文档而不移动旧文档 |
+   | qBittorrent | API key 登录、显式 category、magnet、合法 `.torrent`、202/失败回执 | 只有观察到目标 info-hash 且 category 正确才完成；202 或未知回执不虚报完成 |
+   | Webhook | OPTIONS 能力、固定 JSON POST、重复 `Idempotency-Key`、可选 HMAC、ack 不匹配 | 能力缺失时不 POST；成功仅接受精确 `LenxTool-Ack`；重复键不产生第二个业务事件 |
+
+5. **记录与判定。** 每个用例记录 UTC 时间、源码/Worker 版本、策略版本、脱敏 HTTP 状态、队列终态和第三方非秘密对象标识；不得记录 token、API key、密码、完整 magnet/passkey、正文或响应正文。策略撤销、endpoint 变更、DNS 漂移、断网、正文滴流和写后畸形回执必须确认进入封闭错误/可重试状态。
+6. **关闭或回滚。** 只有四个 provider 的矩阵、凭据 marker 生命周期、旧客户端兼容、D1/Worker 观测和凭据扫描全部通过，才能把本检查点改为 `[x]`。任一失败则保留 `[ ]`，停止后续写入；由发布负责人依据备份/Time Travel 证据决定恢复，不在生产盲目重放。
+
+**P2-D 关闭后下一步：** 按 [`RELEASE_GUIDE.md`](../RELEASE_GUIDE.md) 重新生成自包含包、安装包、更新清单和 SHA256，完成 Windows 10/11 x64 全新安装、覆盖升级、卸载保留数据、Runtime 缺失降级、签名反向验证和跨物理机升级矩阵；最终把脱敏报告、迁移版本、制品哈希和发布标签归档后再创建 GitHub Release。
 
 ## 阶段 P2-E：定时摘要与通知
 
@@ -596,6 +647,8 @@ WPF 应用使用 Windows App SDK 2.3 的手动惰性 bootstrap：Runtime 缺失�
 
 ### P2-23：服务端邮件摘要决策闸门
 
+**状态：** 已完成（2026-08-13，选择 A：当前不实施）。
+
 **目标：** 在不误改隐私边界的前提下，决定是否另立服务端聚合项目。
 
 **依赖：** P2-21 有真实使用数据。
@@ -604,15 +657,17 @@ WPF 应用使用 Windows App SDK 2.3 的手动惰性 bootstrap：Runtime 缺失�
 
 **验收：**
 
-- [ ] 明确是否允许云端保存标题、摘要、正文、AI 结果及保留期限。
-- [ ] 明确邮件提供商、退订、反滥用、成本、删除和版权处理。
-- [ ] 未获得批准前，不新增云端文章表或邮件发送代码。
+- [x] 明确禁止云端保存标题、摘要、正文、AI 结果，当前保留期为 0 天。
+- [x] 当前不选择邮件提供商，不建立退订、反滥用、成本、删除或版权运营链路。
+- [x] 不新增云端文章表、邮箱字段、邮件发送代码或供应商凭据。
 
 **验证：** ADR 审阅通过才创建后续实现计划。
 
 **参考：** Folo AI task 的邮件通知能力；当前 LenxTool 规格默认拒绝云端内容保存。
 
-**决策草案（2026-08-08）：** [`ADR-004`](../decisions/ADR-004-server-email-digest-gate.md) 建议当前不实施邮件摘要、不收集邮箱，标题、摘要、正文和 AI 结果的云端保留期均为 0 天。草案同时记录了仅元数据提醒与包含内容邮件两条备选路径、Cloudflare/Resend/SES 的官方成本和保留差异，以及退订、反滥用、删除与版权最低门槛。当前账号表没有邮箱字段，且仅元数据提醒仍依赖桌面端先运行，不能替代服务端聚合；因此在产品负责人明确选择 A/B/C 前保持 Proposed，不新增 migration、API、发信代码或供应商凭据。
+**决策草案（2026-08-08）：** [`ADR-004`](../decisions/ADR-004-server-email-digest-gate.md) 建议当前不实施邮件摘要、不收集邮箱，标题、摘要、正文和 AI 结果的云端保留期均为 0 天。草案同时记录了仅元数据提醒与包含内容邮件两条备选路径、Cloudflare/Resend/SES 的官方成本和保留差异，以及退订、反滥用、删除与版权最低门槛。当前账号表没有邮箱字段，且仅元数据提醒仍依赖桌面端先运行，不能替代服务端聚合；在 2026-08-13 决策前保持 Proposed，期间未新增 migration、API、发信代码或供应商凭据。
+
+**关闭记录（2026-08-13）：** 产品负责人明确选择 A。ADR-004 改为 Accepted，P2-23 以“不扩权”完成；现有本地日/周摘要、应用内收件箱和 Windows 通知继续作为唯一批准路径。B/C 均未获授权，未来若重开必须以新的需求证据和独立 ADR 重新决策。
 
 ## P2 最终检查点
 
