@@ -38,7 +38,10 @@ describe("Worker integration policies", () => {
       "allowed_hosts_json",
       "updated_by",
       "updated_at",
-      "last_mutation_id"
+      "last_mutation_id",
+      "trusted_private_endpoints_json",
+      "allowed_resources_json",
+      "allowed_loopback_http_ports_json"
     ]);
     expect(columns.join(" ")).not.toMatch(
       /token|password|credential|secret|authorization|target_url|health/iu
@@ -83,7 +86,7 @@ describe("Worker integration policies", () => {
     const active = await read(user, "ACTIVE");
     expect(active.status).toBe(200);
     expect(active.headers.get("etag")).toBe(
-      '"integration-policies-active-1"'
+      '"integration-policies-v2-active-1"'
     );
     expect((await active.json<{ policies: unknown[] }>()).policies)
       .toHaveLength(1);
@@ -200,6 +203,200 @@ describe("Worker integration policies", () => {
     }
   });
 
+  it("stores versioned private endpoints, resources, and qBittorrent loopback ports", async () => {
+    const admin = await seedSession("admin");
+    const user = await seedSession("user");
+    const collectionId = "10000000-0000-4000-8000-000000000017";
+
+    const response = await replace(
+      admin,
+      0,
+      "integration-extended-policy-01",
+      [
+        {
+          kind: "OUTLINE",
+          isEnabled: true,
+          allowedHosts: [],
+          trustedPrivateEndpoints: [
+            { host: "OUTLINE.HOME.ARPA.", port: 8443 }
+          ],
+          allowedResources: [collectionId],
+          allowedLoopbackHttpPorts: []
+        },
+        {
+          kind: "QBITTORRENT",
+          isEnabled: true,
+          allowedHosts: [],
+          trustedPrivateEndpoints: [],
+          allowedResources: [
+            " downloads ",
+            "downloads",
+            "下载🚀\"\\分类"
+          ],
+          allowedLoopbackHttpPorts: [8080, 8080]
+        }
+      ]
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.clone().json()).toMatchObject({
+      policySchemaVersion: 2,
+      policySetVersion: 1,
+      policies: [
+        {
+          kind: "OUTLINE",
+          trustedPrivateEndpoints: [
+            { host: "outline.home.arpa", port: 8443 }
+          ],
+          allowedResources: [collectionId],
+          allowedLoopbackHttpPorts: []
+        },
+        {
+          kind: "QBITTORRENT",
+          trustedPrivateEndpoints: [],
+          allowedResources: ["downloads", "下载🚀\"\\分类"],
+          allowedLoopbackHttpPorts: [8080]
+        }
+      ]
+    });
+    const active = await read(user, "ACTIVE");
+    expect(active.status).toBe(200);
+    expect(await active.clone().json()).toMatchObject({
+      policySchemaVersion: 2
+    });
+    const legacyActive = await read(user, "ACTIVE", undefined, 1);
+    expect(legacyActive.status).toBe(200);
+    expect(await legacyActive.json()).toMatchObject({ policies: [] });
+    const legacyAdmin = await read(admin, "ALL", undefined, 1);
+    expect(legacyAdmin.status).toBe(400);
+    expect(await errorCode(legacyAdmin)).toBe(
+      "INTEGRATION_POLICY_SCHEMA_UPGRADE_REQUIRED"
+    );
+    const rows = await env.DB.prepare(
+      "SELECT kind,trusted_private_endpoints_json," +
+      "allowed_resources_json,allowed_loopback_http_ports_json " +
+      "FROM integration_policies ORDER BY kind"
+    ).all<{
+      kind: string;
+      trusted_private_endpoints_json: string;
+      allowed_resources_json: string;
+      allowed_loopback_http_ports_json: string;
+    }>();
+    expect(rows.results).toEqual([
+      {
+        kind: "OUTLINE",
+        trusted_private_endpoints_json:
+          '[{"host":"outline.home.arpa","port":8443}]',
+        allowed_resources_json: JSON.stringify([collectionId]),
+        allowed_loopback_http_ports_json: "[]"
+      },
+      {
+        kind: "QBITTORRENT",
+        trusted_private_endpoints_json: "[]",
+        allowed_resources_json: JSON.stringify([
+          "downloads",
+          "下载🚀\"\\分类"
+        ]),
+        allowed_loopback_http_ports_json: "[8080]"
+      }
+    ]);
+  });
+
+  it("rejects schema-v1 writes and unsafe extended metadata", async () => {
+    const admin = await seedSession("admin");
+    const legacy = await workerRequest(
+      "/v1/admin/integration-policies",
+      {
+        method: "PUT",
+        headers: {
+          authorization: `Bearer ${admin.accessToken}`,
+          "content-type": "application/json",
+          "if-match": '"integration-policies-v2-all-0"',
+          "idempotency-key": "integration-schema-v1-write"
+        },
+        body: JSON.stringify({ policies: [] })
+      }
+    );
+    expect(legacy.status).toBe(400);
+    expect(await errorCode(legacy)).toBe(
+      "INTEGRATION_POLICY_SCHEMA_UPGRADE_REQUIRED"
+    );
+
+    const invalidValues = [
+      {
+        kind: "WEBHOOK",
+        isEnabled: true,
+        allowedHosts: [],
+        trustedPrivateEndpoints: [
+          { host: "127.0.0.1", port: 443 }
+        ],
+        allowedResources: [],
+        allowedLoopbackHttpPorts: []
+      },
+      {
+        kind: "READWISE",
+        isEnabled: false,
+        allowedHosts: ["api.readwise.io"],
+        trustedPrivateEndpoints: [
+          { host: "reader.home.arpa", port: 443 }
+        ],
+        allowedResources: [],
+        allowedLoopbackHttpPorts: []
+      },
+      {
+        kind: "OUTLINE",
+        isEnabled: true,
+        allowedHosts: ["outline.example.com"],
+        trustedPrivateEndpoints: [],
+        allowedResources: [],
+        allowedLoopbackHttpPorts: []
+      },
+      {
+        kind: "QBITTORRENT",
+        isEnabled: true,
+        allowedHosts: [],
+        trustedPrivateEndpoints: [],
+        allowedResources: ["downloads"],
+        allowedLoopbackHttpPorts: [0]
+      },
+      {
+        kind: "QBITTORRENT",
+        isEnabled: false,
+        allowedHosts: [],
+        trustedPrivateEndpoints: [],
+        allowedResources: ["down\u0085loads"],
+        allowedLoopbackHttpPorts: []
+      },
+      {
+        kind: "WEBHOOK",
+        isEnabled: false,
+        allowedHosts: [],
+        trustedPrivateEndpoints: Array.from(
+          { length: 32 },
+          (_, index) => ({
+            host: maximumLengthHost(index),
+            port: 443
+          })
+        ),
+        allowedResources: [],
+        allowedLoopbackHttpPorts: []
+      }
+    ];
+    for (const [index, value] of invalidValues.entries()) {
+      const rejected = await replace(
+        admin,
+        0,
+        `integration-extended-invalid-${index}`,
+        [value]
+      );
+      expect(rejected.status).toBe(400);
+      expect(await errorCode(rejected)).toBe("VALIDATION_ERROR");
+    }
+    expect(await scalar(
+      "SELECT COUNT(*) AS value FROM integration_policies"
+    )).toBe(0);
+  });
+
   it("rejects every local integration host so endpoints never reach D1", async () => {
     const admin = await seedSession("admin");
     // 同时覆盖两种本机集成与回环名、IP、普通 DNS，防止本机信息被上传。
@@ -277,12 +474,18 @@ describe("Worker integration policies", () => {
       {
         kind: "OBSIDIAN",
         isEnabled: true,
-        allowedHosts: []
+        allowedHosts: [],
+        trustedPrivateEndpoints: [],
+        allowedResources: [],
+        allowedLoopbackHttpPorts: []
       },
       {
         kind: "EAGLE",
         isEnabled: true,
-        allowedHosts: []
+        allowedHosts: [],
+        trustedPrivateEndpoints: [],
+        allowedResources: [],
+        allowedLoopbackHttpPorts: []
       }
     ]);
 
@@ -336,6 +539,31 @@ describe("Worker integration policies", () => {
     expect(await errorCode(response)).toBe("SERVICE_UNAVAILABLE");
   });
 
+  it("fails closed when a local integration row contains extended metadata", async () => {
+    const admin = await seedSession("admin");
+    const updatedAt = new Date().toISOString();
+    const mutationId = crypto.randomUUID();
+    await env.DB.batch([
+      env.DB.prepare(
+        "UPDATE integration_policy_state SET policy_set_version=1," +
+        "updated_at=?,last_mutation_id=? WHERE singleton_id=1"
+      ).bind(updatedAt, mutationId),
+      env.DB.prepare(
+        "INSERT INTO integration_policies(" +
+        "kind,is_enabled,allowed_hosts_json," +
+        "trusted_private_endpoints_json,allowed_resources_json," +
+        "allowed_loopback_http_ports_json," +
+        "updated_by,updated_at,last_mutation_id) " +
+        "VALUES('OBSIDIAN',1,'[]','[]','[\"leak\"]','[]',?,?,?)"
+      ).bind(admin.userId, updatedAt, mutationId)
+    ]);
+
+    const response = await read(admin, "ALL");
+
+    expect(response.status).toBe(503);
+    expect(await errorCode(response)).toBe("SERVICE_UNAVAILABLE");
+  });
+
   it("rejects ambiguous targets and preserves version/idempotency semantics", async () => {
     const admin = await seedSession("admin");
     const invalidHosts = [
@@ -343,8 +571,13 @@ describe("Worker integration policies", () => {
       "https://example.com",
       "example.com:443",
       "127.0.0.1",
+      "127.000.0.1",
+      "2130706433",
+      "0x7f000001",
+      "0177.0.0.1",
       "localhost",
-      "service.local"
+      "service.local",
+      "service.home.arpa"
     ];
     for (const [index, host] of invalidHosts.entries()) {
       const response = await replace(
@@ -356,6 +589,22 @@ describe("Worker integration policies", () => {
       expect(response.status).toBe(400);
       expect(await errorCode(response)).toBe("VALIDATION_ERROR");
     }
+
+    const disguisedPrivateIp = await replace(
+      admin,
+      0,
+      "integration-private-ip-1",
+      [{
+        kind: "WEBHOOK",
+        isEnabled: true,
+        allowedHosts: [],
+        trustedPrivateEndpoints: [
+          { host: "0177.0.0.1", port: 443 }
+        ]
+      }]
+    );
+    expect(disguisedPrivateIp.status).toBe(400);
+    expect(await errorCode(disguisedPrivateIp)).toBe("VALIDATION_ERROR");
 
     const accepted = await replace(
       admin,
@@ -410,22 +659,38 @@ function replace(
   key: string,
   policies: unknown[]
 ): Promise<Response> {
+  const schemaV2Policies = policies.map(policy =>
+    policy !== null
+      && typeof policy === "object"
+      && !Array.isArray(policy)
+      ? {
+          trustedPrivateEndpoints: [],
+          allowedResources: [],
+          allowedLoopbackHttpPorts: [],
+          ...policy
+        }
+      : policy
+  );
   return workerRequest("/v1/admin/integration-policies", {
     method: "PUT",
     headers: {
       authorization: `Bearer ${session.accessToken}`,
       "content-type": "application/json",
-      "if-match": `"integration-policies-all-${version}"`,
+      "if-match": `"integration-policies-v2-all-${version}"`,
       "idempotency-key": key
     },
-    body: JSON.stringify({ policies })
+    body: JSON.stringify({
+      policySchemaVersion: 2,
+      policies: schemaV2Policies
+    })
   });
 }
 
 function read(
   session: Session,
   scope: "ACTIVE" | "ALL",
-  afterVersion?: number
+  afterVersion?: number,
+  schemaVersion: 1 | 2 = 2
 ): Promise<Response> {
   const versionQuery = afterVersion === undefined
     ? ""
@@ -433,7 +698,12 @@ function read(
   return workerRequest(
     `/v1/integration-policies?scope=${scope}${versionQuery}`,
     {
-      headers: { authorization: `Bearer ${session.accessToken}` }
+      headers: {
+        authorization: `Bearer ${session.accessToken}`,
+        ...(schemaVersion === 2
+          ? { "x-lenxtool-integration-policy-schema": "2" }
+          : {})
+      }
     }
   );
 }
@@ -527,4 +797,12 @@ function toBase64Url(bytes: Uint8Array): string {
     .replaceAll("+", "-")
     .replaceAll("/", "_")
     .replace(/=+$/u, "");
+}
+
+function maximumLengthHost(index: number): string {
+  return `${String(index).padStart(2, "0")}.` +
+    `${"a".repeat(63)}.` +
+    `${"b".repeat(63)}.` +
+    `${"c".repeat(63)}.` +
+    "d".repeat(58);
 }

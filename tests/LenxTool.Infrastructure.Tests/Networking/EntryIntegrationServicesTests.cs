@@ -18,6 +18,9 @@ public sealed class EntryIntegrationServicesTests
         ["api.readwise.io"];
     private static readonly string[] WebhookHosts =
         ["hooks.example.com"];
+    private static readonly string[] QBittorrentResources =
+        ["downloads"];
+    private static readonly int[] QBittorrentLoopbackPorts = [8080];
 
     [Fact]
     public async Task PolicyServiceReadsAllAndStrictlyMapsExactHosts()
@@ -30,6 +33,10 @@ public sealed class EntryIntegrationServicesTests
                 return Task.FromResult(LoginResponse("ADMIN"));
             }
             path = request.RequestUri?.PathAndQuery;
+            Assert.Equal(
+                "2",
+                request.Headers.GetValues(
+                    "X-LenxTool-Integration-Policy-Schema").Single());
             return Task.FromResult(JsonResponse(
                 HttpStatusCode.OK,
                 new
@@ -62,9 +69,65 @@ public sealed class EntryIntegrationServicesTests
 
         Assert.Equal("/v1/integration-policies?scope=ALL", path);
         Assert.Equal(4, snapshot.Version);
+        Assert.Equal(1, snapshot.PolicySchemaVersion);
         Assert.Equal(
             "api.readwise.io",
             Assert.Single(snapshot.Policies).AllowedHosts.Single());
+    }
+
+    [Fact]
+    public async Task PolicyServiceMapsVersionedExtendedSecurityMetadata()
+    {
+        var handler = new HttpStubHandler((request, cancellationToken) =>
+        {
+            if (request.RequestUri?.AbsolutePath == "/v1/auth/login")
+            {
+                return Task.FromResult(LoginResponse("ADMIN"));
+            }
+            return Task.FromResult(JsonResponse(
+                HttpStatusCode.OK,
+                new
+                {
+                    policySchemaVersion = 2,
+                    policySetVersion = 5,
+                    scope = "ALL",
+                    generatedAt = "2026-08-13T08:00:00Z",
+                    policies = new[]
+                    {
+                        new
+                        {
+                            kind = "QBITTORRENT",
+                            isEnabled = true,
+                            allowedHosts = Array.Empty<string>(),
+                            trustedPrivateEndpoints = new[]
+                            {
+                                new { host = "qbit.home.arpa", port = 8443 }
+                            },
+                            allowedResources = QBittorrentResources,
+                            allowedLoopbackHttpPorts =
+                                QBittorrentLoopbackPorts
+                        }
+                    }
+                }));
+        });
+        using WorkerAccountSessionService account = CreateAccount(handler);
+        await account.LoginAsync(
+            "owner",
+            "password",
+            CancellationToken.None);
+        var service = new WorkerEntryIntegrationPolicyService(account);
+
+        EntryIntegrationPolicySnapshot snapshot = await service.GetAsync(
+            EntryIntegrationPolicyScope.All,
+            CancellationToken.None);
+
+        EntryIntegrationPolicy policy = Assert.Single(snapshot.Policies);
+        Assert.Equal(2, snapshot.PolicySchemaVersion);
+        Assert.Equal(
+            new EntryIntegrationPrivateEndpoint("qbit.home.arpa", 8443),
+            Assert.Single(policy.TrustedPrivateEndpoints));
+        Assert.Equal(["downloads"], policy.AllowedResources);
+        Assert.Equal([8080], policy.AllowedLoopbackHttpPorts);
     }
 
     [Fact]
@@ -82,7 +145,7 @@ public sealed class EntryIntegrationServicesTests
                     "/v1/admin/integration-policies",
                     request.RequestUri?.AbsolutePath);
                 Assert.Equal(
-                    "\"integration-policies-all-7\"",
+                    "\"integration-policies-v2-all-7\"",
                     request.Headers.GetValues("If-Match").Single());
                 string json = await request.Content!
                     .ReadAsStringAsync(cancellationToken);
@@ -98,6 +161,7 @@ public sealed class EntryIntegrationServicesTests
                     HttpStatusCode.OK,
                     new
                     {
+                        policySchemaVersion = 2,
                         policySetVersion = 8,
                         policies = new[]
                         {
@@ -105,7 +169,11 @@ public sealed class EntryIntegrationServicesTests
                             {
                                 kind = "WEBHOOK",
                                 isEnabled = true,
-                                allowedHosts = WebhookHosts
+                                allowedHosts = WebhookHosts,
+                                trustedPrivateEndpoints =
+                                    Array.Empty<object>(),
+                                allowedResources = Array.Empty<string>(),
+                                allowedLoopbackHttpPorts = Array.Empty<int>()
                             }
                         }
                     });
@@ -129,8 +197,104 @@ public sealed class EntryIntegrationServicesTests
                 CancellationToken.None);
 
         Assert.Equal(8, result.Version);
+        Assert.Equal(2, result.PolicySchemaVersion);
         Assert.False(result.IsReplay);
         Assert.Single(result.Policies);
+    }
+
+    [Fact]
+    public async Task PolicyServicePublishesSchemaVersionAndExtendedMetadata()
+    {
+        var handler = new HttpStubHandler(
+            async (request, cancellationToken) =>
+            {
+                if (request.RequestUri?.AbsolutePath == "/v1/auth/login")
+                {
+                    return LoginResponse("ADMIN");
+                }
+                string json = await request.Content!
+                    .ReadAsStringAsync(cancellationToken);
+                using JsonDocument document = JsonDocument.Parse(json);
+                JsonElement root = document.RootElement;
+                Assert.Equal(
+                    2,
+                    root.GetProperty("policySchemaVersion").GetInt32());
+                JsonElement policy = Assert.Single(
+                    root.GetProperty("policies").EnumerateArray());
+                Assert.Equal(
+                    "qbit.home.arpa",
+                    Assert.Single(
+                        policy.GetProperty("trustedPrivateEndpoints")
+                            .EnumerateArray())
+                        .GetProperty("host")
+                        .GetString());
+                Assert.Equal(
+                    "downloads",
+                    Assert.Single(
+                        policy.GetProperty("allowedResources")
+                            .EnumerateArray())
+                        .GetString());
+                Assert.Equal(
+                    8080,
+                    Assert.Single(
+                        policy.GetProperty("allowedLoopbackHttpPorts")
+                            .EnumerateArray())
+                        .GetInt32());
+                return JsonResponse(
+                    HttpStatusCode.OK,
+                    new
+                    {
+                        policySchemaVersion = 2,
+                        policySetVersion = 9,
+                        policies = new[]
+                        {
+                            new
+                            {
+                                kind = "QBITTORRENT",
+                                isEnabled = true,
+                                allowedHosts = Array.Empty<string>(),
+                                trustedPrivateEndpoints = new[]
+                                {
+                                    new
+                                    {
+                                        host = "qbit.home.arpa",
+                                        port = 8443
+                                    }
+                                },
+                                allowedResources = QBittorrentResources,
+                                allowedLoopbackHttpPorts =
+                                    QBittorrentLoopbackPorts
+                            }
+                        }
+                    });
+            });
+        using WorkerAccountSessionService account = CreateAccount(handler);
+        await account.LoginAsync(
+            "owner",
+            "password",
+            CancellationToken.None);
+        var service = new WorkerEntryIntegrationPolicyService(account);
+        var input = new EntryIntegrationPolicyInput(
+            EntryIntegrationKind.QBittorrent,
+            true,
+            [])
+        {
+            TrustedPrivateEndpoints =
+                [new EntryIntegrationPrivateEndpoint("qbit.home.arpa", 8443)],
+            AllowedResources = ["downloads"],
+            AllowedLoopbackHttpPorts = [8080]
+        };
+
+        EntryIntegrationPolicyMutationResult result =
+            await service.ReplaceAsync(
+                [input],
+                expectedVersion: 8,
+                CancellationToken.None);
+
+        Assert.Equal(9, result.Version);
+        Assert.Equal(
+            [8080],
+            Assert.Single(result.Policies).AllowedLoopbackHttpPorts);
     }
 
     [Fact]
@@ -216,6 +380,132 @@ public sealed class EntryIntegrationServicesTests
     }
 
     [Fact]
+    public async Task HealthCheckRejectsDnsRebindingBeforeReadingCredential()
+    {
+        var credentials = new StubCredentialStore("secret");
+        var service = new EntryIntegrationHealthService(
+            new StubPolicyService([EnabledWebhookPolicy()]),
+            credentials,
+            [new StubProbe(EntryIntegrationKind.Webhook)],
+            new StubResolver([IPAddress.Loopback]),
+            EntryIntegrationHealthOptions.Default,
+            TimeProvider.System);
+
+        EntryIntegrationHealthResult result = await service.CheckAsync(
+            Target("https://hooks.example.com/check"),
+            CancellationToken.None);
+
+        Assert.Equal(
+            EntryIntegrationHealthStatus.BlockedEndpoint,
+            result.Status);
+        Assert.Equal(0, credentials.GetCount);
+    }
+
+    [Fact]
+    public async Task HealthCheckDoesNotReadCredentialForPublicProbe()
+    {
+        var credentials = new StubCredentialStore("dormant-secret");
+        var probe = new StubProbe(
+            EntryIntegrationKind.Webhook,
+            requiresCredential: false);
+        var service = new EntryIntegrationHealthService(
+            new StubPolicyService([EnabledWebhookPolicy()]),
+            credentials,
+            [probe],
+            new StubResolver([IPAddress.Parse("93.184.216.34")]),
+            EntryIntegrationHealthOptions.Default,
+            TimeProvider.System);
+
+        EntryIntegrationHealthResult result = await service.CheckAsync(
+            Target("https://hooks.example.com/check"),
+            CancellationToken.None);
+
+        Assert.Equal(EntryIntegrationHealthStatus.Healthy, result.Status);
+        Assert.Equal(0, credentials.GetCount);
+        Assert.Equal(1, probe.CallCount);
+    }
+
+    [Fact]
+    public async Task HealthCheckAllowsOnlyExactTrustedPrivateHttpsEndpoint()
+    {
+        var probe = new StubProbe(EntryIntegrationKind.Webhook);
+        var policy = new EntryIntegrationPolicy(
+            EntryIntegrationKind.Webhook,
+            true,
+            [])
+        {
+            TrustedPrivateEndpoints =
+            [
+                new EntryIntegrationPrivateEndpoint(
+                    "hooks.home.arpa",
+                    8443)
+            ]
+        };
+        EntryIntegrationHealthService service = CreateHealthService(
+            [policy],
+            probe,
+            credential: "secret",
+            [IPAddress.Parse("10.0.0.8")]);
+
+        EntryIntegrationHealthResult allowed = await service.CheckAsync(
+            new(
+                "target-1",
+                EntryIntegrationKind.Webhook,
+                new Uri("https://hooks.home.arpa:8443/check")),
+            CancellationToken.None);
+        EntryIntegrationHealthResult wrongPort = await service.CheckAsync(
+            new(
+                "target-2",
+                EntryIntegrationKind.Webhook,
+                new Uri("https://hooks.home.arpa:9443/check")),
+            CancellationToken.None);
+
+        Assert.Equal(EntryIntegrationHealthStatus.Healthy, allowed.Status);
+        Assert.Equal(
+            EntryIntegrationHealthStatus.BlockedEndpoint,
+            wrongPort.Status);
+        Assert.Equal(1, probe.CallCount);
+    }
+
+    [Fact]
+    public async Task HealthCheckAllowsOnlyQBittorrentLocalhostHttpOnApprovedPort()
+    {
+        var probe = new StubProbe(EntryIntegrationKind.QBittorrent);
+        var policy = new EntryIntegrationPolicy(
+            EntryIntegrationKind.QBittorrent,
+            true,
+            [])
+        {
+            AllowedResources = ["downloads"],
+            AllowedLoopbackHttpPorts = [8080]
+        };
+        EntryIntegrationHealthService service = CreateHealthService(
+            [policy],
+            probe,
+            credential: "secret",
+            [IPAddress.Loopback]);
+
+        EntryIntegrationHealthResult allowed = await service.CheckAsync(
+            new(
+                "target-1",
+                EntryIntegrationKind.QBittorrent,
+                new Uri("http://localhost:8080/api/v2/app/version")),
+            CancellationToken.None);
+        EntryIntegrationHealthResult lanHttp = await service.CheckAsync(
+            new(
+                "target-2",
+                EntryIntegrationKind.QBittorrent,
+                new Uri("http://qbit.home.arpa:8080/api/v2/app/version")),
+            CancellationToken.None);
+
+        Assert.Equal(EntryIntegrationHealthStatus.Healthy, allowed.Status);
+        Assert.Equal(
+            EntryIntegrationHealthStatus.BlockedEndpoint,
+            lanHttp.Status);
+        Assert.Equal(1, probe.CallCount);
+    }
+
+    [Fact]
     public async Task HealthCheckMapsTimeoutAndRateLimitToClosedRedactedResults()
     {
         var clock = new ManualTimeProvider(
@@ -278,6 +568,72 @@ public sealed class EntryIntegrationServicesTests
                 || property.Name.Contains(
                     "Exception",
                     StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task HealthCheckDeadlineIncludesDnsAndSkipsCredential()
+    {
+        var clock = new ManualTimeProvider(
+            new DateTimeOffset(
+                2026,
+                8,
+                13,
+                8,
+                0,
+                0,
+                TimeSpan.Zero));
+        var credentials = new StubCredentialStore("secret");
+        var service = new EntryIntegrationHealthService(
+            new StubPolicyService([EnabledWebhookPolicy()]),
+            credentials,
+            [new StubProbe(EntryIntegrationKind.Webhook)],
+            new BlockingResolver(clock),
+            new(
+                TimeSpan.FromSeconds(5),
+                TimeSpan.FromSeconds(30),
+                MaximumConcurrency: 2),
+            clock);
+
+        Task<EntryIntegrationHealthResult> pending = service.CheckAsync(
+            Target("https://hooks.example.com/check"),
+            CancellationToken.None);
+        clock.Advance(TimeSpan.FromSeconds(6));
+        EntryIntegrationHealthResult result = await pending;
+
+        Assert.Equal(EntryIntegrationHealthStatus.TimedOut, result.Status);
+        Assert.Equal(0, credentials.GetCount);
+    }
+
+    [Fact]
+    public async Task HealthCheckDeadlineIncludesCredentialRead()
+    {
+        var clock = new ManualTimeProvider(
+            new DateTimeOffset(
+                2026,
+                8,
+                13,
+                8,
+                0,
+                0,
+                TimeSpan.Zero));
+        var service = new EntryIntegrationHealthService(
+            new StubPolicyService([EnabledWebhookPolicy()]),
+            new BlockingCredentialStore(clock),
+            [new StubProbe(EntryIntegrationKind.Webhook)],
+            new StubResolver([IPAddress.Parse("8.8.8.8")]),
+            new(
+                TimeSpan.FromSeconds(5),
+                TimeSpan.FromSeconds(30),
+                MaximumConcurrency: 2),
+            clock);
+
+        Task<EntryIntegrationHealthResult> pending = service.CheckAsync(
+            Target("https://hooks.example.com/check"),
+            CancellationToken.None);
+        clock.Advance(TimeSpan.FromSeconds(6));
+        EntryIntegrationHealthResult result = await pending;
+
+        Assert.Equal(EntryIntegrationHealthStatus.TimedOut, result.Status);
     }
 
     [Fact]
@@ -348,11 +704,16 @@ public sealed class EntryIntegrationServicesTests
     private sealed class StubCredentialStore(string? value)
         : IEntryIntegrationCredentialStore
     {
+        public int GetCount { get; private set; }
+
         public Task<string?> GetAsync(
             EntryIntegrationKind kind,
             string targetId,
-            CancellationToken cancellationToken) =>
-            Task.FromResult(value);
+            CancellationToken cancellationToken)
+        {
+            GetCount++;
+            return Task.FromResult(value);
+        }
 
         public Task<bool> ExistsAsync(
             EntryIntegrationKind kind,
@@ -374,16 +735,53 @@ public sealed class EntryIntegrationServicesTests
             throw new NotSupportedException();
     }
 
+    private sealed class BlockingCredentialStore(TimeProvider timeProvider)
+        : IEntryIntegrationCredentialStore
+    {
+        public async Task<string?> GetAsync(
+            EntryIntegrationKind kind,
+            string targetId,
+            CancellationToken cancellationToken)
+        {
+            await Task.Delay(
+                Timeout.InfiniteTimeSpan,
+                timeProvider,
+                cancellationToken);
+            return null;
+        }
+
+        public Task<bool> ExistsAsync(
+            EntryIntegrationKind kind,
+            string targetId,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task SetAsync(
+            EntryIntegrationKind kind,
+            string targetId,
+            string value,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task DeleteAsync(
+            EntryIntegrationKind kind,
+            string targetId,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+    }
+
     private sealed class StubProbe(
         EntryIntegrationKind kind,
         Func<
             EntryIntegrationProbeContext,
             string,
             CancellationToken,
-            Task<EntryIntegrationProbeResult>>? handler = null)
+            Task<EntryIntegrationProbeResult>>? handler = null,
+        bool requiresCredential = true)
         : IEntryIntegrationHealthProbe
     {
         public EntryIntegrationKind Kind { get; } = kind;
+        public bool RequiresCredential { get; } = requiresCredential;
         public int CallCount { get; private set; }
 
         public async Task<EntryIntegrationProbeResult> ProbeAsync(
@@ -406,6 +804,21 @@ public sealed class EntryIntegrationServicesTests
             string host,
             CancellationToken cancellationToken) =>
             Task.FromResult(addresses);
+    }
+
+    private sealed class BlockingResolver(TimeProvider timeProvider)
+        : IFeedHostResolver
+    {
+        public async Task<IReadOnlyList<IPAddress>> ResolveAsync(
+            string host,
+            CancellationToken cancellationToken)
+        {
+            await Task.Delay(
+                Timeout.InfiniteTimeSpan,
+                timeProvider,
+                cancellationToken);
+            return Array.Empty<IPAddress>();
+        }
     }
 
     private sealed class RecordingSecretStore : ISecretStore

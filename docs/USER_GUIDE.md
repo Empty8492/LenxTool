@@ -216,11 +216,11 @@ Feed 的“视图类型”默认选择“自动识别”，客户端会根据经
 
 ## 外部集成策略与个人凭据
 
-- 管理员登录后可从侧栏进入“外部集成”，逐类启用或停用集成。Obsidian 和 Eagle 都不填写主机：前者只写本地 Vault，后者只允许客户端另行保存数字 loopback HTTP 端点。Zotero 必须填写精确主机 `api.zotero.org`，Readwise 必须填写精确主机 `readwise.io`；其他网络集成也必须填写各自精确目标主机。主机不能包含协议、端口、路径、通配符、IP、localhost 或 `.local`。
+- 管理员登录后可从侧栏进入“外部集成”，逐类启用或停用集成。公网目标填写精确 HTTPS 主机；Readeck、Outline、qBittorrent 和 Webhook 只有在“受信私网端点”中明确填写 DNS 与端口后才可访问私网。Outline collection ID、qBittorrent category 和 qBittorrent localhost HTTP 端口还要分别进入资源/端口白名单。公网主机白名单不接受协议、路径、通配符、IP、`.local` 或 `home.arpa`；`home.arpa` 仅可作为精确私网 DNS 与端口显式填写。
 - 普通用户不能进入或调用共享策略写入。Worker 只向普通用户提供 ACTIVE 策略，ALL 与发布操作仍由服务端管理员角色校验，客户端隐藏入口不是授权边界。
-- “设置 → 个人外部集成”当前只显示已经接通生产 exporter 与健康探针的 Readwise。该卡把 TargetId 固定为 `default`、端点固定为只读 `https://readwise.io/`；token 保存后立即清空输入框、不支持明文回读，并由 Windows DPAPI CurrentUser 存入 `Readwise/default` 槽位。Obsidian、Eagle 和 Zotero 使用各自的本机设置卡；Eagle 不需要凭据，Zotero API key 只使用固定 `Zotero/default` DPAPI 槽位。
-- Readwise 的“测试连接”会先校验管理员策略、精确主机、HTTPS/443、凭据和 DNS 公网地址，再应用 8 秒超时与 30 秒冷却，并只调用无写入副作用的官方 auth 端点；当前表单必须先保存。Zotero 继续经过该共享边界，并额外核对个人库 User ID 与 write/按需 notes/files 权限；Eagle 使用独立的 loopback 探测。界面只显示固定状态，不显示第三方响应、异常、请求头、token、API key 或资源库路径。
-- 当前生产已注册的适配器为 Obsidian 本地文件导出、Eagle 本机 Web API 图片导出、Zotero Web API v3 个人库导出和 Readwise Reader 导出；Cubox 已取消实施，Readeck、Outline、qBittorrent 与 Webhook 只保留兼容枚举/策略契约，不会出现在个人凭据表单、保存占位凭据或发起第三方请求。若升级前曾保存这些占位类型的配置，设置页会显示“旧版占位凭据配置”警告；旧值不会返回界面，也不会交给探针、exporter 或网络，应用不会自动删除它。只有用户点击“删除旧版占位凭据”才会幂等删除当前记录对应的旧槽位，当前 Readwise token 不受影响。若历史上先后保存过多组旧目标，可在“清理其他旧版占位槽位”中按原类型和 TargetId 定向删除；必须仍知道这两个标识，遗忘的 TargetId 不能从哈希槽名反推出。该入口只删除，不保存目标或测试连接。
+- “设置 → 个人外部集成”通用卡只管理固定官方端点的 Readwise；Obsidian、Eagle、Zotero、Readeck、Outline、qBittorrent 和 Webhook 使用各自专用卡。首版每种 provider 只保存一个 `default` 本机目标。凭据保存后立即清空、不支持明文回读，并由 Windows DPAPI CurrentUser 按 provider/target 隔离。
+- 所有网络 provider 的“测试连接”都会先重验已保存 endpoint、ACTIVE 策略、精确 host/port 与全部 DNS 地址，再按需要读取凭据；真实导出还会单独重验 Outline collection 或 qBittorrent category 资源许可。客户端禁用代理、重定向、Cookie 与自动解压，响应正文有流式硬上限。界面只显示封闭状态，不显示第三方响应、异常、请求头、token、API key、完整 magnet 或本机路径。
+- 当前生产已注册 Obsidian、Eagle、Zotero、Readwise、Readeck、Outline、qBittorrent 与 Webhook；Cubox 已取消。升级前 Readeck/Outline/qBittorrent/Webhook 占位凭据不会因新版本自动启用：没有专用目标文档中的凭据代际标记时，探针和 exporter 不会读取它。用户可显式重新填写新凭据，或通过旧凭据清理入口按原类型和 TargetId 删除；遗忘的 TargetId 不能从哈希槽名反推。
 
 ### 导出到 Obsidian
 
@@ -264,6 +264,30 @@ Eagle 未启动、端口错误、版本不兼容、没有打开资源库或响�
 
 401/403 表示 token 或账户状态不允许请求；429 会尊重有界 Retry-After，408/5xx 和无法判断的写入结果由持久队列重试。界面、队列历史和异常不会显示 token 或 Reader 响应正文。当前自动化只证明官方 API 的假 HTTP 契约，尚未使用受控真实 token/账户完成外部写入验收。
 
+### 导出到 Readeck
+
+1. 管理员启用 Readeck，并允许实例的公网 HTTPS 主机或精确私网 HTTPS DNS/端口。本机“Readeck 自托管书签”卡只保存一个实例根地址、归档开关与 token；保存后再测试。
+2. 在资讯页对目标条目点击“导出到 Readeck”。LenxTool 会加入一个可见的 `lenxtool:<stable-id>` 技术标签；重试先按该标签精确查找，零匹配创建、单匹配更新、多匹配冲突关闭。
+3. 标题、来源 URL、Feed categories 和归档状态按固定字段发送；不发送正文、私人备注、AI 私人状态或本机路径。当前尚未使用受控真实实例完成写入验收。
+
+### 导出到 Outline
+
+1. 管理员启用 Outline，同时允许实例 endpoint 和目标 collection UUID。本机“Outline 文档导出”卡保存一个 HTTPS 根地址、collection ID 与 API key。
+2. 同一 Feed 条目在同一 endpoint/collection 目标修订内使用确定性 UUID：首次创建为个人草稿，后续显式导出更新同一草稿，不会自动发布给工作区成员，也不会把旧文档移动到新 collection。切换 endpoint 或 collection 后形成新目标作用域，并在新 collection 创建另一份确定性草稿；需要共享时由用户在 Outline 内复核后发布。Markdown 只来自已净化、有界的条目字段，不读取或上传本地资源。
+3. 401/403 请检查 API key 与 collection 权限；429/暂时故障由队列处理。当前尚未使用受控真实实例完成写入验收。
+
+### 投递到 qBittorrent
+
+1. 只支持 qBittorrent 5.2+ / WebAPI 2.14.1+ API key。管理员必须允许实例、明确非空 category；同机 HTTP 只允许 `http://localhost:<白名单端口>`，其他目标使用 HTTPS。本机卡只保存一个实例和 category。
+2. 资讯页先点击“投递到 qBittorrent”，核对警告后再点“确认启动下载”。没有唯一合法 BTIH magnet 或已验证 `.torrent` enclosure 时不会进入队列；每次投递都必须重新确认。
+3. `.torrent` 只从公网 HTTPS、无跳转、MIME 正确且不超过 2 MiB 的 enclosure 下载，并校验规范 bencode 与 info-hash。完整 magnet、tracker/passkey 和 API 响应不会进入状态或日志。localhost HTTP 会在本机 TCP 明文传输 API key，请保持服务仅监听同机并定期轮换密钥。当前尚未完成真实实例投递验收。
+
+### 发送受控 Webhook
+
+1. 管理员启用 Webhook 并允许精确 HTTPS endpoint；本机专用卡可选择是否使用 HMAC-SHA256。该功能不允许自定义方法、请求头、Authorization 或正文模板。
+2. 接收方必须先对 OPTIONS 返回 `LenxTool-Webhook-Version: 1` 与 `LenxTool-Idempotency: required`。POST 使用固定 JSON、稳定 `Idempotency-Key`，成功必须用 `LenxTool-Ack` 精确回显事件 ID；能力缺失时不会发送。
+3. 可选签名是 `X-LenxTool-Signature: sha256=<hex>`，覆盖实际 UTF-8 请求体。响应正文最多读取 4 KiB 后丢弃，不渲染为 HTML。当前尚未完成真实接收端验收。
+
 ## 自动生成每日/每周订阅摘要
 
 1. 先在设置页保存有效的 DeepSeek Key，并确认本机已经同步到可用的 ACTIVE 订阅目录。摘要不会绕过凭据检查，也不会把 Key 写入计划或报告。
@@ -275,6 +299,6 @@ Eagle 未启动、端口错误、版本不兼容、没有打开资源库或响�
 
 计划、筛选、报告和导出路径只保存在本机，不上传 Worker/D1。为生成摘要，所选条目的有界纯文本会直接发送给 DeepSeek；模型没有工具权限，输出仅作为纯文本保存。明确的 429 会按有界 Retry-After 持久退避，不会热循环阻塞其他计划；网络/超时、5xx或其他无法确认是否已产生结果的失败不会落半成品，也不会自动重放。这个防重选择可能跳过一次摘要，但避免了无幂等键供应商的重复计费。
 
-## 当前验收状态（2026-08-08）
+## 当前验收状态（2026-08-13）
 
-Gate 0、P0、P1、P2-01～P2-14、P2-20～P2-22 与统一发现 DISC-01～DISC-06、UX-03 已通过本地自动化验收。P2-22 新增默认关闭、可降级的 Windows 系统通知、静默/聚合设置、schema v25 受控目标与安全激活；真实 Windows 通知显示和设置页最小窗口也已手测。生产 Worker/D1、受控真实 Eagle/Zotero/Readwise 连通和正式签名安装包仍需单独发布验收；P2-15 Cubox 已取消，P2-16～P2-19 待逐项选择。P2-23 已形成 [`Proposed ADR-004`](decisions/ADR-004-server-email-digest-gate.md) 但未验收，等待产品负责人选择 A/B/C；获批前不会增加云端文章表、邮箱字段或邮件发送代码。最新自动化门禁数字以 [`TEST_REPORT.md`](TEST_REPORT.md) 为准。
+Gate 0、P0、P1、P2-01～P2-14、P2-16～P2-23 与统一发现 DISC-01～DISC-06、UX-03 已通过本地自动化验收。P2-16～P2-19 已完成策略、专用设置、假 HTTP、导出器和显式动作；生产 Worker/D1 以及 Eagle/Zotero/Readwise/Readeck/Outline/qBittorrent/Webhook 的受控真实连通仍需单独发布验收。P2-15 Cubox 已取消；P2-23 已按 [`Accepted ADR-004`](decisions/ADR-004-server-email-digest-gate.md) 选择 A，不增加云端文章表、邮箱字段或邮件发送代码。最新自动化门禁数字以 [`TEST_REPORT.md`](TEST_REPORT.md) 为准。

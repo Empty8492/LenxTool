@@ -225,9 +225,13 @@ P2-14 在同一耐久队列上增加固定官方目标的 Readwise Reader 适配
 
 该导出能力按官方同一 URL 去重语义声明可安全重放，但这是“不会创建第二条”的有限幂等：再次保存会把现有文档移到资料库顶部并显示绿色标记，带不同追踪参数的 URL 仍可能创建第二份。因此队列重放可以收敛到同一对象，却不承诺第三方完全无可观察副作用。P2-14 不新增依赖、本地 schema 或 D1 migration，也没有真实 Readwise token/账户写入验收。
 
-集成类型采用分层可用性：`EntryIntegrationKind` 是已发布的线协议/共享策略契约，不等于客户端已注册凭据入口、健康探针或 exporter。个人通用设置必须使用显式生产 allowlist；当前只有 Readwise，Readeck、Outline、qBittorrent 与 Webhook 即使仍存在于枚举和管理员策略中，也不能由旧配置或程序化赋值进入 TargetId、DPAPI 凭据和连接测试流程。升级前遗留的占位凭据不会被自动删除；ViewModel 不按旧槽位取值，旧值不会返回界面，也不会交给探针、exporter 或网络。设置只保存非秘密清理指针并提供显式删除动作；删除当前指针时会把仍匹配的旧目标以可重放顺序规范化为 Readwise，避免下次启动重新生成提示。历史上还可能存在已被后续目标覆盖的槽位，用户只有知道原类型和 TargetId 才能通过只删除入口定向清理，哈希槽名不能反推出遗忘的标识。
+集成类型采用分层可用性：`EntryIntegrationKind` 是已发布的线协议/共享策略契约，不等于客户端已注册凭据入口、健康探针或 exporter。个人通用设置继续只管理固定官方端点的 Readwise；Readeck、Outline、qBittorrent 与 Webhook 已通过独立的版本化目标存储、专用设置卡、健康探针和 exporter 接入生产 DI，不重新开放历史占位表单。升级前遗留的占位凭据不会被自动启用；没有新目标文档中的 `CredentialVersion=1` 时，探针和 exporter 不读取旧槽。用户必须显式重填凭据，或通过只删除入口按原类型与 TargetId 清理；哈希槽名不能反推出遗忘的标识。
 
-凭据存储的生产实现仍是共享 DPAPI blob：刷新当前 Readwise 的存在状态或执行删除时，存储层可能解密整个 blob。这里承诺的是旧秘密不离开存储层、不进入 ViewModel/UI、探针、exporter 或网络，而不是承诺进程从不解密旧值。新增类型只有在生产 exporter、封闭探针、安全目标契约及对应回归同时就绪后，才能加入个人 allowlist。
+凭据存储的生产实现仍是共享 DPAPI blob：刷新凭据存在状态或执行删除时，存储层可能解密整个 blob。这里承诺的是未启用的旧秘密不离开存储层、不进入 ViewModel/UI、探针、exporter 或网络，而不是承诺进程从不解密旧值。专用设置先保存 `CredentialVersion=0` 的非秘密目标、再写秘密、最后提交 `CredentialVersion=1`；删除时先把目标降为 0，再删除秘密。测试连接只使用与当前表单完全一致的已保存目标，策略、端点和 DNS 验证先于秘密读取。
+
+P2-16～P2-19 将共享策略升级为 schema v2：公网 HTTPS 主机、精确私网 HTTPS `{host,port}`、Outline collection/qBittorrent category 与 qBittorrent loopback HTTP 端口分列保存。Worker 通过表示版本协商给旧客户端兼容投影；带高级约束的管理读写要求 v2，部署顺序固定为 D1 migration 0011、Worker v2、Desktop v2。首版每种 provider 只保存一个本机目标，资源白名单按 kind 全局授权；ACTIVE endpoint/resource 元数据只适用于同一信任域并被视为非秘密。
+
+四个适配器共享“策略与 DNS 先于凭据、禁代理/跳转/Cookie/自动解压、地址钉住、请求头与正文统一截止时间”的网络边界。Readeck 用可见稳定标签收敛 create/update；Outline 用确定性 UUID 且只允许既有文档留在获准 collection，固定创建个人草稿；qBittorrent 固定 5.2+/WebAPI 2.14.1+ API key、显式 category、投递前确认与写后 info-hash/category 复查；Webhook 只支持固定 v1 JSON、能力 OPTIONS、稳定 `Idempotency-Key`、精确 ack 和可选实际正文 HMAC。真实外部实例连通仍由 P2-D 单独验收。
 
 P1 终验（2026-07-27）以两条独立数据流验证架构边界：真实 schema v17 SQLite 在重开后的离线库中覆盖 10,000 条 Feed、1,000 个收藏、混合媒体和全文/AI/规则/媒体活动引用，查询、搜索、预览和清理均满足既定预算；真实 workerd/D1 覆盖管理员发布目录/AI 策略/规则、普通用户写入 403、版本不变及应用表/字段内容隐私白名单。Release 回归为 .NET 648/648、Worker 52/52、strict typecheck 和 0 警告构建。该记录关闭 P1 架构交付，不替代生产部署与正式签名发布。
 

@@ -43,7 +43,8 @@ describe("feed catalog migrations", () => {
       "0007_explicit_feed_view_kind.sql",
       "0008_feed_discovery_index.sql",
       "0009_smart_views.sql",
-      "0010_integration_policies.sql"
+      "0010_integration_policies.sql",
+      "0011_integration_policy_metadata.sql"
     ]);
   });
 

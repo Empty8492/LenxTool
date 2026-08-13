@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text;
@@ -143,7 +143,8 @@ public sealed class WorkerAccountSessionService :
 
     internal Task<HttpResponseMessage> GetAuthorizedAsync(
         string pathAndQuery,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? integrationPolicySchema = null)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (string.IsNullOrWhiteSpace(pathAndQuery)
@@ -155,9 +156,20 @@ public sealed class WorkerAccountSessionService :
             throw new ArgumentException("The Worker path must be a bounded origin-relative path.", nameof(pathAndQuery));
         }
 
-        return SendAuthorizedAsync(
-            token => CreateAuthorizedRequest(HttpMethod.Get, pathAndQuery, token.AccessToken),
-            cancellationToken);
+        return SendAuthorizedAsync(token =>
+        {
+            HttpRequestMessage request = CreateAuthorizedRequest(
+                HttpMethod.Get,
+                pathAndQuery,
+                token.AccessToken);
+            if (integrationPolicySchema is not null)
+            {
+                request.Headers.TryAddWithoutValidation(
+                    "X-LenxTool-Integration-Policy-Schema",
+                    integrationPolicySchema);
+            }
+            return request;
+        }, cancellationToken);
     }
 
     Task<HttpResponseMessage> IWorkerAiProxyClient.SendSharedAiAsync(
@@ -362,7 +374,7 @@ public sealed class WorkerAccountSessionService :
                     token.AccessToken);
             request.Headers.TryAddWithoutValidation(
                 "If-Match",
-                $"\"integration-policies-all-{expectedPolicySetVersion}\"");
+                $"\"integration-policies-v2-all-{expectedPolicySetVersion}\"");
             request.Headers.TryAddWithoutValidation(
                 "Idempotency-Key",
                 idempotencyKey);

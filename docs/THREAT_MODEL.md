@@ -134,6 +134,8 @@ schema v19 迁移、仓储和发布器测试确认历史通知无损归类、三
 
 ## P2-12 Eagle 安全证据（2026-08-03）
 
+> 本节“D1 只保存九种策略、开关和主机 JSON”是 P2-12 当轮的历史快照；当前策略形状已由下文 P2-16～P2-19 的 schema v2 记录取代。
+
 Worker/Core 测试固定 Obsidian/Eagle 空主机许可及两种本机集成的任意非空主机拒绝，D1 仍只保存九种策略、开关和主机 JSON。目标存储、API 客户端和导出器覆盖非法端点、未安装/错误端口、版本/平台/资源库元数据不兼容、超限或畸形 JSON、响应正文脱敏、禁代理/跳转/Cookie、408/429/5xx、调用方取消、POST 不确定结果复查和复查未知可重试。端点代际测试确认同进程保存必须等待活动导出释放；资源库修订测试证明原始路径不离开探测边界，同端点切库产生不同队列/幂等作用域，查询或下载期间已观察到的切换会关闭，新增期间保持到写后探测的切换会报告 `Conflict`。这些测试不证明原子选库：官方 `item/add` 缺少库身份，误写无法回滚且 ABA 切换不可观测。图片测试覆盖受阻/未验证/不支持附件、声明及实际 12 MiB、MIME 欺骗、五种魔数、data URI、标题/来源/标签映射、稳定 ID、已有条目跳过过期下载和重复投递收敛。App/DI/XAML 覆盖设置保存/测试共享忙门、策略撤销、超时阶段、释放取消、行内与详情命令参数、显式入队、可访问实时状态和启动/选择/刷新零导出。NuGet/npm 在线审计均为 0，Release 构建 0 警告/0 错误；无受控真实 Eagle 连通证据，P2-D 对应人工检查点仍未关闭。
 
 ## P2-13 Zotero 安全证据（2026-08-03）
@@ -147,6 +149,14 @@ Worker/Core 测试固定 Obsidian/Eagle 空主机许可及两种本机集成的�
 API 假 HTTP 测试覆盖固定 `readwise.io` 认证/保存路径、`Token` 请求头、204 无副作用探测、201 新建与 200 已有、成功 ID/Reader URL 校验、401/403、400/422、408/429/5xx、`Retry-After`、串行 50 次/分钟、禁代理/跳转/Cookie/解压、全部公网 DNS 钉住、超限/畸形 JSON、响应头后正文卡死、调用方取消与 POST 未知写结果。响应正文、token 和来源 URL 都不进入异常。导出器测试覆盖五种视图能力、来源 URL/标题/作者/日期/categories 的确定映射、净化内容优先及 Feed summary 回退、4,000 Unicode 文本元素与 16 KiB UTF-8 双重裁剪、预览/队列字节/实际 `summary` 一致、策略先于 DPAPI 凭据读取、固定目标、同 URL 200 重放和封闭错误映射。
 
 App/DI/XAML 与真实 WPF 回归覆盖 Readwise 选择后固定只读目标、当前表单先保存再测试、行内 `R`/详情显式入队、策略/凭据/不安全来源任一失败时零入队、可访问状态、只读 OneWay 精确预览和生产健康探针/导出器注册。启动、刷新、选择条目和仅保存设置不会触发 Reader 写入。本轮 NuGet/npm 在线审计均为 0，Release 构建为 0 警告/0 错误；没有真实 Readwise token、账户探测或写入证据，因此 P2-D 受控真实连通检查点仍未关闭。
+
+## P2-16～P2-19 托管集成安全证据（2026-08-13）
+
+共享策略 schema v2 将公网 HTTPS 主机、精确私网 HTTPS `{host,port}`、Outline collection/qBittorrent category 和 qBittorrent localhost HTTP 端口分列保存，并对每列及完整快照采用规范 JSON UTF-8 字节预算。Core 与 Worker 同时拒绝公网 `allowedHosts` 中的 IP literal、通配符、`.local`、`home.arpa`，以及所有字段中的 C0/C1 控制符、非法 UUID/category/端口与损坏扩展列；`home.arpa` 仅可作为管理员显式填写的精确私网 `{host,port}`，不能通过公网主机白名单隐式放行。旧客户端只取得兼容投影，advanced-only ACTIVE 项被隐藏，旧管理 ALL/PUT 在存在高级约束时失败关闭并要求升级。ACTIVE endpoint/resource 元数据会进入 D1 并下发同一 Worker 的登录账号，因此只适用于同一信任域且首版每种 provider 只允许一个本机目标；凭据、路径和条目内容不进入 Worker。
+
+健康探针与真实 exporter 共用执行期 endpoint 授权器：每次重新读取 ACTIVE 策略，核对 scheme/host/port，解析全部 DNS 地址并拒绝混合或越权分类，成功后才按探针需要读取 DPAPI 凭据；真实 Outline/qBittorrent 导出另在写入前重验 collection/category 资源许可。设置页只测试与已保存目标规范值一致的 endpoint，删除凭据先把目标代际降为 0 再删除 DPAPI secret。Pinned handler 禁代理、重定向、Cookie 与自动解压；所有新增 API 客户端和 torrent 下载器使用不信任 `Content-Length` 的流式硬上限，并对响应头后的正文读取设置独立截止时间。独立 target store 使用不透明队列修订；`CredentialVersion=1` 是旧占位槽与新生产凭据之间的显式激活门，未标记目标不会读取旧 secret。
+
+Readeck 以用户可见的稳定标签先查后建并在多匹配时冲突关闭；Outline 以确定性 UUID 只在管理员批准 collection 内 create/update；qBittorrent 只接受 5.2+ API key、唯一 BTIH magnet 或经 MIME/大小/规范 bencode/info-hash 验证的 torrent，category 必须存在且每次由用户再次确认，完整 magnet/passkey 不进入日志；Webhook 固定 v1 JSON、稳定 Idempotency-Key、能力探测、精确 ack 与可选 HMAC-SHA256，不提供任意请求头或模板。自动测试覆盖策略/Wire/迁移、API 假响应、旧凭据门、设置布局和显式 qBittorrent 确认；尚无受控真实 Readeck、Outline、qBittorrent 或 Webhook 连通证据，因此 P2-D 继续开放。
 
 ## P2-22 Windows 通知安全证据（2026-08-08）
 

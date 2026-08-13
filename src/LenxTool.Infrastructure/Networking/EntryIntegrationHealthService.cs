@@ -1,9 +1,5 @@
-using System.Collections.Concurrent;
-using System.Globalization;
-using System.Net;
-using System.Net.Sockets;
+﻿using System.Collections.Concurrent;
 using LenxTool.Core.Contracts;
-using LenxTool.Core.Errors;
 using LenxTool.Core.Feeds;
 using LenxTool.Core.Models;
 
@@ -11,7 +7,6 @@ namespace LenxTool.Infrastructure.Networking;
 
 /// <summary>
 /// 在调用提供商专用探针前完成共享策略、凭据、SSRF、超时和限频检查。
-/// P2-08 生产环境不注册探针，因此不会产生真实第三方网络请求。
 /// </summary>
 internal sealed class EntryIntegrationHealthService
     : IEntryIntegrationHealthService, IDisposable
@@ -21,7 +16,7 @@ internal sealed class EntryIntegrationHealthService
     private readonly Dictionary<
         EntryIntegrationKind,
         IEntryIntegrationHealthProbe> _probes;
-    private readonly IFeedHostResolver _resolver;
+    private readonly EntryIntegrationEndpointAuthorizer _authorizer;
     private readonly EntryIntegrationHealthOptions _options;
     private readonly TimeProvider _timeProvider;
     private readonly SemaphoreSlim _concurrency;
@@ -39,7 +34,7 @@ internal sealed class EntryIntegrationHealthService
     {
         _policies = policies;
         _credentials = credentials;
-        _resolver = resolver;
+        _authorizer = new EntryIntegrationEndpointAuthorizer(resolver);
         _options = ValidateOptions(options);
         _timeProvider = timeProvider;
         _probes = BuildProbeMap(probes);
@@ -72,26 +67,6 @@ internal sealed class EntryIntegrationHealthService
                 EntryIntegrationHealthStatus.PolicyDisabled,
                 now);
         }
-        if (!TryValidateEndpoint(
-                target.Endpoint,
-                policy.AllowedHosts,
-                out Uri endpoint))
-        {
-            return Result(
-                EntryIntegrationHealthStatus.BlockedEndpoint,
-                now);
-        }
-
-        string? credential = await _credentials.GetAsync(
-            target.Kind,
-            target.TargetId,
-            cancellationToken).ConfigureAwait(false);
-        if (string.IsNullOrWhiteSpace(credential))
-        {
-            return Result(
-                EntryIntegrationHealthStatus.CredentialsMissing,
-                now);
-        }
         if (!_probes.TryGetValue(
                 target.Kind,
                 out IEntryIntegrationHealthProbe? probe))
@@ -122,25 +97,6 @@ internal sealed class EntryIntegrationHealthService
             .ConfigureAwait(false);
         try
         {
-            IReadOnlyList<IPAddress> addresses;
-            try
-            {
-                addresses = await ResolvePublicAsync(
-                    endpoint,
-                    cancellationToken).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException)
-                when (cancellationToken.IsCancellationRequested)
-            {
-                throw;
-            }
-            catch
-            {
-                return Result(
-                    EntryIntegrationHealthStatus.BlockedEndpoint,
-                    _timeProvider.GetUtcNow());
-            }
-
             using var timeout = CancellationTokenSource
                 .CreateLinkedTokenSource(cancellationToken);
             using ITimer timer = _timeProvider.CreateTimer(
@@ -148,14 +104,82 @@ internal sealed class EntryIntegrationHealthService
                 null,
                 _options.Timeout,
                 Timeout.InfiniteTimeSpan);
+            EntryIntegrationProbeContext? context;
+            try
+            {
+                context = await _authorizer.AuthorizeAsync(
+                        target,
+                        policy,
+                        timeout.Token)
+                    .ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+                when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (OperationCanceledException)
+            {
+                return Result(
+                    EntryIntegrationHealthStatus.TimedOut,
+                    _timeProvider.GetUtcNow());
+            }
+            catch
+            {
+                return Result(
+                    EntryIntegrationHealthStatus.BlockedEndpoint,
+                    _timeProvider.GetUtcNow());
+            }
+            if (context is null)
+            {
+                return Result(
+                    EntryIntegrationHealthStatus.BlockedEndpoint,
+                    _timeProvider.GetUtcNow());
+            }
+
+            // 先完成策略、端点与 DNS pin，再触碰 DPAPI 凭据；即使 DNS
+            // 漂移到未批准地址，也不会把秘密解密进当前进程。
+            string? credential;
+            try
+            {
+                credential = probe.RequiresCredential
+                    ? await _credentials.GetAsync(
+                        target.Kind,
+                        target.TargetId,
+                        timeout.Token).ConfigureAwait(false)
+                    : null;
+            }
+            catch (OperationCanceledException)
+                when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (OperationCanceledException)
+            {
+                return Result(
+                    EntryIntegrationHealthStatus.TimedOut,
+                    _timeProvider.GetUtcNow());
+            }
+            catch
+            {
+                return Result(
+                    EntryIntegrationHealthStatus.Unavailable,
+                    _timeProvider.GetUtcNow());
+            }
+            if (probe.RequiresCredential
+                && string.IsNullOrWhiteSpace(credential))
+            {
+                return Result(
+                    EntryIntegrationHealthStatus.CredentialsMissing,
+                    _timeProvider.GetUtcNow());
+            }
+
             try
             {
                 EntryIntegrationProbeResult providerResult =
                     await probe.ProbeAsync(
-                        new(
-                            endpoint,
-                            Array.AsReadOnly(addresses.ToArray())),
-                        credential,
+                        context,
+                        credential ?? string.Empty,
                         timeout.Token).ConfigureAwait(false);
                 return NormalizeProbeResult(
                     providerResult,
@@ -190,80 +214,6 @@ internal sealed class EntryIntegrationHealthService
         if (_disposed) return;
         _concurrency.Dispose();
         _disposed = true;
-    }
-
-    private async Task<IReadOnlyList<IPAddress>> ResolvePublicAsync(
-        Uri endpoint,
-        CancellationToken cancellationToken)
-    {
-        string host = NormalizeHost(endpoint.IdnHost);
-        IReadOnlyList<IPAddress> resolved;
-        try
-        {
-            resolved = await _resolver.ResolveAsync(
-                host,
-                cancellationToken).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (Exception exception)
-            when (exception is SocketException or ArgumentException)
-        {
-            throw new AppException(
-                AppErrorFactory.FromNetwork("集成健康检查"),
-                exception);
-        }
-        IPAddress[] addresses = resolved.Distinct().ToArray();
-        if (addresses.Length == 0
-            || addresses.Any(address =>
-                NetworkTargetClassifier.Classify(address)
-                    is NetworkAddressDisposition.Private
-                    or NetworkAddressDisposition.Forbidden))
-        {
-            throw new InvalidOperationException(
-                "集成目标解析到了不允许的网络地址。");
-        }
-        return Array.AsReadOnly(addresses);
-    }
-
-    private static bool TryValidateEndpoint(
-        Uri? value,
-        IReadOnlyList<string> allowedHosts,
-        out Uri endpoint)
-    {
-        endpoint = null!;
-        if (value is null
-            || !value.IsAbsoluteUri
-            || value.AbsoluteUri.Length > 2048
-            || value.Scheme != Uri.UriSchemeHttps
-            || value.Port != 443
-            || !string.IsNullOrEmpty(value.UserInfo)
-            || !string.IsNullOrEmpty(value.Query)
-            || !string.IsNullOrEmpty(value.Fragment)
-            || IPAddress.TryParse(value.IdnHost, out _))
-        {
-            return false;
-        }
-        string host;
-        try
-        {
-            host = NormalizeHost(value.IdnHost);
-        }
-        catch (ArgumentException)
-        {
-            return false;
-        }
-        if (NetworkTargetClassifier.IsReservedHostName(host)
-            || !allowedHosts.Contains(
-                host,
-                StringComparer.Ordinal))
-        {
-            return false;
-        }
-        endpoint = value;
-        return true;
     }
 
     private static EntryIntegrationHealthResult NormalizeProbeResult(
@@ -318,12 +268,6 @@ internal sealed class EntryIntegrationHealthService
         return value;
     }
 
-    private static string NormalizeHost(string value)
-    {
-        string host = value.Trim().TrimEnd('.');
-        return new IdnMapping().GetAscii(host).ToLowerInvariant();
-    }
-
     private static EntryIntegrationHealthOptions ValidateOptions(
         EntryIntegrationHealthOptions options)
     {
@@ -362,4 +306,5 @@ internal sealed class EntryIntegrationHealthService
         }
         return result;
     }
+
 }

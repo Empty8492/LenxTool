@@ -1,4 +1,4 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Globalization;
 using System.IO;
@@ -82,7 +82,15 @@ public sealed partial class NewsCenterViewModel
             entryIntegrationCredentialStore = null,
         FeedDigestScheduleViewModel? feedDigestSchedule = null,
         IAiReportFileDialogService? aiReportDialogs = null,
-        IAiReportTextExportService? aiReportExporter = null)
+        IAiReportTextExportService? aiReportExporter = null,
+        IIntegrationExportTargetStore<ReadeckExportTarget>?
+            readeckExportTargetStore = null,
+        IIntegrationExportTargetStore<OutlineExportTarget>?
+            outlineExportTargetStore = null,
+        IIntegrationExportTargetStore<QBittorrentExportTarget>?
+            qbittorrentExportTargetStore = null,
+        IIntegrationExportTargetStore<WebhookExportTarget>?
+            webhookExportTargetStore = null)
         : base("资讯列表", "订阅资讯、每日早报、热点趋势与 AI 报告")
     {
         bool hasSharedMediaDependency =
@@ -166,7 +174,11 @@ public sealed partial class NewsCenterViewModel
             eagleExportTargetStore,
             eagleApiClient,
             zoteroExportTargetStore,
-            entryIntegrationCredentialStore);
+            entryIntegrationCredentialStore,
+            readeckExportTargetStore,
+            outlineExportTargetStore,
+            qbittorrentExportTargetStore,
+            webhookExportTargetStore);
     }
 
     public ObservableCollection<NewsArticle> Articles { get; } = [];

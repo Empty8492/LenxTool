@@ -1,0 +1,141 @@
+<UserControl x:Class="LenxTool.App.Views.ManagedIntegrationSettingsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:LenxTool.App.Controls">
+    <StackPanel>
+        <Border Margin="0,16,0,0" Style="{StaticResource BentoCardStyle}">
+            <StackPanel>
+                <TextBlock Style="{StaticResource SectionTitleStyle}" Text="Readeck 自托管书签" />
+                <TextBlock Margin="0,7,0,0" Style="{StaticResource MetaTextStyle}"
+                           Text="使用可见的 lenxtool:&lt;稳定摘要&gt; 技术标签收敛重放；实例必须命中管理员批准的公网或精确私网 HTTPS 目标。"
+                           TextWrapping="Wrap" />
+                <TextBlock Margin="0,14,0,0" Style="{StaticResource MetaTextStyle}" Text="实例 HTTPS 根地址" />
+                <TextBox Margin="0,7,0,0" AutomationProperties.Name="Readeck 实例 HTTPS 根地址"
+                         Text="{Binding ReadeckEndpoint, UpdateSourceTrigger=PropertyChanged}" />
+                <CheckBox Margin="0,12,0,0" AutomationProperties.Name="Readeck 保存后归档"
+                          Content="保存后移入归档" IsChecked="{Binding ReadeckArchive}" />
+                <TextBlock Margin="0,14,0,0" Style="{StaticResource MetaTextStyle}" Text="API token（保存后清空，不回读）" />
+                <PasswordBox Margin="0,7,0,0" AutomationProperties.Name="Readeck API token"
+                             controls:PasswordBoxAssistant.BoundPassword="{Binding ReadeckCredential, Mode=TwoWay}" />
+                <DockPanel Margin="0,16,0,0" LastChildFill="False">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource MetaTextStyle}" Text="{Binding ReadeckStatus}" TextWrapping="Wrap" />
+                        <TextBlock Margin="0,4,0,0" Style="{StaticResource MetaTextStyle}"
+                                   Text="{Binding ReadeckHasCredential, StringFormat=已保存 token：{0}}" />
+                    </StackPanel>
+                    <StackPanel DockPanel.Dock="Right" Margin="16,0,0,0" Orientation="Horizontal">
+                        <Button Margin="0,0,8,0" Command="{Binding DeleteReadeckCredentialCommand}" Content="删除 token" />
+                        <Button Margin="0,0,8,0" Command="{Binding TestReadeckCommand}" Content="测试连接" />
+                        <Button Style="{StaticResource AccentButtonStyle}" Command="{Binding SaveReadeckCommand}" Content="保存设置" />
+                    </StackPanel>
+                </DockPanel>
+            </StackPanel>
+        </Border>
+
+        <Border Margin="0,16,0,0" Style="{StaticResource BentoCardStyle}">
+            <StackPanel>
+                <TextBlock Style="{StaticResource SectionTitleStyle}" Text="Outline 文档导出" />
+                <TextBlock Margin="0,7,0,0" Style="{StaticResource MetaTextStyle}"
+                           Text="同一 Feed 条目使用确定性 UUID 更新同一文档；collection ID 必须位于管理员资源白名单。为避免意外公开，首版始终创建个人草稿，不会自动发布给工作区成员。"
+                           TextWrapping="Wrap" />
+                <Grid Margin="0,14,0,0">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="16" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource MetaTextStyle}" Text="实例 HTTPS 根地址" />
+                        <TextBox Margin="0,7,0,0" AutomationProperties.Name="Outline 实例 HTTPS 根地址"
+                                 Text="{Binding OutlineEndpoint, UpdateSourceTrigger=PropertyChanged}" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="2">
+                        <TextBlock Style="{StaticResource MetaTextStyle}" Text="Collection ID" />
+                        <TextBox Margin="0,7,0,0" AutomationProperties.Name="Outline Collection ID"
+                                 Text="{Binding OutlineCollectionId, UpdateSourceTrigger=PropertyChanged}" />
+                    </StackPanel>
+                </Grid>
+                <TextBlock Margin="0,14,0,0" Style="{StaticResource MetaTextStyle}" Text="API key（保存后清空，不回读）" />
+                <PasswordBox Margin="0,7,0,0" AutomationProperties.Name="Outline API key"
+                             controls:PasswordBoxAssistant.BoundPassword="{Binding OutlineCredential, Mode=TwoWay}" />
+                <DockPanel Margin="0,16,0,0" LastChildFill="False">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource MetaTextStyle}" Text="{Binding OutlineStatus}" TextWrapping="Wrap" />
+                        <TextBlock Margin="0,4,0,0" Style="{StaticResource MetaTextStyle}"
+                                   Text="{Binding OutlineHasCredential, StringFormat=已保存 API key：{0}}" />
+                    </StackPanel>
+                    <StackPanel DockPanel.Dock="Right" Margin="16,0,0,0" Orientation="Horizontal">
+                        <Button Margin="0,0,8,0" Command="{Binding DeleteOutlineCredentialCommand}" Content="删除 API key" />
+                        <Button Margin="0,0,8,0" Command="{Binding TestOutlineCommand}" Content="测试连接" />
+                        <Button Style="{StaticResource AccentButtonStyle}" Command="{Binding SaveOutlineCommand}" Content="保存设置" />
+                    </StackPanel>
+                </DockPanel>
+            </StackPanel>
+        </Border>
+
+        <Border Margin="0,16,0,0" Style="{StaticResource BentoCardStyle}">
+            <StackPanel>
+                <TextBlock Style="{StaticResource SectionTitleStyle}" Text="qBittorrent 投递" />
+                <TextBlock Margin="0,7,0,0" Style="{StaticResource MetaTextStyle}"
+                           Text="仅支持 qBittorrent 5.2+ / WebAPI 2.14.1+ API key；只投递已验证 magnet 或 torrent，每次操作都需在资讯页再次确认。"
+                           TextWrapping="Wrap" />
+                <TextBlock Margin="0,7,0,0" Foreground="{DynamicResource Brush.Warning}"
+                           Text="安全提示：选择 localhost HTTP 时，API key 会通过本机 TCP 明文传输；仅限同一台受信设备。优先使用 HTTPS。"
+                           TextWrapping="Wrap" />
+                <Grid Margin="0,14,0,0">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="16" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource MetaTextStyle}" Text="实例地址（HTTPS 或管理员批准的 localhost HTTP）" />
+                        <TextBox Margin="0,7,0,0" AutomationProperties.Name="qBittorrent 实例地址"
+                                 Text="{Binding QBittorrentEndpoint, UpdateSourceTrigger=PropertyChanged}" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="2">
+                        <TextBlock Style="{StaticResource MetaTextStyle}" Text="明确分类（不可为空）" />
+                        <TextBox Margin="0,7,0,0" AutomationProperties.Name="qBittorrent 保存分类"
+                                 Text="{Binding QBittorrentCategory, UpdateSourceTrigger=PropertyChanged}" />
+                    </StackPanel>
+                </Grid>
+                <TextBlock Margin="0,14,0,0" Style="{StaticResource MetaTextStyle}" Text="qbt_ API key（保存后清空，不回读）" />
+                <PasswordBox Margin="0,7,0,0" AutomationProperties.Name="qBittorrent API key"
+                             controls:PasswordBoxAssistant.BoundPassword="{Binding QBittorrentCredential, Mode=TwoWay}" />
+                <DockPanel Margin="0,16,0,0" LastChildFill="False">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource MetaTextStyle}" Text="{Binding QBittorrentStatus}" TextWrapping="Wrap" />
+                        <TextBlock Margin="0,4,0,0" Style="{StaticResource MetaTextStyle}"
+                                   Text="{Binding QBittorrentHasCredential, StringFormat=已保存 API key：{0}}" />
+                    </StackPanel>
+                    <StackPanel DockPanel.Dock="Right" Margin="16,0,0,0" Orientation="Horizontal">
+                        <Button Margin="0,0,8,0" Command="{Binding DeleteQBittorrentCredentialCommand}" Content="删除 API key" />
+                        <Button Margin="0,0,8,0" Command="{Binding TestQBittorrentCommand}" Content="测试连接" />
+                        <Button Style="{StaticResource AccentButtonStyle}" Command="{Binding SaveQBittorrentCommand}" Content="保存设置" />
+                    </StackPanel>
+                </DockPanel>
+            </StackPanel>
+        </Border>
+
+        <Border Margin="0,16,0,0" Style="{StaticResource BentoCardStyle}">
+            <StackPanel>
+                <TextBlock Style="{StaticResource SectionTitleStyle}" Text="受控 JSON Webhook" />
+                <TextBlock Margin="0,7,0,0" Style="{StaticResource MetaTextStyle}"
+                           Text="固定 v1 JSON 字段；发送前 OPTIONS 必须声明幂等能力，POST 必须按 Idempotency-Key 回显 LenxTool-Ack。禁止自定义请求头和模板。"
+                           TextWrapping="Wrap" />
+                <TextBlock Margin="0,14,0,0" Style="{StaticResource MetaTextStyle}" Text="精确 HTTPS Webhook 地址（可含路径，不可含查询）" />
+                <TextBox Margin="0,7,0,0" AutomationProperties.Name="受控 Webhook HTTPS 地址"
+                         Text="{Binding WebhookEndpoint, UpdateSourceTrigger=PropertyChanged}" />
+                <CheckBox Margin="0,12,0,0" AutomationProperties.Name="Webhook 启用 HMAC SHA256"
+                          Content="使用 HMAC-SHA256 签名固定请求体" IsChecked="{Binding WebhookUseHmac}" />
+                <TextBlock Margin="0,14,0,0" Style="{StaticResource MetaTextStyle}" Text="HMAC secret（可选；保存后清空，不回读）" />
+                <PasswordBox Margin="0,7,0,0" AutomationProperties.Name="Webhook HMAC secret"
+                             controls:PasswordBoxAssistant.BoundPassword="{Binding WebhookCredential, Mode=TwoWay}" />
+                <DockPanel Margin="0,16,0,0" LastChildFill="False">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource MetaTextStyle}" Text="{Binding WebhookStatus}" TextWrapping="Wrap" />
+                        <TextBlock Margin="0,4,0,0" Style="{StaticResource MetaTextStyle}"
+                                   Text="{Binding WebhookHasCredential, StringFormat=已保存 HMAC secret：{0}}" />
+                    </StackPanel>
+                    <StackPanel DockPanel.Dock="Right" Margin="16,0,0,0" Orientation="Horizontal">
+                        <Button Margin="0,0,8,0" Command="{Binding DeleteWebhookCredentialCommand}" Content="删除 secret" />
+                        <Button Margin="0,0,8,0" Command="{Binding TestWebhookCommand}" Content="测试能力" />
+                        <Button Style="{StaticResource AccentButtonStyle}" Command="{Binding SaveWebhookCommand}" Content="保存设置" />
+                    </StackPanel>
+                </DockPanel>
+            </StackPanel>
+        </Border>
+    </StackPanel>
+</UserControl>

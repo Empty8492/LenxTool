@@ -9,6 +9,18 @@
 | 2026-08-05 | Obsidian 证据分级知识库工作流 | `vault:default/08_AI_Workflows_AI与工作流/Obsidian 证据分级知识库工作流.md` | 作为自动毕业改造的既有流程基线；保留证据分级、分类和不覆盖规则，并明确修订逐次授权边界 | `cairn/knowledge-capture.md`、全局与项目 `AGENTS.md` |
 | 2026-08-05 | LenxTool 持久导出队列与安全 Markdown 导出 | `vault:default/07_Decisions_决策方案/LenxTool 持久导出队列与安全 Markdown 导出.md` | 采用真实 SQLite 双仓储、唯一窗口、租约 token、过期接管和陈旧提交拒绝的可恢复状态机约束；仅作为历史设计参考，均由当前代码和测试重新验证 | schema v23、`LocalScheduleRunRepository`、窗口恢复测试 |
 
+## WPF CalendarAutomationPeer 测试宿主
+
+- [dotnet/wpf v10.0.10：CalendarAutomationPeer.GetChildrenCore](https://github.com/dotnet/wpf/blob/v10.0.10/src/Microsoft.DotNet.Wpf/src/PresentationFramework/System/Windows/Automation/Peers/CalendarAutomationPeer.cs#L102-L126)：确认 peer 在 `MonthControl` 存在后直接读取 Previous/Header/Next 三个按钮，不容忍内层模板仍未应用的半初始化状态。
+- [dotnet/wpf v10.0.10：CalendarItem.OnApplyTemplate](https://github.com/dotnet/wpf/blob/v10.0.10/src/Microsoft.DotNet.Wpf/src/PresentationFramework/System/Windows/Controls/Primitives/CalendarItem.cs#L146-L169)：确认三个按钮字段只在 `CalendarItem` 应用模板时从对应 `PART_*` 部件解析；据此把修复限定在测试宿主时序而非产品模板。
+
+## P2-16～P2-19 外部集成
+
+- [Readeck 官方 bookmarks API](https://codeberg.org/readeck/readeck/src/commit/145a52fcf0db57082c2705f38388471cf303cdf0/docs/api/bookmarks/routes-bookmarks.yaml)：采用 Bearer、label 查询、创建与更新路由；以可见稳定标签实现写前查找与重放收敛。
+- [Outline 官方 API 指南](https://docs.getoutline.com/s/guide/doc/api-1rEIXDfLF6) 与 [官方 OpenAPI](https://raw.githubusercontent.com/outline/openapi/main/spec3.json)：采用 Bearer、`documents.info/create/update`、Document collectionId 回执和 `publish` 草稿语义；据此拒绝跨 collection 移动并固定个人草稿。
+- [qBittorrent API key 认证](https://github.com/qbittorrent/qBittorrent/wiki/API-Key-Authentication-%28%E2%89%A5v5.2.0%29)：采用 5.2+ API key，避免引入 username/password 与 SID cookie 生命周期。
+- [qBittorrent WebUI API](https://github.com/qbittorrent/qBittorrent/wiki/WebUI-API-%28qBittorrent-5.0%29) 与 [WebAPI changelog](https://github.com/qbittorrent/qBittorrent/blob/master/WebAPI_Changelog.md)：采用显式 category、WebAPI 2.14.1+ add JSON/202 语义及 info-hash/category 写后复核，不把排队或畸形回执误报为完成。
+
 ## P2-22 Windows 通知
 
 - [Microsoft：App notifications overview](https://learn.microsoft.com/en-us/windows/apps/develop/notifications/)：采用 App Notifications 当前平台边界与系统设置可用状态。

@@ -248,8 +248,8 @@ Idempotency-Key: 018f87d4-0f7e-7ad0-9c06-b285e52e7664
 | `GET /v1/automation-rules` | user/admin | URL 2 KiB；`afterVersion` 0～2^53-1；`scope` 枚举 | 200 `AutomationRulesSnapshot` 或 304 | `AUTOMATION_VERSION_AHEAD`、`ADMIN_REQUIRED` | 无 |
 | `POST /v1/admin/automation-rules` | admin | JSON 64 KiB；规则/条件/动作受限 | 201 `AutomationMutation` | `AUTOMATION_VERSION_CONFLICT`、`AUTOMATION_RULE_LIMIT_REACHED` | `automation_rule.created` |
 | `PATCH /v1/admin/automation-rules/{id}` | admin | JSON 64 KiB；ID 36；规则/条件/动作受限 | 200 `AutomationMutation` | `AUTOMATION_VERSION_CONFLICT`、`RESOURCE_NOT_FOUND` | `automation_rule.updated` |
-| `GET /v1/integration-policies` | user/admin | URL 2 KiB；`afterVersion` 0～2^53-1；`scope` 枚举 | 200 `IntegrationPolicySnapshot` 或 304 | `INTEGRATION_POLICY_VERSION_AHEAD`、`ADMIN_REQUIRED` | 无 |
-| `PUT /v1/admin/integration-policies` | admin | JSON 64 KiB；最多 9 种策略；本机类型主机为空，其余类型最多 32 个精确 DNS 主机 | 200 `IntegrationPolicyMutation` | `INTEGRATION_POLICY_VERSION_CONFLICT`、幂等/校验错误 | `integration_policy.replaced` |
+| `GET /v1/integration-policies` | user/admin | URL 2 KiB；`afterVersion` 0～2^53-1；`scope` 枚举；新客户端发送策略 schema 头 `2` | 200 `IntegrationPolicySnapshot` 或 304 | `INTEGRATION_POLICY_VERSION_AHEAD`、`INTEGRATION_POLICY_SCHEMA_UPGRADE_REQUIRED`、`ADMIN_REQUIRED` | 无 |
+| `PUT /v1/admin/integration-policies` | admin | JSON 64 KiB；`policySchemaVersion=2`；最多 9 种策略及有界 endpoint/resource 列表 | 200 `IntegrationPolicyMutation` | `INTEGRATION_POLICY_VERSION_CONFLICT`、`INTEGRATION_POLICY_SCHEMA_UPGRADE_REQUIRED`、幂等/校验错误 | `integration_policy.replaced` |
 
 所有端点还可能返回第 1.2 节的通用校验、认证、限流和服务不可用错误。
 
@@ -566,10 +566,18 @@ Worker 只验证、版本化和发布规则，不执行正文匹配，也不把�
 
 ## 12. P2 外部集成策略契约
 
-`GET /v1/integration-policies?scope=ACTIVE|ALL&afterVersion=n` 使用独立于目录、规则和智能视图的 `policySetVersion`。user 只能读取 ACTIVE，admin 可读取 ALL；强 ETag 为 `"integration-policies-active-n"` 或 `"integration-policies-all-n"`，当前版本返回 304，客户端版本超前返回 `409 INTEGRATION_POLICY_VERSION_AHEAD`。
+`GET /v1/integration-policies?scope=ACTIVE|ALL&afterVersion=n` 使用独立于目录、规则和智能视图的 `policySetVersion`。user 只能读取 ACTIVE，admin 可读取 ALL；schema v2 客户端必须发送 `X-LenxTool-Integration-Policy-Schema: 2`，响应包含 `policySchemaVersion: 2`，强 ETag 为 `"integration-policies-v2-active-n"` 或 `"integration-policies-v2-all-n"`。响应设置 `Vary: X-LenxTool-Integration-Policy-Schema`；当前版本返回 304，客户端版本超前返回 `409 INTEGRATION_POLICY_VERSION_AHEAD`。
 
-管理员 PUT 必须同时发送 `If-Match: "integration-policies-all-n"` 和 16～128 字符的 `Idempotency-Key`，请求体是完整 `policies` 集合。成功整组替换并只递增一次版本；同 key/同请求重放原成功响应，同 key/不同请求或旧版本返回 409。支持类型固定为 `OBSIDIAN`、`EAGLE`、`ZOTERO`、`READWISE`、`CUBOX`、`READECK`、`OUTLINE`、`QBITTORRENT`、`WEBHOOK`。
+管理员 PUT 必须同时发送 `If-Match: "integration-policies-v2-all-n"` 和 16～128 字符的 `Idempotency-Key`，请求体包含 `policySchemaVersion: 2` 与完整 `policies` 集合。schema 版本和完整规范请求都进入幂等摘要。成功整组替换并只递增一次版本；同 key/同请求重放原成功响应，同 key/不同请求或旧版本返回 409。支持类型固定为 `OBSIDIAN`、`EAGLE`、`ZOTERO`、`READWISE`、`CUBOX`、`READECK`、`OUTLINE`、`QBITTORRENT`、`WEBHOOK`。
 
-每种策略只有 `kind`、`isEnabled` 和 `allowedHosts`。Obsidian 与 Eagle 的 `allowedHosts` 必须为空，任一类型携带非空主机都会被拒绝：前者只写客户端 Vault，后者的 loopback HTTP 端点和当前资源库作用域也只存在于客户端。其余七种类型启用时至少需要一个、最多 32 个精确且可公开解析的 DNS 主机名，并拒绝协议、端口、路径、通配符、IP、localhost 与保留后缀；其中 Zotero 首版客户端进一步固定为 `api.zotero.org`，Readwise 客户端固定为 `readwise.io`。Worker/D1 只发布共享许可，不保存个人 TargetId、完整端点、Zotero User ID 或目标修订、Readwise token/固定队列目标、API key、Cookie、DPAPI 密文、DNS 结果、健康检查状态、Reader 返回 ID/URL 或外部响应。桌面端凭据只进入本机 DPAPI；P2-08 完成时尚未注册真实外部探测器或导出适配器，后续 P2-11～P2-14 已分别接入受控 Obsidian、Eagle、Zotero 和 Readwise，但策略发布本身仍不会触发健康探测或第三方保存请求。
+每种 schema v2 策略只允许 `kind`、`isEnabled`、`allowedHosts`、`trustedPrivateEndpoints`、`allowedResources` 和 `allowedLoopbackHttpPorts`。四个数组分别限制为 32、32、32、16 项，规范 JSON 单列不超过 8 KiB，完整策略集不超过 40 KiB：
 
-为兼容严格本机校验上线前旧入口可能写入 D1 的 Obsidian/Eagle 精确 DNS，GET 会先按旧约束验证数组，再按当前契约投影为 `allowedHosts: []`；只要当前查询范围内仍有这种非空旧行，即使 `afterVersion` 或 ETag 与服务端版本相等也返回 200，避免旧缓存永久保留主机。管理员可把 `scope=ALL` 返回的完整快照直接 PUT，从当前两种本机策略行移除旧主机；自愈产生新版本后，相等条件恢复 304。存量校验发生在 304 判断前，损坏数组仍返回 503。这个读取兼容层不放宽写入规则，新 PUT 中 Obsidian 或 Eagle 的任意非空 `allowedHosts` 仍返回 400。
+- `allowedHosts` 只允许公网 HTTPS/443 使用的精确 DNS；拒绝协议、端口、路径、通配符、所有 IP 表示、localhost、`.local` 和 `home.arpa` 等保留后缀。
+- `trustedPrivateEndpoints` 只对 Readeck、Outline、qBittorrent、Webhook 开放，保存精确私网 DNS 与端口。它允许管理员显式使用 `home.arpa`，但拒绝 IP、localhost、`.local` 和通配符；桌面执行期还必须确认全部 DNS 结果均为私网并固定连接地址。
+- `allowedResources` 只对 Outline 与 qBittorrent 开放：前者是非空规范 UUID collection ID，后者是 1～128 字符的显式非控制符 category。网络端点与资源按 kind 形成全局许可，因此首版每种 provider 只允许一个本机目标。
+- `allowedLoopbackHttpPorts` 只对 qBittorrent 开放；桌面仅可组合为精确 `http://localhost:<port>/`，不能扩展为 LAN HTTP。
+- Obsidian 与 Eagle 四个数组必须全部为空。其他网络类型启用时至少要有一个公网、私网或 qBittorrent loopback 目标；Outline/qBittorrent 启用时还必须有至少一个资源。
+
+Worker/D1 只发布同一信任域内的共享许可元数据，不保存个人 TargetId、完整 URL/路径、Zotero User ID 或目标修订、Readwise token/固定队列目标、API key、Cookie、DPAPI 密文、DNS 结果、健康检查状态、第三方返回 ID/URL、条目或外部响应。策略发布本身不会触发健康探测或第三方写入。
+
+未发送 schema 头的旧 GET 只得到 v1 三字段兼容投影和旧 ETag。ACTIVE 中仅依赖私网/loopback 的启用项会隐藏，避免旧桌面因空 `allowedHosts` 拒绝整份快照；ALL 中存在这类项时直接返回 `400 INTEGRATION_POLICY_SCHEMA_UPGRADE_REQUIRED`，旧格式 PUT 也一律要求升级，防止加载再发布时丢失扩展授权。严格本机校验上线前由旧入口写入的 Obsidian/Eagle 精确 DNS 仍会先验证再投影为空；损坏数组或扩展列失败关闭为 503。生产部署顺序固定为 `0011 migration → Worker schema v2 → Desktop schema v2`。

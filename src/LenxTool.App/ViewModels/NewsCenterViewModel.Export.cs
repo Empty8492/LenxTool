@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Text;
 using LenxTool.App.Mvvm;
 using LenxTool.Core.Contracts;
@@ -19,6 +19,14 @@ public sealed partial class NewsCenterViewModel
     private IZoteroExportTargetStore? _zoteroExportTargetStore;
     private IEntryIntegrationCredentialStore?
         _entryIntegrationCredentialStore;
+    private IIntegrationExportTargetStore<ReadeckExportTarget>?
+        _readeckExportTargetStore;
+    private IIntegrationExportTargetStore<OutlineExportTarget>?
+        _outlineExportTargetStore;
+    private IIntegrationExportTargetStore<QBittorrentExportTarget>?
+        _qbittorrentExportTargetStore;
+    private IIntegrationExportTargetStore<WebhookExportTarget>?
+        _webhookExportTargetStore;
     private string _obsidianExportStatus =
         "仅在点击后检查 Obsidian 配置与管理员策略。";
     private string _eagleExportStatus =
@@ -27,6 +35,29 @@ public sealed partial class NewsCenterViewModel
         "仅在显式点击后检查 Zotero 个人库、ACTIVE 策略与本机 API key。";
     private string _readwiseExportStatus =
         "Readwise 只发送下方可见的裁剪摘要；不会发送私人备注或完整正文。";
+    private string _readeckExportStatus =
+        "Readeck 使用可见稳定技术标签收敛重复投递。";
+    private string _outlineExportStatus =
+        "Outline 使用确定性文档 ID 更新同一条目。";
+    private string _qbittorrentExportStatus =
+        "qBittorrent 仅接受验证后的 magnet/torrent，且每次必须再次确认。";
+    private string _webhookExportStatus =
+        "Webhook 仅发送固定 JSON，并要求远端声明幂等与回显 ack。";
+    private FeedTimelineItem? _pendingQBittorrentExport;
+    private string? _pendingQBittorrentQueueTargetId;
+
+    public AsyncRelayCommand<FeedTimelineItem> ExportTimelineEntryToReadeckCommand { get; private set; } = null!;
+    public AsyncRelayCommand<FeedTimelineItem> ExportTimelineEntryToOutlineCommand { get; private set; } = null!;
+    public AsyncRelayCommand<FeedTimelineItem> PrepareTimelineEntryForQBittorrentCommand { get; private set; } = null!;
+    public AsyncRelayCommand ConfirmTimelineEntryToQBittorrentCommand { get; private set; } = null!;
+    public RelayCommand CancelTimelineEntryToQBittorrentCommand { get; private set; } = null!;
+    public AsyncRelayCommand<FeedTimelineItem> ExportTimelineEntryToWebhookCommand { get; private set; } = null!;
+
+    public string ReadeckExportStatus { get => _readeckExportStatus; private set => SetProperty(ref _readeckExportStatus, value); }
+    public string OutlineExportStatus { get => _outlineExportStatus; private set => SetProperty(ref _outlineExportStatus, value); }
+    public string QBittorrentExportStatus { get => _qbittorrentExportStatus; private set => SetProperty(ref _qbittorrentExportStatus, value); }
+    public string WebhookExportStatus { get => _webhookExportStatus; private set => SetProperty(ref _webhookExportStatus, value); }
+    public bool HasPendingQBittorrentExport => _pendingQBittorrentExport is not null;
 
     public AsyncRelayCommand<FeedTimelineItem>
         ExportTimelineEntryToObsidianCommand
@@ -97,7 +128,15 @@ public sealed partial class NewsCenterViewModel
         IEagleApiClient? eagleApiClient,
         IZoteroExportTargetStore? zoteroExportTargetStore,
         IEntryIntegrationCredentialStore?
-            entryIntegrationCredentialStore)
+            entryIntegrationCredentialStore,
+        IIntegrationExportTargetStore<ReadeckExportTarget>?
+            readeckExportTargetStore,
+        IIntegrationExportTargetStore<OutlineExportTarget>?
+            outlineExportTargetStore,
+        IIntegrationExportTargetStore<QBittorrentExportTarget>?
+            qbittorrentExportTargetStore,
+        IIntegrationExportTargetStore<WebhookExportTarget>?
+            webhookExportTargetStore)
     {
         _entryExportQueueService = entryExportQueueService;
         _entryIntegrationPolicyService = entryIntegrationPolicyService;
@@ -107,6 +146,10 @@ public sealed partial class NewsCenterViewModel
         _zoteroExportTargetStore = zoteroExportTargetStore;
         _entryIntegrationCredentialStore =
             entryIntegrationCredentialStore;
+        _readeckExportTargetStore = readeckExportTargetStore;
+        _outlineExportTargetStore = outlineExportTargetStore;
+        _qbittorrentExportTargetStore = qbittorrentExportTargetStore;
+        _webhookExportTargetStore = webhookExportTargetStore;
         ExportTimelineEntryToObsidianCommand = new(
             ExportTimelineEntryToObsidianAsync,
             CanExportTimelineEntryToObsidian);
@@ -119,6 +162,47 @@ public sealed partial class NewsCenterViewModel
         ExportTimelineEntryToReadwiseCommand = new(
             ExportTimelineEntryToReadwiseAsync,
             CanExportTimelineEntryToReadwise);
+        ExportTimelineEntryToReadeckCommand = new(
+            (item, cancellationToken) => ExportManagedAsync(
+                item,
+                EntryIntegrationKind.Readeck,
+                ReadeckEntryExporter.ExporterId,
+                GetReadeckQueueTargetAsync,
+                _ => 1024,
+                value => ReadeckExportStatus = value,
+                cancellationToken),
+            item => item is not null && _readeckExportTargetStore is not null);
+        ExportTimelineEntryToOutlineCommand = new(
+            (item, cancellationToken) => ExportManagedAsync(
+                item,
+                EntryIntegrationKind.Outline,
+                OutlineEntryExporter.ExporterId,
+                GetOutlineQueueTargetAsync,
+                entry => Encoding.UTF8.GetByteCount(entry.SanitizedContent),
+                value => OutlineExportStatus = value,
+                cancellationToken),
+            item => item is not null && _outlineExportTargetStore is not null);
+        PrepareTimelineEntryForQBittorrentCommand = new(
+            PrepareQBittorrentExportAsync,
+            item => item is not null && _qbittorrentExportTargetStore is not null);
+        ConfirmTimelineEntryToQBittorrentCommand = new(
+            ConfirmQBittorrentExportAsync,
+            () => HasPendingQBittorrentExport);
+        CancelTimelineEntryToQBittorrentCommand = new(
+            CancelQBittorrentExport,
+            () => HasPendingQBittorrentExport);
+        ExportTimelineEntryToWebhookCommand = new(
+            (item, cancellationToken) => ExportManagedAsync(
+                item,
+                EntryIntegrationKind.Webhook,
+                WebhookEntryExporter.ExporterId,
+                GetWebhookQueueTargetAsync,
+                entry => Math.Min(
+                    32 * 1024,
+                    Encoding.UTF8.GetByteCount(entry.Summary)),
+                value => WebhookExportStatus = value,
+                cancellationToken),
+            item => item is not null && _webhookExportTargetStore is not null);
     }
 
     private bool CanExportTimelineEntryToReadwise(
@@ -436,6 +520,236 @@ public sealed partial class NewsCenterViewModel
         return false;
     }
 
+    private async Task ExportManagedAsync(
+        FeedTimelineItem? item,
+        EntryIntegrationKind kind,
+        string exporterId,
+        Func<CancellationToken, Task<ManagedQueueTarget?>> getTarget,
+        Func<FeedEntry, long> getContentBytes,
+        Action<string> setStatus,
+        CancellationToken cancellationToken,
+        string? expectedQueueTargetId = null)
+    {
+        if (item is null
+            || _entryExportQueueService is null
+            || _entryIntegrationPolicyService is null
+            || _entryIntegrationCredentialStore is null)
+        {
+            return;
+        }
+        string label = GetExportTargetLabel(item);
+        string displayName = IntegrationKindChoice.LabelFor(kind);
+        try
+        {
+            ManagedQueueTarget? target = await getTarget(cancellationToken);
+            if (target is null)
+            {
+                setStatus($"条目“{label}”：尚未保存 {displayName} 目标。");
+                return;
+            }
+            if (expectedQueueTargetId is not null
+                && !string.Equals(
+                    target.QueueTargetId,
+                    expectedQueueTargetId,
+                    StringComparison.Ordinal))
+            {
+                setStatus(
+                    $"条目“{label}”：qBittorrent 目标已变化，请重新确认。");
+                return;
+            }
+            EntryIntegrationPolicySnapshot snapshot =
+                await _entryIntegrationPolicyService.GetAsync(
+                    EntryIntegrationPolicyScope.Active,
+                    cancellationToken);
+            if (!snapshot.Policies.Any(policy =>
+                    policy.Kind == kind && policy.IsEnabled))
+            {
+                setStatus($"条目“{label}”：管理员尚未启用 {displayName}。");
+                return;
+            }
+            if (target.RequiresCredential
+                && !await _entryIntegrationCredentialStore.ExistsAsync(
+                    kind,
+                    "default",
+                    cancellationToken))
+            {
+                setStatus($"条目“{label}”：请先在设置中保存 {displayName} 凭据。");
+                return;
+            }
+            EntryExportRequest request = EntryExportRequest.Create(
+                exporterId,
+                target.QueueTargetId,
+                item.Entry,
+                ClassifyExportView(item.Entry),
+                getContentBytes(item.Entry));
+            EntryExportEnqueueResult result =
+                await _entryExportQueueService.EnqueueAsync(
+                    request,
+                    cancellationToken);
+            setStatus(result.Created
+                ? $"条目“{label}”已加入 {displayName} 导出队列。"
+                : $"条目“{label}”的当前 {displayName} 版本已存在于队列或历史中。");
+        }
+        catch (OperationCanceledException)
+            when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch
+        {
+            setStatus($"条目“{label}”：{displayName} 导出暂时不可用。");
+        }
+    }
+
+    private async Task<ManagedQueueTarget?> GetReadeckQueueTargetAsync(
+        CancellationToken cancellationToken)
+    {
+        ReadeckExportTarget? target = _readeckExportTargetStore is null
+            ? null
+            : await _readeckExportTargetStore.GetAsync(cancellationToken);
+        return target is null || target.CredentialVersion != 1
+            ? null
+            : new(target.CreateQueueTargetId(), RequiresCredential: true);
+    }
+
+    private async Task<ManagedQueueTarget?> GetOutlineQueueTargetAsync(
+        CancellationToken cancellationToken)
+    {
+        OutlineExportTarget? target = _outlineExportTargetStore is null
+            ? null
+            : await _outlineExportTargetStore.GetAsync(cancellationToken);
+        return target is null || target.CredentialVersion != 1
+            ? null
+            : new(target.CreateQueueTargetId(), RequiresCredential: true);
+    }
+
+    private async Task<ManagedQueueTarget?> GetQBittorrentQueueTargetAsync(
+        CancellationToken cancellationToken)
+    {
+        QBittorrentExportTarget? target = _qbittorrentExportTargetStore is null
+            ? null
+            : await _qbittorrentExportTargetStore.GetAsync(cancellationToken);
+        return target is null || target.CredentialVersion != 1
+            ? null
+            : new(target.CreateQueueTargetId(), RequiresCredential: true);
+    }
+
+    private async Task<ManagedQueueTarget?> GetWebhookQueueTargetAsync(
+        CancellationToken cancellationToken)
+    {
+        WebhookExportTarget? target = _webhookExportTargetStore is null
+            ? null
+            : await _webhookExportTargetStore.GetAsync(cancellationToken);
+        return target is null || target.UseHmac && target.CredentialVersion != 1
+            ? null
+            : new(
+                target.CreateQueueTargetId(),
+                RequiresCredential: target.UseHmac);
+    }
+
+    private async Task PrepareQBittorrentExportAsync(
+        FeedTimelineItem? item,
+        CancellationToken cancellationToken)
+    {
+        if (item is null) return;
+        bool hasCandidate = item.Entry.NormalizedUrl?.StartsWith(
+                "magnet:",
+                StringComparison.OrdinalIgnoreCase) == true
+            || item.Entry.Enclosures.Any(value =>
+                value.Url.StartsWith(
+                    "magnet:",
+                    StringComparison.OrdinalIgnoreCase)
+                || string.Equals(
+                    value.MediaType,
+                    "application/x-bittorrent",
+                    StringComparison.OrdinalIgnoreCase)
+                || Uri.TryCreate(
+                        value.Url,
+                        UriKind.Absolute,
+                        out Uri? uri)
+                    && uri.AbsolutePath.EndsWith(
+                        ".torrent",
+                        StringComparison.OrdinalIgnoreCase));
+        if (!hasCandidate)
+        {
+            QBittorrentExportStatus =
+                $"条目“{GetExportTargetLabel(item)}”没有可验证的 magnet/torrent。";
+            return;
+        }
+        QBittorrentExportTarget? target;
+        try
+        {
+            target = _qbittorrentExportTargetStore is null
+                ? null
+                : await _qbittorrentExportTargetStore.GetAsync(
+                    cancellationToken);
+            target = target is null
+                ? null
+                : QBittorrentExportTarget.Normalize(target);
+        }
+        catch (OperationCanceledException)
+            when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch
+        {
+            QBittorrentExportStatus =
+                "qBittorrent 目标暂时无法读取；未进入确认状态。";
+            return;
+        }
+        if (target is null || target.CredentialVersion != 1)
+        {
+            QBittorrentExportStatus =
+                "请先保存 qBittorrent 目标与 API key。";
+            return;
+        }
+        _pendingQBittorrentExport = item;
+        _pendingQBittorrentQueueTargetId = target.CreateQueueTargetId();
+        OnPropertyChanged(nameof(HasPendingQBittorrentExport));
+        ConfirmTimelineEntryToQBittorrentCommand.NotifyCanExecuteChanged();
+        CancelTimelineEntryToQBittorrentCommand.NotifyCanExecuteChanged();
+        QBittorrentExportStatus =
+            $"即将把条目“{GetExportTargetLabel(item)}”投递到 {target.Endpoint.Authority} 的“{target.Category}”分类；确认后会启动下载，请再次确认。";
+    }
+
+    private async Task ConfirmQBittorrentExportAsync(
+        CancellationToken cancellationToken)
+    {
+        FeedTimelineItem? item = _pendingQBittorrentExport;
+        string? expectedTargetId = _pendingQBittorrentQueueTargetId;
+        ClearQBittorrentConfirmation();
+        if (item is null || expectedTargetId is null) return;
+        await ExportManagedAsync(
+            item,
+            EntryIntegrationKind.QBittorrent,
+            QBittorrentEntryExporter.ExporterId,
+            GetQBittorrentQueueTargetAsync,
+            entry => entry.Enclosures
+                .Where(value => value.Length is >= 0)
+                .Select(value => value.Length ?? 0)
+                .DefaultIfEmpty(0)
+                .Max(),
+            value => QBittorrentExportStatus = value,
+            cancellationToken,
+            expectedTargetId);
+    }
+
+    private void CancelQBittorrentExport()
+    {
+        ClearQBittorrentConfirmation();
+        QBittorrentExportStatus = "已取消本次 qBittorrent 投递。";
+    }
+
+    private void ClearQBittorrentConfirmation()
+    {
+        _pendingQBittorrentExport = null;
+        _pendingQBittorrentQueueTargetId = null;
+        OnPropertyChanged(nameof(HasPendingQBittorrentExport));
+        ConfirmTimelineEntryToQBittorrentCommand.NotifyCanExecuteChanged();
+        CancelTimelineEntryToQBittorrentCommand.NotifyCanExecuteChanged();
+    }
+
     private bool CanExportTimelineEntryToObsidian(
         FeedTimelineItem? item) =>
         item is not null
@@ -611,5 +925,14 @@ public sealed partial class NewsCenterViewModel
         ExportTimelineEntryToEagleCommand.Dispose();
         ExportTimelineEntryToZoteroCommand.Dispose();
         ExportTimelineEntryToReadwiseCommand.Dispose();
+        ExportTimelineEntryToReadeckCommand.Dispose();
+        ExportTimelineEntryToOutlineCommand.Dispose();
+        PrepareTimelineEntryForQBittorrentCommand.Dispose();
+        ConfirmTimelineEntryToQBittorrentCommand.Dispose();
+        ExportTimelineEntryToWebhookCommand.Dispose();
     }
+
+    private sealed record ManagedQueueTarget(
+        string QueueTargetId,
+        bool RequiresCredential);
 }

@@ -1514,7 +1514,7 @@
                                            Text="个人外部集成" />
                                 <TextBlock Margin="0,7,0,0"
                                            Style="{StaticResource MetaTextStyle}"
-                                           Text="目标名称和 HTTPS 地址保存在本地数据库；凭据只进入 Windows DPAPI。当前通用卡仅开放已接通且固定官方端点的 Readwise；未接通类型不会显示、保存凭据或发起外部请求。"
+                                           Text="目标名称和 HTTPS 地址保存在本地数据库；凭据只进入 Windows DPAPI。当前通用卡仅管理固定官方端点的 Readwise；Readeck、Outline、qBittorrent 与 Webhook 使用下方专用卡。升级前占位凭据不会自动启用，只能显式清理或重新填写。"
                                            TextWrapping="Wrap" />
                                 <Grid Margin="0,16,0,0">
                                     <Grid.ColumnDefinitions>
@@ -1653,6 +1653,8 @@
                                 </DockPanel>
                             </StackPanel>
                         </Border>
+                        <views:ManagedIntegrationSettingsView
+                            DataContext="{Binding ManagedIntegrations}" />
                         <Border Margin="0,16,0,0"
                                 DataContext="{Binding ZoteroSettings}"
                                 Style="{StaticResource BentoCardStyle}">

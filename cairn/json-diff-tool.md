@@ -26,4 +26,4 @@ Independent-01 于 2026-08-10 完成。入口位于“文档与数据”页的�
 - ViewModel：独立错误、路径预算提前截断的实际条数、超限、交换、UTF-8 字节位置、完成后取消、A→B→A。
 - 真实 WPF：最小 920×620 `MainWindow` 中的生产滚动区、原生 Automation Peer、Tab 焦点、绑定命令、500 行回收虚拟化、等效 200% 布局下右栏/列表可达与深浅主题。
 
-等效 200% `LayoutTransform` 是稳定组件级证据，不替代正式发布矩阵中的真实 Windows 200% DPI/文本缩放人工观察。仓库既有 `SelectionControlsWpfRuntimeTests` 仍可能在 `CalendarAutomationPeer.GetChildrenCore` 出现环境基线失败；判断 JSON Diff 回归时须独立进程运行其真实 WPF 用例。
+等效 200% `LayoutTransform` 是稳定组件级证据，不替代正式发布矩阵中的真实 Windows 200% DPI/文本缩放人工观察。此前 `SelectionControlsWpfRuntimeTests` 的 `CalendarAutomationPeer.GetChildrenCore` 失败已于 2026-08-13 证实为测试在内层 `CalendarItem` 自然加载前强制外层布局造成的半初始化误报；测试改为等待真实 Loaded/布局并显式查询完整 Calendar Automation 子树后，当前 10 个 WPF runtime 类逐进程为 14/14。真实 WPF 用例仍须串行或逐进程运行，不能用结构测试替代。

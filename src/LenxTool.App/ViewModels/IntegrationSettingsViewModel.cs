@@ -401,6 +401,11 @@ public sealed class IntegrationSettingsViewModel
         }
 
         EntryIntegrationKind kind = SelectedLegacyCleanupKind.Kind;
+        if (IsDedicatedDefaultTarget(kind, targetId))
+        {
+            Status = "生产适配器的 default 槽位请使用对应专用卡删除，避免误删当前凭据。";
+            return;
+        }
         await _credentials.DeleteAsync(
             kind,
             targetId,
@@ -677,11 +682,16 @@ public sealed class IntegrationSettingsViewModel
 
     private static bool IsLegacyUnwiredKind(
         EntryIntegrationKind kind) =>
-        kind is EntryIntegrationKind.Cubox
-            or EntryIntegrationKind.Readeck
+        kind is EntryIntegrationKind.Cubox;
+
+    private static bool IsDedicatedDefaultTarget(
+        EntryIntegrationKind kind,
+        string targetId) =>
+        kind is EntryIntegrationKind.Readeck
             or EntryIntegrationKind.Outline
             or EntryIntegrationKind.QBittorrent
-            or EntryIntegrationKind.Webhook;
+            or EntryIntegrationKind.Webhook
+        && string.Equals(targetId, "default", StringComparison.Ordinal);
 
     private string ValidateTargetId()
     {
@@ -751,8 +761,11 @@ public sealed class IntegrationSettingsViewModel
         }
         try
         {
-            _ = ValidateCredentialTargetId(LegacyCleanupTargetId);
-            return true;
+            string targetId = ValidateCredentialTargetId(
+                LegacyCleanupTargetId);
+            return !IsDedicatedDefaultTarget(
+                SelectedLegacyCleanupKind.Kind,
+                targetId);
         }
         catch (ArgumentException)
         {

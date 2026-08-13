@@ -1,4 +1,4 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using LenxTool.App.Mvvm;
 using LenxTool.Core.Accounts;
 using LenxTool.Core.Contracts;
@@ -15,21 +15,48 @@ public sealed class IntegrationPolicyEditorItem(
     EntryIntegrationKind kind,
     string label,
     bool isEnabled,
-    string allowedHostsText)
+    string allowedHostsText,
+    string trustedPrivateEndpointsText = "",
+    string allowedResourcesText = "",
+    string allowedLoopbackHttpPortsText = "")
     : ObservableObject
 {
     private bool _isEnabled = isEnabled;
     private string _allowedHostsText = RequiresAllowedHostsFor(kind)
         ? allowedHostsText
         : string.Empty;
+    private string _trustedPrivateEndpointsText =
+        SupportsTrustedPrivateEndpointsFor(kind)
+            ? trustedPrivateEndpointsText
+            : string.Empty;
+    private string _allowedResourcesText = SupportsResourcesFor(kind)
+        ? allowedResourcesText
+        : string.Empty;
+    private string _allowedLoopbackHttpPortsText =
+        kind == EntryIntegrationKind.QBittorrent
+            ? allowedLoopbackHttpPortsText
+            : string.Empty;
 
     public EntryIntegrationKind Kind { get; } = kind;
     public string Label { get; } = label;
     public bool RequiresAllowedHosts { get; } =
         RequiresAllowedHostsFor(kind);
+    public bool SupportsTrustedPrivateEndpoints { get; } =
+        SupportsTrustedPrivateEndpointsFor(kind);
+    public bool SupportsResources { get; } = SupportsResourcesFor(kind);
+    public bool SupportsLoopbackHttpPorts { get; } =
+        kind == EntryIntegrationKind.QBittorrent;
     public string HostGuidance => RequiresAllowedHosts
-        ? "网络集成：每行填写一个精确 DNS 主机。"
+        ? "公网 HTTPS：每行填写一个精确 DNS 主机；未填写时可由受信私网或 qBittorrent loopback 目标满足。"
         : "本机集成：目标只保存在客户端，此处必须留空。";
+    public string ResourceGuidance => Kind switch
+    {
+        EntryIntegrationKind.Outline =>
+            "每行一个允许的 Outline collection UUID。",
+        EntryIntegrationKind.QBittorrent =>
+            "每行一个允许的 qBittorrent 分类；不允许未分类投递。",
+        _ => string.Empty
+    };
 
     public bool IsEnabled
     {
@@ -47,11 +74,53 @@ public sealed class IntegrationPolicyEditorItem(
                 : string.Empty);
     }
 
+    public string TrustedPrivateEndpointsText
+    {
+        get => _trustedPrivateEndpointsText;
+        set => SetProperty(
+            ref _trustedPrivateEndpointsText,
+            SupportsTrustedPrivateEndpoints
+                ? value ?? string.Empty
+                : string.Empty);
+    }
+
+    public string AllowedResourcesText
+    {
+        get => _allowedResourcesText;
+        set => SetProperty(
+            ref _allowedResourcesText,
+            SupportsResources ? value ?? string.Empty : string.Empty);
+    }
+
+    public string AllowedLoopbackHttpPortsText
+    {
+        get => _allowedLoopbackHttpPortsText;
+        set => SetProperty(
+            ref _allowedLoopbackHttpPortsText,
+            SupportsLoopbackHttpPorts
+                ? value ?? string.Empty
+                : string.Empty);
+    }
+
     private static bool RequiresAllowedHostsFor(
         EntryIntegrationKind value) =>
         value is not (
             EntryIntegrationKind.Obsidian
             or EntryIntegrationKind.Eagle);
+
+    private static bool SupportsTrustedPrivateEndpointsFor(
+        EntryIntegrationKind value) =>
+        value is (
+            EntryIntegrationKind.Readeck
+            or EntryIntegrationKind.Outline
+            or EntryIntegrationKind.QBittorrent
+            or EntryIntegrationKind.Webhook);
+
+    private static bool SupportsResourcesFor(
+        EntryIntegrationKind value) =>
+        value is (
+            EntryIntegrationKind.Outline
+            or EntryIntegrationKind.QBittorrent);
 }
 
 /// <summary>
@@ -63,6 +132,7 @@ public sealed class IntegrationAdminViewModel : PageViewModel
     private readonly IAccountSessionService _accountSession;
     private readonly SynchronizationContext? _synchronizationContext;
     private long _version;
+    private int _policySchemaVersion;
     private bool _isAdmin;
     private bool _isBusy;
     private string _status = "正在读取共享集成策略…";
@@ -78,14 +148,15 @@ public sealed class IntegrationAdminViewModel : PageViewModel
         _accountSession = accountSession;
         _synchronizationContext = SynchronizationContext.Current;
         Policies = [];
-        RefreshCommand = new(RefreshAsync, CanOperate);
-        PublishCommand = new(PublishAsync, CanOperate);
+        RefreshCommand = new(RefreshAsync, CanRefresh);
+        PublishCommand = new(PublishAsync, CanPublish);
         _accountSession.SessionChanged += OnSessionChanged;
         ApplySession(_accountSession.Current);
     }
 
     public ObservableCollection<IntegrationPolicyEditorItem>
-        Policies { get; }
+        Policies
+    { get; }
     public AsyncRelayCommand RefreshCommand { get; }
     public AsyncRelayCommand PublishCommand { get; }
     public bool IsAdmin => _isAdmin;
@@ -93,6 +164,11 @@ public sealed class IntegrationAdminViewModel : PageViewModel
     {
         get => _version;
         private set => SetProperty(ref _version, value);
+    }
+    public int PolicySchemaVersion
+    {
+        get => _policySchemaVersion;
+        private set => SetProperty(ref _policySchemaVersion, value);
     }
     public bool IsBusy
     {
@@ -149,9 +225,11 @@ public sealed class IntegrationAdminViewModel : PageViewModel
             if (!IsAdmin) return;
             ApplySnapshot(
                 snapshot.Version,
-                snapshot.Policies);
-            Status =
-                $"策略集 v{Version} 已加载；当前启用 {Policies.Count(item => item.IsEnabled)} 项。";
+                snapshot.Policies,
+                snapshot.PolicySchemaVersion);
+            Status = PolicySchemaVersion == 2
+                ? $"策略集 v{Version} 已加载；当前启用 {Policies.Count(item => item.IsEnabled)} 项。"
+                : "Worker 仍使用集成策略 schema v1；当前页面只读，请先升级 Worker。";
         }
         catch (AppException exception)
         {
@@ -163,6 +241,7 @@ public sealed class IntegrationAdminViewModel : PageViewModel
     private async Task PublishAsync(
         CancellationToken cancellationToken)
     {
+        if (!CanPublish()) return;
         IReadOnlyList<EntryIntegrationPolicyInput> inputs;
         try
         {
@@ -183,7 +262,10 @@ public sealed class IntegrationAdminViewModel : PageViewModel
                     Version,
                     cancellationToken);
             if (!IsAdmin) return;
-            ApplySnapshot(result.Version, result.Policies);
+            ApplySnapshot(
+                result.Version,
+                result.Policies,
+                result.PolicySchemaVersion);
             Status =
                 $"策略集 v{Version} 已发布；普通用户只能读取其中已启用的类型。";
         }
@@ -204,7 +286,16 @@ public sealed class IntegrationAdminViewModel : PageViewModel
             .Select(item => new EntryIntegrationPolicyInput(
                 item.Kind,
                 item.IsEnabled,
-                SplitHosts(item.AllowedHostsText)))
+                SplitHosts(item.AllowedHostsText))
+            {
+                TrustedPrivateEndpoints =
+                    SplitPrivateEndpoints(
+                        item.TrustedPrivateEndpointsText),
+                AllowedResources = SplitLines(
+                    item.AllowedResourcesText),
+                AllowedLoopbackHttpPorts = SplitPorts(
+                    item.AllowedLoopbackHttpPortsText)
+            })
             .ToArray();
         IReadOnlyList<EntryIntegrationPolicy> normalized =
             EntryIntegrationPolicyValidator
@@ -213,13 +304,21 @@ public sealed class IntegrationAdminViewModel : PageViewModel
             .Select(policy => new EntryIntegrationPolicyInput(
                 policy.Kind,
                 policy.IsEnabled,
-                policy.AllowedHosts))
+                policy.AllowedHosts)
+            {
+                TrustedPrivateEndpoints =
+                    policy.TrustedPrivateEndpoints,
+                AllowedResources = policy.AllowedResources,
+                AllowedLoopbackHttpPorts =
+                    policy.AllowedLoopbackHttpPorts
+            })
             .ToArray();
     }
 
     private void ApplySnapshot(
         long version,
-        IReadOnlyList<EntryIntegrationPolicy> policies)
+        IReadOnlyList<EntryIntegrationPolicy> policies,
+        int policySchemaVersion)
     {
         Dictionary<EntryIntegrationKind, EntryIntegrationPolicy>
             byKind = policies.ToDictionary(policy => policy.Kind);
@@ -236,9 +335,28 @@ public sealed class IntegrationAdminViewModel : PageViewModel
                     ? string.Empty
                     : string.Join(
                         Environment.NewLine,
-                        policy.AllowedHosts)));
+                        policy.AllowedHosts),
+                policy is null
+                    ? string.Empty
+                    : string.Join(
+                        Environment.NewLine,
+                        policy.TrustedPrivateEndpoints.Select(
+                            endpoint =>
+                                $"{endpoint.Host}:{endpoint.Port}")),
+                policy is null
+                    ? string.Empty
+                    : string.Join(
+                        Environment.NewLine,
+                        policy.AllowedResources),
+                policy is null
+                    ? string.Empty
+                    : string.Join(
+                        Environment.NewLine,
+                        policy.AllowedLoopbackHttpPorts)));
         }
         Version = version;
+        PolicySchemaVersion = policySchemaVersion;
+        NotifyCommands();
     }
 
     private static string[] SplitHosts(string value) =>
@@ -247,6 +365,44 @@ public sealed class IntegrationAdminViewModel : PageViewModel
                 StringSplitOptions.RemoveEmptyEntries
                 | StringSplitOptions.TrimEntries)
             .Where(host => host.Length > 0)
+            .ToArray();
+
+    private static string[] SplitLines(string value) =>
+        value.Split(
+                ['\r', '\n'],
+                StringSplitOptions.RemoveEmptyEntries
+                | StringSplitOptions.TrimEntries)
+            .Where(item => item.Length > 0)
+            .ToArray();
+
+    private static EntryIntegrationPrivateEndpoint[]
+        SplitPrivateEndpoints(string value) =>
+        SplitLines(value)
+            .Select(item =>
+            {
+                int separator = item.LastIndexOf(':');
+                if (separator <= 0
+                    || separator == item.Length - 1
+                    || item[..separator].Contains(':', StringComparison.Ordinal)
+                    || !int.TryParse(
+                        item[(separator + 1)..],
+                        out int port))
+                {
+                    throw new ArgumentException(
+                        "受信私网目标必须按 host:port 每行填写一项。");
+                }
+                return new EntryIntegrationPrivateEndpoint(
+                    item[..separator],
+                    port);
+            })
+            .ToArray();
+
+    private static int[] SplitPorts(string value) =>
+        SplitLines(value)
+            .Select(item => int.TryParse(item, out int port)
+                ? port
+                : throw new ArgumentException(
+                    "qBittorrent loopback HTTP 端口必须是整数。"))
             .ToArray();
 
     private void OnSessionChanged(
@@ -278,10 +434,14 @@ public sealed class IntegrationAdminViewModel : PageViewModel
         if (isAdmin) return;
         Policies.Clear();
         Version = 0;
+        PolicySchemaVersion = 0;
         Status = "当前账号没有共享集成策略管理权限。";
     }
 
-    private bool CanOperate() => IsAdmin && !IsBusy;
+    private bool CanRefresh() => IsAdmin && !IsBusy;
+
+    private bool CanPublish() =>
+        IsAdmin && !IsBusy && PolicySchemaVersion == 2;
 
     private void NotifyCommands()
     {

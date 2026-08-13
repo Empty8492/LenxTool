@@ -1,4 +1,4 @@
-using LenxTool.Core.Contracts;
+﻿using LenxTool.Core.Contracts;
 using LenxTool.Core.Errors;
 using LenxTool.Core.Models;
 
@@ -24,7 +24,13 @@ public sealed class WorkerEntryIntegrationPolicyService(
         using HttpResponseMessage response =
             await accountSession.GetAuthorizedAsync(
                 $"/v1/integration-policies?scope={wireScope}",
-                cancellationToken).ConfigureAwait(false);
+                cancellationToken,
+                integrationPolicySchema:
+                    EntryIntegrationPolicyWireProtocol
+                        .PolicySchemaVersion.ToString(
+                            System.Globalization.CultureInfo
+                                .InvariantCulture))
+                .ConfigureAwait(false);
         await WorkerAccountSessionService.EnsureSuccessAsync(
             response,
             cancellationToken).ConfigureAwait(false);
