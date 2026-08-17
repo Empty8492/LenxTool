@@ -6,7 +6,7 @@ workers_dev = true
 [[d1_databases]]
 binding = "DB"
 database_name = "lenx-tool"
-database_id = "REPLACE_WITH_D1_DATABASE_ID"
+database_id = "0e5c208d-a9b3-4da1-80a1-11b9c8e6bb43"
 migrations_dir = "migrations"
 
 [vars]
