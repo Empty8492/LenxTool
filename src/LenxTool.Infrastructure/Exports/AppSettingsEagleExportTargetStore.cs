@@ -1,5 +1,5 @@
-﻿using System.Text;
 using System.Diagnostics.CodeAnalysis;
+using System.Text;
 using System.Text.Json;
 using LenxTool.Core.Contracts;
 using LenxTool.Infrastructure.Networking;

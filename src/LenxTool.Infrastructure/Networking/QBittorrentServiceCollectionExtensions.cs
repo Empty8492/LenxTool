@@ -1,4 +1,4 @@
-﻿using LenxTool.Core.Contracts;
+using LenxTool.Core.Contracts;
 using LenxTool.Core.Models;
 using LenxTool.Infrastructure.Exports;
 using Microsoft.Extensions.DependencyInjection;

@@ -1,4 +1,4 @@
-﻿using LenxTool.App.ViewModels;
+using LenxTool.App.ViewModels;
 using LenxTool.Core.Accounts;
 using LenxTool.Core.Contracts;
 using LenxTool.Core.Models;

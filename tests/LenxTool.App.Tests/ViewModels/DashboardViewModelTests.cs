@@ -1,6 +1,6 @@
+using LenxTool.App.ViewModels;
 using LenxTool.Core.Contracts;
 using LenxTool.Core.Models;
-using LenxTool.App.ViewModels;
 
 namespace LenxTool.App.Tests.ViewModels;
 

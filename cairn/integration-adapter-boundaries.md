@@ -31,7 +31,7 @@
 
 ## 当前阻断
 
-- 代码与假 HTTP 契约无剩余 P0/P1。生产 D1 migration、Worker v2、首管理员、策略 schema v2/兼容契约和 Desktop/qBittorrent 部分真实 canary 已完成；尚未完成的是 qBittorrent 公网 fetch/状态矩阵、真实 Readeck/Outline/Webhook、全仓 formatter 基线、签名安装包和跨物理机升级矩阵。
+- 代码与假 HTTP 契约无剩余 P0/P1。生产 D1 migration、Worker v2、首管理员、策略 schema v2/兼容契约、Desktop/qBittorrent 部分真实 canary，以及全仓 formatter 基线已完成；尚未完成的是 qBittorrent 公网 fetch/状态矩阵、真实 Readeck/Outline/Webhook、签名安装包和跨物理机升级矩阵。
 - 自动化完成不等于第三方真实实例或生产发布完成；在 P2-D 前不得宣称端到端生产验收通过。
 
 ## 回归证据
@@ -39,6 +39,6 @@
 - 2026-08-13 完整门禁：Core 222/222、Infrastructure 811/811、App 非 WPF 523/523、10 个 WPF runtime 类逐进程 14/14、Worker 81/81、strict typecheck、Release build 0 警告/0 错误、NuGet/npm 漏洞 0。
 - 2026-08-17 重新运行同一发布门禁并保持上述结果；11 个 D1 migration 另通过 LF-only 前置检查。远端 11/11、三组 0011 列、0008 表与四个触发器均已只读核对。
 - 同日强 ETag 修复以 9 个失败先行断言锁定五类快照的 200/304，修复后聚焦 38/38、Worker 串行 82/82、strict typecheck、生产依赖漏洞 0 和 deploy dry-run 通过；公网 schema v2/旧客户端契约及最终 D1 安全基线均已只读复核。
-- 同日 qBittorrent canary 后新鲜门禁为 Core 222/222、Infrastructure 811/811、App 非 WPF 523/523、WPF 14/14、Worker 82/82、typecheck、Release build 0/0、NuGet/npm 漏洞 0；首轮 App 与 Infrastructure 并行时序失败经独立 1/1 和 App 523/523 收敛。`dotnet format --verify-no-changes` 则确认既有全仓基线仍失败，正式发布不可视为全绿。
+- 同日 qBittorrent canary 后首次确认 formatter 既有基线失败；独立修复将 C# 统一为 UTF-8 无 BOM + CRLF，并以 `.gitattributes` 固定跨 Git 配置检出契约。修复后 Core 222/222、Infrastructure 811/811、App 非 WPF 523/523、WPF 14/14、Worker 82/82、typecheck、Release build 0/0、NuGet/npm 漏洞 0、`git diff --check` 与 `dotnet format --verify-no-changes` 全部通过。
 - 集成终审使用 `gpt-5.6-sol`（max）只读复核，最终未发现剩余 P0/P1；本轮 56 个改动 C# 文件的格式验证与 `git diff --check` 通过。
 - qBittorrent 受控实例/API key 已在隔离窗口使用并回收，其他 provider token/实例和 Webhook 接收端仍未使用；详细当前状态与历史门禁见 `docs/TEST_REPORT.md` 和 `docs/plans/RSS_P2_VIEWS_INTEGRATIONS.md`。

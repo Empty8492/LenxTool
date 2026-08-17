@@ -22,13 +22,17 @@ public sealed partial class HistoryViewModel
     private int _selectedHistoryTabIndex;
 
     public ObservableCollection<HistorySearchTypeOption>
-        SearchTypeOptions { get; } = [];
+        SearchTypeOptions
+    { get; } = [];
     public ObservableCollection<HistorySearchFilterOption>
-        SearchCategories { get; } = [];
+        SearchCategories
+    { get; } = [];
     public ObservableCollection<HistorySearchFilterOption>
-        SearchFeeds { get; } = [];
+        SearchFeeds
+    { get; } = [];
     public ObservableCollection<HistorySearchFilterOption>
-        SearchTags { get; } = [];
+        SearchTags
+    { get; } = [];
 
     public AsyncRelayCommand LoadMoreSearchResultsCommand { get; private set; } =
         null!;
@@ -397,14 +401,14 @@ public sealed partial class HistoryViewModel
 
     private static string SearchTypeLabel(
         ContentSearchResultType value) => value switch
-    {
-        ContentSearchResultType.News => "早报",
-        ContentSearchResultType.Trend => "热点",
-        ContentSearchResultType.AiReport => "AI 报告",
-        ContentSearchResultType.FeedEntry => "订阅条目",
-        ContentSearchResultType.Subtitle => "字幕",
-        ContentSearchResultType.Tag => "标签",
-        ContentSearchResultType.Favorite => "收藏",
-        _ => value.ToString()
-    };
+        {
+            ContentSearchResultType.News => "早报",
+            ContentSearchResultType.Trend => "热点",
+            ContentSearchResultType.AiReport => "AI 报告",
+            ContentSearchResultType.FeedEntry => "订阅条目",
+            ContentSearchResultType.Subtitle => "字幕",
+            ContentSearchResultType.Tag => "标签",
+            ContentSearchResultType.Favorite => "收藏",
+            _ => value.ToString()
+        };
 }

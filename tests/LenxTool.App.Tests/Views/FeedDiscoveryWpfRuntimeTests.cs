@@ -221,22 +221,28 @@ public sealed class FeedDiscoveryWpfRuntimeTests
             [15, 30, 60, 120];
         public int SelectedPublishRefreshMinutes { get; set; } = 60;
         public IReadOnlyList<FeedPublishCategoryChoice>
-            PublishCategories { get; init; } = [];
+            PublishCategories
+        { get; init; } = [];
         public FeedPublishCategoryChoice?
-            SelectedPublishCategory { get; set; }
+            SelectedPublishCategory
+        { get; set; }
         public IReadOnlyList<FeedPublishViewChoice>
-            PublishViewChoices { get; init; } = [];
+            PublishViewChoices
+        { get; init; } = [];
         public FeedPublishViewChoice? SelectedPublishView { get; set; }
         public IReadOnlyList<FeedPublishFullTextChoice>
-            PublishFullTextChoices { get; init; } = [];
+            PublishFullTextChoices
+        { get; init; } = [];
         public FeedPublishFullTextChoice?
-            SelectedPublishFullText { get; set; }
+            SelectedPublishFullText
+        { get; set; }
         public bool IsPublishConfirmed { get; set; } = true;
         public RelayCommand SearchCommand { get; init; } = null!;
         public RelayCommand CancelCommand { get; init; } = null!;
         public RelayCommand RetryCommand { get; init; } = null!;
         public RelayCommand<FeedDiscoveryCandidateViewModel>
-            PreparePublishCommand { get; init; } = null!;
+            PreparePublishCommand
+        { get; init; } = null!;
         public RelayCommand PublishCommand { get; init; } = null!;
         public RelayCommand CancelPublishCommand { get; init; } = null!;
         public RelayCommand RefreshCatalogCommand { get; init; } = null!;

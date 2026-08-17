@@ -1,4 +1,4 @@
-﻿using System.Net;
+using System.Net;
 using LenxTool.Core.Models;
 
 namespace LenxTool.Infrastructure.Networking;

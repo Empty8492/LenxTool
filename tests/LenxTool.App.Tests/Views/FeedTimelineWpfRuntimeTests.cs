@@ -355,7 +355,7 @@ public sealed class FeedTimelineWpfRuntimeTests
                 viewModel?.Dispose();
                 SynchronizationContext.SetSynchronizationContext(null);
             }
-            },
+        },
             TimeSpan.FromSeconds(20),
             () => $"WPF timeline acceptance timed out at stage: {stage}.");
 

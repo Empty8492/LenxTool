@@ -150,30 +150,30 @@ public sealed class FeedAutomationRuleAdminService(
 
     private static object ToPayload(
         FeedAutomationRuleDefinition definition) => new
-    {
-        definition.Name,
-        definition.Priority,
-        definition.ConflictOrder,
-        definition.IsEnabled,
-        MatchMode = definition.MatchMode switch
         {
-            FeedAutomationMatchMode.All => "ALL",
-            FeedAutomationMatchMode.Any => "ANY",
-            _ => throw new ArgumentOutOfRangeException(nameof(definition))
-        },
-        Conditions = definition.Conditions.Select(condition => new
-        {
-            Field = ToWireValue(condition.Field),
-            Operator = ToWireValue(condition.Operator),
-            condition.Value
-        }),
-        Actions = definition.Actions.Select(action => new
-        {
-            Type = ToWireValue(action.Type),
-            action.Order,
-            action.Value
-        })
-    };
+            definition.Name,
+            definition.Priority,
+            definition.ConflictOrder,
+            definition.IsEnabled,
+            MatchMode = definition.MatchMode switch
+            {
+                FeedAutomationMatchMode.All => "ALL",
+                FeedAutomationMatchMode.Any => "ANY",
+                _ => throw new ArgumentOutOfRangeException(nameof(definition))
+            },
+            Conditions = definition.Conditions.Select(condition => new
+            {
+                Field = ToWireValue(condition.Field),
+                Operator = ToWireValue(condition.Operator),
+                condition.Value
+            }),
+            Actions = definition.Actions.Select(action => new
+            {
+                Type = ToWireValue(action.Type),
+                action.Order,
+                action.Value
+            })
+        };
 
     private static FeedAutomationRule MapRule(RuleDto? dto)
     {
@@ -277,28 +277,28 @@ public sealed class FeedAutomationRuleAdminService(
 
     private static string ToWireValue(
         FeedAutomationOperator value) => value switch
-    {
-        FeedAutomationOperator.Equals => "EQUALS",
-        FeedAutomationOperator.Contains => "CONTAINS",
-        FeedAutomationOperator.Regex => "REGEX",
-        FeedAutomationOperator.Before => "BEFORE",
-        FeedAutomationOperator.After => "AFTER",
-        FeedAutomationOperator.Exists => "EXISTS",
-        _ => throw new ArgumentOutOfRangeException(nameof(value))
-    };
+        {
+            FeedAutomationOperator.Equals => "EQUALS",
+            FeedAutomationOperator.Contains => "CONTAINS",
+            FeedAutomationOperator.Regex => "REGEX",
+            FeedAutomationOperator.Before => "BEFORE",
+            FeedAutomationOperator.After => "AFTER",
+            FeedAutomationOperator.Exists => "EXISTS",
+            _ => throw new ArgumentOutOfRangeException(nameof(value))
+        };
 
     private static string ToWireValue(
         FeedAutomationActionType value) => value switch
-    {
-        FeedAutomationActionType.AddTag => "ADD_TAG",
-        FeedAutomationActionType.Hide => "HIDE",
-        FeedAutomationActionType.MarkRead => "MARK_READ",
-        FeedAutomationActionType.GenerateSummary => "GENERATE_SUMMARY",
-        FeedAutomationActionType.Translate => "TRANSLATE",
-        FeedAutomationActionType.SendToMedia => "SEND_TO_MEDIA",
-        FeedAutomationActionType.Notify => "NOTIFY",
-        _ => throw new ArgumentOutOfRangeException(nameof(value))
-    };
+        {
+            FeedAutomationActionType.AddTag => "ADD_TAG",
+            FeedAutomationActionType.Hide => "HIDE",
+            FeedAutomationActionType.MarkRead => "MARK_READ",
+            FeedAutomationActionType.GenerateSummary => "GENERATE_SUMMARY",
+            FeedAutomationActionType.Translate => "TRANSLATE",
+            FeedAutomationActionType.SendToMedia => "SEND_TO_MEDIA",
+            FeedAutomationActionType.Notify => "NOTIFY",
+            _ => throw new ArgumentOutOfRangeException(nameof(value))
+        };
 
     private static async Task<T> ReadBoundedJsonAsync<T>(
         HttpResponseMessage response,

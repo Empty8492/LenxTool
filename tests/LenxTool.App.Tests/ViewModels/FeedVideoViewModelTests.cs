@@ -67,9 +67,9 @@ public sealed class FeedVideoViewModelTests
     {
         FeedEntry entry = VideoEntry("video-1", 5 * Mebibyte)
             with
-            {
-                NormalizedUrl = "http://127.0.0.1/private",
-                Enclosures =
+        {
+            NormalizedUrl = "http://127.0.0.1/private",
+            Enclosures =
                 [
                     new(
                         "https://cdn.example/video-1.mp4",
@@ -82,7 +82,7 @@ public sealed class FeedVideoViewModelTests
                         128,
                         "Fake poster")
                 ]
-            };
+        };
         using FeedVideoViewModel viewModel = CreateViewModel(
             [entry],
             new StubVideoPlanner(),

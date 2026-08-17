@@ -1,4 +1,4 @@
-﻿using LenxTool.App.Mvvm;
+using LenxTool.App.Mvvm;
 using LenxTool.Core.Tools;
 
 namespace LenxTool.App.ViewModels;

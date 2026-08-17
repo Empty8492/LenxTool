@@ -1,4 +1,4 @@
-﻿namespace LenxTool.Infrastructure.Networking;
+namespace LenxTool.Infrastructure.Networking;
 
 /// <summary>
 /// Reads an HTTP response body without trusting Content-Length and stops as soon

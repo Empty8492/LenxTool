@@ -171,19 +171,19 @@ public sealed class WindowsAppSdkNotificationAdapter
 
     private static WindowsNotificationAvailability Map(
         AppNotificationSetting setting) => setting switch
-    {
-        AppNotificationSetting.Enabled =>
-            WindowsNotificationAvailability.Available,
-        AppNotificationSetting.DisabledForApplication =>
-            WindowsNotificationAvailability.DisabledForApplication,
-        AppNotificationSetting.DisabledForUser =>
-            WindowsNotificationAvailability.DisabledForUser,
-        AppNotificationSetting.DisabledByGroupPolicy =>
-            WindowsNotificationAvailability.DisabledByGroupPolicy,
-        AppNotificationSetting.DisabledByManifest =>
-            WindowsNotificationAvailability.DisabledByManifest,
-        _ => WindowsNotificationAvailability.Unsupported
-    };
+        {
+            AppNotificationSetting.Enabled =>
+                WindowsNotificationAvailability.Available,
+            AppNotificationSetting.DisabledForApplication =>
+                WindowsNotificationAvailability.DisabledForApplication,
+            AppNotificationSetting.DisabledForUser =>
+                WindowsNotificationAvailability.DisabledForUser,
+            AppNotificationSetting.DisabledByGroupPolicy =>
+                WindowsNotificationAvailability.DisabledByGroupPolicy,
+            AppNotificationSetting.DisabledByManifest =>
+                WindowsNotificationAvailability.DisabledByManifest,
+            _ => WindowsNotificationAvailability.Unsupported
+        };
 
     private void ReleaseRuntime()
     {

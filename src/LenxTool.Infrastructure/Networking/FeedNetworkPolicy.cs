@@ -1,8 +1,8 @@
 using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
-using LenxTool.Core.Feeds;
 using LenxTool.Core.Errors;
+using LenxTool.Core.Feeds;
 
 namespace LenxTool.Infrastructure.Networking;
 

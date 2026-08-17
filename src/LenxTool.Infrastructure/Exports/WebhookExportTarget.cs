@@ -1,4 +1,4 @@
-﻿namespace LenxTool.Infrastructure.Exports;
+namespace LenxTool.Infrastructure.Exports;
 
 public sealed record WebhookExportTarget(
     string TargetId,

@@ -100,7 +100,8 @@ public sealed class FeedCatalogRepositoryTests : IDisposable
             FeedCatalogScope.Active,
             [Category(EnabledCategoryId, "AI", 0, true) with { AiPolicy = categoryPolicy }],
             [Feed(EnabledFeedId, "ai", "AI Feed", EnabledCategoryId, 0, true) with { AiPolicy = feedPolicy }])
-            with { AiPolicyDefaults = defaults };
+            with
+        { AiPolicyDefaults = defaults };
 
         await repository.ReplaceAsync(snapshot, CancellationToken.None);
 

@@ -621,16 +621,16 @@ public sealed class NewsRepository(SqliteDatabase database) : INewsRepository
 
     private static string ToSearchEntityType(
         ContentSearchResultType value) => value switch
-    {
-        ContentSearchResultType.News => "news",
-        ContentSearchResultType.Trend => "trend",
-        ContentSearchResultType.AiReport => "report",
-        ContentSearchResultType.FeedEntry => "feed_entry",
-        ContentSearchResultType.Subtitle => "subtitle",
-        ContentSearchResultType.Tag => "tag",
-        ContentSearchResultType.Favorite => "favorite",
-        _ => throw new ArgumentOutOfRangeException(nameof(value))
-    };
+        {
+            ContentSearchResultType.News => "news",
+            ContentSearchResultType.Trend => "trend",
+            ContentSearchResultType.AiReport => "report",
+            ContentSearchResultType.FeedEntry => "feed_entry",
+            ContentSearchResultType.Subtitle => "subtitle",
+            ContentSearchResultType.Tag => "tag",
+            ContentSearchResultType.Favorite => "favorite",
+            _ => throw new ArgumentOutOfRangeException(nameof(value))
+        };
 
     private static ContentSearchQuery ValidateSearchQuery(
         ContentSearchQuery query)

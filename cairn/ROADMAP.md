@@ -1,7 +1,7 @@
 # LenxTool 路线图
 
 > [!abstract] 当前焦点
-> 以 `docs/PROJECT_GUIDE.md` 第 10 节为当前交付状态唯一准绳；P2-16～P2-19 已完成代码与假 HTTP 自动化，P2-23 已按 Accepted ADR-004 选择 A 关闭。2026-08-17 已完成生产 D1 0001～0011、Worker v2、`TOKEN_SECRET`、`/health`、首管理员、schema v2/旧客户端策略契约，以及 Desktop v2/qBittorrent 部分真实 canary；生产已恢复策略版本 4 全禁用。当前焦点是补完 qBittorrent 状态矩阵、逐一验收 Readeck/Outline/Webhook，并修复 formatter 发布基线。
+> 以 `docs/PROJECT_GUIDE.md` 第 10 节为当前交付状态唯一准绳；P2-16～P2-19 已完成代码与假 HTTP 自动化，P2-23 已按 Accepted ADR-004 选择 A 关闭。2026-08-17 已完成生产 D1 0001～0011、Worker v2、`TOKEN_SECRET`、`/health`、首管理员、schema v2/旧客户端策略契约、Desktop v2/qBittorrent 部分真实 canary，以及全仓 formatter 基线关闭；生产已恢复策略版本 4 全禁用。当前焦点是补完 qBittorrent 状态矩阵并逐一验收 Readeck/Outline/Webhook。
 
 ## 里程碑
 
@@ -16,7 +16,7 @@
 - [x] 完成 Desktop v2 与 qBittorrent 5.2.3 的健康、magnet、受控 `.torrent`、幂等重放、精确清理和策略撤销 canary；最终策略版本 4 全禁用、target marker 0、DPAPI 测试凭据删除。
 - [ ] 完成 Readeck、Outline、qBittorrent、Webhook 与既有 provider 的 P2-D 受控真实连通。
 - [ ] 完成正式签名安装包、升级及跨物理机发布矩阵的独立验收。
-- [ ] 修复全仓 `dotnet format --verify-no-changes` 的既有 encoding/whitespace/import-order 基线。
+- [x] 关闭全仓 `dotnet format --verify-no-changes` 的既有 encoding/whitespace/import-order 基线，并固定跨 Git 配置的 C# CRLF 契约。
 
 ## 未决问题
 
@@ -28,7 +28,7 @@
 1. 为 qBittorrent 补真实公网 fetch 与 200/202/409/暂时故障，再登记 Readeck、Outline、Webhook 的受控实例、账号、精确 endpoint/resource/port、回滚负责人和时间窗。
 2. 每轮从九类全禁用的策略版本 4 出发，只为一个受控对象发布最小权限；目标先于 DPAPI secret，结束后恢复全禁用并清理 marker/测试对象。
 3. 保存脱敏首写/重放/撤销/暂时故障证据；秘密不得进入仓库、日志、截图或聊天。
-4. 单独修复 formatter 基线；P2-D 与 formatter 全部通过后再生成签名制品、完成 Windows 10/11 与跨机验证并创建 GitHub Release。
+4. P2-D 全部通过后生成签名制品、完成 Windows 10/11 与跨机验证并创建 GitHub Release；在固定发布候选上重跑 formatter 与完整门禁。
 
 ## 权威状态入口
 

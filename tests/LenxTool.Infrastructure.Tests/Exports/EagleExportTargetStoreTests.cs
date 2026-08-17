@@ -1,4 +1,4 @@
-﻿using LenxTool.Core.Contracts;
+using LenxTool.Core.Contracts;
 using LenxTool.Infrastructure.Exports;
 
 namespace LenxTool.Infrastructure.Tests.Exports;

@@ -224,7 +224,8 @@ public sealed class FeedAutomationLocalActionServiceTests
     private sealed class StubFavoriteRepository : IFavoriteRepository
     {
         public List<(string EntityType, string EntityId, string Name, string Color)>
-            AddedTags { get; } = [];
+            AddedTags
+        { get; } = [];
 
         public Task<TagItem> AddTagAsync(
             string entityType,

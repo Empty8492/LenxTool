@@ -1,4 +1,4 @@
-﻿using LenxTool.Core.Errors;
+using LenxTool.Core.Errors;
 
 namespace LenxTool.Core.Models;
 

@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using LenxTool.App.Mvvm;
 using LenxTool.App.Services;
 using LenxTool.Core.Contracts;

@@ -1,4 +1,4 @@
-﻿using System.Collections.ObjectModel;
+using System.Collections.ObjectModel;
 using System.Security.Cryptography;
 using System.Text;
 using LenxTool.Core.Contracts;

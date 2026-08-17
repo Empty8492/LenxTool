@@ -1,4 +1,4 @@
-﻿using LenxTool.Core.Media;
+using LenxTool.Core.Media;
 using LenxTool.Core.Models;
 
 namespace LenxTool.Core.Tests.Media;

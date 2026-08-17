@@ -1,4 +1,4 @@
-﻿using LenxTool.Core.Models;
+using LenxTool.Core.Models;
 using LenxTool.Infrastructure.Data;
 using LenxTool.Infrastructure.SystemServices;
 using Microsoft.Data.Sqlite;

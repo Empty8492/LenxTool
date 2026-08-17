@@ -1,4 +1,4 @@
-﻿using System.Reflection;
+using System.Reflection;
 using LenxTool.App.Services;
 using LenxTool.App.ViewModels;
 using LenxTool.Core.Contracts;

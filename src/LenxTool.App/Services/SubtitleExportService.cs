@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using System.Text;
 using LenxTool.Core.Media;
 using LenxTool.Core.Models;

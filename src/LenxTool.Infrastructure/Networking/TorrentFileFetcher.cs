@@ -1,4 +1,4 @@
-﻿using System.Net;
+using System.Net;
 using System.Net.Sockets;
 using LenxTool.Core.Feeds;
 using LenxTool.Core.Models;

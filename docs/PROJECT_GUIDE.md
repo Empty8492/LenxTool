@@ -269,7 +269,7 @@ npm.cmd test -- --run
 
 ### 10.2 下一里程碑
 
-Gate 0 字幕闭环、P0“管理员策展 RSS”、P1“阅读增强、AI 与自动化”、P2-01～P2-14、P2-16～P2-23，以及插入计划 DISC-01～DISC-06、UX-03 均已完成。[P2 内容视图与集成计划](plans/RSS_P2_VIEWS_INTEGRATIONS.md) 的 P2-15 Cubox 因与既有导出能力重叠、官方幂等与安全重试契约不足而取消实施；客户端不保存 Cubox API 凭据，也不注册连接探针或导出器。P2-23 已按 [Accepted ADR-004](decisions/ADR-004-server-email-digest-gate.md) 选择 A：不实施邮件摘要、不收集邮箱、所有 Feed/AI 内容云端保留 0 天，不新增云端文章表、邮箱字段或邮件发送代码。P2-D 已完成 Desktop v2 与 qBittorrent 的部分真实 canary，但 qBittorrent 剩余状态矩阵和 Readeck/Outline/Webhook 仍未完成；P1/P2 源码进度不等于正式签名发布完成。
+Gate 0 字幕闭环、P0“管理员策展 RSS”、P1“阅读增强、AI 与自动化”、P2-01～P2-14、P2-16～P2-23，以及插入计划 DISC-01～DISC-06、UX-03 均已完成。[P2 内容视图与集成计划](plans/RSS_P2_VIEWS_INTEGRATIONS.md) 的 P2-15 Cubox 因与既有导出能力重叠、官方幂等与安全重试契约不足而取消实施；客户端不保存 Cubox API 凭据，也不注册连接探针或导出器。P2-23 已按 [Accepted ADR-004](decisions/ADR-004-server-email-digest-gate.md) 选择 A：不实施邮件摘要、不收集邮箱、所有 Feed/AI 内容云端保留 0 天，不新增云端文章表、邮箱字段或邮件发送代码。P2-D 已完成 Desktop v2 与 qBittorrent 的部分真实 canary，但 qBittorrent 剩余状态矩阵和 Readeck/Outline/Webhook 仍未完成；P1/P2 源码进度不等于正式签名发布完成。全仓 formatter 历史基线已在独立阶段关闭：`.editorconfig` 改为与主流源码一致的 UTF-8 无 BOM，`.gitattributes` 固定 C# 为 CRLF、D1 migration 为 LF，机械格式化与完整门禁均通过。
 
 2026-08-17 生产检查点已完成 D1 创建、迁移前后 Time Travel 留证、0001～0011 全量迁移、关键列/触发器复核、Worker v2、随机 `TOKEN_SECRET`、公网 `/health` 200、首管理员和策略 schema v2/旧客户端兼容契约。bootstrap 首轮因本地与生产 PBKDF2 迭代上限不一致返回 500；失败请求未创建用户，根因修复提交 `7ce9827` 已发布。随后首管理员条件写入、正常登录与 `/v1/me` ADMIN 身份均验证成功；临时 `BOOTSTRAP_TOKEN` 已删除，入口恢复 404。策略契约首轮在任何 PUT 前发现 Cloudflare 压缩把强 ETag 改成弱 ETag；提交 `3cbb879` 为所有 ETag 快照的 200/304 响应增加 `Cache-Control: no-transform`，生产复验后 v2 GET/PUT、强 ETag/`If-Match`、精确幂等重放、幂等键冲突、旧版本冲突、旧客户端 ACTIVE 投影/ALL 升级拒绝及 304 均通过。当前 100% Worker 版本为 `94d90695-3162-4e9c-b8ad-d3feb1541dd6`。策略版本 3 曾只为 qBittorrent canary 授权 category `lenxtool-canary` 与 loopback 端口 47891；验收结束后版本 4 已恢复九类全部禁用、所有 host/endpoint/resource/port 授权为空、ACTIVE 0。Release Desktop 的真实健康、magnet、受控 `.torrent`、重放、精确清理和撤销均通过；target 已降为 marker 0，LenxTool DPAPI 测试凭据删除，qBittorrent 进程停止。D1/Worker 不保存 provider 秘密、条目或完整 magnet；远端无待迁移，Secret 仅有 `TOKEN_SECRET`。qBittorrent 的真实公网 fetch/200/202/失败状态、Readeck/Outline/Webhook、Groq/DeepSeek Provider Secret 与正式发布仍未完成。恢复书签和请求级证据只保存在本机忽略文件，不进入仓库。
 
@@ -280,7 +280,7 @@ Gate 0 字幕闭环、P0“管理员策展 RSS”、P1“阅读增强、AI 与�
 1. **锁定受控环境并发布最小权限策略。** 指定 Readeck、Outline、qBittorrent 和 Webhook 的测试实例、版本、操作者、测试时间窗与回滚负责人；准备精确 endpoint、Outline collection UUID、qBittorrent category 和 Webhook 接收端。每轮从当前版本 4 的全禁用安全基线只启用一个实际测试类型，并加入最小 host/endpoint/resource/port 授权；结束后恢复全禁用，不重复迁移、重开 bootstrap 或手工改迁移账本。
 2. **补完真实 provider 矩阵。** qBittorrent 先补生产 `TorrentFileFetcher` 的公网 HTTPS `.torrent` 和可观测 200/202/409/暂时故障；Readeck 验证标签查找、首次创建、重复重放和归档；Outline 验证 collection 身份、个人草稿、重复更新和目标切换；Webhook 验证 OPTIONS 能力、固定 JSON、幂等键、HMAC 和精确 ack。目标始终先于 DPAPI 秘密保存，结束时清理测试对象并降 marker；每一步只记录脱敏状态、队列终态和非秘密对象标识。
 3. **关闭或回滚。** 只有四个 provider 的真实矩阵、凭据生命周期、策略撤销、断网/超时/重复执行和 D1/Worker 观测均通过，才关闭 P2-D；迁移或策略语义异常时停止写入，保留 Time Travel 书签并由发布负责人决定恢复，不在生产直接反复应用迁移。
-4. **关闭 formatter 后生成正式制品并发布。** 先在独立提交中修复全仓编码/空白/导入顺序，使 `dotnet format --verify-no-changes` 与完整回归同时通过。安装 Inno Setup、准备仓库外 ECDSA 更新私钥和 Authenticode 证书后，运行 [`RELEASE_GUIDE.md`](RELEASE_GUIDE.md) 的构建脚本；核对安装包/便携包/清单的版本、哈希、签名和 Microsoft 依赖资产，完成 Windows 10/11 x64 全新安装、覆盖升级、卸载保留数据、Runtime 缺失降级和更新回滚测试。先推送源码提交，再创建带版本标签的 GitHub Release；未完成以上步骤前不能标记为“端到端生产验收完成”。
+4. **生成正式制品并发布。** formatter 已独立关闭，后续发布候选仍需重跑 `dotnet format --verify-no-changes` 与完整回归。安装 Inno Setup、准备仓库外 ECDSA 更新私钥和 Authenticode 证书后，运行 [`RELEASE_GUIDE.md`](RELEASE_GUIDE.md) 的构建脚本；核对安装包/便携包/清单的版本、哈希、签名和 Microsoft 依赖资产，完成 Windows 10/11 x64 全新安装、覆盖升级、卸载保留数据、Runtime 缺失降级和更新回滚测试。先推送源码提交，再创建带版本标签的 GitHub Release；未完成以上步骤前不能标记为“端到端生产验收完成”。
 
 字幕闭环完成后的产品主路线已确定为“管理员策展 RSS”：管理员维护共享 RSS/Atom 目录，普通用户只能同步和阅读，不得修改共享订阅、分类、抓取策略或自动化规则。为保持现有“云端不存新闻正文”边界，首版采用 Worker/D1 保存权威目录、各桌面客户端本地抓取和 SQLite 缓存的模式。
 
@@ -344,7 +344,7 @@ Gate 0 字幕闭环、P0“管理员策展 RSS”、P1“阅读增强、AI 与�
 - 购买并配置 Authenticode 证书和可信时间戳服务。
 - 填写真实发布说明、最低支持版本和强制更新标志，并完成覆盖升级验收。
 - 若有意升级 WebView2 或 Windows App Runtime 安装资产，必须从官方来源取得新文件，人工复核版本/签名后显式更新固定 SHA-256；不得为了恢复构建而移除校验。
-- 修复当前 `dotnet format LenxTool.slnx --verify-no-changes --no-restore` 暴露的既有全仓编码、空白与导入顺序基线，并在独立提交中重跑完整测试；不得在 provider canary 提交中批量格式化无关文件。
+- 全仓 formatter 历史基线已于 2026-08-17 独立关闭；发布候选必须继续运行 `dotnet format LenxTool.slnx --verify-no-changes --no-restore`，不得把失败降级为警告。
 - 当前 Git 仓库可正常识别；正式发布前仍需确认发布提交已推送到 `origin/main`，并让版本标签、清单版本和安装包版本保持一致。
 
 ### 10.7 当前制品状态

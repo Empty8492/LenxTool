@@ -107,7 +107,8 @@ public sealed class AutomationAdminViewModel : PageViewModel
     public ObservableCollection<AutomationConditionEditorItem> Conditions { get; }
     public ObservableCollection<AutomationActionEditorItem> Actions { get; }
     public ObservableCollection<AutomationSimulationEntryViewModel>
-        SimulationEntries { get; }
+        SimulationEntries
+    { get; }
     public IReadOnlyList<AutomationFieldChoice> FieldChoices { get; }
     public IReadOnlyList<AutomationActionChoice> ActionChoices { get; }
     public IReadOnlyList<AutomationMatchModeChoice> MatchModeChoices { get; }

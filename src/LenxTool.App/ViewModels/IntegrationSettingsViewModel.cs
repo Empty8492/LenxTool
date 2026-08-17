@@ -1,4 +1,4 @@
-﻿using LenxTool.App.Mvvm;
+using LenxTool.App.Mvvm;
 using LenxTool.Core.Contracts;
 using LenxTool.Core.Models;
 using LenxTool.Infrastructure.Exports;

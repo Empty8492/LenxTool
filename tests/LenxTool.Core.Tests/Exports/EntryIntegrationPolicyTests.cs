@@ -1,4 +1,4 @@
-﻿using System.Reflection;
+using System.Reflection;
 using LenxTool.Core.Exports;
 using LenxTool.Core.Models;
 

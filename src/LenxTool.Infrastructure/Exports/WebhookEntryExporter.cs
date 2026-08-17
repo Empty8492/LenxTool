@@ -1,4 +1,4 @@
-﻿using System.Text;
+using System.Text;
 using LenxTool.Core.Contracts;
 using LenxTool.Core.Errors;
 using LenxTool.Core.Models;

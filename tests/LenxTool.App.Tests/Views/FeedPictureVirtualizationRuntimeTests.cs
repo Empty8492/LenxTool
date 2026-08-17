@@ -119,7 +119,7 @@ public sealed class FeedPictureVirtualizationRuntimeTests
                 SynchronizationContext.SetSynchronizationContext(null);
                 stage = "finished";
             }
-            },
+        },
             TimeSpan.FromSeconds(30),
             () => $"Real picture-view virtualization acceptance timed out at stage: {stage}.");
         if (failure is not null)

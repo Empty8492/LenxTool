@@ -1,5 +1,5 @@
-using System.Net;
 using System.Collections.ObjectModel;
+using System.Net;
 using LenxTool.Core.Contracts;
 using LenxTool.Core.Errors;
 using LenxTool.Core.Models;
@@ -723,7 +723,8 @@ public sealed class ZoteroEntryExporterTests
         : IArticleImageStreamDownloader
     {
         public List<(string EntryId, string ImageUrl, string? Referrer)>
-            Requests { get; } = [];
+            Requests
+        { get; } = [];
 
         public Task<ArticleImageStreamContent?> OpenAsync(
             string entryId,

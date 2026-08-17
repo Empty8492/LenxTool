@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using LenxTool.Core.Errors;
 using LenxTool.Infrastructure.SystemServices;
 using Microsoft.Data.Sqlite;

@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using LenxTool.Core.Errors;
 using LenxTool.Core.Exports;
 using LenxTool.Core.Models;

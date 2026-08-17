@@ -2,6 +2,15 @@
 
 <!-- 最新记录放在此行下方；每条只写摘要、证据和详情指针，控制在约 20 行内。 -->
 
+## 2026-08-17 · 全仓 formatter 历史基线关闭
+
+- 症状：首次正式运行 `dotnet format --verify-no-changes` 报告既有 encoding、line ending、whitespace 与 using-order 问题；不能把该失败降级为警告，也没有混入 provider canary 提交。
+- 根因：`.editorconfig` 强制 UTF-8 BOM，但多数 C# 实际为 UTF-8 无 BOM；同时要求 CRLF，却未在 `.gitattributes` 固定 C# 检出行尾，干净克隆结果会受平台和 Git 配置影响。
+- 修复：charset 改为 UTF-8 无 BOM，新增 `*.cs text eol=crlf` 并保留 D1 migration 的 LF 例外，随后由 `dotnet format` 机械统一 BOM、空白、using 和表达式排版；抽查未发现业务语义变化。
+- 门禁：`dotnet format --verify-no-changes`、`git diff --check`、Release build 0/0、Core 222/222、Infrastructure 811/811、App 非 WPF 523/523、10 个 WPF 类逐进程 14/14、Worker 82/82、strict typecheck、11 个 migration LF-only及 NuGet/npm 漏洞 0 全部通过。
+- 结论：formatter 不再阻塞发布；当前仍需完成 qBittorrent 公网 fetch/状态矩阵、Readeck/Outline/Webhook 真实验收，以及签名与跨物理机发布矩阵。
+- 详情：`docs/TEST_REPORT.md`、`docs/PROJECT_GUIDE.md`、`cairn/ROADMAP.md`。
+
 ## 2026-08-17 · Desktop v2 / qBittorrent 真实 canary 与安全回滚
 
 - 结果：固定候选 `35658f3` 以 qBittorrent 5.2.3 / WebAPI 2.15.1 完成 Release 设置页健康、随机无 tracker magnet、受控合法 `.torrent`、同请求重放、info-hash/category/stopped 复查、精确删除和策略撤销；P2-D 总检查点仍开放。
@@ -11,7 +20,7 @@
 - 故障：首轮两种写入共用 45 秒总 deadline，`.torrent` 清理复用已取消 token，遗留 1 个 stopped canary；根因修复为 150 秒业务窗口与独立 15 秒精确清理，先删除唯一遗留对象后完整复跑通过。
 - 边界：`.torrent` 由内存 metainfo 和测试 fetcher 送入生产 exporter/client，只证明真实文件上传/回执/写后复查；公网 `TorrentFileFetcher` 与 200/202/409/暂时故障仍未形成真实证据。
 - 门禁：Core 222/222、Infrastructure 811/811、App 非 WPF 523/523、WPF 14/14、Worker 82/82、typecheck、Release build 0/0、NuGet/npm 漏洞 0。App 并行时序首轮 1 项失败，独立 1/1 与全量 523/523 通过。
-- 发布阻塞：首次完整运行 `dotnet format --verify-no-changes` 发现跨全仓既有 encoding/whitespace/import-order 基线；本轮未批量改无关文件，需独立任务关闭。
+- 当时的发布阻塞：首次完整运行 `dotnet format --verify-no-changes` 发现跨全仓既有 encoding/whitespace/import-order 基线；provider canary 未批量改无关文件，后续已由本日志上方的独立任务关闭。
 - 详情：`docs/TEST_REPORT.md`、`docs/PROJECT_GUIDE.md`、`docs/plans/RSS_P2_VIEWS_INTEGRATIONS.md`、`cairn/integration-adapter-boundaries.md`；请求级秘密与证据只在本机忽略文件。
 
 ## 2026-08-17 · 生产策略 schema v2 契约与强 ETag

@@ -29,10 +29,10 @@ Lenx Tools 是面向 Windows 10/11 x64 的本地优先桌面效率应用，统�
 1. 准备剩余受控输入：Readeck 实例、Outline 实例与 collection、Webhook 接收端，以及 qBittorrent 可公开 HTTPS 获取的测试 `.torrent`/状态观测。测试账号、API key 和 token 只通过密码管理器或运行时安全输入提供，不写入仓库、Issue、日志或聊天。
 2. 生产 D1、Worker v2、首管理员、强 ETag、schema v2/旧客户端矩阵和 Desktop v2/qBittorrent 部分 canary 已完成；每轮继续从版本 4 的九类全禁用基线发布单 provider 最小权限，结束后立即回滚并清理 marker/测试对象。
 3. 下一轮优先补 qBittorrent 的真实公网 HTTPS `.torrent` 获取和可观测 200/202/失败状态，再执行 Readeck 标签查找/创建/重放、Outline collection 与草稿回执、Webhook OPTIONS/HMAC/幂等 ack。每个用例记录脱敏结果、队列终态和第三方实际对象，不记录秘密或正文。
-4. 同时单独修复当前全仓 `dotnet format --verify-no-changes` 的历史编码/空白/导入顺序基线；P2-D 与 formatter 均关闭后，才按 [`构建、签名与发布指南`](docs/RELEASE_GUIDE.md)重新生成并验收正式制品。
+4. 全仓 formatter 历史基线已在独立阶段关闭：C# 统一为 UTF-8 无 BOM + CRLF，Git 检出契约与 `.editorconfig` 一致，`dotnet format --verify-no-changes` 和完整回归均通过。P2-D 关闭后，再按 [`构建、签名与发布指南`](docs/RELEASE_GUIDE.md)重新生成并验收正式制品。
 5. 发布前再次运行 [`docs/TEST_REPORT.md`](docs/TEST_REPORT.md) 中的完整门禁，确认没有真实凭据、私钥、数据库或旧制品进入提交；最后创建 GitHub Release，不能把现有旧 `Release\LenxTool_Setup.exe` 当作本轮制品。
 
-当前仍开放的是 qBittorrent 剩余状态矩阵、Readeck/Outline/Webhook 真实外联、formatter 基线、Provider key、签名证书/离线更新私钥和跨物理机升级矩阵；这些输入确认前，不宣称端到端生产验收完成。
+当前仍开放的是 qBittorrent 剩余状态矩阵、Readeck/Outline/Webhook 真实外联、Provider key、签名证书/离线更新私钥和跨物理机升级矩阵；这些输入确认前，不宣称端到端生产验收完成。
 
 ## 常用命令
 
@@ -40,6 +40,7 @@ Lenx Tools 是面向 Windows 10/11 x64 的本地优先桌面效率应用，统�
 dotnet restore LenxTool.slnx
 dotnet build LenxTool.slnx -c Release --no-restore
 dotnet test LenxTool.slnx -c Release --no-build
+dotnet format LenxTool.slnx --no-restore --verify-no-changes
 dotnet run --project src/LenxTool.App/LenxTool.App.csproj
 ```
 

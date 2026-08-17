@@ -636,7 +636,8 @@ public sealed class EntryExportQueueServiceTests
         public required Func<
             EntryExportRequest,
             CancellationToken,
-            Task<EntryExportResult>> Handler { get; init; }
+            Task<EntryExportResult>> Handler
+        { get; init; }
 
         public int CallCount { get; private set; }
 

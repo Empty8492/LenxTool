@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using LenxTool.App.Services;
 using LenxTool.App.ViewModels;
 using LenxTool.Core.Contracts;

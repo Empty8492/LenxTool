@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using LenxTool.Core.Errors;
 using LenxTool.Core.Models;
 using LenxTool.Infrastructure.Data;

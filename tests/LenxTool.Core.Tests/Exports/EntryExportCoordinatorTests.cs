@@ -484,7 +484,8 @@ public sealed class EntryExportCoordinatorTests
         public Func<
             EntryExportRequest,
             CancellationToken,
-            Task<EntryExportResult>>? Handler { get; set; }
+            Task<EntryExportResult>>? Handler
+        { get; set; }
 
         public Task<EntryExportResult> ExportAsync(
             EntryExportRequest request,

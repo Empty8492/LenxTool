@@ -1,4 +1,4 @@
-﻿namespace LenxTool.Core.Models;
+namespace LenxTool.Core.Models;
 
 /// <summary>
 /// P2 阶段支持的外部集成类型。枚举值是云端策略协议的一部分，禁止重排或复用。

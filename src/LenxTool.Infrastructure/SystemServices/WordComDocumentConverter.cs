@@ -1,7 +1,7 @@
-using System.Reflection;
-using System.Runtime.InteropServices;
 using System.Diagnostics;
 using System.Globalization;
+using System.Reflection;
+using System.Runtime.InteropServices;
 using LenxTool.Core.Contracts;
 using LenxTool.Core.Errors;
 

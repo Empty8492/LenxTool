@@ -1,4 +1,4 @@
-﻿using LenxTool.Core.Errors;
+using LenxTool.Core.Errors;
 using LenxTool.Core.Models;
 using LenxTool.Infrastructure.Networking;
 

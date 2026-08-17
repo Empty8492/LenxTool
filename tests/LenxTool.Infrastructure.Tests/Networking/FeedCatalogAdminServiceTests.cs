@@ -286,18 +286,18 @@ public sealed class FeedCatalogAdminServiceTests
         string role,
         string accessToken = "access-token",
         string refreshToken = "refresh-token") => JsonSerializer.Serialize(new
-    {
-        user = new { id = "10000000-0000-4000-8000-000000000001", username = "owner", role },
-        quota = new
         {
-            date = "2026-07-23",
-            ai = new { limit = 100, used = 0, reserved = 0, remaining = 100 },
-            speechSeconds = new { limit = 3600, used = 0, reserved = 0, remaining = 3600 }
-        },
-        accessToken,
-        refreshToken,
-        expiresInSeconds = 900
-    });
+            user = new { id = "10000000-0000-4000-8000-000000000001", username = "owner", role },
+            quota = new
+            {
+                date = "2026-07-23",
+                ai = new { limit = 100, used = 0, reserved = 0, remaining = 100 },
+                speechSeconds = new { limit = 3600, used = 0, reserved = 0, remaining = 3600 }
+            },
+            accessToken,
+            refreshToken,
+            expiresInSeconds = 900
+        });
 
     private static string TokenJson(string accessToken, string refreshToken) => JsonSerializer.Serialize(new
     {

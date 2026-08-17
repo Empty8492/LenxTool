@@ -68,11 +68,11 @@ public sealed partial class SettingsViewModel
     public AsyncRelayCommand RefreshStorageUsageCommand { get; private set; } =
         null!;
     public AsyncRelayCommand PreviewStorageCleanupCommand
-        { get; private set; } = null!;
+    { get; private set; } = null!;
     public AsyncRelayCommand ConfirmStorageCleanupCommand
-        { get; private set; } = null!;
+    { get; private set; } = null!;
     public RelayCommand CancelStorageCleanupPreviewCommand
-        { get; private set; } = null!;
+    { get; private set; } = null!;
 
     public async Task RefreshStorageUsageInBackgroundAsync(
         CancellationToken cancellationToken)

@@ -86,7 +86,7 @@ public sealed class SmoothWheelScrollingWpfRuntimeTests
                     Assert.InRange(viewer.VerticalOffset, 70d, 140d);
                     Assert.True(
                         logicalScrollUpdates > 1,
-                        "上游路径应逐帧提交真实 VerticalOffset。" );
+                        "上游路径应逐帧提交真实 VerticalOffset。");
                     Assert.Same(originalTransform, content.RenderTransform);
                     stage = "completed assertions";
                 }

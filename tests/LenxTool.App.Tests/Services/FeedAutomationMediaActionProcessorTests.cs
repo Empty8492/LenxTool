@@ -200,7 +200,8 @@ public sealed class FeedAutomationMediaActionProcessorTests
         public required Func<
             FeedAutomationActionLease,
             CancellationToken,
-            Task<FeedAutomationMediaActionResult>> Handler { get; init; }
+            Task<FeedAutomationMediaActionResult>> Handler
+        { get; init; }
 
         public Task<FeedAutomationMediaActionResult> ExecuteAsync(
             FeedAutomationActionLease action,

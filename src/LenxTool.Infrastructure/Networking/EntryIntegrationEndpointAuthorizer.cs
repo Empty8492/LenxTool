@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.Net;
 using LenxTool.Core.Contracts;
 using LenxTool.Core.Feeds;

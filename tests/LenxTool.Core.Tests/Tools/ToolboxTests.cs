@@ -1,4 +1,4 @@
-﻿using LenxTool.Core.Tools;
+using LenxTool.Core.Tools;
 
 namespace LenxTool.Core.Tests.Tools;
 

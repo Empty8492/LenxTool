@@ -346,7 +346,8 @@ public sealed class SmartViewAdminViewModelTests
             new(8, View());
         public AppException? MutationFailure { get; set; }
         public TaskCompletionSource<FeedSmartViewMutationResult>?
-            PendingMutation { get; set; }
+            PendingMutation
+        { get; set; }
         public TaskCompletionSource MutationStarted { get; } =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
         public int GetCount { get; private set; }
@@ -414,7 +415,8 @@ public sealed class SmartViewAdminViewModelTests
     {
         public int Count { get; private set; }
         public TaskCompletionSource<FeedSmartViewSyncResult>?
-            PendingResult { get; set; }
+            PendingResult
+        { get; set; }
         public TaskCompletionSource Started { get; } =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
 

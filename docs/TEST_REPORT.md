@@ -17,11 +17,13 @@
 | .NET Release build warnings（2026-08-17） | 0 |
 | NuGet vulnerable packages（2026-08-17） | 0 detected |
 | npm audit vulnerabilities（2026-08-17） | 0 detected |
-| `dotnet format --verify-no-changes`（2026-08-17） | blocked：既有全仓 encoding/whitespace/import-order 基线 |
+| `dotnet format --verify-no-changes`（2026-08-17） | passed |
 
 P2-16～P2-19 已按 N2/R1/G1/W1 完成自动化实现。Worker/D1 schema v2 分列保存公网主机、精确私网 HTTPS endpoint、Outline collection/qBittorrent category 与 qBittorrent loopback HTTP 端口；旧客户端取得兼容投影，带高级约束的旧管理读写要求升级。四个 provider 使用独立目标存储、专用设置卡、DPAPI 凭据代际、执行期策略/DNS pin、禁代理/跳转/Cookie/自动解压和覆盖响应头与正文的 deadline。Readeck 只有在空页且 `Total-Count=0` 时创建，并以可见稳定标签收敛；Outline UUID 绑定不透明目标修订与条目 ID，固定个人草稿且不跨 collection 移动；qBittorrent 固定 5.2+/WebAPI 2.14.1+ API key、显式 category、用户确认和写后 info-hash/category 复核；Webhook 固定 v1 JSON、能力 OPTIONS、稳定幂等键、精确 ack 与可选正文 HMAC。写后畸形或超时回执不会被误报成功或永久拒绝，统一进入可重试的未知写结果；`.torrent` 暂时网络故障也保持可重试。
 
-P2-23 已按 Accepted ADR-004 选择 A 关闭：不实现邮件摘要、不收集邮箱，Worker/App/Core 没有新增邮箱字段、邮件供应商或发送代码。P2-16～P2-19 的独立只读终审使用 `gpt-5.6-sol`（max），最终未发现剩余 P0/P1。本轮重新执行 Core 222/222、Infrastructure 811/811、App 非 WPF 523/523、10 个 WPF runtime 类逐进程 14/14、Release build 0 警告/0 错误、Worker 82/82、strict typecheck、11 个 migration LF-only及 NuGet/npm 漏洞审计 0。App 非 WPF 首轮与 Infrastructure 全量并行时，既有租约续期时序用例 1 项提前完成；Infrastructure 结束后该项独立 1/1、App 独立全量 523/523，没有修改产品代码或阈值。`dotnet format --verify-no-changes` 首次作为本轮正式门禁执行后失败于跨全仓既有文件的编码、空白与 using 顺序，不能在本轮 provider 文档提交中批量改写，正式发布保持阻塞。qBittorrent 已有部分真实 canary，其他 provider 与 qBittorrent 剩余状态矩阵仍开放，因此 P2-D 总检查点不变。
+P2-23 已按 Accepted ADR-004 选择 A 关闭：不实现邮件摘要、不收集邮箱，Worker/App/Core 没有新增邮箱字段、邮件供应商或发送代码。P2-16～P2-19 的独立只读终审使用 `gpt-5.6-sol`（max），最终未发现剩余 P0/P1。qBittorrent canary 阶段首次把 `dotnet format --verify-no-changes` 纳入正式门禁时，发现跨全仓既有编码、空白与 using 顺序基线；该问题没有混入 provider 提交，而是在随后独立阶段处理。根因是 `.editorconfig` 要求 UTF-8 BOM，而多数源码实际为无 BOM，且 C# 的 CRLF 要求没有 Git 检出契约。修复将 charset 统一为 UTF-8 无 BOM、在 `.gitattributes` 固定 C# CRLF 并保留 migration LF，再由 `dotnet format` 机械统一 120 个实际变更的 C# 文件；抽查差异仅为 BOM、空白、using 与表达式排版。
+
+formatter 修复后的新鲜门禁为 Core 222/222、Infrastructure 811/811、App 非 WPF 523/523、10 个 WPF runtime 类逐进程 14/14、Release build 0 警告/0 错误、Worker 82/82、strict typecheck、11 个 migration LF-only、NuGet/npm 漏洞审计 0、`git diff --check` 与 `dotnet format --verify-no-changes` 通过。qBittorrent 已有部分真实 canary，其他 provider 与 qBittorrent 剩余状态矩阵仍开放，因此 P2-D 总检查点不变；formatter 不再是发布阻塞。
 
 ## 生产 D1 / Worker 检查点
 
@@ -48,7 +50,7 @@ P2-23 已按 Accepted ADR-004 选择 A 关闭：不实现邮件摘要、不收�
 1. 为 qBittorrent 准备可公开 HTTPS 获取的受控 `.torrent` 和不泄露正文的状态观测，补齐真实 fetch、200、202 pending/收敛、409/all-failed 与暂时故障。
 2. 准备受控 Readeck、Outline、Webhook 实例和独立测试账号，登记版本、精确 endpoint/resource/port、时间窗与回滚负责人；秘密只通过密码管理器/运行时输入，不进入日志、截图、Issue 或仓库。
 3. 每轮基于当前版本 4 的九类全禁用基线只启用一个真实对象，完成首写、重复/重放、策略撤销、暂时故障和写后回执后，恢复全禁用并清理 marker/测试对象。
-4. 单独修复全仓 formatter 历史基线并重跑完整门禁；只有 formatter 与全部真实矩阵通过，才按 [`RELEASE_GUIDE.md`](RELEASE_GUIDE.md) 生成并验证签名安装包、便携包、更新清单和 SHA256，再完成 Windows 10/11 x64 发布矩阵。
+4. formatter 历史基线已经独立关闭；全部真实矩阵通过后，按 [`RELEASE_GUIDE.md`](RELEASE_GUIDE.md) 生成并验证签名安装包、便携包、更新清单和 SHA256，再完成 Windows 10/11 x64 发布矩阵，并在发布候选上重跑 formatter 与完整门禁。
 
 P2-D 关闭前不得宣称端到端生产验收通过；P2-D 关闭后仍需完成生产发布标签、GitHub Release 和跨物理机升级矩阵。
 

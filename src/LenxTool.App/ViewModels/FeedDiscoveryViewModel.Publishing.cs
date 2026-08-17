@@ -16,7 +16,8 @@ public sealed partial class FeedDiscoveryViewModel
     private bool _isCatalogCurrent;
 
     public ObservableCollection<FeedPublishCategoryChoice>
-        PublishCategories { get; private set; } = null!;
+        PublishCategories
+    { get; private set; } = null!;
 
     public IReadOnlyList<int> PublishRefreshChoices { get; private set; } =
         null!;
@@ -34,7 +35,8 @@ public sealed partial class FeedDiscoveryViewModel
     } = null!;
 
     public RelayCommand<FeedDiscoveryCandidateViewModel>
-        PreparePublishCommand { get; private set; } = null!;
+        PreparePublishCommand
+    { get; private set; } = null!;
 
     public AsyncRelayCommand PublishCommand { get; private set; } = null!;
 

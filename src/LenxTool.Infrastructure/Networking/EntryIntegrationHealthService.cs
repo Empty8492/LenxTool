@@ -1,4 +1,4 @@
-﻿using System.Collections.Concurrent;
+using System.Collections.Concurrent;
 using LenxTool.Core.Contracts;
 using LenxTool.Core.Feeds;
 using LenxTool.Core.Models;

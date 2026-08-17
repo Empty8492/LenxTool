@@ -80,7 +80,7 @@ public sealed class FeedDigestScheduledTaskHandler : ILocalScheduledTaskHandler
                 ScheduleId,
                 cancellationToken).ConfigureAwait(false)
             ?? throw new InvalidOperationException(
-                "摘要计划在执行前已不存在。") ;
+                "摘要计划在执行前已不存在。");
         FeedDigestWindow window = FeedDigestPlanner.GetWindow(
             _period,
             task.Schedule,

@@ -176,7 +176,7 @@ public sealed class ShellViewModelTests
         : PageViewModel(title, string.Empty), IEntityNavigationAware
     {
         public List<(string EntityType, string EntityId)> OpenedEntities
-            { get; } = [];
+        { get; } = [];
 
         public Task OpenEntityAsync(
             string entityType,
