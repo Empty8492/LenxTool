@@ -70,6 +70,8 @@ npx wrangler secret put BOOTSTRAP_TOKEN
 
 脚本会分别安全提示管理员用户名、密码和 `BOOTSTRAP_TOKEN`；密码与 token 不接受命令行参数，不写入文件。端点仅在 D1 没有任何用户时允许一次条件插入，并发或重复执行返回 409。
 
+密码派生使用 PBKDF2-SHA256 100,000 次，这是 Cloudflare Workers Web Crypto 生产运行时允许的最高迭代数。不得只依据本地 Miniflare 把它调高：本地环境可能接受更高值，而生产运行时会抛出 `NotSupportedError`，bootstrap 对外只返回脱敏 500。若出现该症状，应停止重试、确认 D1 仍为 0 用户并立即删除临时 `BOOTSTRAP_TOKEN`，修复和部署后再生成新的单次 token。
+
 2. 使用新管理员账号调用正常登录端点验证密码，然后立即删除临时 Secret：
 
 ```powershell

@@ -2,6 +2,15 @@
 
 <!-- 最新记录放在此行下方；每条只写摘要、证据和详情指针，控制在约 20 行内。 -->
 
+## 2026-08-17 · 首管理员 bootstrap 生产运行时修复
+
+- 症状：两次有效 bootstrap 请求均返回脱敏 HTTP 500；生产 D1 仍为 0 用户、无成功审计，实时 Tail 显示请求由应用正常返回 500，而非 CPU 超限终止。
+- 根因：本地 Miniflare 接受 PBKDF2-SHA256 310,000 次，但 Cloudflare 远程运行时明确以 `NotSupportedError` 拒绝超过 100,000 次的迭代；既有测试没有表达这条生产平台上限。
+- 修复：密码派生固定为平台上限 100,000，并新增安全契约测试；部署/API/项目文档同步解释本地与生产差异。失败后临时 `BOOTSTRAP_TOKEN` 已删除，D1 未留下半成品。
+- 验证：回归先以缺失常量失败；修复后身份与安全聚焦 13/13、Worker 全量 82/82、strict typecheck、11 个 migration LF-only、生产依赖漏洞 0、deploy dry-run 通过；Cloudflare 远程预览实测 100,000 次返回 200。
+- 边界：本节记录的是待发布修复检查点；生产 Worker 版本与首管理员结果必须在实际部署和一次性 bootstrap 后另行更新。
+- 详情：`docs/WORKER_DEPLOYMENT.md`、`docs/api/worker-v1.md`、`docs/PROJECT_GUIDE.md`、`cairn/integration-adapter-boundaries.md`。
+
 ## 2026-08-17 · P2-D 生产 D1 / Worker v2 检查点
 
 - 结果：创建生产 D1 `lenx-tool`，完成 0001～0011、三组策略扩展列、发现索引与四个同步触发器复核；远端无待迁移。恢复书签只写入本机忽略证据，不进入仓库。

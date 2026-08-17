@@ -34,6 +34,10 @@ interface TokenMaterial extends TokenPair { refreshId: string; refreshHash: stri
 
 const jsonHeaders = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" };
 const encoder = new TextEncoder();
+// Cloudflare Workers rejects PBKDF2 iteration counts above 100,000 at runtime.
+// Keep this explicit and covered by a contract test so local Miniflare cannot
+// silently accept a value that production will reject.
+export const PASSWORD_PBKDF2_ITERATIONS = 100_000;
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -463,7 +467,7 @@ async function verifyPassword(password:string,saltText:string,expected:string):P
 }
 async function derivePassword(password:string,salt:Uint8Array):Promise<string>{
   const key = await crypto.subtle.importKey("raw",encoder.encode(password),"PBKDF2",false,["deriveBits"]);
-  const bits = await crypto.subtle.deriveBits({name:"PBKDF2",hash:"SHA-256",salt:salt as BufferSource,iterations:310000},key,256);
+  const bits = await crypto.subtle.deriveBits({name:"PBKDF2",hash:"SHA-256",salt:salt as BufferSource,iterations:PASSWORD_PBKDF2_ITERATIONS},key,256);
   return toBase64Url(new Uint8Array(bits));
 }
 

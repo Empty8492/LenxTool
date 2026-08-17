@@ -341,7 +341,7 @@ Content-Type: application/json
 
 - 服务端先验证 bootstrap secret，再读取账号状态；无效 secret 返回 `401 BOOTSTRAP_AUTH_INVALID`，不透露 D1 是否已有用户。
 - 插入使用“D1 仍无任何用户”的条件写入。并发或重复执行最多一个请求成功，其他请求返回 `409 BOOTSTRAP_ALREADY_COMPLETED`。
-- 密码复用正常账号 PBKDF2 派生流程；响应和审计不包含密码、secret、salt 或 hash。
+- 密码复用正常账号 PBKDF2-SHA256 派生流程，迭代次数固定为 Cloudflare Workers Web Crypto 生产运行时允许的上限 100,000；本地运行时可能接受更高值，因此安全契约测试必须锁定该上限。响应和审计不包含密码、secret、salt 或 hash。
 - 201 只返回 `{ "user": PublicUser }`，不签发会话。运维人员随后通过正常登录验证。
 - 成功后必须立即执行 `wrangler secret delete BOOTSTRAP_TOKEN`。secret 缺失或短于 32 个字符时，该端点表现为 404。
 

@@ -17,6 +17,7 @@
 ## D1 生产迁移
 
 - [Cloudflare workers-sdk #14991](https://github.com/cloudflare/workers-sdk/issues/14991) 与 [修复 PR #15044](https://github.com/cloudflare/workers-sdk/pull/15044)：确认 Windows CRLF 会让包含 SQLite trigger 的远程 D1 migration 以 `incomplete input` 失败；据此采用仓库级 LF 规范和测试前置字节检查，同时保留标准迁移账本流程。
+- [Cloudflare Workers Web Crypto](https://developers.cloudflare.com/workers/runtime-apis/web-crypto/) 与 [Workers limits](https://developers.cloudflare.com/workers/platform/limits/)：用于确认原生 PBKDF2 支持、CPU 观测口径和生产运行时边界；远程预览进一步实测 `iterations > 100000` 会被运行时拒绝，因此密码派生固定为 100,000 并由契约测试锁定。
 
 ## P2-16～P2-19 外部集成
 

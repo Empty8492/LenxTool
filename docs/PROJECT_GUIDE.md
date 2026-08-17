@@ -123,7 +123,7 @@ Groq 429 读取 `Retry-After`、请求限额和剩余量，并计算已用量。
 - 共享 Key：仅 Worker Secret。
 - 更新私钥：仓库外离线保存；客户端只嵌入 P-256 公钥。
 - 更新：清单 ECDSA-SHA256 签名，安装包 SHA-256 加独立签名。
-- Worker：PBKDF2-SHA256 310,000 次、短期 HMAC access token、refresh token 哈希与轮换、禁用账号即时失效。
+- Worker：PBKDF2-SHA256 固定 100,000 次（Cloudflare Workers Web Crypto 的生产运行时上限），配合 12 字符首管理员密码下限与认证限流；短期 HMAC access token、refresh token 哈希与轮换、禁用账号即时失效。
 - 配额：D1 条件 UPDATE 原子预留，成功后结算，防止并发超额；管理员跳过共享额度。
 - Worker 不写入新闻、字幕、音视频或请求正文；音频请求体直接流式转发。
 
