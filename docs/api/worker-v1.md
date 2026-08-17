@@ -1,7 +1,7 @@
 # Worker v1 账号、共享订阅目录与发现 API 契约
 
 状态：v1 基线已冻结；P0 身份/目录、P1 AI 策略与受限自动化规则、DISC-02 已知目录发现、P2 智能视图与外部集成策略均已实现
-最后核对：2026-08-03
+最后核对：2026-08-17
 适用范围：LenxTool 桌面端与 `cloud/LenxTool.Worker` 之间的账号、会话、管理员策展目录、已知目录发现、AI 策略和自动化规则接口
 
 本文是 P0/P1 Worker 契约的真相源。实现顺序和验收见 [P0 详细计划](../plans/RSS_P0_ADMIN_CATALOG.md)与 [P1 详细计划](../plans/RSS_P1_READING_INTELLIGENCE.md)，安全边界见 [威胁模型](../THREAT_MODEL.md)，云端只保存共享目录配置的决策见 [ADR-001](../decisions/ADR-001-admin-curated-rss.md)。
@@ -9,7 +9,7 @@
 ## 1. 兼容性与通用约定
 
 - 基础路径固定为 `/v1`。v1 内只做向后兼容的字段新增；删除字段、改变字段类型/语义或收紧既有枚举必须另立迁移方案。
-- 只接受 HTTPS、UTF-8 JSON。账号成功响应、写入响应和所有错误响应均发送 `Cache-Control: no-store`。目录 GET 使用 `Cache-Control: private, no-cache`，发现 GET 使用 `Cache-Control: private, max-age=60`；两者都发送 `Vary: Authorization` 和强 ETag，禁止公共代理共享认证响应。
+- 只接受 HTTPS、UTF-8 JSON。账号成功响应、写入响应和所有错误响应均发送 `Cache-Control: no-store`。目录 GET 使用 `Cache-Control: private, no-cache, no-transform`，发现 GET 使用 `Cache-Control: private, max-age=60, no-transform`；自动化规则、智能视图和外部集成策略快照使用 `Cache-Control: no-store, no-transform`。所有携带强 ETag 的 200/304 响应都必须保留 `no-transform`，防止 Cloudflare 边缘压缩修改表示并把强校验器弱化；认证快照同时发送各自的 `Vary` 维度，禁止公共代理跨身份或跨 schema 共享响应。
 - 字段和查询参数使用 `camelCase`；枚举值使用 `UPPER_SNAKE_CASE`；时间使用 UTC ISO 8601，例如 `2026-07-21T08:30:00Z`。
 - 服务端生成的账号、分类和 Feed ID 是不透明 UUID。客户端只能原样保存和回传，不能从 ID 推断排序或时间。
 - 客户端可发送 `X-Request-Id`，长度 1～128，只允许可打印 ASCII；服务端不信任其唯一性。服务端始终在 `X-Request-Id` 响应头和错误体 `requestId` 中返回最终请求 ID。
@@ -566,7 +566,7 @@ Worker 只验证、版本化和发布规则，不执行正文匹配，也不把�
 
 ## 12. P2 外部集成策略契约
 
-`GET /v1/integration-policies?scope=ACTIVE|ALL&afterVersion=n` 使用独立于目录、规则和智能视图的 `policySetVersion`。user 只能读取 ACTIVE，admin 可读取 ALL；schema v2 客户端必须发送 `X-LenxTool-Integration-Policy-Schema: 2`，响应包含 `policySchemaVersion: 2`，强 ETag 为 `"integration-policies-v2-active-n"` 或 `"integration-policies-v2-all-n"`。响应设置 `Vary: X-LenxTool-Integration-Policy-Schema`；当前版本返回 304，客户端版本超前返回 `409 INTEGRATION_POLICY_VERSION_AHEAD`。
+`GET /v1/integration-policies?scope=ACTIVE|ALL&afterVersion=n` 使用独立于目录、规则和智能视图的 `policySetVersion`。user 只能读取 ACTIVE，admin 可读取 ALL；schema v2 客户端必须发送 `X-LenxTool-Integration-Policy-Schema: 2`，响应包含 `policySchemaVersion: 2`，强 ETag 为 `"integration-policies-v2-active-n"` 或 `"integration-policies-v2-all-n"`。响应设置 `Vary: X-LenxTool-Integration-Policy-Schema` 和 `Cache-Control: no-store, no-transform`；当前版本返回 304，客户端版本超前返回 `409 INTEGRATION_POLICY_VERSION_AHEAD`。
 
 管理员 PUT 必须同时发送 `If-Match: "integration-policies-v2-all-n"` 和 16～128 字符的 `Idempotency-Key`，请求体包含 `policySchemaVersion: 2` 与完整 `policies` 集合。schema 版本和完整规范请求都进入幂等摘要。成功整组替换并只递增一次版本；同 key/同请求重放原成功响应，同 key/不同请求或旧版本返回 409。支持类型固定为 `OBSIDIAN`、`EAGLE`、`ZOTERO`、`READWISE`、`CUBOX`、`READECK`、`OUTLINE`、`QBITTORRENT`、`WEBHOOK`。
 

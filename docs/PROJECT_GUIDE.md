@@ -271,17 +271,16 @@ npm.cmd test -- --run
 
 Gate 0 字幕闭环、P0“管理员策展 RSS”、P1“阅读增强、AI 与自动化”、P2-01～P2-14、P2-16～P2-23，以及插入计划 DISC-01～DISC-06、UX-03 均已完成。[P2 内容视图与集成计划](plans/RSS_P2_VIEWS_INTEGRATIONS.md) 的 P2-15 Cubox 因与既有导出能力重叠、官方幂等与安全重试契约不足而取消实施；客户端不保存 Cubox API 凭据，也不注册连接探针或导出器。P2-23 已按 [Accepted ADR-004](decisions/ADR-004-server-email-digest-gate.md) 选择 A：不实施邮件摘要、不收集邮箱、所有 Feed/AI 内容云端保留 0 天，不新增云端文章表、邮箱字段或邮件发送代码。P2-D 的受控真实外部服务连通仍未完成，P1/P2 源码进度不等于正式签名发布完成。
 
-2026-08-17 生产检查点已完成 D1 创建、迁移前 Time Travel 留证、0001～0011 全量迁移、关键列/触发器复核、Worker v2 发布、随机 `TOKEN_SECRET` 注入和公网 `/health` 200。首轮 bootstrap 因本地与生产 PBKDF2 迭代上限不一致返回 500；失败请求未创建用户，根因修复提交 `7ce9827` 已发布。修复后首管理员条件写入、正常登录和 `/v1/me` ADMIN 身份均验证成功；D1 当前恰好 1 个启用管理员、成功 bootstrap 审计恰好 1 条。临时 `BOOTSTRAP_TOKEN` 已删除，入口恢复 404；最终 Secret 删除形成的当前 100% Worker 版本为 `93ea2bc7-e4bc-4976-bb2c-d429fc77dbbc`。远端当前无待应用迁移；Groq/DeepSeek Provider Secret、管理员 ACTIVE 策略和 Desktop v2 生产配置尚未完成。恢复书签和请求级证据只保存在本机忽略文件，不进入仓库。
+2026-08-17 生产检查点已完成 D1 创建、迁移前后 Time Travel 留证、0001～0011 全量迁移、关键列/触发器复核、Worker v2、随机 `TOKEN_SECRET`、公网 `/health` 200、首管理员和策略 schema v2/旧客户端兼容契约。bootstrap 首轮因本地与生产 PBKDF2 迭代上限不一致返回 500；失败请求未创建用户，根因修复提交 `7ce9827` 已发布。随后首管理员条件写入、正常登录与 `/v1/me` ADMIN 身份均验证成功；临时 `BOOTSTRAP_TOKEN` 已删除，入口恢复 404。策略契约首轮在任何 PUT 前发现 Cloudflare 压缩把强 ETag 改成弱 ETag；提交 `3cbb879` 为所有 ETag 快照的 200/304 响应增加 `Cache-Control: no-transform`，生产复验后 v2 GET/PUT、强 ETag/`If-Match`、精确幂等重放、幂等键冲突、旧版本冲突、旧客户端 ACTIVE 投影/ALL 升级拒绝及 304 均通过。当前 100% Worker 版本为 `94d90695-3162-4e9c-b8ad-d3feb1541dd6`；策略版本 2 包含九类完整策略，全部禁用且所有 host/endpoint/resource/port 授权为空。D1 保留两版不可变策略历史与两条策略审计，其中版本 1 只是无真实服务、无凭据、不可连通的临时 advanced-only 契约探针，版本 2 为最终安全基线。远端无待迁移，Secret 仅有 `TOKEN_SECRET`；Groq/DeepSeek Provider Secret、最小权限真实 provider 策略和 Desktop v2 生产配置仍未完成。恢复书签和请求级证据只保存在本机忽略文件，不进入仓库。
 
 #### 10.2.1 可执行下一步：P2-D → 正式发布
 
 按以下顺序推进，任何一步失败都停止后续写入或发布，不用“重试”代替人工确认：
 
-1. **验收 Worker v2 契约。** 使用管理员会话验证 schema v2 GET/PUT、v2 `ETag`/`If-Match`、幂等重放、旧客户端兼容投影和高级约束下的升级拒绝；再发布最小 ACTIVE 策略。生产 D1 migration、Worker v2 基础部署与首管理员 bootstrap 已经完成，不得重复应用迁移、重开 bootstrap 或手工改迁移账本。
-2. **锁定受控环境并配置 Desktop v2。** 指定 Readeck、Outline、qBittorrent 和 Webhook 的测试实例、版本、操作者、测试时间窗与回滚负责人；准备 Outline collection UUID、qBittorrent category 和 Webhook 接收端。先保存非秘密目标，再通过本机 DPAPI 安全输入秘密并确认 marker 1。
-3. **执行真实 provider 矩阵。** Readeck 验证标签查找、首次创建、重复重放和归档；Outline 验证 collection 身份、个人草稿、重复更新和目标切换；qBittorrent 验证 API key、category、magnet、`.torrent`、200/202/失败回执与写后 info-hash/category；Webhook 验证 OPTIONS 能力、固定 JSON、幂等键、HMAC 和精确 ack。每一步记录脱敏 HTTP 状态、队列终态和第三方对象标识，不记录秘密、正文、完整 magnet 或响应正文。
-4. **关闭或回滚。** 只有四个 provider 的真实矩阵、凭据生命周期、策略撤销、断网/超时/重复执行和 D1/Worker 观测均通过，才关闭 P2-D；迁移或策略语义异常时停止写入，保留 Time Travel 书签并由发布负责人决定恢复，不在生产直接反复应用迁移。
-5. **生成正式制品并发布。** 安装 Inno Setup、准备仓库外 ECDSA 更新私钥和 Authenticode 证书后，运行 [`RELEASE_GUIDE.md`](RELEASE_GUIDE.md) 的构建脚本；核对安装包/便携包/清单的版本、哈希、签名和 Microsoft 依赖资产，完成 Windows 10/11 x64 全新安装、覆盖升级、卸载保留数据、Runtime 缺失降级和更新回滚测试。先推送源码提交，再创建带版本标签的 GitHub Release；未完成以上步骤前不能标记为“端到端生产验收完成”。
+1. **锁定受控环境并发布最小权限策略。** 指定 Readeck、Outline、qBittorrent 和 Webhook 的测试实例、版本、操作者、测试时间窗与回滚负责人；准备精确 endpoint、Outline collection UUID、qBittorrent category 和 Webhook 接收端。基于当前版本 2 的全禁用安全基线，只启用本轮实际测试的类型并加入最小 host/endpoint/resource/port 授权；不要重复迁移、重开 bootstrap 或手工改迁移账本。
+2. **配置 Desktop v2 并执行真实 provider 矩阵。** 先保存非秘密目标，再通过本机 DPAPI 安全输入秘密并确认 marker 1。Readeck 验证标签查找、首次创建、重复重放和归档；Outline 验证 collection 身份、个人草稿、重复更新和目标切换；qBittorrent 验证 API key、category、magnet、`.torrent`、200/202/失败回执与写后 info-hash/category；Webhook 验证 OPTIONS 能力、固定 JSON、幂等键、HMAC 和精确 ack。每一步记录脱敏 HTTP 状态、队列终态和第三方对象标识，不记录秘密、正文、完整 magnet 或响应正文。
+3. **关闭或回滚。** 只有四个 provider 的真实矩阵、凭据生命周期、策略撤销、断网/超时/重复执行和 D1/Worker 观测均通过，才关闭 P2-D；迁移或策略语义异常时停止写入，保留 Time Travel 书签并由发布负责人决定恢复，不在生产直接反复应用迁移。
+4. **生成正式制品并发布。** 安装 Inno Setup、准备仓库外 ECDSA 更新私钥和 Authenticode 证书后，运行 [`RELEASE_GUIDE.md`](RELEASE_GUIDE.md) 的构建脚本；核对安装包/便携包/清单的版本、哈希、签名和 Microsoft 依赖资产，完成 Windows 10/11 x64 全新安装、覆盖升级、卸载保留数据、Runtime 缺失降级和更新回滚测试。先推送源码提交，再创建带版本标签的 GitHub Release；未完成以上步骤前不能标记为“端到端生产验收完成”。
 
 字幕闭环完成后的产品主路线已确定为“管理员策展 RSS”：管理员维护共享 RSS/Atom 目录，普通用户只能同步和阅读，不得修改共享订阅、分类、抓取策略或自动化规则。为保持现有“云端不存新闻正文”边界，首版采用 Worker/D1 保存权威目录、各桌面客户端本地抓取和 SQLite 缓存的模式。
 
@@ -295,7 +294,7 @@ Gate 0 字幕闭环、P0“管理员策展 RSS”、P1“阅读增强、AI 与�
 6. Independent-01 JSON 双栏结构 Diff 已完成；Core 对每侧只解析一次，接受合法根值 `null`，使用分块协作取消、无歧义方括号路径和有界路径输出，双栏 UI 支持交换与回收虚拟化差异列表，并在最小 920×620 的真实 `MainWindow`、500 行结果及等效 200% 布局中验证生产滚动区可达；未修改 RSS 模型、SQLite 或 Worker。
 7. “洛克王国世界每日清体力自动化”只登记为独立候选调研项，尚未批准 MaaFramework 依赖或任何实现。它不属于 RSS P2 编号；若后续启动，必须先完成条款核对、前台手动登录边界、识别 PoC、进程隔离、停止/失败保护与许可证审查，具体见 [`plans/GAME_AUTOMATION_BACKLOG.md`](plans/GAME_AUTOMATION_BACKLOG.md)。
 
-总路线、参考项目和许可证边界见 [`plans/RSS_MASTER_ROADMAP.md`](plans/RSS_MASTER_ROADMAP.md)，架构决策见 [`decisions/ADR-001-admin-curated-rss.md`](decisions/ADR-001-admin-curated-rss.md)、[`decisions/ADR-002-article-content-extraction.md`](decisions/ADR-002-article-content-extraction.md)、[`decisions/ADR-003-durable-entry-export-queue.md`](decisions/ADR-003-durable-entry-export-queue.md) 与已接受的 [`decisions/ADR-004-server-email-digest-gate.md`](decisions/ADR-004-server-email-digest-gate.md)。P0 与 P1 可作为已验收基础；生产 D1/Worker 基础部署和首管理员已完成，但策略、Desktop、正式安装包、签名、升级和跨物理机矩阵仍按 10.5～10.7 节单独验收。
+总路线、参考项目和许可证边界见 [`plans/RSS_MASTER_ROADMAP.md`](plans/RSS_MASTER_ROADMAP.md)，架构决策见 [`decisions/ADR-001-admin-curated-rss.md`](decisions/ADR-001-admin-curated-rss.md)、[`decisions/ADR-002-article-content-extraction.md`](decisions/ADR-002-article-content-extraction.md)、[`decisions/ADR-003-durable-entry-export-queue.md`](decisions/ADR-003-durable-entry-export-queue.md) 与已接受的 [`decisions/ADR-004-server-email-digest-gate.md`](decisions/ADR-004-server-email-digest-gate.md)。P0 与 P1 可作为已验收基础；生产 D1/Worker、首管理员和 schema v2/旧客户端策略契约已完成，但 Desktop、真实 provider、正式安装包、签名、升级和跨物理机矩阵仍按 10.5～10.7 节单独验收。
 
 ### 10.3 其他尚未完成的产品功能
 
@@ -308,7 +307,7 @@ Gate 0 字幕闭环、P0“管理员策展 RSS”、P1“阅读增强、AI 与�
 云端与管理缺口：
 
 - 客户端已接入共享账号登录、退出、过期状态、角色、额度和管理员目录管理；注册尚未实现。
-- Worker 认证、令牌轮换和管理员目录写入已有 workerd/D1 自动化；生产 D1 migration、Worker 公网健康、首管理员/登录与 bootstrap 关闭已验收，schema v2 管理契约、D1 并发压测和共享额度代理链路仍未验收。
+- Worker 认证、令牌轮换和管理员目录写入已有 workerd/D1 自动化；生产 D1 migration、Worker 公网健康、首管理员/登录、bootstrap 关闭及 schema v2/旧客户端管理契约已验收，D1 并发压测和共享额度代理链路仍未验收。
 - 管理员分类/Feed 写 API、普通用户只读目录、ETag/304、桌面角色可见性、本地目录自动同步、安全发现/抓取和管理交互已实现。
 - 安全 Feed URL 发现、通用条目解析、抓取调度、OPML 管理、只读时间线、Feed 健康诊断、首页真实数据聚合、全文/图片离线、附件分类与安全外链、自动化规则发布边界、图形管理与只读模拟、本地运行账本、规则同步、受限状态动作、AI 摘要/翻译动作、Feed 媒体投递、本地/Windows 通知、七类实体统一搜索、180 天保留维护以及 P2-21 日/周本地摘要均已实现；P2-01～P2-14 与 P2-16～P2-19 的多内容视图、智能视图和已选外部导出也已完成。P2-23 已选择 A，以“不扩权”关闭，不存在邮件实现；P2-D 仍等待受控真实服务验收。
 

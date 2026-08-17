@@ -42,11 +42,11 @@ npx wrangler secret put DEEPSEEK_API_KEY
 
 P2-16～P2-19 的生产窗口必须固定为 `D1 migration 0011 → Worker v2 → Desktop v2`，不能先让新桌面写入高级策略，也不能让旧 Worker 接收 schema v2 写入。
 
-**当前生产检查点（2026-08-17）：** `lenx-tool` D1 已完成 0001～0011，远端无待应用迁移；Worker v2 已发布到 `https://lenx-tool-api.lenx-tool-worker.workers.dev`，当前 100% 版本 `93ea2bc7-e4bc-4976-bb2c-d429fc77dbbc`（源码基线提交 `7ce9827`，版本变化来自最终 Secret 删除），`/health` 为 200，随机 `TOKEN_SECRET` 已配置。首轮 bootstrap 暴露的 PBKDF2 生产上限不一致已修复并通过远程预览；随后首管理员条件写入、正常登录和 `/v1/me` ADMIN 身份均验证成功。D1 当前恰好 1 个启用管理员、成功 bootstrap 审计恰好 1 条；临时 `BOOTSTRAP_TOKEN` 已删除且端点恢复 404。Provider Secret、管理员策略和 Desktop v2 生产配置尚未完成；迁移恢复书签只保存在本机忽略证据中。
+**当前生产检查点（2026-08-17）：** `lenx-tool` D1 已完成 0001～0011，远端无待应用迁移；Worker v2 已发布到 `https://lenx-tool-api.lenx-tool-worker.workers.dev`，当前 100% 版本 `94d90695-3162-4e9c-b8ad-d3feb1541dd6`（源码提交 `3cbb879`），`/health` 为 200，随机 `TOKEN_SECRET` 已配置。首管理员条件写入、正常登录和 `/v1/me` ADMIN 身份均已验证；临时 `BOOTSTRAP_TOKEN` 已删除且端点恢复 404。生产 schema v2 GET/PUT、强 ETag/`If-Match`、幂等重放与冲突、旧版本冲突、旧客户端 ACTIVE 投影/ALL 升级拒绝和 304 已通过。首次契约运行在任何策略 PUT 前发现 Cloudflare 压缩把强 ETag 改为弱 ETag；所有 ETag 快照的 200/304 响应现用 `Cache-Control: no-transform` 阻止边缘转换，并已在公网复验。最终策略版本 2 包含九类全部禁用策略，所有授权数组为空；D1 保留两版策略历史与两条策略审计，版本 1 仅为不连接真实服务的临时高级约束探针。Provider Secret、真实最小权限策略和 Desktop v2 生产配置尚未完成；迁移/策略前后恢复书签只保存在本机忽略证据中。
 
 1. **冻结与备份：** 记录当前源码/Worker commit、远端迁移列表、ACTIVE/ALL 版本和 v1 ETag；保存 D1 Time Travel/备份书签，并确认 0011 尚未应用。
 2. **迁移：** 只执行 `cloud/LenxTool.Worker/migrations/0011_integration_policy_metadata.sql`，随后重新列出远端迁移并检查三组扩展列的默认值、长度预算和旧 `allowed_hosts` 数据投影。迁移失败或列数据异常时停止，不重复应用。
-3. **Worker v2：** 部署 Worker 后先验证 `/health`、登录、管理员 v2 GET/PUT、v2 `ETag`/`If-Match`、`policySchemaVersion=2`，再验证旧客户端的兼容投影；存在私网 endpoint、resource 或 loopback 端口时，旧管理端必须收到升级要求且不能清空高级字段。
+3. **Worker v2：** 部署 Worker 后先验证 `/health`、登录、管理员 v2 GET/PUT、v2 `ETag`/`If-Match`、`policySchemaVersion=2`，再验证旧客户端的兼容投影；存在私网 endpoint、resource 或 loopback 端口时，旧管理端必须收到升级要求且不能清空高级字段。所有携带强 ETag 的快照 200/304 响应必须包含 `Cache-Control: no-transform`，防止 Cloudflare 压缩把表示校验器弱化。
 4. **Desktop v2：** 只在 Worker v2 验证通过后发布桌面候选；管理员先保存 schema v2 策略，随后按 [P2-D 执行手册](plans/RSS_P2_VIEWS_INTEGRATIONS.md#p2-d-执行手册) 执行四个 provider 的真实矩阵。
 5. **回滚：** 任何迁移语义、ETag、兼容投影或权限异常都先停止写入并保留证据，由发布负责人根据备份/Time Travel 决定恢复。不要通过删除迁移记录、强制覆盖 ETag 或反复重放来“修复”。
 

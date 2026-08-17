@@ -2,13 +2,24 @@
 
 <!-- 最新记录放在此行下方；每条只写摘要、证据和详情指针，控制在约 20 行内。 -->
 
+## 2026-08-17 · 生产策略 schema v2 契约与强 ETag
+
+- 结果：生产 v2 GET/PUT、强 ETag/`If-Match`、精确幂等重放、同键异体冲突、旧版本冲突、旧客户端 ACTIVE 投影/ALL 升级拒绝、304、超前版本和未知 schema 均通过。
+- 症状与停止条件：首次公网读到 `W/"integration-policies-v2-all-0"`；契约脚本在任何 PUT 前停止并退出会话，D1 复核仍为策略版本 0、无策略/历史/审计。
+- 根因：Cloudflare 对响应压缩时修改了表示，未声明 `no-transform` 的强 ETag 被弱化；单改集成路由会让目录、发现、自动化和智能视图保留同一风险。
+- 修复：提交 `3cbb879` 为全部 ETag 快照的 200/304 响应补 `Cache-Control: no-transform`。失败先行锁定 9 个断言；修复后聚焦 38/38、Worker 串行 82/82、strict typecheck、11 个 migration LF-only、生产依赖漏洞 0、deploy dry-run通过。
+- 生产：当前 Worker 100% 版本为 `94d90695-3162-4e9c-b8ad-d3feb1541dd6`。最终 `policySetVersion=2`，九类策略全部禁用且四组授权数组全空；ACTIVE 为空，2 个不可变策略版本、2 条策略审计和 2 条 24 小时幂等记录与预期一致。
+- 安全边界：版本 1 只用随机合成、不可连通且无凭据的 advanced-only 探针验证兼容投影；版本 2 立即恢复全禁用基线。策略前后 Time Travel 书签和请求级证据只保存在本机忽略文件。
+- 下一步：登记四个受控实例和回滚窗口，从全禁用基线发布最小 endpoint/resource/port 授权，再配置 Desktop v2 与 DPAPI 凭据并执行真实 provider 矩阵。
+- 详情：`docs/TEST_REPORT.md`、`docs/WORKER_DEPLOYMENT.md`、`docs/api/worker-v1.md`、`cairn/integration-adapter-boundaries.md`。
+
 ## 2026-08-17 · 生产首管理员与 bootstrap 关闭
 
 - 结果：在 PBKDF2 生产上限修复后完成一次性首管理员条件写入；正常登录与 `/v1/me` 均确认 ADMIN 身份。
 - 完整性：生产 D1 当前恰好 1 个启用管理员、`bootstrap.admin.created` 审计恰好 1 条；未查询或记录密码 salt/hash、token、IP 哈希或会话正文。
 - 关闭：临时 `BOOTSTRAP_TOKEN` 已删除，Secret 清单仅保留 `TOKEN_SECRET`，bootstrap 端点恢复 404，`/health` 保持 200。
-- 版本：最终 Secret 删除形成当前 100% Worker 版本 `93ea2bc7-e4bc-4976-bb2c-d429fc77dbbc`，源码基线仍为修复提交 `7ce9827`。
-- 下一步：验证 schema v2/旧客户端策略契约并发布最小 ACTIVE 策略；Desktop v2、Provider Secret、真实 provider 与签名发布仍开放。
+- 版本：当时最终 Secret 删除形成 100% Worker 版本 `93ea2bc7-e4bc-4976-bb2c-d429fc77dbbc`，源码基线为修复提交 `7ce9827`；当前生产版本见上一节。
+- 后续：schema v2/旧客户端策略契约已在同日完成；Desktop v2、Provider Secret、真实 provider 与签名发布仍开放。
 - 详情：`docs/WORKER_DEPLOYMENT.md`、`docs/PROJECT_GUIDE.md`、`cairn/integration-adapter-boundaries.md`。
 
 ## 2026-08-17 · 首管理员 bootstrap 生产运行时修复
@@ -25,9 +36,9 @@
 - 结果：创建生产 D1 `lenx-tool`，完成 0001～0011、三组策略扩展列、发现索引与四个同步触发器复核；远端无待迁移。恢复书签只写入本机忽略证据，不进入仓库。
 - 故障与根因：首次 0008 在 0001～0007 成功后以 `incomplete input` 原子失败；确认是 Windows CRLF + SQLite trigger 命中 Wrangler 远程迁移解析缺陷，且远端没有留下 0008 半成品。
 - 防复发：根 `.gitattributes` 固定 migration LF，Worker 测试前置脚本拒绝 CR 字节；仍用标准 `d1 migrations apply` 完成剩余迁移，不采用 `execute --file` 或手工账本。
-- Worker：生产 v2 已发布到 workers.dev，当前 100% 版本 `93ea2bc7-e4bc-4976-bb2c-d429fc77dbbc`；随机 `TOKEN_SECRET` 通过标准输入注入，公网 `/health` 200，未认证策略 401，bootstrap 未启用时 404。
-- 门禁：Core 222/222、Infrastructure 811/811、App 非 WPF 523/523、WPF runtime 14/14、Worker 81/81、strict typecheck、Release build 0/0、NuGet/npm 漏洞 0、11 个 migration LF-only。
-- 边界：首管理员已完成；策略 v2/旧客户端、Desktop v2、Provider Secret、真实 provider、签名制品和跨机矩阵继续开放。
+- Worker：当时生产 v2 已发布到 workers.dev，100% 版本为 `93ea2bc7-e4bc-4976-bb2c-d429fc77dbbc`；随机 `TOKEN_SECRET` 通过标准输入注入，公网 `/health` 200，未认证策略 401，bootstrap 未启用时 404。当前版本见本日志首条。
+- 门禁：当时 Core 222/222、Infrastructure 811/811、App 非 WPF 523/523、WPF runtime 14/14、Worker 81/81、strict typecheck、Release build 0/0、NuGet/npm 漏洞 0、11 个 migration LF-only；后续 Worker 已增至 82/82。
+- 边界：首管理员与策略 v2/旧客户端契约已完成；Desktop v2、Provider Secret、真实 provider、签名制品和跨机矩阵继续开放。
 - 详情：`docs/TEST_REPORT.md`、`docs/WORKER_DEPLOYMENT.md`、`docs/PROJECT_GUIDE.md`、`cairn/integration-adapter-boundaries.md`。
 
 ## 2026-08-13 · P2-D 执行手册与仓库目标校正

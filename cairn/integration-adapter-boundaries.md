@@ -4,7 +4,8 @@
 
 - `EntryIntegrationKind` 是 Worker、客户端和共享策略间的稳定线协议枚举，不是 UI 注册表。通用个人设置只管理固定官方端点的 Readwise；Obsidian、Eagle、Zotero、Readeck、Outline、qBittorrent 与 Webhook 使用专用设置卡和目标存储，Cubox 已取消。
 - P2-16～P2-19 已完成代码与假 HTTP 自动化。共享 schema v2 分列保存公网 HTTPS 主机、精确私网 HTTPS `{host,port}`、Outline collection/qBittorrent category 和 qBittorrent loopback HTTP 端口；部署顺序固定为 D1 migration 0011、Worker v2、Desktop v2。
-- 2026-08-17 已完成生产 D1 0001～0011、关键结构复核、Worker v2、随机 `TOKEN_SECRET`、公网 `/health` 200 和首管理员；远端无待迁移，D1 恰好 1 个启用管理员、成功 bootstrap 审计恰好 1 条，登录与 `/v1/me` ADMIN 身份已验证，临时 `BOOTSTRAP_TOKEN` 已删除且入口为 404。策略 v2/旧客户端契约、Desktop v2 与真实 provider 尚未验收，不能把基础部署与首管理员等同 P2-D 关闭。
+- 2026-08-17 已完成生产 D1 0001～0011、关键结构复核、Worker v2、随机 `TOKEN_SECRET`、公网 `/health` 200、首管理员及 schema v2/旧客户端策略契约；远端无待迁移，D1 恰好 1 个启用管理员、成功 bootstrap 审计恰好 1 条，登录与 `/v1/me` ADMIN 身份已验证，临时 `BOOTSTRAP_TOKEN` 已删除且入口为 404。当前策略版本 2 含九类全部禁用策略且无 host/endpoint/resource/port 授权；Desktop v2 与真实 provider 尚未验收，不能把安全策略基线等同真实连通。
+- 公网 Cloudflare 压缩曾把 Worker 强 ETag 弱化；所有带 ETag 的目录、发现、自动化、智能视图和集成策略 200/304 响应必须声明 `Cache-Control: no-transform`。生产契约先拒绝任何 `W/` ETag，再允许条件写入。
 - Worker 密码派生受 Cloudflare Web Crypto 生产上限约束，PBKDF2-SHA256 必须固定为 100,000 次；本地 Miniflare 会接受生产拒绝的更高值，因此该参数属于显式平台契约，必须同时由测试与远程预览验证。
 - 旧客户端只取得兼容投影；advanced-only ACTIVE 项不下发。存在高级约束时，旧 ALL/PUT 失败关闭并要求升级。管理员客户端只有加载到 schema v2 才允许发布，避免 Worker-first 窗口丢字段。
 - 每种新 provider 首版只保存一个本机 `default` 目标。资源白名单按 kind 全局授权，ACTIVE endpoint/resource 元数据会下发同一 Worker 的登录账号，因此只适用于同一信任域并被视为非秘密；凭据、完整 Webhook 路径、条目内容和完整 magnet 不进入 D1。
@@ -24,17 +25,18 @@
 4. 幂等查找只有在第三方明确证明不存在时才允许创建；分页、计数、重复响应头、身份或 resource 不一致都失败关闭。
 5. 目标修订必须进入队列作用域；确认型操作还必须绑定准备时修订。endpoint/resource 改变后旧任务不能静默投向新目标。
 6. marker 1 是凭据激活权限，DPAPI 槽位存在本身不是权限；删除 marker 必须先于秘密删除，崩溃或旁路重写不能重新激活。
-7. Worker 表示版本、ETag、`If-Match`、幂等哈希和数据库列预算必须按同一 schema 演进；不能只加顶层版本号并假设旧客户端安全忽略字段。
+7. Worker 表示版本、ETag、`If-Match`、幂等哈希和数据库列预算必须按同一 schema 演进；不能只加顶层版本号并假设旧客户端安全忽略字段。所有强 ETag 快照的 200/304 必须使用 `no-transform`，且生产写入前拒绝弱 ETag。
 8. P2-23 若未来重开，必须另立 ADR 并重新评估邮箱、内容保留、退订、反滥用、删除与供应商边界，不能复用本次 A 结论扩权。
 
 ## 当前阻断
 
-- 代码与假 HTTP 契约无剩余 P0/P1。生产 D1 migration、Worker v2 基础部署与首管理员已完成；尚未完成的是策略 schema v2/兼容契约、Desktop v2、真实 Readeck/Outline/qBittorrent/Webhook 受控连通、签名安装包和跨物理机升级矩阵。
+- 代码与假 HTTP 契约无剩余 P0/P1。生产 D1 migration、Worker v2、首管理员与策略 schema v2/兼容契约已完成；尚未完成的是 Desktop v2、真实 Readeck/Outline/qBittorrent/Webhook 受控连通、签名安装包和跨物理机升级矩阵。
 - 自动化完成不等于第三方真实实例或生产发布完成；在 P2-D 前不得宣称端到端生产验收通过。
 
 ## 回归证据
 
 - 2026-08-13 完整门禁：Core 222/222、Infrastructure 811/811、App 非 WPF 523/523、10 个 WPF runtime 类逐进程 14/14、Worker 81/81、strict typecheck、Release build 0 警告/0 错误、NuGet/npm 漏洞 0。
 - 2026-08-17 重新运行同一发布门禁并保持上述结果；11 个 D1 migration 另通过 LF-only 前置检查。远端 11/11、三组 0011 列、0008 表与四个触发器均已只读核对。
+- 同日强 ETag 修复以 9 个失败先行断言锁定五类快照的 200/304，修复后聚焦 38/38、Worker 串行 82/82、strict typecheck、生产依赖漏洞 0 和 deploy dry-run 通过；公网 schema v2/旧客户端契约及最终 D1 安全基线均已只读复核。
 - 集成终审使用 `gpt-5.6-sol`（max）只读复核，最终未发现剩余 P0/P1；本轮 56 个改动 C# 文件的格式验证与 `git diff --check` 通过。
-- 受控真实实例、token/API key 和 Webhook 接收端均未使用；详细当前状态与历史门禁见 `docs/TEST_REPORT.md` 和 `docs/plans/RSS_P2_VIEWS_INTEGRATIONS.md`。
+- 受控真实实例、provider token/API key 和 Webhook 接收端均未使用；详细当前状态与历史门禁见 `docs/TEST_REPORT.md` 和 `docs/plans/RSS_P2_VIEWS_INTEGRATIONS.md`。

@@ -12,7 +12,7 @@
 | LenxTool.Infrastructure.Tests（2026-08-17） | 811 passed |
 | LenxTool.App.Tests 非 WPF（2026-08-17） | 523 passed |
 | App WPF runtime 逐类隔离（2026-08-17） | 14/14 passed |
-| Cloudflare Worker Vitest（2026-08-17） | 81 passed |
+| Cloudflare Worker Vitest（2026-08-17） | 82 passed |
 | Worker TypeScript strict typecheck（2026-08-17） | passed |
 | .NET Release build warnings（2026-08-17） | 0 |
 | NuGet vulnerable packages（2026-08-17） | 0 detected |
@@ -20,22 +20,24 @@
 
 P2-16～P2-19 已按 N2/R1/G1/W1 完成自动化实现。Worker/D1 schema v2 分列保存公网主机、精确私网 HTTPS endpoint、Outline collection/qBittorrent category 与 qBittorrent loopback HTTP 端口；旧客户端取得兼容投影，带高级约束的旧管理读写要求升级。四个 provider 使用独立目标存储、专用设置卡、DPAPI 凭据代际、执行期策略/DNS pin、禁代理/跳转/Cookie/自动解压和覆盖响应头与正文的 deadline。Readeck 只有在空页且 `Total-Count=0` 时创建，并以可见稳定标签收敛；Outline UUID 绑定不透明目标修订与条目 ID，固定个人草稿且不跨 collection 移动；qBittorrent 固定 5.2+/WebAPI 2.14.1+ API key、显式 category、用户确认和写后 info-hash/category 复核；Webhook 固定 v1 JSON、能力 OPTIONS、稳定幂等键、精确 ack 与可选正文 HMAC。写后畸形或超时回执不会被误报成功或永久拒绝，统一进入可重试的未知写结果；`.torrent` 暂时网络故障也保持可重试。
 
-P2-23 已按 Accepted ADR-004 选择 A 关闭：不实现邮件摘要、不收集邮箱，Worker/App/Core 没有新增邮箱字段、邮件供应商或发送代码。P2-16～P2-19 的独立只读终审使用 `gpt-5.6-sol`（max），最终未发现剩余 P0/P1。最新完整门禁为 Core 222/222、Infrastructure 811/811、App 非 WPF 523/523、10 个 WPF runtime 类逐进程 14/14、Worker 12 个文件 81/81、strict typecheck、Release build 0 警告/0 错误、NuGet/npm 漏洞 0；迁移 LF 检查覆盖 11 个 SQL 文件。全部 provider 仍未使用真实 token、API key、实例或 Webhook 接收端；P2-D 继续作为独立发布验收。
+P2-23 已按 Accepted ADR-004 选择 A 关闭：不实现邮件摘要、不收集邮箱，Worker/App/Core 没有新增邮箱字段、邮件供应商或发送代码。P2-16～P2-19 的独立只读终审使用 `gpt-5.6-sol`（max），最终未发现剩余 P0/P1。最新完整 .NET 门禁仍为 Core 222/222、Infrastructure 811/811、App 非 WPF 523/523、10 个 WPF runtime 类逐进程 14/14、Release build 0 警告/0 错误和 NuGet 漏洞 0；本次强 ETag 修复未改 .NET，未把历史结果冒充重跑。Worker 本次串行运行 12 个文件 82/82，strict typecheck、11 个 migration LF-only、deploy dry-run 与生产依赖审计 0 漏洞均通过。全部 provider 仍未使用真实 token、API key、实例或 Webhook 接收端；P2-D 继续作为独立发布验收。
 
 ## 生产 D1 / Worker 检查点
 
 - 生产 D1 `lenx-tool` 已创建并绑定，迁移前后的 Time Travel 书签保存在本机忽略证据文件中。0001～0007 首轮成功；0008 因 Windows CRLF 与 `CREATE TRIGGER` 触发 Wrangler 远程解析缺陷而原子失败，远端复核确认没有留下 0008 半成品。
 - 根因修复不是绕过迁移账本：`.gitattributes` 将 `cloud/LenxTool.Worker/migrations/*.sql` 固定为 LF，`npm test` 前置脚本拒绝任何 CR 字节。修复后继续使用标准 `wrangler d1 migrations apply DB --remote`，0008～0011 全部成功；远端迁移账本为 11/11 且无待应用迁移。
-- 结构复核确认 `integration_policies` 已包含三组 0011 扩展列，`feed_discovery_index` 及四个同步触发器均存在。生产 Worker v2 当前 100% 版本为 `d24077d3-70a9-4db5-a2e9-256fa3b63c3b`，公网 `/health` 返回 200、`Cache-Control: no-store` 和最小健康正文。
-- 生产 Secret 清单当前只有随机 `TOKEN_SECRET`；值通过标准输入写入且未落盘。D1 用户数仍为 0，未配置 `BOOTSTRAP_TOKEN` 或 Groq/DeepSeek Provider Secret；未认证策略读取返回 401，bootstrap 未启用时返回 404。
+- 结构复核确认 `integration_policies` 已包含三组 0011 扩展列，`feed_discovery_index` 及四个同步触发器均存在。生产 Worker v2 当前 100% 版本为 `94d90695-3162-4e9c-b8ad-d3feb1541dd6`（源码 `3cbb879`），公网 `/health` 返回 200、`Cache-Control: no-store` 和最小健康正文。
+- 首管理员、正常登录与 `/v1/me` ADMIN 身份已验证；D1 恰好 1 个启用管理员和 1 条成功 bootstrap 审计。生产 Secret 清单只有随机 `TOKEN_SECRET`；`BOOTSTRAP_TOKEN` 已删除、入口为 404，Groq/DeepSeek Provider Secret 未配置。
+- schema v2 生产契约首轮在任何 PUT 前因公网强 ETag 被 Cloudflare 压缩弱化而安全停止。失败先行回归锁定 9 个 200/304 缺失 `no-transform` 的断言；修复后聚焦 38/38、Worker 串行全量 82/82。再次运行生产契约后，v2 GET/PUT、强 ETag/`If-Match`、精确幂等重放、同键异体冲突、旧版本冲突、旧客户端 ACTIVE 投影/ALL 升级拒绝、304 与超前/未知 schema 错误均通过。
+- 最终 `policySetVersion=2`，九种策略全部禁用，`allowedHosts`、`trustedPrivateEndpoints`、`allowedResources` 和 `allowedLoopbackHttpPorts` 均为空；ACTIVE 为空。D1 保留 2 个策略版本、2 条策略审计和 2 条 24 小时幂等记录；版本 1 是不含真实 provider、凭据或可达目标的临时 advanced-only 契约探针，版本 2 是最终安全基线。
 
 ## 下一步与完成条件
 
 本报告证明的是“源码、假 HTTP 契约和本地安全边界完成”，不等同于第三方真实服务或正式安装包已发布。下一轮必须使用固定发布候选提交，按 [`P2-D 执行手册`](plans/RSS_P2_VIEWS_INTEGRATIONS.md#p2-d-执行手册) 完成：
 
-1. 在受控终端初始化首个管理员，验证登录后立即删除临时 `BOOTSTRAP_TOKEN`；再验收 schema v2、ETag/If-Match、旧客户端兼容投影和升级拒绝，并发布最小 ACTIVE 策略。
-2. 准备受控 Readeck、Outline、qBittorrent、Webhook 实例和独立测试账号；秘密只通过密码管理器/运行时输入，不进入日志、截图、Issue 或仓库。
-3. 配置 Desktop v2，完成四个 provider 的真实首写、重复/重放、策略撤销、暂时故障和写后回执矩阵，保存脱敏 HTTP 状态、队列终态和非秘密对象标识。
+1. 准备受控 Readeck、Outline、qBittorrent、Webhook 实例和独立测试账号，登记版本、精确 endpoint/resource/port、时间窗与回滚负责人；秘密只通过密码管理器/运行时输入，不进入日志、截图、Issue 或仓库。
+2. 基于当前九类全禁用的版本 2 安全基线，仅为本轮真实对象发布最小权限策略；配置 Desktop v2 的非秘密目标，再保存 DPAPI 凭据并确认 marker 1。
+3. 完成四个 provider 的真实首写、重复/重放、策略撤销、暂时故障和写后回执矩阵，保存脱敏 HTTP 状态、队列终态和非秘密对象标识。
 4. 只有全部矩阵通过，才按 [`RELEASE_GUIDE.md`](RELEASE_GUIDE.md) 生成并验证签名安装包、便携包、更新清单和 SHA256，并完成 Windows 10/11 x64 全新安装、覆盖升级、卸载保留数据及 Runtime 缺失降级。
 
 P2-D 关闭前不得宣称端到端生产验收通过；P2-D 关闭后仍需完成生产发布标签、GitHub Release 和跨物理机升级矩阵。

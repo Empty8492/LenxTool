@@ -18,7 +18,7 @@ Lenx Tools 是面向 Windows 10/11 x64 的本地优先桌面效率应用，统�
 
 状态核对日期：2026-08-17。当前源码已经具备资讯刷新与缓存、13 个可多选筛选的分组热点平台、Groq/DeepSeek Key 加密保存、AI 解读/翻译、Groq/本地 Whisper 转写、完整字幕翻译/导出闭环、JSON 双栏结构 Diff、七类统一搜索、数据库备份/安全清理和签名更新检查等预览能力。
 
-字幕 Gate 0、RSS P0、P1、P2-01～P2-14、P2-16～P2-23、Independent-01 和统一发现 DISC-01～DISC-06、UX-03 已完成。P1 已交付私人已读/收藏/标签/备注/进度、离线图片与受控全文、AI 摘要/翻译及本地自动处理、管理员受限规则与模拟、确定性动作账本、Feed 媒体投递、应用内通知、七类统一搜索和 180 天安全清理；P2 已交付五类内容视图、智能视图、统一导出契约与集成安全策略、持久化导出队列、本地 Markdown、Obsidian、Eagle、Zotero 个人库、Readwise Reader、Readeck、Outline、qBittorrent、受控 Webhook 和隐私安全的 Windows 系统通知。P2-16～P2-19 使用独立本机设置卡、DPAPI 凭据代际和 Worker/D1 schema v2 策略；执行时重新校验 ACTIVE 策略与全部 DNS 地址，默认禁代理、跳转、Cookie 和自动解压。P2-20～P2-22 提供本地计划、日/周摘要和封闭通知；筛选、报告和通知设置不上传 Worker/D1。P2-15 Cubox 已取消。P2-23 已按 [`Accepted ADR-004`](docs/decisions/ADR-004-server-email-digest-gate.md) 选择 A，以“不实施、不收邮箱、不扩权”关闭。2026-08-17 已完成生产 D1 0001～0011 迁移、Worker v2 发布、随机 `TOKEN_SECRET` 注入和公网 `/health` 200 验证；首个管理员、schema v2 策略/兼容矩阵、Desktop v2 生产配置、受控真实 provider 连通、正式签名安装包和发布矩阵仍未完成。完整状态、运行配置和发布阻塞项以 [`docs/PROJECT_GUIDE.md` 第 10 节](docs/PROJECT_GUIDE.md#10-当前版本边界与交付状态)为准。
+字幕 Gate 0、RSS P0、P1、P2-01～P2-14、P2-16～P2-23、Independent-01 和统一发现 DISC-01～DISC-06、UX-03 已完成。P1 已交付私人已读/收藏/标签/备注/进度、离线图片与受控全文、AI 摘要/翻译及本地自动处理、管理员受限规则与模拟、确定性动作账本、Feed 媒体投递、应用内通知、七类统一搜索和 180 天安全清理；P2 已交付五类内容视图、智能视图、统一导出契约与集成安全策略、持久化导出队列、本地 Markdown、Obsidian、Eagle、Zotero 个人库、Readwise Reader、Readeck、Outline、qBittorrent、受控 Webhook 和隐私安全的 Windows 系统通知。P2-16～P2-19 使用独立本机设置卡、DPAPI 凭据代际和 Worker/D1 schema v2 策略；执行时重新校验 ACTIVE 策略与全部 DNS 地址，默认禁代理、跳转、Cookie 和自动解压。P2-20～P2-22 提供本地计划、日/周摘要和封闭通知；筛选、报告和通知设置不上传 Worker/D1。P2-15 Cubox 已取消。P2-23 已按 [`Accepted ADR-004`](docs/decisions/ADR-004-server-email-digest-gate.md) 选择 A，以“不实施、不收邮箱、不扩权”关闭。2026-08-17 已完成生产 D1 0001～0011、Worker v2、随机 `TOKEN_SECRET`、公网健康、首管理员和 schema v2/旧客户端策略契约验收；生产策略版本 2 当前包含九类全部禁用且无 endpoint/resource/port 授权的最小安全基线。Desktop v2 生产配置、受控真实 provider 连通、Provider Secret、正式签名安装包和发布矩阵仍未完成。完整状态、运行配置和发布阻塞项以 [`docs/PROJECT_GUIDE.md` 第 10 节](docs/PROJECT_GUIDE.md#10-当前版本边界与交付状态)为准。
 
 字幕闭环之后的主路线为 **管理员策展 RSS**：只有管理员能维护共享 RSS/Atom 目录、AI 策略和自动化规则，普通用户只能同步 ACTIVE 配置并在本机消费。P0/P1 已验收，P2-01～P2-14、P2-16～P2-23 与统一发现 DISC-01～DISC-06、UX-03 已完成；P2-15 Cubox 已取消，P2-D 的外部真实连通仍单独开放。P2-23 的 [`Accepted ADR-004`](docs/decisions/ADR-004-server-email-digest-gate.md) 明确不实施服务端邮件摘要、不收集邮箱、所有 Feed/AI 内容云端保留 0 天，也不增加云端文章表、邮箱字段或邮件发送代码。另有“洛克王国世界每日清体力自动化”作为独立候选调研项登记，尚未批准选型或进入实现，不属于当前 RSS 路线。完整 RSS 任务见 [`docs/plans/RSS_MASTER_ROADMAP.md`](docs/plans/RSS_MASTER_ROADMAP.md)，独立候选边界见 [`docs/plans/GAME_AUTOMATION_BACKLOG.md`](docs/plans/GAME_AUTOMATION_BACKLOG.md)。
 
@@ -27,12 +27,12 @@ Lenx Tools 是面向 Windows 10/11 x64 的本地优先桌面效率应用，统�
 源码和假 HTTP 契约已经完成，下一步不是继续扩展 provider，而是按 [`P2-D 执行手册`](docs/plans/RSS_P2_VIEWS_INTEGRATIONS.md#p2-d-执行手册)完成真实环境验收，再制作签名发布包：
 
 1. 准备四个受控测试对象：Readeck 实例、Outline 实例与 collection、qBittorrent 5.2+/WebAPI 2.14.1+ 实例与 category、Webhook 接收端。测试账号、API key 和 token 只通过密码管理器或运行时安全输入提供，不写入仓库、Issue、日志或聊天。
-2. 生产 D1 迁移与 Worker v2 已完成。下一步在受控终端初始化首个管理员，成功登录后立即删除临时 `BOOTSTRAP_TOKEN`；再验证 schema v2、v2 ETag/If-Match、旧客户端兼容投影和高级约束下的升级拒绝，并发布最小 ACTIVE 策略。
+2. 生产 D1、Worker v2、首管理员、强 ETag、schema v2/旧客户端矩阵和最小安全策略均已完成。下一步为四个受控实例登记精确 endpoint/resource/port，按最小权限更新管理员策略，再配置 Desktop v2 的非秘密目标与 DPAPI 凭据 marker。
 3. 配置 Desktop v2 后逐 provider 执行最小真实矩阵：Readeck 标签查找/创建/重放，Outline collection 与草稿回执，qBittorrent magnet/`.torrent`/200/202/失败回执，Webhook OPTIONS/HMAC/幂等 ack。每个用例记录脱敏结果、队列终态和第三方实际对象，不记录秘密或正文。
 4. P2-D 全部通过后，按 [`构建、签名与发布指南`](docs/RELEASE_GUIDE.md)重新生成自包含包、安装包、更新清单和 SHA256；完成 Windows 10/11 x64 的全新安装、覆盖升级、卸载保留数据、Runtime 缺失降级和签名反向验证。
 5. 发布前再次运行 [`docs/TEST_REPORT.md`](docs/TEST_REPORT.md) 中的完整门禁，确认没有真实凭据、私钥、数据库或旧制品进入提交；最后创建 GitHub Release，不能把现有旧 `Release\LenxTool_Setup.exe` 当作本轮制品。
 
-当前仍开放的是首管理员与生产策略验收、Desktop v2、P2-D 受控实例、Provider key、签名证书/离线更新私钥和跨物理机升级矩阵；这些输入确认前，不宣称端到端生产验收完成。
+当前仍开放的是 Desktop v2、P2-D 受控实例与真实外联、Provider key、签名证书/离线更新私钥和跨物理机升级矩阵；这些输入确认前，不宣称端到端生产验收完成。
 
 ## 常用命令
 

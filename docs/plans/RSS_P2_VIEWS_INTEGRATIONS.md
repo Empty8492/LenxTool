@@ -552,7 +552,7 @@ P2-D 是受控真实环境的发布闸门，不是开发机上“能访问一次
 
 **固定执行顺序：**
 
-> 2026-08-17 生产进度：候选基线、D1 Time Travel 留证、0001～0011 迁移、结构复核、Worker v2 发布、随机 `TOKEN_SECRET` 和公网 `/health` 已完成。当前 D1 为 0 用户，未启用 bootstrap、Provider Secret 或管理员 ACTIVE 策略。下一步是受控终端初始化首管理员并立即删除临时 Secret，然后完成本清单第 2 步剩余的登录/schema v2/ETag/旧客户端契约，再进入 Desktop v2 和真实 provider 矩阵。恢复书签不进入仓库。
+> 2026-08-17 生产进度：候选基线、D1 Time Travel 留证、0001～0011 迁移、结构复核、Worker v2、随机 `TOKEN_SECRET`、公网 `/health`、首管理员和 schema v2/旧客户端策略契约均已完成。公网首次暴露 Cloudflare 压缩把强 ETag 弱化；所有 ETag 快照的 200/304 响应增加 `Cache-Control: no-transform` 后，v2 GET/PUT、`If-Match`、幂等重放/冲突、旧版本冲突、旧客户端 ACTIVE 投影/ALL 升级拒绝与 304 已复验通过。当前策略版本 2 含九类全部禁用策略且四组授权数组全空；下一步从该安全基线登记受控实例、发布最小权限策略，再进入 Desktop v2 和真实 provider 矩阵。恢复书签不进入仓库。
 
 1. **冻结候选并做基线。** 记录源码 commit、Worker 当前版本、D1 迁移列表、当前 v1/v2 ETag 和已启用策略；运行 Core/Infrastructure/App/Worker 的发布门禁。禁止在真实验收中同时修改策略、迁移和客户端代码。
 2. **部署 D1 与 Worker。** 在生产 D1 记录 Time Travel/备份书签，确认 0011 尚未应用，然后按 `0011 migration → Worker v2 → Desktop v2` 执行。迁移后重新列出迁移状态；Worker 部署后验证 `/health`、登录、管理员 v2 读写、v2 `ETag`/`If-Match`、旧客户端兼容投影和高级约束下的升级拒绝。迁移语义异常时停止写入，不重复应用迁移。
