@@ -4,7 +4,7 @@
 
 - `EntryIntegrationKind` 是 Worker、客户端和共享策略间的稳定线协议枚举，不是 UI 注册表。通用个人设置只管理固定官方端点的 Readwise；Obsidian、Eagle、Zotero、Readeck、Outline、qBittorrent 与 Webhook 使用专用设置卡和目标存储，Cubox 已取消。
 - P2-16～P2-19 已完成代码与假 HTTP 自动化。共享 schema v2 分列保存公网 HTTPS 主机、精确私网 HTTPS `{host,port}`、Outline collection/qBittorrent category 和 qBittorrent loopback HTTP 端口；部署顺序固定为 D1 migration 0011、Worker v2、Desktop v2。
-- 2026-08-17 已完成生产 D1 0001～0011、关键结构复核、Worker v2、随机 `TOKEN_SECRET` 和公网 `/health` 200；远端无待迁移且仍为 0 用户。首管理员、策略 v2/旧客户端契约、Desktop v2 与真实 provider 尚未验收，不能把基础部署等同 P2-D 关闭。
+- 2026-08-17 已完成生产 D1 0001～0011、关键结构复核、Worker v2、随机 `TOKEN_SECRET`、公网 `/health` 200 和首管理员；远端无待迁移，D1 恰好 1 个启用管理员、成功 bootstrap 审计恰好 1 条，登录与 `/v1/me` ADMIN 身份已验证，临时 `BOOTSTRAP_TOKEN` 已删除且入口为 404。策略 v2/旧客户端契约、Desktop v2 与真实 provider 尚未验收，不能把基础部署与首管理员等同 P2-D 关闭。
 - Worker 密码派生受 Cloudflare Web Crypto 生产上限约束，PBKDF2-SHA256 必须固定为 100,000 次；本地 Miniflare 会接受生产拒绝的更高值，因此该参数属于显式平台契约，必须同时由测试与远程预览验证。
 - 旧客户端只取得兼容投影；advanced-only ACTIVE 项不下发。存在高级约束时，旧 ALL/PUT 失败关闭并要求升级。管理员客户端只有加载到 schema v2 才允许发布，避免 Worker-first 窗口丢字段。
 - 每种新 provider 首版只保存一个本机 `default` 目标。资源白名单按 kind 全局授权，ACTIVE endpoint/resource 元数据会下发同一 Worker 的登录账号，因此只适用于同一信任域并被视为非秘密；凭据、完整 Webhook 路径、条目内容和完整 magnet 不进入 D1。
@@ -29,7 +29,7 @@
 
 ## 当前阻断
 
-- 代码与假 HTTP 契约无剩余 P0/P1。生产 D1 migration 与 Worker v2 基础部署已完成；尚未完成的是首管理员、策略 schema v2/兼容契约、Desktop v2、真实 Readeck/Outline/qBittorrent/Webhook 受控连通、签名安装包和跨物理机升级矩阵。
+- 代码与假 HTTP 契约无剩余 P0/P1。生产 D1 migration、Worker v2 基础部署与首管理员已完成；尚未完成的是策略 schema v2/兼容契约、Desktop v2、真实 Readeck/Outline/qBittorrent/Webhook 受控连通、签名安装包和跨物理机升级矩阵。
 - 自动化完成不等于第三方真实实例或生产发布完成；在 P2-D 前不得宣称端到端生产验收通过。
 
 ## 回归证据

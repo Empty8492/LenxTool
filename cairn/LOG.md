@@ -2,13 +2,22 @@
 
 <!-- 最新记录放在此行下方；每条只写摘要、证据和详情指针，控制在约 20 行内。 -->
 
+## 2026-08-17 · 生产首管理员与 bootstrap 关闭
+
+- 结果：在 PBKDF2 生产上限修复后完成一次性首管理员条件写入；正常登录与 `/v1/me` 均确认 ADMIN 身份。
+- 完整性：生产 D1 当前恰好 1 个启用管理员、`bootstrap.admin.created` 审计恰好 1 条；未查询或记录密码 salt/hash、token、IP 哈希或会话正文。
+- 关闭：临时 `BOOTSTRAP_TOKEN` 已删除，Secret 清单仅保留 `TOKEN_SECRET`，bootstrap 端点恢复 404，`/health` 保持 200。
+- 版本：最终 Secret 删除形成当前 100% Worker 版本 `93ea2bc7-e4bc-4976-bb2c-d429fc77dbbc`，源码基线仍为修复提交 `7ce9827`。
+- 下一步：验证 schema v2/旧客户端策略契约并发布最小 ACTIVE 策略；Desktop v2、Provider Secret、真实 provider 与签名发布仍开放。
+- 详情：`docs/WORKER_DEPLOYMENT.md`、`docs/PROJECT_GUIDE.md`、`cairn/integration-adapter-boundaries.md`。
+
 ## 2026-08-17 · 首管理员 bootstrap 生产运行时修复
 
 - 症状：两次有效 bootstrap 请求均返回脱敏 HTTP 500；生产 D1 仍为 0 用户、无成功审计，实时 Tail 显示请求由应用正常返回 500，而非 CPU 超限终止。
 - 根因：本地 Miniflare 接受 PBKDF2-SHA256 310,000 次，但 Cloudflare 远程运行时明确以 `NotSupportedError` 拒绝超过 100,000 次的迭代；既有测试没有表达这条生产平台上限。
 - 修复：密码派生固定为平台上限 100,000，并新增安全契约测试；部署/API/项目文档同步解释本地与生产差异。失败后临时 `BOOTSTRAP_TOKEN` 已删除，D1 未留下半成品。
 - 验证：回归先以缺失常量失败；修复后身份与安全聚焦 13/13、Worker 全量 82/82、strict typecheck、11 个 migration LF-only、生产依赖漏洞 0、deploy dry-run 通过；Cloudflare 远程预览实测 100,000 次返回 200。
-- 发布：修复提交 `7ce9827` 已部署为 100% Worker 版本 `e62b9407-49d6-4124-aede-fb6ea1fa5df5`；`/health` 200，Secret 清单仅保留 `TOKEN_SECRET`，bootstrap 端点为 404，D1 仍为 0 用户。首管理员仍需新的单次 token 后执行。
+- 发布：修复提交 `7ce9827` 已部署；随后首管理员、登录与 bootstrap 关闭均完成，当前生产状态见上一节。
 - 详情：`docs/WORKER_DEPLOYMENT.md`、`docs/api/worker-v1.md`、`docs/PROJECT_GUIDE.md`、`cairn/integration-adapter-boundaries.md`。
 
 ## 2026-08-17 · P2-D 生产 D1 / Worker v2 检查点
@@ -16,9 +25,9 @@
 - 结果：创建生产 D1 `lenx-tool`，完成 0001～0011、三组策略扩展列、发现索引与四个同步触发器复核；远端无待迁移。恢复书签只写入本机忽略证据，不进入仓库。
 - 故障与根因：首次 0008 在 0001～0007 成功后以 `incomplete input` 原子失败；确认是 Windows CRLF + SQLite trigger 命中 Wrangler 远程迁移解析缺陷，且远端没有留下 0008 半成品。
 - 防复发：根 `.gitattributes` 固定 migration LF，Worker 测试前置脚本拒绝 CR 字节；仍用标准 `d1 migrations apply` 完成剩余迁移，不采用 `execute --file` 或手工账本。
-- Worker：生产 v2 已发布到 workers.dev，当前 100% 版本 `e62b9407-49d6-4124-aede-fb6ea1fa5df5`；随机 `TOKEN_SECRET` 通过标准输入注入，公网 `/health` 200，未认证策略 401，bootstrap 未启用时 404。
+- Worker：生产 v2 已发布到 workers.dev，当前 100% 版本 `93ea2bc7-e4bc-4976-bb2c-d429fc77dbbc`；随机 `TOKEN_SECRET` 通过标准输入注入，公网 `/health` 200，未认证策略 401，bootstrap 未启用时 404。
 - 门禁：Core 222/222、Infrastructure 811/811、App 非 WPF 523/523、WPF runtime 14/14、Worker 81/81、strict typecheck、Release build 0/0、NuGet/npm 漏洞 0、11 个 migration LF-only。
-- 边界：D1 仍为 0 用户；首管理员、策略 v2/旧客户端、Desktop v2、Provider Secret、真实 provider、签名制品和跨机矩阵继续开放。
+- 边界：首管理员已完成；策略 v2/旧客户端、Desktop v2、Provider Secret、真实 provider、签名制品和跨机矩阵继续开放。
 - 详情：`docs/TEST_REPORT.md`、`docs/WORKER_DEPLOYMENT.md`、`docs/PROJECT_GUIDE.md`、`cairn/integration-adapter-boundaries.md`。
 
 ## 2026-08-13 · P2-D 执行手册与仓库目标校正
