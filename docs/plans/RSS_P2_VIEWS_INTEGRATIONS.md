@@ -484,7 +484,7 @@ P2 不引入 Folo 社区、关注关系、钱包、支付、移动端或完整 A
 
 ### P2-18：qBittorrent 适配器
 
-**状态：** 已完成自动化实现（2026-08-13）；受控真实实例连通仍属于 P2-D。
+**状态：** 已完成自动化实现（2026-08-13）；2026-08-17 完成受控真实 canary 的健康、magnet、内存 metainfo `.torrent`、重放、清理与策略撤销，真实公网 `.torrent` 获取及 200/202/失败状态矩阵仍属于 P2-D。
 
 **目标：** 仅对验证后的 magnet/torrent 条目提供显式投递，默认关闭。
 
@@ -502,7 +502,9 @@ P2 不引入 Folo 社区、关注关系、钱包、支付、移动端或完整 A
 
 **参考：** Folo qBittorrent 动作；实现时核对 qBittorrent Web API。
 
-**完成记录（2026-08-13）：** 首版固定 qBittorrent 5.2+ / WebAPI 2.14.1+ 与 32 字符 API key，只允许管理员批准的 HTTPS 目标或 `http://localhost:<精确端口>`。category 必须非空、存在且命中共享白名单，不支持未分类或自动创建。magnet 只接受唯一 BTIH；`.torrent` 只从公网 HTTPS、无跳转的已验证 enclosure 有界下载，并经过规范 bencode 与 info-hash 校验。资讯页采用“准备→再次确认→入队”，完整 magnet、tracker 与 passkey 不进入状态或日志。localhost HTTP 会在本机 TCP 明文传输 API key，界面明确限定为同机例外；未使用真实 qBittorrent 实例。
+**完成记录（2026-08-13）：** 首版固定 qBittorrent 5.2+ / WebAPI 2.14.1+ 与 32 字符 API key，只允许管理员批准的 HTTPS 目标或 `http://localhost:<精确端口>`。category 必须非空、存在且命中共享白名单，不支持未分类或自动创建。magnet 只接受唯一 BTIH；`.torrent` 只从公网 HTTPS、无跳转的已验证 enclosure 有界下载，并经过规范 bencode 与 info-hash 校验。资讯页采用“准备→再次确认→入队”，完整 magnet、tracker 与 passkey 不进入状态或日志。localhost HTTP 会在本机 TCP 明文传输 API key，界面明确限定为同机例外。
+
+**真实 canary 记录（2026-08-17）：** 固定候选 `35658f3` 使用 qBittorrent 5.2.3 / WebAPI 2.15.1 的独立本机 profile，WebUI 仅监听 `127.0.0.1:47891`，BitTorrent TCP/UDP 仅监听 loopback，UPnP/NAT-PMP、DHT、PeX、LSD 与新任务自动启动均关闭。生产策略版本 3 只授权 `lenxtool-canary` 和端口 47891；Release 设置卡健康检查通过。真实 exporter/client 的随机无 tracker magnet 与受控合法 `.torrent` 均完成首写、同请求重放、正确 info-hash/category/stopped 复查和精确删除；策略恢复全禁用后再次执行得到不可重试 `AccessDenied` 且 provider 对象为 0。`.torrent` 由验收器内存生成并通过测试 fetcher 交给生产 exporter/client，因此只证明真实文件上传/回执/写后复查，不证明生产 `TorrentFileFetcher` 的公网 HTTPS 连通；公共 exporter 也不暴露原始 HTTP 状态，故 200/202/失败分支仍由自动化而非本次真实证据覆盖。最终生产策略为版本 4、ACTIVE 0；target 降为 marker 0、LenxTool DPAPI 测试凭据删除、provider 停止。P2-D 总检查点保持未勾选。
 
 ### P2-19：受控自定义 Webhook
 
@@ -552,7 +554,7 @@ P2-D 是受控真实环境的发布闸门，不是开发机上“能访问一次
 
 **固定执行顺序：**
 
-> 2026-08-17 生产进度：候选基线、D1 Time Travel 留证、0001～0011 迁移、结构复核、Worker v2、随机 `TOKEN_SECRET`、公网 `/health`、首管理员和 schema v2/旧客户端策略契约均已完成。公网首次暴露 Cloudflare 压缩把强 ETag 弱化；所有 ETag 快照的 200/304 响应增加 `Cache-Control: no-transform` 后，v2 GET/PUT、`If-Match`、幂等重放/冲突、旧版本冲突、旧客户端 ACTIVE 投影/ALL 升级拒绝与 304 已复验通过。当前策略版本 2 含九类全部禁用策略且四组授权数组全空；下一步从该安全基线登记受控实例、发布最小权限策略，再进入 Desktop v2 和真实 provider 矩阵。恢复书签不进入仓库。
+> 2026-08-17 生产进度：候选基线、D1 Time Travel 留证、0001～0011 迁移、结构复核、Worker v2、随机 `TOKEN_SECRET`、公网 `/health`、首管理员和 schema v2/旧客户端策略契约均已完成。公网首次暴露 Cloudflare 压缩把强 ETag 弱化；所有 ETag 快照的 200/304 响应增加 `Cache-Control: no-transform` 后，v2 GET/PUT、`If-Match`、幂等重放/冲突、旧版本冲突、旧客户端 ACTIVE 投影/ALL 升级拒绝与 304 已复验通过。Desktop v2 与 qBittorrent 部分真实 canary 也已完成，最终策略版本 4 含九类全部禁用策略且四组授权数组全空；下一步从该安全基线补 qBittorrent 剩余状态矩阵并逐一验收 Readeck、Outline、Webhook。恢复书签和请求级证据不进入仓库。
 
 1. **冻结候选并做基线。** 记录源码 commit、Worker 当前版本、D1 迁移列表、当前 v1/v2 ETag 和已启用策略；运行 Core/Infrastructure/App/Worker 的发布门禁。禁止在真实验收中同时修改策略、迁移和客户端代码。
 2. **部署 D1 与 Worker。** 在生产 D1 记录 Time Travel/备份书签，确认 0011 尚未应用，然后按 `0011 migration → Worker v2 → Desktop v2` 执行。迁移后重新列出迁移状态；Worker 部署后验证 `/health`、登录、管理员 v2 读写、v2 `ETag`/`If-Match`、旧客户端兼容投影和高级约束下的升级拒绝。迁移语义异常时停止写入，不重复应用迁移。

@@ -2,13 +2,25 @@
 
 <!-- 最新记录放在此行下方；每条只写摘要、证据和详情指针，控制在约 20 行内。 -->
 
+## 2026-08-17 · Desktop v2 / qBittorrent 真实 canary 与安全回滚
+
+- 结果：固定候选 `35658f3` 以 qBittorrent 5.2.3 / WebAPI 2.15.1 完成 Release 设置页健康、随机无 tracker magnet、受控合法 `.torrent`、同请求重放、info-hash/category/stopped 复查、精确删除和策略撤销；P2-D 总检查点仍开放。
+- 网络边界：独立 profile 的 WebUI 只监听 `127.0.0.1:47891`，BitTorrent TCP/UDP 只监听 loopback；UPnP/NAT-PMP、DHT、PeX、LSD、更新检查、GeoDB 与新任务自动启动关闭。
+- 生产策略：版本 3 只授权 `lenxtool-canary` 与端口 47891；最终版本 4 恢复九类全禁用、ACTIVE 0。撤销后真实 exporter 返回不可重试 `AccessDenied`，provider 对象为 0。
+- 凭据：目标按 marker 0→DPAPI→marker 1 激活；结束后 marker 1→0、删除 LenxTool DPAPI 测试凭据。LenxTool/qBittorrent 进程优雅退出，隔离 provider profile 保留供复验。
+- 故障：首轮两种写入共用 45 秒总 deadline，`.torrent` 清理复用已取消 token，遗留 1 个 stopped canary；根因修复为 150 秒业务窗口与独立 15 秒精确清理，先删除唯一遗留对象后完整复跑通过。
+- 边界：`.torrent` 由内存 metainfo 和测试 fetcher 送入生产 exporter/client，只证明真实文件上传/回执/写后复查；公网 `TorrentFileFetcher` 与 200/202/409/暂时故障仍未形成真实证据。
+- 门禁：Core 222/222、Infrastructure 811/811、App 非 WPF 523/523、WPF 14/14、Worker 82/82、typecheck、Release build 0/0、NuGet/npm 漏洞 0。App 并行时序首轮 1 项失败，独立 1/1 与全量 523/523 通过。
+- 发布阻塞：首次完整运行 `dotnet format --verify-no-changes` 发现跨全仓既有 encoding/whitespace/import-order 基线；本轮未批量改无关文件，需独立任务关闭。
+- 详情：`docs/TEST_REPORT.md`、`docs/PROJECT_GUIDE.md`、`docs/plans/RSS_P2_VIEWS_INTEGRATIONS.md`、`cairn/integration-adapter-boundaries.md`；请求级秘密与证据只在本机忽略文件。
+
 ## 2026-08-17 · 生产策略 schema v2 契约与强 ETag
 
 - 结果：生产 v2 GET/PUT、强 ETag/`If-Match`、精确幂等重放、同键异体冲突、旧版本冲突、旧客户端 ACTIVE 投影/ALL 升级拒绝、304、超前版本和未知 schema 均通过。
 - 症状与停止条件：首次公网读到 `W/"integration-policies-v2-all-0"`；契约脚本在任何 PUT 前停止并退出会话，D1 复核仍为策略版本 0、无策略/历史/审计。
 - 根因：Cloudflare 对响应压缩时修改了表示，未声明 `no-transform` 的强 ETag 被弱化；单改集成路由会让目录、发现、自动化和智能视图保留同一风险。
 - 修复：提交 `3cbb879` 为全部 ETag 快照的 200/304 响应补 `Cache-Control: no-transform`。失败先行锁定 9 个断言；修复后聚焦 38/38、Worker 串行 82/82、strict typecheck、11 个 migration LF-only、生产依赖漏洞 0、deploy dry-run通过。
-- 生产：当前 Worker 100% 版本为 `94d90695-3162-4e9c-b8ad-d3feb1541dd6`。最终 `policySetVersion=2`，九类策略全部禁用且四组授权数组全空；ACTIVE 为空，2 个不可变策略版本、2 条策略审计和 2 条 24 小时幂等记录与预期一致。
+- 生产：该契约检查点结束时 Worker 100% 版本为 `94d90695-3162-4e9c-b8ad-d3feb1541dd6`、`policySetVersion=2`，九类策略全部禁用且四组授权数组全空；ACTIVE 为空，2 个不可变策略版本、2 条策略审计和 2 条 24 小时幂等记录与预期一致。后续 qBittorrent canary 与当前版本 4 见本日志首条。
 - 安全边界：版本 1 只用随机合成、不可连通且无凭据的 advanced-only 探针验证兼容投影；版本 2 立即恢复全禁用基线。策略前后 Time Travel 书签和请求级证据只保存在本机忽略文件。
 - 下一步：登记四个受控实例和回滚窗口，从全禁用基线发布最小 endpoint/resource/port 授权，再配置 Desktop v2 与 DPAPI 凭据并执行真实 provider 矩阵。
 - 详情：`docs/TEST_REPORT.md`、`docs/WORKER_DEPLOYMENT.md`、`docs/api/worker-v1.md`、`cairn/integration-adapter-boundaries.md`。

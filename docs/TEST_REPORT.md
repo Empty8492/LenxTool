@@ -17,10 +17,11 @@
 | .NET Release build warnings（2026-08-17） | 0 |
 | NuGet vulnerable packages（2026-08-17） | 0 detected |
 | npm audit vulnerabilities（2026-08-17） | 0 detected |
+| `dotnet format --verify-no-changes`（2026-08-17） | blocked：既有全仓 encoding/whitespace/import-order 基线 |
 
 P2-16～P2-19 已按 N2/R1/G1/W1 完成自动化实现。Worker/D1 schema v2 分列保存公网主机、精确私网 HTTPS endpoint、Outline collection/qBittorrent category 与 qBittorrent loopback HTTP 端口；旧客户端取得兼容投影，带高级约束的旧管理读写要求升级。四个 provider 使用独立目标存储、专用设置卡、DPAPI 凭据代际、执行期策略/DNS pin、禁代理/跳转/Cookie/自动解压和覆盖响应头与正文的 deadline。Readeck 只有在空页且 `Total-Count=0` 时创建，并以可见稳定标签收敛；Outline UUID 绑定不透明目标修订与条目 ID，固定个人草稿且不跨 collection 移动；qBittorrent 固定 5.2+/WebAPI 2.14.1+ API key、显式 category、用户确认和写后 info-hash/category 复核；Webhook 固定 v1 JSON、能力 OPTIONS、稳定幂等键、精确 ack 与可选正文 HMAC。写后畸形或超时回执不会被误报成功或永久拒绝，统一进入可重试的未知写结果；`.torrent` 暂时网络故障也保持可重试。
 
-P2-23 已按 Accepted ADR-004 选择 A 关闭：不实现邮件摘要、不收集邮箱，Worker/App/Core 没有新增邮箱字段、邮件供应商或发送代码。P2-16～P2-19 的独立只读终审使用 `gpt-5.6-sol`（max），最终未发现剩余 P0/P1。最新完整 .NET 门禁仍为 Core 222/222、Infrastructure 811/811、App 非 WPF 523/523、10 个 WPF runtime 类逐进程 14/14、Release build 0 警告/0 错误和 NuGet 漏洞 0；本次强 ETag 修复未改 .NET，未把历史结果冒充重跑。Worker 本次串行运行 12 个文件 82/82，strict typecheck、11 个 migration LF-only、deploy dry-run 与生产依赖审计 0 漏洞均通过。全部 provider 仍未使用真实 token、API key、实例或 Webhook 接收端；P2-D 继续作为独立发布验收。
+P2-23 已按 Accepted ADR-004 选择 A 关闭：不实现邮件摘要、不收集邮箱，Worker/App/Core 没有新增邮箱字段、邮件供应商或发送代码。P2-16～P2-19 的独立只读终审使用 `gpt-5.6-sol`（max），最终未发现剩余 P0/P1。本轮重新执行 Core 222/222、Infrastructure 811/811、App 非 WPF 523/523、10 个 WPF runtime 类逐进程 14/14、Release build 0 警告/0 错误、Worker 82/82、strict typecheck、11 个 migration LF-only及 NuGet/npm 漏洞审计 0。App 非 WPF 首轮与 Infrastructure 全量并行时，既有租约续期时序用例 1 项提前完成；Infrastructure 结束后该项独立 1/1、App 独立全量 523/523，没有修改产品代码或阈值。`dotnet format --verify-no-changes` 首次作为本轮正式门禁执行后失败于跨全仓既有文件的编码、空白与 using 顺序，不能在本轮 provider 文档提交中批量改写，正式发布保持阻塞。qBittorrent 已有部分真实 canary，其他 provider 与 qBittorrent 剩余状态矩阵仍开放，因此 P2-D 总检查点不变。
 
 ## 生产 D1 / Worker 检查点
 
@@ -29,16 +30,25 @@ P2-23 已按 Accepted ADR-004 选择 A 关闭：不实现邮件摘要、不收�
 - 结构复核确认 `integration_policies` 已包含三组 0011 扩展列，`feed_discovery_index` 及四个同步触发器均存在。生产 Worker v2 当前 100% 版本为 `94d90695-3162-4e9c-b8ad-d3feb1541dd6`（源码 `3cbb879`），公网 `/health` 返回 200、`Cache-Control: no-store` 和最小健康正文。
 - 首管理员、正常登录与 `/v1/me` ADMIN 身份已验证；D1 恰好 1 个启用管理员和 1 条成功 bootstrap 审计。生产 Secret 清单只有随机 `TOKEN_SECRET`；`BOOTSTRAP_TOKEN` 已删除、入口为 404，Groq/DeepSeek Provider Secret 未配置。
 - schema v2 生产契约首轮在任何 PUT 前因公网强 ETag 被 Cloudflare 压缩弱化而安全停止。失败先行回归锁定 9 个 200/304 缺失 `no-transform` 的断言；修复后聚焦 38/38、Worker 串行全量 82/82。再次运行生产契约后，v2 GET/PUT、强 ETag/`If-Match`、精确幂等重放、同键异体冲突、旧版本冲突、旧客户端 ACTIVE 投影/ALL 升级拒绝、304 与超前/未知 schema 错误均通过。
-- 最终 `policySetVersion=2`，九种策略全部禁用，`allowedHosts`、`trustedPrivateEndpoints`、`allowedResources` 和 `allowedLoopbackHttpPorts` 均为空；ACTIVE 为空。D1 保留 2 个策略版本、2 条策略审计和 2 条 24 小时幂等记录；版本 1 是不含真实 provider、凭据或可达目标的临时 advanced-only 契约探针，版本 2 是最终安全基线。
+- schema v2 契约验收结束时 `policySetVersion=2`，九种策略全部禁用且四组授权数组为空；随后 qBittorrent canary 使用版本 3 的单 provider 最小授权，完成后发布版本 4 恢复九类全禁用、ACTIVE 为空。版本 1 是不含真实 provider、凭据或可达目标的临时 advanced-only 契约探针；版本 3 只含 canary category/loopback 端口，不含秘密或条目内容。
+
+## Desktop v2 / qBittorrent 真实 canary
+
+- 固定候选为 `35658f389369eca2a1e7f3c17326e1dd38f73501`；真实 Release Desktop 从生产 Worker 恢复 ADMIN 会话与 schema v2 策略，并在专用设置卡显示规范化 endpoint/category、已保存凭据标记。连接测试返回健康，实际经过 ACTIVE 策略、localhost DNS loopback 分类、地址 pin、DPAPI 和 WebAPI 版本探测。
+- 受控实例为 qBittorrent 5.2.3 / WebAPI 2.15.1 的独立 profile。WebUI 仅监听 `127.0.0.1:47891`，BitTorrent TCP/UDP 仅监听 loopback；UPnP/NAT-PMP、DHT、PeX、LSD、更新检查、GeoDB 查询和新任务自动启动关闭。
+- 真实 exporter/client 对随机无 tracker magnet 与内存生成的合法 BitTorrent v1 `.torrent` 均完成首写、同请求幂等重放、info-hash/category/stopped 写后复查和精确删除；重放前后 provider `added_on` 不变。`.torrent` 使用测试专用 fetcher 交付 metainfo，故没有把生产公网 HTTPS fetch 路径冒充已验收。
+- 首次组合验收器把两条用例共用 45 秒截止时间，`.torrent` 清理又复用已取消 token，留下 1 个停止态 canary。修正为 150 秒业务窗口与独立 15 秒精确清理窗口后，先按 category/名称/hash/stopped 状态删除唯一遗留对象，再完整复跑通过；最终 provider canary 对象为 0。
+- 策略恢复版本 4 后，真实 exporter 返回不可重试 `AccessDenied`，provider 对象仍为 0。随后本机 target 按 marker 1→0 降级、LenxTool DPAPI 测试凭据删除，LenxTool 与 qBittorrent 进程均优雅退出。qBittorrent 自身隔离 profile 保留，便于后续受控复验。
+- 产品公共 exporter 不暴露原始 HTTP 状态，本轮也未记录第三方响应正文，因此不能区分真实首写的 200 与 202；真实公网 `.torrent` 获取、202 pending/收敛、409/all-failed、暂时故障及畸形回执仍需独立状态级验收。自动化契约覆盖不替代该真实证据。
 
 ## 下一步与完成条件
 
-本报告证明的是“源码、假 HTTP 契约和本地安全边界完成”，不等同于第三方真实服务或正式安装包已发布。下一轮必须使用固定发布候选提交，按 [`P2-D 执行手册`](plans/RSS_P2_VIEWS_INTEGRATIONS.md#p2-d-执行手册) 完成：
+本报告证明的是“源码、假 HTTP 契约、本地安全边界和 qBittorrent 部分真实 canary 完成”，不等同于四个第三方真实服务或正式安装包已发布。下一轮必须使用固定发布候选提交，按 [`P2-D 执行手册`](plans/RSS_P2_VIEWS_INTEGRATIONS.md#p2-d-执行手册) 完成：
 
-1. 准备受控 Readeck、Outline、qBittorrent、Webhook 实例和独立测试账号，登记版本、精确 endpoint/resource/port、时间窗与回滚负责人；秘密只通过密码管理器/运行时输入，不进入日志、截图、Issue 或仓库。
-2. 基于当前九类全禁用的版本 2 安全基线，仅为本轮真实对象发布最小权限策略；配置 Desktop v2 的非秘密目标，再保存 DPAPI 凭据并确认 marker 1。
-3. 完成四个 provider 的真实首写、重复/重放、策略撤销、暂时故障和写后回执矩阵，保存脱敏 HTTP 状态、队列终态和非秘密对象标识。
-4. 只有全部矩阵通过，才按 [`RELEASE_GUIDE.md`](RELEASE_GUIDE.md) 生成并验证签名安装包、便携包、更新清单和 SHA256，并完成 Windows 10/11 x64 全新安装、覆盖升级、卸载保留数据及 Runtime 缺失降级。
+1. 为 qBittorrent 准备可公开 HTTPS 获取的受控 `.torrent` 和不泄露正文的状态观测，补齐真实 fetch、200、202 pending/收敛、409/all-failed 与暂时故障。
+2. 准备受控 Readeck、Outline、Webhook 实例和独立测试账号，登记版本、精确 endpoint/resource/port、时间窗与回滚负责人；秘密只通过密码管理器/运行时输入，不进入日志、截图、Issue 或仓库。
+3. 每轮基于当前版本 4 的九类全禁用基线只启用一个真实对象，完成首写、重复/重放、策略撤销、暂时故障和写后回执后，恢复全禁用并清理 marker/测试对象。
+4. 单独修复全仓 formatter 历史基线并重跑完整门禁；只有 formatter 与全部真实矩阵通过，才按 [`RELEASE_GUIDE.md`](RELEASE_GUIDE.md) 生成并验证签名安装包、便携包、更新清单和 SHA256，再完成 Windows 10/11 x64 发布矩阵。
 
 P2-D 关闭前不得宣称端到端生产验收通过；P2-D 关闭后仍需完成生产发布标签、GitHub Release 和跨物理机升级矩阵。
 
