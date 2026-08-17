@@ -14,6 +14,10 @@
 - [dotnet/wpf v10.0.10：CalendarAutomationPeer.GetChildrenCore](https://github.com/dotnet/wpf/blob/v10.0.10/src/Microsoft.DotNet.Wpf/src/PresentationFramework/System/Windows/Automation/Peers/CalendarAutomationPeer.cs#L102-L126)：确认 peer 在 `MonthControl` 存在后直接读取 Previous/Header/Next 三个按钮，不容忍内层模板仍未应用的半初始化状态。
 - [dotnet/wpf v10.0.10：CalendarItem.OnApplyTemplate](https://github.com/dotnet/wpf/blob/v10.0.10/src/Microsoft.DotNet.Wpf/src/PresentationFramework/System/Windows/Controls/Primitives/CalendarItem.cs#L146-L169)：确认三个按钮字段只在 `CalendarItem` 应用模板时从对应 `PART_*` 部件解析；据此把修复限定在测试宿主时序而非产品模板。
 
+## D1 生产迁移
+
+- [Cloudflare workers-sdk #14991](https://github.com/cloudflare/workers-sdk/issues/14991) 与 [修复 PR #15044](https://github.com/cloudflare/workers-sdk/pull/15044)：确认 Windows CRLF 会让包含 SQLite trigger 的远程 D1 migration 以 `incomplete input` 失败；据此采用仓库级 LF 规范和测试前置字节检查，同时保留标准迁移账本流程。
+
 ## P2-16～P2-19 外部集成
 
 - [Readeck 官方 bookmarks API](https://codeberg.org/readeck/readeck/src/commit/145a52fcf0db57082c2705f38388471cf303cdf0/docs/api/bookmarks/routes-bookmarks.yaml)：采用 Bearer、label 查询、创建与更新路由；以可见稳定标签实现写前查找与重放收敛。

@@ -120,7 +120,7 @@
 
 ## 阶段 7：Cloudflare Worker + D1
 
-> Worker/D1 的账号、目录、AI 策略和自动化规则契约已接入桌面客户端，并有本地 workerd/D1 自动化；以下阶段仍保持未完成，因为注册、完整共享代理、生产 D1/真实部署与远端运维验收尚未闭环。
+> Worker/D1 的账号、目录、AI 策略和自动化规则契约已接入桌面客户端，并有本地 workerd/D1 自动化。2026-08-17 已完成生产 D1 0001～0011、Worker v2、`TOKEN_SECRET` 与公网健康检查；以下产品阶段仍保持未完成，因为首管理员/邀请注册、schema v2 策略与旧客户端契约、Groq/DeepSeek Provider Secret、生产额度代理和远端运维验收尚未闭环。
 
 - [ ] 建立 Worker、D1 schema/migration、环境校验和健康检查。
 - [ ] 实现邀请码注册、登录、短 access token、刷新令牌轮换和禁用。

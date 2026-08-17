@@ -1,7 +1,7 @@
 # LenxTool 路线图
 
 > [!abstract] 当前焦点
-> 以 `docs/PROJECT_GUIDE.md` 第 10 节为当前交付状态唯一准绳；P2-16～P2-19 已完成代码与假 HTTP 自动化，P2-23 已按 Accepted ADR-004 选择 A 关闭。当前焦点是 P2-D 受控真实服务、生产 Worker/D1 与签名发布验收，顺序固定为 `0011 migration → Worker v2 → Desktop v2 → provider 矩阵 → 签名制品`。
+> 以 `docs/PROJECT_GUIDE.md` 第 10 节为当前交付状态唯一准绳；P2-16～P2-19 已完成代码与假 HTTP 自动化，P2-23 已按 Accepted ADR-004 选择 A 关闭。2026-08-17 已完成生产 D1 0001～0011、Worker v2、`TOKEN_SECRET` 与 `/health` 检查点；当前焦点是首管理员与 schema v2 契约、Desktop v2、受控真实 provider 和签名发布验收。
 
 ## 里程碑
 
@@ -10,20 +10,21 @@
 - [x] 完成 Readeck、Outline、qBittorrent 与受控 Webhook：schema v2、专用目标/凭据、健康探针、导出器、显式动作及安全回归。
 - [x] P2-23 采用 A：不实施邮件摘要、不收集邮箱、不增加云端内容或发信能力，所有 Feed/AI 内容云端保留 0 天。
 - [x] 关闭 `SelectionControlsWpfRuntimeTests` 的 `CalendarAutomationPeer` 半初始化误报；当前 10 个 WPF runtime 类逐进程 14/14。
+- [x] 创建生产 D1，保存迁移前后恢复证据，完成 0001～0011 与结构复核；发布 Worker v2、注入随机 `TOKEN_SECRET` 并验证公网 `/health` 200。
 - [ ] 完成 Readeck、Outline、qBittorrent、Webhook 与既有 provider 的 P2-D 受控真实连通。
-- [ ] 完成生产 Worker/D1、正式签名安装包、升级及跨物理机发布矩阵的独立验收。
+- [ ] 完成首管理员、schema v2/旧客户端策略契约、Desktop v2、正式签名安装包、升级及跨物理机发布矩阵的独立验收。
 
 ## 未决问题
 
-1. P2-D 真实服务验收使用哪些受控实例与测试账号，何时启动？
-2. D1 migration 0011、Worker v2、Desktop v2 的生产部署窗口何时启动？
-3. 正式签名安装包、升级与跨物理机发布矩阵何时启动？
+1. 首管理员用户名/密码何时通过受控本机终端输入并完成一次性 bootstrap？
+2. P2-D 真实服务验收使用哪些受控实例与测试账号，何时启动？
+3. Groq/DeepSeek Provider Secret、正式签名证书/离线更新私钥和跨物理机发布矩阵何时提供？
 
 ## 下一步执行顺序
 
-1. 由发布负责人登记四个 provider 的受控实例、版本、账号、回滚负责人和时间窗；秘密不得进入仓库、日志、截图或聊天。
-2. 记录 D1 备份/Time Travel 书签，应用 0011，部署 Worker v2，验证 schema v2、v2 ETag/If-Match、旧客户端投影和升级拒绝。
-3. 发布 Desktop v2，执行 Readeck、Outline、qBittorrent、Webhook 的真实首写/重放/撤销/暂时故障矩阵，保存脱敏证据。
+1. 在受控终端初始化首管理员，验证登录后立即删除 `BOOTSTRAP_TOKEN`；随后验证 schema v2、v2 ETag/If-Match、旧客户端投影和升级拒绝，并发布最小 ACTIVE 策略。
+2. 由发布负责人登记四个 provider 的受控实例、版本、账号、回滚负责人和时间窗；秘密不得进入仓库、日志、截图或聊天。
+3. 配置 Desktop v2，执行 Readeck、Outline、qBittorrent、Webhook 的真实首写/重放/撤销/暂时故障矩阵，保存脱敏证据。
 4. P2-D 全部通过后生成签名安装包、便携包和更新清单，完成 Windows 10/11 安装/升级/降级验证，再创建 GitHub Release。
 
 ## 权威状态入口

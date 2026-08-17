@@ -2,6 +2,16 @@
 
 <!-- 最新记录放在此行下方；每条只写摘要、证据和详情指针，控制在约 20 行内。 -->
 
+## 2026-08-17 · P2-D 生产 D1 / Worker v2 检查点
+
+- 结果：创建生产 D1 `lenx-tool`，完成 0001～0011、三组策略扩展列、发现索引与四个同步触发器复核；远端无待迁移。恢复书签只写入本机忽略证据，不进入仓库。
+- 故障与根因：首次 0008 在 0001～0007 成功后以 `incomplete input` 原子失败；确认是 Windows CRLF + SQLite trigger 命中 Wrangler 远程迁移解析缺陷，且远端没有留下 0008 半成品。
+- 防复发：根 `.gitattributes` 固定 migration LF，Worker 测试前置脚本拒绝 CR 字节；仍用标准 `d1 migrations apply` 完成剩余迁移，不采用 `execute --file` 或手工账本。
+- Worker：生产 v2 已发布到 workers.dev，当前 100% 版本 `d24077d3-70a9-4db5-a2e9-256fa3b63c3b`；随机 `TOKEN_SECRET` 通过标准输入注入，公网 `/health` 200，未认证策略 401，bootstrap 未启用时 404。
+- 门禁：Core 222/222、Infrastructure 811/811、App 非 WPF 523/523、WPF runtime 14/14、Worker 81/81、strict typecheck、Release build 0/0、NuGet/npm 漏洞 0、11 个 migration LF-only。
+- 边界：D1 仍为 0 用户；首管理员、策略 v2/旧客户端、Desktop v2、Provider Secret、真实 provider、签名制品和跨机矩阵继续开放。
+- 详情：`docs/TEST_REPORT.md`、`docs/WORKER_DEPLOYMENT.md`、`docs/PROJECT_GUIDE.md`、`cairn/integration-adapter-boundaries.md`。
+
 ## 2026-08-13 · P2-D 执行手册与仓库目标校正
 
 - 文档：补齐 README、PROJECT_GUIDE、P2 专项计划、TEST_REPORT、WORKER_DEPLOYMENT 和 RELEASE_GUIDE 的可执行下一步、真实 provider 矩阵、部署顺序、证据字段、停止/回滚条件和正式制品闸门。

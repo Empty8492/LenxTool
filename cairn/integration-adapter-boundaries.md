@@ -4,6 +4,7 @@
 
 - `EntryIntegrationKind` 是 Worker、客户端和共享策略间的稳定线协议枚举，不是 UI 注册表。通用个人设置只管理固定官方端点的 Readwise；Obsidian、Eagle、Zotero、Readeck、Outline、qBittorrent 与 Webhook 使用专用设置卡和目标存储，Cubox 已取消。
 - P2-16～P2-19 已完成代码与假 HTTP 自动化。共享 schema v2 分列保存公网 HTTPS 主机、精确私网 HTTPS `{host,port}`、Outline collection/qBittorrent category 和 qBittorrent loopback HTTP 端口；部署顺序固定为 D1 migration 0011、Worker v2、Desktop v2。
+- 2026-08-17 已完成生产 D1 0001～0011、关键结构复核、Worker v2、随机 `TOKEN_SECRET` 和公网 `/health` 200；远端无待迁移且仍为 0 用户。首管理员、策略 v2/旧客户端契约、Desktop v2 与真实 provider 尚未验收，不能把基础部署等同 P2-D 关闭。
 - 旧客户端只取得兼容投影；advanced-only ACTIVE 项不下发。存在高级约束时，旧 ALL/PUT 失败关闭并要求升级。管理员客户端只有加载到 schema v2 才允许发布，避免 Worker-first 窗口丢字段。
 - 每种新 provider 首版只保存一个本机 `default` 目标。资源白名单按 kind 全局授权，ACTIVE endpoint/resource 元数据会下发同一 Worker 的登录账号，因此只适用于同一信任域并被视为非秘密；凭据、完整 Webhook 路径、条目内容和完整 magnet 不进入 D1。
 - 凭据存储仍为 Windows DPAPI CurrentUser。专用设置先保存 `CredentialVersion=0` 的非秘密目标，再写秘密，最后提交 marker 1；删除先降为 marker 0，再删秘密。marker 0、无目标文档或 endpoint 变更后遗留的 `kind/default` 秘密仍可从专用卡显式删除，但绝不会自动激活。
@@ -27,11 +28,12 @@
 
 ## 当前阻断
 
-- 代码与假 HTTP 契约无剩余 P0/P1。尚未完成的是 P2-D：真实 Readeck、Outline、qBittorrent、Webhook 受控连通，以及生产 D1 migration 0011 / Worker v2 / Desktop v2 部署、签名安装包和跨物理机升级矩阵。
+- 代码与假 HTTP 契约无剩余 P0/P1。生产 D1 migration 与 Worker v2 基础部署已完成；尚未完成的是首管理员、策略 schema v2/兼容契约、Desktop v2、真实 Readeck/Outline/qBittorrent/Webhook 受控连通、签名安装包和跨物理机升级矩阵。
 - 自动化完成不等于第三方真实实例或生产发布完成；在 P2-D 前不得宣称端到端生产验收通过。
 
 ## 回归证据
 
 - 2026-08-13 完整门禁：Core 222/222、Infrastructure 811/811、App 非 WPF 523/523、10 个 WPF runtime 类逐进程 14/14、Worker 81/81、strict typecheck、Release build 0 警告/0 错误、NuGet/npm 漏洞 0。
+- 2026-08-17 重新运行同一发布门禁并保持上述结果；11 个 D1 migration 另通过 LF-only 前置检查。远端 11/11、三组 0011 列、0008 表与四个触发器均已只读核对。
 - 集成终审使用 `gpt-5.6-sol`（max）只读复核，最终未发现剩余 P0/P1；本轮 56 个改动 C# 文件的格式验证与 `git diff --check` 通过。
 - 受控真实实例、token/API key 和 Webhook 接收端均未使用；详细当前状态与历史门禁见 `docs/TEST_REPORT.md` 和 `docs/plans/RSS_P2_VIEWS_INTEGRATIONS.md`。
