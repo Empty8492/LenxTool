@@ -1250,7 +1250,7 @@ function catalogNotModified(etag: string, requestId: string): Response {
 
 function catalogReadHeaders(etag: string, requestId: string): Headers {
   return new Headers({
-    "cache-control": "private, no-cache",
+    "cache-control": "private, no-cache, no-transform",
     "vary": "Authorization",
     "etag": etag,
     "x-request-id": requestId

@@ -88,6 +88,9 @@ describe("Worker integration policies", () => {
     expect(active.headers.get("etag")).toBe(
       '"integration-policies-v2-active-1"'
     );
+    expect(active.headers.get("cache-control")).toBe(
+      "no-store, no-transform"
+    );
     expect((await active.json<{ policies: unknown[] }>()).policies)
       .toHaveLength(1);
     expect((await read(user, "ALL")).status).toBe(403);
@@ -509,7 +512,11 @@ describe("Worker integration policies", () => {
       { kind: "EAGLE", allowed_hosts_json: "[]" },
       { kind: "OBSIDIAN", allowed_hosts_json: "[]" }
     ]);
-    expect((await read(user, "ACTIVE", 2)).status).toBe(304);
+    const cached = await read(user, "ACTIVE", 2);
+    expect(cached.status).toBe(304);
+    expect(cached.headers.get("cache-control")).toBe(
+      "no-store, no-transform"
+    );
   });
 
   it("fails closed on a malformed legacy local host even when the cache version matches", async () => {

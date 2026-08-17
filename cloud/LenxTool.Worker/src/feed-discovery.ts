@@ -438,7 +438,7 @@ function discoveryHeaders(
   includeContentType: boolean
 ): Headers {
   const headers = new Headers({
-    "cache-control": "private, max-age=60",
+    "cache-control": "private, max-age=60, no-transform",
     "etag": etag,
     "vary": "Authorization",
     "x-request-id": requestId

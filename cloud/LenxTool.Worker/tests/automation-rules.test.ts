@@ -154,6 +154,9 @@ describe("Worker v1 restricted automation rules", () => {
     }>();
     expect(active.status).toBe(200);
     expect(active.headers.get("etag")).toBe('"automation-active-1"');
+    expect(active.headers.get("cache-control")).toBe(
+      "no-store, no-transform"
+    );
     expect(activeBody).toMatchObject({
       ruleSetVersion: 1,
       scope: "ACTIVE",
@@ -367,6 +370,9 @@ describe("Worker v1 restricted automation rules", () => {
 
     expect(current.status).toBe(304);
     expect(current.headers.get("etag")).toBe('"automation-active-1"');
+    expect(current.headers.get("cache-control")).toBe(
+      "no-store, no-transform"
+    );
     expect(current.headers.get("x-request-id")).toBe("automation-not-modified");
     expect(await current.text()).toBe("");
     expect(ahead.status).toBe(409);

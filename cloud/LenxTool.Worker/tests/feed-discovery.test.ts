@@ -102,7 +102,9 @@ describe("Worker v1 known feed discovery route", () => {
     const secondPage = await second.json<DiscoveryPage>();
 
     expect(first.status).toBe(200);
-    expect(first.headers.get("cache-control")).toBe("private, max-age=60");
+    expect(first.headers.get("cache-control")).toBe(
+      "private, max-age=60, no-transform"
+    );
     expect(first.headers.get("vary")).toBe("Authorization");
     expect(first.headers.get("etag")).toMatch(/^"feed-discovery-12-[A-Za-z0-9_-]{16}"$/u);
     expect(first.headers.get("x-request-id")).toBe("discovery-page-one");
@@ -156,6 +158,9 @@ describe("Worker v1 known feed discovery route", () => {
       first.headers.get("etag")!
     );
     expect(notModified.status).toBe(304);
+    expect(notModified.headers.get("cache-control")).toBe(
+      "private, max-age=60, no-transform"
+    );
     expect(await notModified.text()).toBe("");
   });
 

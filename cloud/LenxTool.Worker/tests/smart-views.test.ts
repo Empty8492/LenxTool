@@ -101,6 +101,9 @@ describe("Worker shared smart views", () => {
     const active = await readViews(user, "ACTIVE");
     expect(active.status).toBe(200);
     expect(active.headers.get("etag")).toBe('"smart-views-active-1"');
+    expect(active.headers.get("cache-control")).toBe(
+      "no-store, no-transform"
+    );
     expect((await active.json<{ views: SmartView[] }>()).views).toHaveLength(1);
 
     const disabled = await mutate(
@@ -257,6 +260,9 @@ describe("Worker shared smart views", () => {
     );
 
     expect(unchanged.status).toBe(304);
+    expect(unchanged.headers.get("cache-control")).toBe(
+      "no-store, no-transform"
+    );
     expect(await unchanged.text()).toBe("");
     expect(ahead.status).toBe(409);
     expect(await errorCode(ahead)).toBe("SMART_VIEW_VERSION_AHEAD");

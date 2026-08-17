@@ -206,7 +206,7 @@ async function readPolicies(
     return new Response(null, {
       status: 304,
       headers: {
-        "cache-control": "no-store",
+        "cache-control": "no-store, no-transform",
         etag,
         vary: policySchemaHeader,
         "x-request-id": auth.requestId
@@ -922,7 +922,7 @@ function policyJson(
     status: 200,
     headers: {
       "content-type": "application/json; charset=utf-8",
-      "cache-control": "no-store",
+      "cache-control": "no-store, no-transform",
       etag,
       vary: policySchemaHeader,
       ...(schemaVersion === 2

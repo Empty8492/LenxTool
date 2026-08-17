@@ -101,7 +101,9 @@ describe("Worker v1 feed catalog read route", () => {
 
     expect(first.status).toBe(200);
     expect(first.headers.get("etag")).toBe('"catalog-active-7"');
-    expect(first.headers.get("cache-control")).toBe("private, no-cache");
+    expect(first.headers.get("cache-control")).toBe(
+      "private, no-cache, no-transform"
+    );
     expect(first.headers.get("vary")).toBe("Authorization");
     expect(first.headers.get("x-request-id")).toBe("catalog-active-request");
     expect(snapshot).toEqual({
@@ -174,6 +176,9 @@ describe("Worker v1 feed catalog read route", () => {
     expect(unchanged.status).toBe(304);
     expect(await unchanged.text()).toBe("");
     expect(unchanged.headers.get("etag")).toBe('"catalog-active-7"');
+    expect(unchanged.headers.get("cache-control")).toBe(
+      "private, no-cache, no-transform"
+    );
     expect(unchanged.headers.get("x-request-id")).toBe("catalog-unchanged");
     expect(older.status).toBe(200);
     expect((await older.json<CatalogSnapshot>()).catalogVersion).toBe(7);

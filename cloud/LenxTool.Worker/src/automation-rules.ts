@@ -530,7 +530,7 @@ function automationJson(body: string, etag: string, requestId: string): Response
     status: 200,
     headers: {
       "content-type": "application/json; charset=utf-8",
-      "cache-control": "no-store",
+      "cache-control": "no-store, no-transform",
       etag,
       "x-request-id": requestId
     }
@@ -541,7 +541,7 @@ function emptyNotModified(etag: string, requestId: string): Response {
   return new Response(null, {
     status: 304,
     headers: {
-      "cache-control": "no-store",
+      "cache-control": "no-store, no-transform",
       etag,
       "x-request-id": requestId
     }
