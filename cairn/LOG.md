@@ -8,7 +8,7 @@
 - 根因：本地 Miniflare 接受 PBKDF2-SHA256 310,000 次，但 Cloudflare 远程运行时明确以 `NotSupportedError` 拒绝超过 100,000 次的迭代；既有测试没有表达这条生产平台上限。
 - 修复：密码派生固定为平台上限 100,000，并新增安全契约测试；部署/API/项目文档同步解释本地与生产差异。失败后临时 `BOOTSTRAP_TOKEN` 已删除，D1 未留下半成品。
 - 验证：回归先以缺失常量失败；修复后身份与安全聚焦 13/13、Worker 全量 82/82、strict typecheck、11 个 migration LF-only、生产依赖漏洞 0、deploy dry-run 通过；Cloudflare 远程预览实测 100,000 次返回 200。
-- 边界：本节记录的是待发布修复检查点；生产 Worker 版本与首管理员结果必须在实际部署和一次性 bootstrap 后另行更新。
+- 发布：修复提交 `7ce9827` 已部署为 100% Worker 版本 `e62b9407-49d6-4124-aede-fb6ea1fa5df5`；`/health` 200，Secret 清单仅保留 `TOKEN_SECRET`，bootstrap 端点为 404，D1 仍为 0 用户。首管理员仍需新的单次 token 后执行。
 - 详情：`docs/WORKER_DEPLOYMENT.md`、`docs/api/worker-v1.md`、`docs/PROJECT_GUIDE.md`、`cairn/integration-adapter-boundaries.md`。
 
 ## 2026-08-17 · P2-D 生产 D1 / Worker v2 检查点
@@ -16,7 +16,7 @@
 - 结果：创建生产 D1 `lenx-tool`，完成 0001～0011、三组策略扩展列、发现索引与四个同步触发器复核；远端无待迁移。恢复书签只写入本机忽略证据，不进入仓库。
 - 故障与根因：首次 0008 在 0001～0007 成功后以 `incomplete input` 原子失败；确认是 Windows CRLF + SQLite trigger 命中 Wrangler 远程迁移解析缺陷，且远端没有留下 0008 半成品。
 - 防复发：根 `.gitattributes` 固定 migration LF，Worker 测试前置脚本拒绝 CR 字节；仍用标准 `d1 migrations apply` 完成剩余迁移，不采用 `execute --file` 或手工账本。
-- Worker：生产 v2 已发布到 workers.dev，当前 100% 版本 `d24077d3-70a9-4db5-a2e9-256fa3b63c3b`；随机 `TOKEN_SECRET` 通过标准输入注入，公网 `/health` 200，未认证策略 401，bootstrap 未启用时 404。
+- Worker：生产 v2 已发布到 workers.dev，当前 100% 版本 `e62b9407-49d6-4124-aede-fb6ea1fa5df5`；随机 `TOKEN_SECRET` 通过标准输入注入，公网 `/health` 200，未认证策略 401，bootstrap 未启用时 404。
 - 门禁：Core 222/222、Infrastructure 811/811、App 非 WPF 523/523、WPF runtime 14/14、Worker 81/81、strict typecheck、Release build 0/0、NuGet/npm 漏洞 0、11 个 migration LF-only。
 - 边界：D1 仍为 0 用户；首管理员、策略 v2/旧客户端、Desktop v2、Provider Secret、真实 provider、签名制品和跨机矩阵继续开放。
 - 详情：`docs/TEST_REPORT.md`、`docs/WORKER_DEPLOYMENT.md`、`docs/PROJECT_GUIDE.md`、`cairn/integration-adapter-boundaries.md`。

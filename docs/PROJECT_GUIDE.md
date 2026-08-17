@@ -271,7 +271,7 @@ npm.cmd test -- --run
 
 Gate 0 字幕闭环、P0“管理员策展 RSS”、P1“阅读增强、AI 与自动化”、P2-01～P2-14、P2-16～P2-23，以及插入计划 DISC-01～DISC-06、UX-03 均已完成。[P2 内容视图与集成计划](plans/RSS_P2_VIEWS_INTEGRATIONS.md) 的 P2-15 Cubox 因与既有导出能力重叠、官方幂等与安全重试契约不足而取消实施；客户端不保存 Cubox API 凭据，也不注册连接探针或导出器。P2-23 已按 [Accepted ADR-004](decisions/ADR-004-server-email-digest-gate.md) 选择 A：不实施邮件摘要、不收集邮箱、所有 Feed/AI 内容云端保留 0 天，不新增云端文章表、邮箱字段或邮件发送代码。P2-D 的受控真实外部服务连通仍未完成，P1/P2 源码进度不等于正式签名发布完成。
 
-2026-08-17 生产检查点已完成 D1 创建、迁移前 Time Travel 留证、0001～0011 全量迁移、关键列/触发器复核、Worker v2 发布、随机 `TOKEN_SECRET` 注入和公网 `/health` 200。远端当前无待应用迁移，D1 仍为 0 用户；`BOOTSTRAP_TOKEN`、Groq/DeepSeek Provider Secret、管理员 ACTIVE 策略和 Desktop v2 生产账号尚未配置。恢复书签和请求级证据只保存在本机忽略文件，不进入仓库。
+2026-08-17 生产检查点已完成 D1 创建、迁移前 Time Travel 留证、0001～0011 全量迁移、关键列/触发器复核、Worker v2 发布、随机 `TOKEN_SECRET` 注入和公网 `/health` 200。首轮 bootstrap 因本地与生产 PBKDF2 迭代上限不一致返回 500；失败请求未创建用户，根因修复提交 `7ce9827` 已部署为 100% 版本 `e62b9407-49d6-4124-aede-fb6ea1fa5df5`，临时 `BOOTSTRAP_TOKEN` 随后删除且端点恢复 404。远端当前无待应用迁移，D1 仍为 0 用户；新的单次 `BOOTSTRAP_TOKEN`、Groq/DeepSeek Provider Secret、管理员 ACTIVE 策略和 Desktop v2 生产账号尚未配置。恢复书签和请求级证据只保存在本机忽略文件，不进入仓库。
 
 #### 10.2.1 可执行下一步：P2-D → 正式发布
 

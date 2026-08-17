@@ -42,7 +42,7 @@ npx wrangler secret put DEEPSEEK_API_KEY
 
 P2-16～P2-19 的生产窗口必须固定为 `D1 migration 0011 → Worker v2 → Desktop v2`，不能先让新桌面写入高级策略，也不能让旧 Worker 接收 schema v2 写入。
 
-**当前生产检查点（2026-08-17）：** `lenx-tool` D1 已完成 0001～0011，远端无待应用迁移；Worker v2 已发布到 `https://lenx-tool-api.lenx-tool-worker.workers.dev`，当前 100% 版本 `d24077d3-70a9-4db5-a2e9-256fa3b63c3b`，`/health` 为 200，随机 `TOKEN_SECRET` 已配置。D1 仍为 0 用户，`BOOTSTRAP_TOKEN`、Provider Secret、管理员策略和 Desktop v2 生产配置尚未完成；迁移恢复书签只保存在本机忽略证据中。
+**当前生产检查点（2026-08-17）：** `lenx-tool` D1 已完成 0001～0011，远端无待应用迁移；Worker v2 已发布到 `https://lenx-tool-api.lenx-tool-worker.workers.dev`，当前 100% 版本 `e62b9407-49d6-4124-aede-fb6ea1fa5df5`（源码提交 `7ce9827`），`/health` 为 200，随机 `TOKEN_SECRET` 已配置。首轮 bootstrap 暴露的 PBKDF2 生产上限不一致已修复并通过远程预览；失败请求未创建用户，临时 `BOOTSTRAP_TOKEN` 已删除且端点恢复 404。D1 仍为 0 用户，新的单次 `BOOTSTRAP_TOKEN`、Provider Secret、管理员策略和 Desktop v2 生产配置尚未完成；迁移恢复书签只保存在本机忽略证据中。
 
 1. **冻结与备份：** 记录当前源码/Worker commit、远端迁移列表、ACTIVE/ALL 版本和 v1 ETag；保存 D1 Time Travel/备份书签，并确认 0011 尚未应用。
 2. **迁移：** 只执行 `cloud/LenxTool.Worker/migrations/0011_integration_policy_metadata.sql`，随后重新列出远端迁移并检查三组扩展列的默认值、长度预算和旧 `allowed_hosts` 数据投影。迁移失败或列数据异常时停止，不重复应用。
