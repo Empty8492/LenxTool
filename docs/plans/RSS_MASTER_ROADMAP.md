@@ -113,7 +113,7 @@ D1 不在本路线默认保存文章正文、AI 结果、字幕、用户文件�
 ### P2：多形态和生态连接
 
 - 文章、图片、音频、视频、通知等内容视图和智能视图。
-- Markdown、Obsidian、Eagle、Zotero 与 Readwise 已按统一导出接口完成；Cubox 已取消实施，Readeck/Outline/qBittorrent 等后续适配器仍需逐个选择和交付。
+- Markdown、Obsidian、Eagle、Zotero、Readwise、Readeck、Outline、qBittorrent 与受控 Webhook 已按统一导出接口完成；Cubox 已取消实施。qBittorrent 真实 P2-D 矩阵已通过，Readeck/Outline/Webhook 仍需受控真实验收。
 - 受控自定义 Webhook、目标健康检查、失败重试和审计。
 - 本地每日/每周摘要、定时 AI 任务、勿扰策略和 Windows 系统通知；P1 已完成的应用内通知收件箱继续复用。
 - 服务端邮件摘要只作为独立隐私决策后的可选扩展，不混入默认路线。

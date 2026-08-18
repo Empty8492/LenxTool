@@ -26,6 +26,8 @@
 - [Outline 官方 API 指南](https://docs.getoutline.com/s/guide/doc/api-1rEIXDfLF6) 与 [官方 OpenAPI](https://raw.githubusercontent.com/outline/openapi/main/spec3.json)：采用 Bearer、`documents.info/create/update`、Document collectionId 回执和 `publish` 草稿语义；据此拒绝跨 collection 移动并固定个人草稿。
 - [qBittorrent API key 认证](https://github.com/qbittorrent/qBittorrent/wiki/API-Key-Authentication-%28%E2%89%A5v5.2.0%29)：采用 5.2+ API key，避免引入 username/password 与 SID cookie 生命周期。
 - [qBittorrent WebUI API](https://github.com/qbittorrent/qBittorrent/wiki/WebUI-API-%28qBittorrent-5.0%29) 与 [WebAPI changelog](https://github.com/qbittorrent/qBittorrent/blob/master/WebAPI_Changelog.md)：采用显式 category、WebAPI 2.14.1+ add JSON/202 语义及 info-hash/category 写后复核，不把排队或畸形回执误报为完成。
+- [qBittorrent 5.2.3 `torrents/add` 实现](https://github.com/qbittorrent/qBittorrent/blob/release-5.2.3/src/webui/api/torrentscontroller.cpp#L1165-L1281)：确认可解析 magnet/文件直接产生 ID，尚未解析出 hash 的远程 URL 才计入 pending/202，全部添加失败为 409；据此把 provider URL 型 202 与产品 magnet/文件路径分开记录。
+- [Ubuntu 24.04.4 官方发布目录](https://releases.ubuntu.com/noble/)：采用官方 `ubuntu-24.04.4-desktop-amd64.iso.torrent` 作为不含私有 tracker/passkey、可公开 HTTPS 获取且可精确清理的生产 `TorrentFileFetcher` canary 输入。
 
 ## P2-22 Windows 通知
 

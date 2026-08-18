@@ -120,7 +120,7 @@
 
 ## 阶段 7：Cloudflare Worker + D1
 
-> Worker/D1 的账号、目录、AI 策略和自动化规则契约已接入桌面客户端，并有本地 workerd/D1 自动化。2026-08-17 已完成生产 D1 0001～0011、Worker v2、`TOKEN_SECRET`、公网健康、首管理员、schema v2/旧客户端策略契约、Desktop v2/qBittorrent 部分真实 canary，以及全仓 formatter 基线关闭；以下产品阶段仍保持未完成，因为邀请注册、Groq/DeepSeek Provider Secret、生产额度代理、qBittorrent 剩余状态矩阵、Readeck/Outline/Webhook 与远端运维验收尚未闭环。
+> Worker/D1 的账号、目录、AI 策略和自动化规则契约已接入桌面客户端，并有本地 workerd/D1 自动化。2026-08-18 已完成生产 D1 0001～0011、Worker v2、`TOKEN_SECRET`、公网健康、首管理员、schema v2/旧客户端策略契约、Desktop v2/qBittorrent 全部真实 canary，以及全仓 formatter 基线关闭；以下产品阶段仍保持未完成，因为邀请注册、Groq/DeepSeek Provider Secret、生产额度代理、Readeck/Outline/Webhook 与远端运维验收尚未闭环。
 
 - [ ] 建立 Worker、D1 schema/migration、环境校验和健康检查。
 - [ ] 实现邀请码注册、登录、短 access token、刷新令牌轮换和禁用。

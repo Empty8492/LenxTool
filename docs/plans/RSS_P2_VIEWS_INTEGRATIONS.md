@@ -484,7 +484,7 @@ P2 不引入 Folo 社区、关注关系、钱包、支付、移动端或完整 A
 
 ### P2-18：qBittorrent 适配器
 
-**状态：** 已完成自动化实现（2026-08-13）；2026-08-17 完成受控真实 canary 的健康、magnet、内存 metainfo `.torrent`、重放、清理与策略撤销，真实公网 `.torrent` 获取及 200/202/失败状态矩阵仍属于 P2-D。
+**状态：** 已完成自动化实现（2026-08-13）；2026-08-17 完成健康、magnet、内存 metainfo `.torrent`、重放、清理与策略撤销，2026-08-18 完成生产公网 `.torrent`、200/202/409、暂时故障及完整回滚；qBittorrent 的 P2-D 真实矩阵已完成。
 
 **目标：** 仅对验证后的 magnet/torrent 条目提供显式投递，默认关闭。
 
@@ -505,6 +505,8 @@ P2 不引入 Folo 社区、关注关系、钱包、支付、移动端或完整 A
 **完成记录（2026-08-13）：** 首版固定 qBittorrent 5.2+ / WebAPI 2.14.1+ 与 32 字符 API key，只允许管理员批准的 HTTPS 目标或 `http://localhost:<精确端口>`。category 必须非空、存在且命中共享白名单，不支持未分类或自动创建。magnet 只接受唯一 BTIH；`.torrent` 只从公网 HTTPS、无跳转的已验证 enclosure 有界下载，并经过规范 bencode 与 info-hash 校验。资讯页采用“准备→再次确认→入队”，完整 magnet、tracker 与 passkey 不进入状态或日志。localhost HTTP 会在本机 TCP 明文传输 API key，界面明确限定为同机例外。
 
 **真实 canary 记录（2026-08-17）：** 固定候选 `35658f3` 使用 qBittorrent 5.2.3 / WebAPI 2.15.1 的独立本机 profile，WebUI 仅监听 `127.0.0.1:47891`，BitTorrent TCP/UDP 仅监听 loopback，UPnP/NAT-PMP、DHT、PeX、LSD 与新任务自动启动均关闭。生产策略版本 3 只授权 `lenxtool-canary` 和端口 47891；Release 设置卡健康检查通过。真实 exporter/client 的随机无 tracker magnet 与受控合法 `.torrent` 均完成首写、同请求重放、正确 info-hash/category/stopped 复查和精确删除；策略恢复全禁用后再次执行得到不可重试 `AccessDenied` 且 provider 对象为 0。`.torrent` 由验收器内存生成并通过测试 fetcher 交给生产 exporter/client，因此只证明真实文件上传/回执/写后复查，不证明生产 `TorrentFileFetcher` 的公网 HTTPS 连通；公共 exporter 也不暴露原始 HTTP 状态，故 200/202/失败分支仍由自动化而非本次真实证据覆盖。最终生产策略为版本 4、ACTIVE 0；target 降为 marker 0、LenxTool DPAPI 测试凭据删除、provider 停止。P2-D 总检查点保持未勾选。
+
+**公网与状态矩阵（2026-08-18）：** 同一源码候选使用 Ubuntu 官方 24.04.4 Desktop amd64 `.torrent`。生产 `TorrentFileFetcher` 实际完成 HTTPS/443、DNS Fake-IP 分类、地址 pin、禁代理/跳转/Cookie/解压、508,158 字节正文、MIME、bencode 与 info-hash 校验；真实 exporter 完成首写、同请求幂等重放、正确 info-hash/category/stopped 复查和精确删除，不存在的公网子域返回可重试 `DestinationUnavailable`。独立脱敏观测确认合法文件为 200、同 hash 重复添加为 409 且不替换对象、远程 `.torrent` URL 为 202 并最终收敛到正确 stopped 对象。官方 5.2.3 源码显示 202 只在 URL 尚未解析出 hash 时产生；当前产品只发送可解析 magnet 或已下载文件，因此该 202 只证明 provider 异步契约和客户端防御性分支，不冒充产品公网文件路径。单会话编排完整执行启动、验收、精确清理、策略撤销、WebAPI 关闭和凭据回收；最终策略版本 12、ACTIVE 0，撤销后 `AccessDenied` 且 provider 对象为 0，target marker 0、DPAPI 测试凭据删除、进程/监听/下载文件均为 0。P2-D 总检查点仍因 Readeck、Outline、Webhook 未验收而保持未勾选。
 
 ### P2-19：受控自定义 Webhook
 
@@ -554,7 +556,7 @@ P2-D 是受控真实环境的发布闸门，不是开发机上“能访问一次
 
 **固定执行顺序：**
 
-> 2026-08-17 生产进度：候选基线、D1 Time Travel 留证、0001～0011 迁移、结构复核、Worker v2、随机 `TOKEN_SECRET`、公网 `/health`、首管理员和 schema v2/旧客户端策略契约均已完成。公网首次暴露 Cloudflare 压缩把强 ETag 弱化；所有 ETag 快照的 200/304 响应增加 `Cache-Control: no-transform` 后，v2 GET/PUT、`If-Match`、幂等重放/冲突、旧版本冲突、旧客户端 ACTIVE 投影/ALL 升级拒绝与 304 已复验通过。Desktop v2 与 qBittorrent 部分真实 canary 也已完成，最终策略版本 4 含九类全部禁用策略且四组授权数组全空；下一步从该安全基线补 qBittorrent 剩余状态矩阵并逐一验收 Readeck、Outline、Webhook。恢复书签和请求级证据不进入仓库。
+> 2026-08-18 生产进度：候选基线、D1 Time Travel 留证、0001～0011 迁移、结构复核、Worker v2、随机 `TOKEN_SECRET`、公网 `/health`、首管理员、schema v2/旧客户端策略契约和 qBittorrent 全部真实 canary 均已完成。公网首次暴露的弱 ETag 问题已通过所有 ETag 快照 200/304 的 `Cache-Control: no-transform` 修复并复验。当前策略版本 12 含九类全部禁用策略且四组授权数组全空，ACTIVE 0；下一步从该安全基线逐一验收 Webhook、Readeck 和 Outline。恢复书签、请求级证据和 provider 秘密不进入仓库。
 
 1. **冻结候选并做基线。** 记录源码 commit、Worker 当前版本、D1 迁移列表、当前 v1/v2 ETag 和已启用策略；运行 Core/Infrastructure/App/Worker 的发布门禁。禁止在真实验收中同时修改策略、迁移和客户端代码。
 2. **部署 D1 与 Worker。** 在生产 D1 记录 Time Travel/备份书签，确认 0011 尚未应用，然后按 `0011 migration → Worker v2 → Desktop v2` 执行。迁移后重新列出迁移状态；Worker 部署后验证 `/health`、登录、管理员 v2 读写、v2 `ETag`/`If-Match`、旧客户端兼容投影和高级约束下的升级拒绝。迁移语义异常时停止写入，不重复应用迁移。
@@ -565,7 +567,7 @@ P2-D 是受控真实环境的发布闸门，不是开发机上“能访问一次
    |---|---|---|
    | Readeck | 标签查找→首次创建→同条目重放→归档；模拟响应丢失后复查 | 只产生一个带 `lenxtool:<stable-id>` 的书签，重复重放不新增 |
    | Outline | 指定 collection 创建草稿→重复更新→目标/collection 切换 | 文档 `collectionId` 始终匹配；草稿保持 `publish=false`；切换后产生新确定性文档而不移动旧文档 |
-   | qBittorrent | API key 登录、显式 category、magnet、合法 `.torrent`、202/失败回执 | 只有观察到目标 info-hash 且 category 正确才完成；202 或未知回执不虚报完成 |
+   | qBittorrent（已完成 2026-08-18） | API key 登录、显式 category、magnet、合法/公网 `.torrent`、200/202/409、暂时故障与撤销 | 目标 info-hash/category/stopped、幂等重放、精确清理和最终 marker 0 均已观测；URL 型 202 与产品文件路径分开记录 |
    | Webhook | OPTIONS 能力、固定 JSON POST、重复 `Idempotency-Key`、可选 HMAC、ack 不匹配 | 能力缺失时不 POST；成功仅接受精确 `LenxTool-Ack`；重复键不产生第二个业务事件 |
 
 5. **记录与判定。** 每个用例记录 UTC 时间、源码/Worker 版本、策略版本、脱敏 HTTP 状态、队列终态和第三方非秘密对象标识；不得记录 token、API key、密码、完整 magnet/passkey、正文或响应正文。策略撤销、endpoint 变更、DNS 漂移、断网、正文滴流和写后畸形回执必须确认进入封闭错误/可重试状态。
