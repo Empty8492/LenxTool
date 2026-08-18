@@ -157,7 +157,7 @@ App/DI/XAML 与真实 WPF 回归覆盖 Readwise 选择后固定只读目标、�
 
 健康探针与真实 exporter 共用执行期 endpoint 授权器：每次重新读取 ACTIVE 策略，核对 scheme/host/port，解析全部 DNS 地址并拒绝混合或越权分类，成功后才按探针需要读取 DPAPI 凭据；真实 Outline/qBittorrent 导出另在写入前重验 collection/category 资源许可。设置页只测试与已保存目标规范值一致的 endpoint，删除凭据先把目标代际降为 0 再删除 DPAPI secret。Pinned handler 禁代理、重定向、Cookie 与自动解压；所有新增 API 客户端和 torrent 下载器使用不信任 `Content-Length` 的流式硬上限，并对响应头后的正文读取设置独立截止时间。独立 target store 使用不透明队列修订；`CredentialVersion=1` 是旧占位槽与新生产凭据之间的显式激活门，未标记目标不会读取旧 secret。
 
-Readeck 以用户可见的稳定标签先查后建并在多匹配时冲突关闭；Outline 以确定性 UUID 只在管理员批准 collection 内 create/update；qBittorrent 只接受 5.2+ API key、唯一 BTIH magnet 或经 MIME/大小/规范 bencode/info-hash 验证的 torrent，category 必须存在且每次由用户再次确认，完整 magnet/passkey 不进入日志；Webhook 固定 v1 JSON、稳定 Idempotency-Key、能力探测、精确 ack 与可选 HMAC-SHA256，不提供任意请求头或模板。自动测试覆盖策略/Wire/迁移、API 假响应、旧凭据门、设置布局和显式 qBittorrent 确认；尚无受控真实 Readeck、Outline、qBittorrent 或 Webhook 连通证据，因此 P2-D 继续开放。
+Readeck 以用户可见的稳定标签先查后建并在多匹配时冲突关闭；Outline 以确定性 UUID 只在管理员批准 collection 内 create/update；qBittorrent 只接受 5.2+ API key、唯一 BTIH magnet 或经 MIME/大小/规范 bencode/info-hash 验证的 torrent，category 必须存在且每次由用户再次确认，完整 magnet/passkey 不进入日志；Webhook 固定 v1 JSON、稳定 Idempotency-Key、能力探测、精确 ack 与可选 HMAC-SHA256，不提供任意请求头或模板。自动测试覆盖策略/Wire/迁移、API 假响应、旧凭据门、设置布局和显式 qBittorrent 确认；qBittorrent 与 Webhook 已完成受控真实矩阵，Eagle、Zotero、Readwise、Readeck、Outline 尚无真实发布证据，因此 P2-D/发布总闸门继续开放。
 
 ## P2-22 Windows 通知安全证据（2026-08-08）
 

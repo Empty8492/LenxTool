@@ -301,4 +301,4 @@ Eagle 未启动、端口错误、版本不兼容、没有打开资源库或响�
 
 ## 当前验收状态（2026-08-18）
 
-Gate 0、P0、P1、P2-01～P2-14、P2-16～P2-23 与统一发现 DISC-01～DISC-06、UX-03 已通过本地自动化验收。P2-16～P2-19 已完成策略、专用设置、假 HTTP、导出器和显式动作；生产 Worker/D1 与 qBittorrent 的受控真实矩阵已完成，Eagle/Zotero/Readwise/Readeck/Outline/Webhook 的其余真实连通仍需单独发布验收。P2-15 Cubox 已取消；P2-23 已按 [`Accepted ADR-004`](decisions/ADR-004-server-email-digest-gate.md) 选择 A，不增加云端文章表、邮箱字段或邮件发送代码。最新自动化门禁数字以 [`TEST_REPORT.md`](TEST_REPORT.md) 为准。
+Gate 0、P0、P1、P2-01～P2-14、P2-16～P2-23 与统一发现 DISC-01～DISC-06、UX-03 已通过本地自动化验收。P2-16～P2-19 已完成策略、专用设置、假 HTTP、导出器和显式动作；生产 Worker/D1 与 qBittorrent、Webhook 的受控真实矩阵已完成，Eagle/Zotero/Readwise/Readeck/Outline 的其余真实连通仍需单独发布验收。P2-15 Cubox 已取消；P2-23 已按 [`Accepted ADR-004`](decisions/ADR-004-server-email-digest-gate.md) 选择 A，不增加云端文章表、邮箱字段或邮件发送代码。最新自动化门禁数字以 [`TEST_REPORT.md`](TEST_REPORT.md) 为准。

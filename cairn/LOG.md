@@ -2,6 +2,17 @@
 
 <!-- 最新记录放在此行下方；每条只写摘要、证据和详情指针，控制在约 20 行内。 -->
 
+## 2026-08-18 · Webhook 真实公网矩阵与安全回滚
+
+- 结果：固定候选 `84945757f66a0e01e855ab00a44173e8236cbbd0` 通过真实 Release Desktop/生产 Worker 的 Webhook 健康、首写、同键重放、实际正文 HMAC、能力缺失、ack 不匹配、503 恢复和策略撤销矩阵。
+- 接收端：一次性 Quick Tunnel HTTPS 主机/随机路径；仅在内存保存计数和 `eventId → SHA-256(body)`，不持久化正文。HMAC/control secret 与运行证据只存在于单次会话和忽略目录。
+- 幂等：正常首写/重放只产生 1 个业务事件；ack 不匹配重试只计重复；503 恢复只创建 1 个事件；全部矩阵恰好 3 个预期业务事件。
+- 封闭失败：能力缺失为不可重试 `AccessDenied` 且不 POST；ack 不匹配和 503 为可重试 `DestinationUnavailable`；撤权后 `AccessDenied` 且接收端增量 0。
+- 故障根因：首轮验收器把接收器模式硬编码为 `normal`，与正确的 `capability-missing` 状态冲突；真实产品行为/计数无异常，`finally` 已回滚版本 14。按场景修正断言和安全阶段诊断后完整复跑通过。
+- 最终状态：生产策略版本 16 九类全禁用、ACTIVE 0；Webhook target/DPAPI 不存在，接收器、Quick Tunnel、helper 进程、监听和临时秘密文件均为 0。
+- 门禁：Infrastructure Webhook/健康 22/22、App Webhook 2/2、Core 策略 36/36、Worker 82/82、typecheck、接收器 8/8、验收器 Release build 0/0。
+- 当前焦点：先完成 Readeck/Outline；发布总闸门还需 Eagle/Zotero/Readwise、签名安装包和跨物理机升级。详情见 `docs/TEST_REPORT.md`、`docs/PROJECT_GUIDE.md`、`docs/plans/RSS_P2_VIEWS_INTEGRATIONS.md` 与 `cairn/integration-adapter-boundaries.md`。
+
 ## 2026-08-18 · qBittorrent 公网 fetch / 200-202-409 真实矩阵
 
 - 结果：固定源码候选以 qBittorrent 5.2.3 / WebAPI 2.15.1 完成生产 `TorrentFileFetcher`、Ubuntu 官方 508,158 字节 `.torrent`、首写、幂等重放、info-hash/category/stopped 复查、精确删除和暂时故障可重试。
@@ -39,7 +50,7 @@
 - 症状与停止条件：首次公网读到 `W/"integration-policies-v2-all-0"`；契约脚本在任何 PUT 前停止并退出会话，D1 复核仍为策略版本 0、无策略/历史/审计。
 - 根因：Cloudflare 对响应压缩时修改了表示，未声明 `no-transform` 的强 ETag 被弱化；单改集成路由会让目录、发现、自动化和智能视图保留同一风险。
 - 修复：提交 `3cbb879` 为全部 ETag 快照的 200/304 响应补 `Cache-Control: no-transform`。失败先行锁定 9 个断言；修复后聚焦 38/38、Worker 串行 82/82、strict typecheck、11 个 migration LF-only、生产依赖漏洞 0、deploy dry-run通过。
-- 生产：该契约检查点结束时 Worker 100% 版本为 `94d90695-3162-4e9c-b8ad-d3feb1541dd6`、`policySetVersion=2`，九类策略全部禁用且四组授权数组全空；ACTIVE 为空，2 个不可变策略版本、2 条策略审计和 2 条 24 小时幂等记录与预期一致。后续 qBittorrent canary 见 2026-08-17 与 2026-08-18 记录；当前安全基线为版本 12。
+- 生产：该契约检查点结束时 Worker 100% 版本为 `94d90695-3162-4e9c-b8ad-d3feb1541dd6`、`policySetVersion=2`，九类策略全部禁用且四组授权数组全空；ACTIVE 为空，2 个不可变策略版本、2 条策略审计和 2 条 24 小时幂等记录与预期一致。后续 qBittorrent/Webhook canary 见上方记录；当前安全基线为版本 16。
 - 安全边界：版本 1 只用随机合成、不可连通且无凭据的 advanced-only 探针验证兼容投影；版本 2 立即恢复全禁用基线。策略前后 Time Travel 书签和请求级证据只保存在本机忽略文件。
 - 下一步：登记四个受控实例和回滚窗口，从全禁用基线发布最小 endpoint/resource/port 授权，再配置 Desktop v2 与 DPAPI 凭据并执行真实 provider 矩阵。
 - 详情：`docs/TEST_REPORT.md`、`docs/WORKER_DEPLOYMENT.md`、`docs/api/worker-v1.md`、`cairn/integration-adapter-boundaries.md`。

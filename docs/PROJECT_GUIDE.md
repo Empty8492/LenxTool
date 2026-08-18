@@ -164,7 +164,7 @@ npm.cmd test -- --run
 
 ## 10. 当前版本边界与交付状态
 
-本节是当前交付状态的唯一准绳，最后核对日期为 **2026-08-13**。`IMPLEMENTATION_PLAN.md` 保留完整任务与验收条件；其中未勾选的任务可能已有部分实现，但表示尚未满足该任务的全部验收条件。
+本节是当前交付状态的唯一准绳，最后核对日期为 **2026-08-18**。`IMPLEMENTATION_PLAN.md` 保留完整任务与验收条件；其中未勾选的任务可能已有部分实现，但表示尚未满足该任务的全部验收条件。
 
 ### 10.1 本轮已完成
 
@@ -269,19 +269,21 @@ npm.cmd test -- --run
 
 ### 10.2 下一里程碑
 
-Gate 0 字幕闭环、P0“管理员策展 RSS”、P1“阅读增强、AI 与自动化”、P2-01～P2-14、P2-16～P2-23，以及插入计划 DISC-01～DISC-06、UX-03 均已完成。[P2 内容视图与集成计划](plans/RSS_P2_VIEWS_INTEGRATIONS.md) 的 P2-15 Cubox 因与既有导出能力重叠、官方幂等与安全重试契约不足而取消实施；客户端不保存 Cubox API 凭据，也不注册连接探针或导出器。P2-23 已按 [Accepted ADR-004](decisions/ADR-004-server-email-digest-gate.md) 选择 A：不实施邮件摘要、不收集邮箱、所有 Feed/AI 内容云端保留 0 天，不新增云端文章表、邮箱字段或邮件发送代码。P2-D 已完成 Desktop v2 与 qBittorrent 的全部受控真实 canary，Readeck/Outline/Webhook 仍未完成；P1/P2 源码进度不等于正式签名发布完成。全仓 formatter 历史基线已在独立阶段关闭：`.editorconfig` 改为与主流源码一致的 UTF-8 无 BOM，`.gitattributes` 固定 C# 为 CRLF、D1 migration 为 LF，机械格式化与完整门禁均通过。
+Gate 0 字幕闭环、P0“管理员策展 RSS”、P1“阅读增强、AI 与自动化”、P2-01～P2-14、P2-16～P2-23，以及插入计划 DISC-01～DISC-06、UX-03 均已完成。[P2 内容视图与集成计划](plans/RSS_P2_VIEWS_INTEGRATIONS.md) 的 P2-15 Cubox 因与既有导出能力重叠、官方幂等与安全重试契约不足而取消实施；客户端不保存 Cubox API 凭据，也不注册连接探针或导出器。P2-23 已按 [Accepted ADR-004](decisions/ADR-004-server-email-digest-gate.md) 选择 A：不实施邮件摘要、不收集邮箱、所有 Feed/AI 内容云端保留 0 天，不新增云端文章表、邮箱字段或邮件发送代码。P2-16～19 的真实队列已完成 qBittorrent 与 Webhook，Readeck/Outline 仍未完成；正式发布总闸门还缺 Eagle、Zotero、Readwise 的受控真实证据。P1/P2 源码进度不等于正式签名发布完成。全仓 formatter 历史基线已在独立阶段关闭：`.editorconfig` 改为与主流源码一致的 UTF-8 无 BOM，`.gitattributes` 固定 C# 为 CRLF、D1 migration 为 LF，机械格式化与完整门禁均通过。
 
 2026-08-17 生产检查点已完成 D1 创建、迁移前后 Time Travel 留证、0001～0011 全量迁移、关键列/触发器复核、Worker v2、随机 `TOKEN_SECRET`、公网 `/health` 200、首管理员和策略 schema v2/旧客户端兼容契约。bootstrap 首轮因本地与生产 PBKDF2 迭代上限不一致返回 500；失败请求未创建用户，根因修复提交 `7ce9827` 已发布。随后首管理员条件写入、正常登录与 `/v1/me` ADMIN 身份均验证成功；临时 `BOOTSTRAP_TOKEN` 已删除，入口恢复 404。策略契约首轮在任何 PUT 前发现 Cloudflare 压缩把强 ETag 改成弱 ETag；提交 `3cbb879` 为所有 ETag 快照的 200/304 响应增加 `Cache-Control: no-transform`，生产复验后 v2 GET/PUT、强 ETag/`If-Match`、精确幂等重放、幂等键冲突、旧版本冲突、旧客户端 ACTIVE 投影/ALL 升级拒绝及 304 均通过。当前 100% Worker 版本为 `94d90695-3162-4e9c-b8ad-d3feb1541dd6`。策略版本 3 曾只为 qBittorrent canary 授权 category `lenxtool-canary` 与 loopback 端口 47891；验收结束后版本 4 已恢复九类全部禁用、所有 host/endpoint/resource/port 授权为空、ACTIVE 0。Release Desktop 的真实健康、magnet、受控 `.torrent`、重放、精确清理和撤销均通过；target 已降为 marker 0，LenxTool DPAPI 测试凭据删除，qBittorrent 进程停止。D1/Worker 不保存 provider 秘密、条目或完整 magnet；远端无待迁移，Secret 仅有 `TOKEN_SECRET`。当时仍未完成 qBittorrent 公网 fetch/状态矩阵、Readeck/Outline/Webhook、Groq/DeepSeek Provider Secret 与正式发布；恢复书签和请求级证据只保存在本机忽略文件，不进入仓库。
 
-2026-08-18 在同一固定源码候选上补完 qBittorrent 5.2.3 / WebAPI 2.15.1 的剩余 P2-D 矩阵。生产 `TorrentFileFetcher` 从 Ubuntu 官方 HTTPS/443 下载 508,158 字节 `.torrent`，经 DNS Fake-IP 分类、地址 pin、禁代理/跳转/Cookie/解压、MIME、正文上限与 bencode/info-hash 校验后，由真实 exporter 完成首次写入、同请求幂等重放、info-hash/category/stopped 复查和精确删除；不存在的公网子域得到可重试 `DestinationUnavailable`。独立脱敏观测又确认 WebAPI 对合法文件返回 200、对已存在同 hash 的重复文件返回 409 且对象不替换、对远程 `.torrent` URL 返回 202 并最终收敛到正确 stopped 对象。当前产品只发送可解析 magnet 或已下载文件，故 202 是 provider URL 型异步行为与产品防御性协议分支的真实佐证，不冒充产品公网文件路径。首次编排把 qBittorrent 留在已经结束的命令会话，约 156 秒后执行环境正常回收后台进程；改为单会话“启动→验收→清理→WebAPI 关闭”后完整复跑通过。最终生产策略为版本 12、九类全禁用、ACTIVE 0；撤销后 exporter 返回 `AccessDenied` 且 provider 对象为 0，target marker 0、DPAPI 测试凭据删除、qBittorrent/LenxTool 进程与 47891/6272 监听为 0、隔离下载目录文件为 0。qBittorrent 真实矩阵至此完成，P2-D 仍等待 Readeck、Outline 和 Webhook。
+2026-08-18 在同一固定源码候选上补完 qBittorrent 5.2.3 / WebAPI 2.15.1 的剩余 P2-D 矩阵。生产 `TorrentFileFetcher` 从 Ubuntu 官方 HTTPS/443 下载 508,158 字节 `.torrent`，经 DNS Fake-IP 分类、地址 pin、禁代理/跳转/Cookie/解压、MIME、正文上限与 bencode/info-hash 校验后，由真实 exporter 完成首次写入、同请求幂等重放、info-hash/category/stopped 复查和精确删除；不存在的公网子域得到可重试 `DestinationUnavailable`。独立脱敏观测又确认 WebAPI 对合法文件返回 200、对已存在同 hash 的重复文件返回 409 且对象不替换、对远程 `.torrent` URL 返回 202 并最终收敛到正确 stopped 对象。当前产品只发送可解析 magnet 或已下载文件，故 202 是 provider URL 型异步行为与产品防御性协议分支的真实佐证，不冒充产品公网文件路径。首次编排把 qBittorrent 留在已经结束的命令会话，约 156 秒后执行环境正常回收后台进程；改为单会话“启动→验收→清理→WebAPI 关闭”后完整复跑通过。最终生产策略为版本 12、九类全禁用、ACTIVE 0；撤销后 exporter 返回 `AccessDenied` 且 provider 对象为 0，target marker 0、DPAPI 测试凭据删除、qBittorrent/LenxTool 进程与 47891/6272 监听为 0、隔离下载目录文件为 0。qBittorrent 真实矩阵至此完成。
+
+同日固定源码候选 `84945757f66a0e01e855ab00a44173e8236cbbd0` 完成 Webhook 真实公网矩阵。验收会话生成随机 HTTPS 路径、控制令牌和 HMAC secret，以仅保存内存计数与事件正文 SHA-256 摘要的临时接收器承接真实 Release Desktop/生产 DI 请求；接收器不持久化正文，运行文件位于 Git 忽略目录。健康检查、首次写入、同键重放、实际 UTF-8 正文 HMAC、能力缺失不 POST、ack 不匹配的可重试恢复、503 的可重试恢复均通过，最终只产生 3 个预期业务事件。策略撤销后 exporter 返回不可重试 `AccessDenied`，接收器请求增量为 0。首轮矩阵在能力缺失后因验收器错误地把接收器模式硬编码为 `normal` 而停止，产品行为无异常且 `finally` 已将版本 14 恢复全禁用；修正验收断言后，版本 15 最小启用、版本 16 撤销的完整矩阵通过。最终版本 16 九类全禁用、ACTIVE 0，Webhook target 与 DPAPI 测试凭据不存在，Quick Tunnel、接收器进程和临时秘密文件均已清理。P2-16～19 现只等待 Readeck 与 Outline；正式发布总闸门还要补 Eagle、Zotero、Readwise。
 
 #### 10.2.1 可执行下一步：P2-D → 正式发布
 
 按以下顺序推进，任何一步失败都停止后续写入或发布，不用“重试”代替人工确认：
 
-1. **锁定受控环境并发布最小权限策略。** 指定 Readeck、Outline 和 Webhook 的测试实例、版本、操作者、测试时间窗与回滚负责人；准备精确 endpoint、Outline collection UUID 和 Webhook 接收端。每轮从当前版本 12 的全禁用安全基线只启用一个实际测试类型，并加入最小 host/endpoint/resource/port 授权；结束后恢复全禁用，不重复迁移、重开 bootstrap 或手工改迁移账本。
-2. **补完真实 provider 矩阵。** qBittorrent 的生产公网 fetch、真实 200/202/409、暂时故障、重放、清理和撤销已经完成；下一步验证 Webhook 的 OPTIONS 能力、固定 JSON、幂等键、HMAC 和精确 ack，再验证 Readeck 标签查找、首次创建、重复重放和归档，以及 Outline collection 身份、个人草稿、重复更新和目标切换。目标始终先于 DPAPI 秘密保存，结束时清理测试对象并降 marker；每一步只记录脱敏状态、队列终态和非秘密对象标识。
-3. **关闭或回滚。** 只有四个 provider 的真实矩阵、凭据生命周期、策略撤销、断网/超时/重复执行和 D1/Worker 观测均通过，才关闭 P2-D；迁移或策略语义异常时停止写入，保留 Time Travel 书签并由发布负责人决定恢复，不在生产直接反复应用迁移。
+1. **锁定受控环境并发布最小权限策略。** 指定 Readeck、Outline 的测试实例、版本、操作者、测试时间窗与回滚负责人；准备精确 endpoint、Outline collection UUID 和可清理测试对象。每轮从当前版本 16 的全禁用安全基线只启用一个实际测试类型，并加入最小 host/endpoint/resource/port 授权；结束后恢复全禁用，不重复迁移、重开 bootstrap 或手工改迁移账本。
+2. **补完真实 provider 矩阵。** qBittorrent 与 Webhook 的真实矩阵已经完成；下一步先验证 Readeck 标签查找、首次创建、重复重放、归档、暂时故障与撤权，再验证 Outline collection 身份、个人草稿、重复更新、目标切换、暂时故障与撤权。随后补 Eagle 独立资源库与图片写入、Zotero 个人库/可选附件、Readwise 精确 URL 重放的真实矩阵。目标始终先于 DPAPI 秘密保存，结束时清理测试对象并降 marker；每一步只记录脱敏状态、队列终态和非秘密对象标识。
+3. **关闭或回滚。** 只有所有已启用且依赖外部服务的适配器（Eagle、Zotero、Readwise、Readeck、Outline、qBittorrent、Webhook）的真实矩阵、凭据生命周期、策略撤销、断网/超时/重复执行和 D1/Worker 观测均通过，才关闭总闸门；迁移或策略语义异常时停止写入，保留 Time Travel 书签并由发布负责人决定恢复，不在生产直接反复应用迁移。
 4. **生成正式制品并发布。** formatter 已独立关闭，后续发布候选仍需重跑 `dotnet format --verify-no-changes` 与完整回归。安装 Inno Setup、准备仓库外 ECDSA 更新私钥和 Authenticode 证书后，运行 [`RELEASE_GUIDE.md`](RELEASE_GUIDE.md) 的构建脚本；核对安装包/便携包/清单的版本、哈希、签名和 Microsoft 依赖资产，完成 Windows 10/11 x64 全新安装、覆盖升级、卸载保留数据、Runtime 缺失降级和更新回滚测试。先推送源码提交，再创建带版本标签的 GitHub Release；未完成以上步骤前不能标记为“端到端生产验收完成”。
 
 字幕闭环完成后的产品主路线已确定为“管理员策展 RSS”：管理员维护共享 RSS/Atom 目录，普通用户只能同步和阅读，不得修改共享订阅、分类、抓取策略或自动化规则。为保持现有“云端不存新闻正文”边界，首版采用 Worker/D1 保存权威目录、各桌面客户端本地抓取和 SQLite 缓存的模式。
@@ -296,7 +298,7 @@ Gate 0 字幕闭环、P0“管理员策展 RSS”、P1“阅读增强、AI 与�
 6. Independent-01 JSON 双栏结构 Diff 已完成；Core 对每侧只解析一次，接受合法根值 `null`，使用分块协作取消、无歧义方括号路径和有界路径输出，双栏 UI 支持交换与回收虚拟化差异列表，并在最小 920×620 的真实 `MainWindow`、500 行结果及等效 200% 布局中验证生产滚动区可达；未修改 RSS 模型、SQLite 或 Worker。
 7. “洛克王国世界每日清体力自动化”只登记为独立候选调研项，尚未批准 MaaFramework 依赖或任何实现。它不属于 RSS P2 编号；若后续启动，必须先完成条款核对、前台手动登录边界、识别 PoC、进程隔离、停止/失败保护与许可证审查，具体见 [`plans/GAME_AUTOMATION_BACKLOG.md`](plans/GAME_AUTOMATION_BACKLOG.md)。
 
-总路线、参考项目和许可证边界见 [`plans/RSS_MASTER_ROADMAP.md`](plans/RSS_MASTER_ROADMAP.md)，架构决策见 [`decisions/ADR-001-admin-curated-rss.md`](decisions/ADR-001-admin-curated-rss.md)、[`decisions/ADR-002-article-content-extraction.md`](decisions/ADR-002-article-content-extraction.md)、[`decisions/ADR-003-durable-entry-export-queue.md`](decisions/ADR-003-durable-entry-export-queue.md) 与已接受的 [`decisions/ADR-004-server-email-digest-gate.md`](decisions/ADR-004-server-email-digest-gate.md)。P0 与 P1 可作为已验收基础；生产 D1/Worker、首管理员、schema v2/旧客户端策略契约和 Desktop/qBittorrent 完整 canary 已完成，但其余真实 provider、正式安装包、签名、升级和跨物理机矩阵仍按 10.5～10.7 节单独验收。
+总路线、参考项目和许可证边界见 [`plans/RSS_MASTER_ROADMAP.md`](plans/RSS_MASTER_ROADMAP.md)，架构决策见 [`decisions/ADR-001-admin-curated-rss.md`](decisions/ADR-001-admin-curated-rss.md)、[`decisions/ADR-002-article-content-extraction.md`](decisions/ADR-002-article-content-extraction.md)、[`decisions/ADR-003-durable-entry-export-queue.md`](decisions/ADR-003-durable-entry-export-queue.md) 与已接受的 [`decisions/ADR-004-server-email-digest-gate.md`](decisions/ADR-004-server-email-digest-gate.md)。P0 与 P1 可作为已验收基础；生产 D1/Worker、首管理员、schema v2/旧客户端策略契约和 Desktop/qBittorrent/Webhook 完整 canary 已完成，但 Eagle/Zotero/Readwise/Readeck/Outline、正式安装包、签名、升级和跨物理机矩阵仍按 10.5～10.7 节单独验收。
 
 ### 10.3 其他尚未完成的产品功能
 
@@ -325,7 +327,7 @@ Gate 0 字幕闭环、P0“管理员策展 RSS”、P1“阅读增强、AI 与�
 - Readeck：管理员先启用 Readeck，并将实例精确配置为公网 HTTPS 主机或受信私网 HTTPS `{host,port}`；本机专用卡保存一个实例根地址、归档选项和 token。导出会写入可见的 `lenxtool:<stable-id>` 技术标签并据此收敛重放；当前没有真实实例写入验收。
 - Outline：管理员先启用 Outline，并同时允许实例 endpoint 与 collection UUID；本机专用卡保存一个 HTTPS 根地址、collection ID 和 API key。同一 Feed 条目使用确定性 UUID 更新同一文档；首版固定创建和更新个人草稿，不会自动向工作区发布，当前没有真实实例写入验收。
 - qBittorrent：只支持 5.2+ / WebAPI 2.14.1+ API key。管理员必须允许实例、非空 category，以及使用同机 HTTP 时的精确 localhost 端口；本机专用卡只保存一个目标。资讯页每次投递 magnet/torrent 都要再次确认。5.2.3 / WebAPI 2.15.1 的 loopback 健康、magnet、受控文件上传、生产公网 `.torrent`、200/202/409、暂时故障、重放、清理与撤销 canary 均已通过；202 是 provider 对远程 URL 的异步行为，当前产品路径仍只发送可解析 magnet 或已下载文件。
-- Webhook：管理员先启用 Webhook 并允许精确 HTTPS endpoint；本机专用卡可选择 HMAC-SHA256。接收方必须用 OPTIONS 声明 LenxTool v1 与幂等能力，并在 POST 后精确回显 `LenxTool-Ack`；不支持自定义方法、请求头、Authorization 或正文模板，当前没有真实接收端验收。
+- Webhook：管理员先启用 Webhook 并允许精确 HTTPS endpoint；本机专用卡可选择 HMAC-SHA256。接收方必须用 OPTIONS 声明 LenxTool v1 与幂等能力，并在 POST 后精确回显 `LenxTool-Ack`；不支持自定义方法、请求头、Authorization 或正文模板。2026-08-18 已完成受控公网接收端的健康、HMAC、幂等重放、能力缺失、回执不一致、503 恢复和策略撤销矩阵；验收结束后临时接收端与凭据均已清理。
 - 共享账号：部署 Worker 后，以 `LENXTOOL_WORKER_BASE_URL` 配置其 HTTPS 根地址；登录界面才会启用。该变量不是凭据，账号 refresh token 仍只由 DPAPI CurrentUser 保存。
 - WebView2 / Windows App Runtime：当前电脑均已安装。安装版会携带并校验两项 Microsoft 安装资产；便携版若缺少 Windows App Runtime，只会禁用系统通知，应用内收件箱仍可用。
 - Microsoft Word：当前电脑已安装，Word 转 PDF 无需额外配置。

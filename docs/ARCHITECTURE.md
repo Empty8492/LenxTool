@@ -231,7 +231,7 @@ P2-14 在同一耐久队列上增加固定官方目标的 Readwise Reader 适配
 
 P2-16～P2-19 将共享策略升级为 schema v2：公网 HTTPS 主机、精确私网 HTTPS `{host,port}`、Outline collection/qBittorrent category 与 qBittorrent loopback HTTP 端口分列保存。Worker 通过表示版本协商给旧客户端兼容投影；带高级约束的管理读写要求 v2，部署顺序固定为 D1 migration 0011、Worker v2、Desktop v2。首版每种 provider 只保存一个本机目标，资源白名单按 kind 全局授权；ACTIVE endpoint/resource 元数据只适用于同一信任域并被视为非秘密。
 
-四个适配器共享“策略与 DNS 先于凭据、禁代理/跳转/Cookie/自动解压、地址钉住、请求头与正文统一截止时间”的网络边界。Readeck 用可见稳定标签收敛 create/update；Outline 用确定性 UUID 且只允许既有文档留在获准 collection，固定创建个人草稿；qBittorrent 固定 5.2+/WebAPI 2.14.1+ API key、显式 category、投递前确认与写后 info-hash/category 复查；Webhook 只支持固定 v1 JSON、能力 OPTIONS、稳定 `Idempotency-Key`、精确 ack 和可选实际正文 HMAC。真实外部实例连通仍由 P2-D 单独验收。
+四个适配器共享“策略与 DNS 先于凭据、禁代理/跳转/Cookie/自动解压、地址钉住、请求头与正文统一截止时间”的网络边界。Readeck 用可见稳定标签收敛 create/update；Outline 用确定性 UUID 且只允许既有文档留在获准 collection，固定创建个人草稿；qBittorrent 固定 5.2+/WebAPI 2.14.1+ API key、显式 category、投递前确认与写后 info-hash/category 复查；Webhook 只支持固定 v1 JSON、能力 OPTIONS、稳定 `Idempotency-Key`、精确 ack 和可选实际正文 HMAC。qBittorrent 与 Webhook 已完成受控真实矩阵；Readeck、Outline 及其他尚无真实证据的外部适配器仍由 P2-D/发布总闸门单独验收。
 
 P1 终验（2026-07-27）以两条独立数据流验证架构边界：真实 schema v17 SQLite 在重开后的离线库中覆盖 10,000 条 Feed、1,000 个收藏、混合媒体和全文/AI/规则/媒体活动引用，查询、搜索、预览和清理均满足既定预算；真实 workerd/D1 覆盖管理员发布目录/AI 策略/规则、普通用户写入 403、版本不变及应用表/字段内容隐私白名单。Release 回归为 .NET 648/648、Worker 52/52、strict typecheck 和 0 警告构建。该记录关闭 P1 架构交付，不替代生产部署与正式签名发布。
 

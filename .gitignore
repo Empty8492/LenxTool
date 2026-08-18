@@ -18,4 +18,5 @@ TestResults/
 *.key
 cloud/LenxTool.Worker/node_modules/
 cloud/LenxTool.Worker/.wrangler/
+/.wrangler/
 installer/assets/WindowsAppRuntimeInstall-*.exe
